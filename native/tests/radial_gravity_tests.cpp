@@ -2,6 +2,7 @@
 
 #include <ninho/physics/radial_gravity.hpp>
 
+#include <limits>
 #include <type_traits>
 
 using namespace ninho::physics;
@@ -28,12 +29,36 @@ static_assert(cross(Vec3{1, 0, 0}, Vec3{0, 1, 0}) == Vec3{0, 0, 1});
 
 NINHO_TEST("radial gravity points toward center on every axis")
 {
+    const auto near_failure = [](double actual, double expected, double epsilon) {
+        try {
+            NINHO_REQUIRE_NEAR(actual, expected, epsilon);
+        } catch (const std::runtime_error& error) {
+            return std::string{error.what()};
+        }
+        return std::string{};
+    };
+    const double nan = std::numeric_limits<double>::quiet_NaN();
+    const double infinity = std::numeric_limits<double>::infinity();
+    NINHO_REQUIRE(!near_failure(nan, 0.0, 1e-4).empty());
+    NINHO_REQUIRE(!near_failure(0.0, nan, 1e-4).empty());
+    NINHO_REQUIRE(!near_failure(0.0, 0.0, nan).empty());
+    NINHO_REQUIRE(!near_failure(infinity, 0.0, 1e-4).empty());
+    NINHO_REQUIRE(!near_failure(0.0, infinity, 1e-4).empty());
+    NINHO_REQUIRE(!near_failure(0.0, 0.0, infinity).empty());
+    NINHO_REQUIRE(near_failure(0.0, 0.0, -1.0).find("epsilon") != std::string::npos);
+
     RadialGravity gravity({.center = {0, 0, 0}, .radius = 10.0f, .surface_acceleration = 9.0f});
     const Vec3 x = gravity.acceleration({10, 0, 0});
     const Vec3 y = gravity.acceleration({0, 10, 0});
     const Vec3 z = gravity.acceleration({0, 0, -10});
     NINHO_REQUIRE_NEAR(x.x, -9.0f, 1e-4f);
+    NINHO_REQUIRE_NEAR(x.y, 0.0f, 1e-4f);
+    NINHO_REQUIRE_NEAR(x.z, 0.0f, 1e-4f);
+    NINHO_REQUIRE_NEAR(y.x, 0.0f, 1e-4f);
     NINHO_REQUIRE_NEAR(y.y, -9.0f, 1e-4f);
+    NINHO_REQUIRE_NEAR(y.z, 0.0f, 1e-4f);
+    NINHO_REQUIRE_NEAR(z.x, 0.0f, 1e-4f);
+    NINHO_REQUIRE_NEAR(z.y, 0.0f, 1e-4f);
     NINHO_REQUIRE_NEAR(z.z, 9.0f, 1e-4f);
 }
 

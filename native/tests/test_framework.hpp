@@ -33,6 +33,35 @@ struct Registrar {
     throw std::runtime_error(out.str());
 }
 
+inline void require_near(
+    const char* file,
+    int line,
+    const char* actual_expression,
+    const char* expected_expression,
+    const char* epsilon_expression,
+    double actual,
+    double expected,
+    double epsilon)
+{
+    if (!std::isfinite(actual) || !std::isfinite(expected) || !std::isfinite(epsilon)) {
+        std::ostringstream message;
+        message << "near requires finite values: " << actual_expression << '=' << actual
+                << ", " << expected_expression << '=' << expected << ", epsilon=" << epsilon;
+        fail(file, line, message.str());
+    }
+    if (epsilon < 0.0) {
+        std::ostringstream message;
+        message << "epsilon must be non-negative: " << epsilon_expression << '=' << epsilon;
+        fail(file, line, message.str());
+    }
+    if (std::abs(actual - expected) > epsilon) {
+        std::ostringstream message;
+        message << actual_expression << '=' << actual << ", expected " << expected
+                << " +/- " << epsilon;
+        fail(file, line, message.str());
+    }
+}
+
 }
 
 #define NINHO_JOIN_INNER(a, b) a##b
@@ -51,9 +80,6 @@ struct Registrar {
 #define NINHO_REQUIRE_NEAR(actual, expected, epsilon)                                                \
     do {                                                                                             \
         const double a_ = (actual), e_ = (expected), d_ = (epsilon);                                \
-        if (std::abs(a_ - e_) > d_) {                                                               \
-            std::ostringstream m_;                                                                  \
-            m_ << #actual << '=' << a_ << ", expected " << e_ << " +/- " << d_;                  \
-            ::ninho::test::fail(__FILE__, __LINE__, m_.str());                                      \
-        }                                                                                            \
+        ::ninho::test::require_near(                                                                 \
+            __FILE__, __LINE__, #actual, #expected, #epsilon, a_, e_, d_);                          \
     } while (false)
