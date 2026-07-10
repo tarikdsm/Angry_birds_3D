@@ -1,6 +1,7 @@
 add_executable(ninho_physics_tests
   test_main.cpp
   radial_gravity_tests.cpp
+  world_lifecycle_tests.cpp
 )
 
 target_include_directories(ninho_physics_tests PRIVATE
@@ -16,6 +17,8 @@ if(MSVC)
 endif()
 
 add_test(NAME radial COMMAND ninho_physics_tests --filter radial)
+add_test(NAME world COMMAND ninho_physics_tests --filter world)
+add_test(NAME contracts COMMAND ninho_physics_tests --filter contract)
 
 add_test(NAME runner_rejects_no_match
   COMMAND ninho_physics_tests --filter __ninho_missing__)

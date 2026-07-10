@@ -1,4 +1,5 @@
 add_library(ninho_physics_kernel STATIC
+  src/physics_world.cpp
   src/radial_gravity.cpp
 )
 add_library(ninho::physics ALIAS ninho_physics_kernel)
