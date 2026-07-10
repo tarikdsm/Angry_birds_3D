@@ -609,6 +609,7 @@ struct PhysicsWorld::Impl {
             return;
         }
 
+        // Constructor reservation covers the fixed 250-joint foundation capacity.
         free_joint_slots.push_back(handle.index);
         if (B3_IS_NON_NULL(native) && b3Joint_IsValid(native)) {
             b3DestroyJoint(native, true);
@@ -621,6 +622,42 @@ struct PhysicsWorld::Impl {
         slot->a = {};
         slot->b = {};
         --reserved_joint_count;
+    }
+
+    void invalidate_joint_handle(JointHandle handle) noexcept
+    {
+        JointSlot* slot = matching_joint_slot(handle);
+        if (slot == nullptr || slot->state == SlotState::Free) {
+            return;
+        }
+
+        // Fixed-capacity reservation makes this public invalidation non-allocating.
+        free_joint_slots.push_back(handle.index);
+        std::erase_if(
+            joint_reaction_storage,
+            [handle](const JointReaction& reaction) { return reaction.joint == handle; });
+        slot->native = {};
+        slot->state = SlotState::Free;
+        slot->a = {};
+        slot->b = {};
+        --reserved_joint_count;
+    }
+
+    void transition_body_to_pending_destroy(BodyHandle body) noexcept
+    {
+        Slot* slot = matching_slot(body);
+        if (slot == nullptr || slot->state == SlotState::Free
+            || slot->state == SlotState::PendingDestroy) {
+            return;
+        }
+        slot->state = SlotState::PendingDestroy;
+        for (std::uint32_t index = 1; index < joint_slots.size(); ++index) {
+            const JointSlot& joint_slot = joint_slots[index];
+            if (joint_slot.state != SlotState::Free
+                && (joint_slot.a == body || joint_slot.b == body)) {
+                invalidate_joint_handle({index, joint_slot.generation});
+            }
+        }
     }
 
     void release_attached_joints(BodyHandle body)
@@ -841,7 +878,7 @@ struct PhysicsWorld::Impl {
     void create_native_joint(const CreateJointCommand& command)
     {
         JointSlot* slot = matching_joint_slot(command.handle);
-        if (slot == nullptr) {
+        if (slot == nullptr || slot->state == SlotState::Free) {
             return;
         }
         if (slot->state == SlotState::PendingDestroy && B3_IS_NULL(slot->native)) {
@@ -1372,7 +1409,7 @@ struct PhysicsWorld::Impl {
 
             if (slot->remove_beyond_six_r && radius >= removal_radius) {
                 commands.push_back(DestroyCommand{snapshot.handle});
-                slot->state = SlotState::PendingDestroy;
+                transition_body_to_pending_destroy(snapshot.handle);
             }
         }
     }
@@ -1434,19 +1471,7 @@ Status PhysicsWorld::destroy_body(BodyHandle body)
         return invalid_handle_status();
     }
     impl_->commands.emplace_back(Impl::DestroyCommand{body});
-    Impl::Slot& slot = impl_->slots[body.index];
-    slot.state = Impl::SlotState::PendingDestroy;
-    for (std::uint32_t index = 1; index < impl_->joint_slots.size(); ++index) {
-        Impl::JointSlot& joint_slot = impl_->joint_slots[index];
-        if (joint_slot.state != Impl::SlotState::Free
-            && (joint_slot.a == body || joint_slot.b == body)) {
-            joint_slot.state = Impl::SlotState::PendingDestroy;
-            const JointHandle joint{index, joint_slot.generation};
-            std::erase_if(
-                impl_->joint_reaction_storage,
-                [joint](const JointReaction& reaction) { return reaction.joint == joint; });
-        }
-    }
+    impl_->transition_body_to_pending_destroy(body);
     std::erase_if(impl_->snapshots, [body](const BodyState& value) { return value.handle == body; });
     return {};
 }

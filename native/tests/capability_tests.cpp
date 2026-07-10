@@ -77,18 +77,45 @@ NINHO_TEST("capability sphere cast returns first hit")
 NINHO_TEST("capability shape cast resolves quantized ties by public handle")
 {
     PhysicsWorld world(WorldConfig{.surface_gravity = 0});
+    constexpr Vec3 cast_origin{0, 12, 0};
+    constexpr Vec3 cast_translation{0, -12, 0};
+    constexpr float query_radius = 0.25f;
+    constexpr float pinned_linear_slop = 0.005f;
+    constexpr float analytical_first_fraction =
+        (12.0f - (5.0f + query_radius - pinned_linear_slop)) / 12.0f;
+    constexpr float closer_offset = 2.0e-6f;
+
     BodyDesc first_desc = BodyDesc::static_box({1, 1, 1}, {{0, 4, 0}, {}});
     first_desc.shapes.front().material_id = 10;
     const BodyHandle first = world.create_body(first_desc).value;
-    BodyDesc second_desc = BodyDesc::static_box({1, 1, 1}, {{0, 4, 0}, {}});
+    world.step();
+    const auto baseline =
+        world.cast_sphere(cast_origin, query_radius, cast_translation);
+    NINHO_REQUIRE(baseline.has_value());
+    NINHO_REQUIRE(baseline->body == first);
+    NINHO_REQUIRE_NEAR(baseline->fraction, analytical_first_fraction, 1.0e-7f);
+
+    BodyDesc second_desc =
+        BodyDesc::static_box({1, 1, 1}, {{0, 4 + closer_offset, 0}, {}});
     second_desc.shapes.front().material_id = 20;
     const BodyHandle second = world.create_body(second_desc).value;
     world.step();
     NINHO_REQUIRE(first < second);
-    const auto hit = world.cast_sphere({0, 8, 0}, 0.25f, {0, -8, 0});
-    NINHO_REQUIRE(hit.has_value());
-    NINHO_REQUIRE(hit->body == first);
-    NINHO_REQUIRE(hit->material_id == 10);
+    const auto tied = world.cast_sphere(cast_origin, query_radius, cast_translation);
+    NINHO_REQUIRE(tied.has_value());
+    NINHO_REQUIRE(tied->body == first);
+    NINHO_REQUIRE(tied->material_id == 10);
+    NINHO_REQUIRE_NEAR(tied->fraction, baseline->fraction, 1.0e-8f);
+
+    NINHO_REQUIRE(world.destroy_body(first).ok());
+    world.step();
+    const auto closer = world.cast_sphere(cast_origin, query_radius, cast_translation);
+    NINHO_REQUIRE(closer.has_value());
+    NINHO_REQUIRE(closer->body == second);
+    NINHO_REQUIRE(closer->fraction < baseline->fraction);
+    const float fraction_delta = baseline->fraction - closer->fraction;
+    NINHO_REQUIRE(fraction_delta > 0.0f);
+    NINHO_REQUIRE(fraction_delta < 1.0e-6f);
 }
 
 NINHO_TEST("capability distance joint exposes finite force and destroys safely")
@@ -132,6 +159,49 @@ NINHO_TEST("capability weld joint keeps loaded bodies together")
     NINHO_REQUIRE(std::abs(reaction->linear_separation) < 0.02f);
 }
 
+NINHO_TEST("capability nontrivial weld frames map to world and resist applied torque")
+{
+    PhysicsWorld world(WorldConfig{.substeps = 6, .surface_gravity = 0});
+    constexpr float half_sqrt_two = 0.70710678118f;
+    const Quat positive_quarter_turn{0, 0, half_sqrt_two, half_sqrt_two};
+    const Quat negative_quarter_turn{0, 0, -half_sqrt_two, half_sqrt_two};
+
+    const BodyHandle a = world.create_body(BodyDesc::static_box(
+        {0.5f, 0.5f, 0.5f}, {{-1, 5, 0}, positive_quarter_turn})).value;
+    BodyDesc b_desc = BodyDesc::dynamic_box(
+        {0.5f, 0.5f, 0.5f}, {{1, 5, 0}, negative_quarter_turn}, 500);
+    b_desc.radial_gravity = false;
+    b_desc.enable_sleep = false;
+    const BodyHandle b = world.create_body(b_desc).value;
+    world.step();
+
+    const Transform frame_a{{0, -1, 0}, negative_quarter_turn};
+    const Transform frame_b{{0, -1, 0}, positive_quarter_turn};
+    const JointHandle joint = world.create_joint(WeldJointDesc{
+        .a = a,
+        .b = b,
+        .frame_a = frame_a,
+        .frame_b = frame_b,
+        .hertz = 13.0f,
+        .damping_ratio = 0.35f,
+    }).value;
+    world.step();
+    const auto unloaded = world.joint_reaction(joint);
+    NINHO_REQUIRE(unloaded.has_value());
+    NINHO_REQUIRE(std::abs(unloaded->linear_separation) < 1.0e-4f);
+    NINHO_REQUIRE(std::abs(unloaded->angular_separation) < 1.0e-4f);
+
+    NINHO_REQUIRE(world.apply_force(b, {0, 5000, 0}, {2, 5, 0}).ok());
+    NINHO_REQUIRE(world.apply_force(b, {0, -5000, 0}, {0, 5, 0}).ok());
+    world.step();
+    const auto loaded = world.joint_reaction(joint);
+    NINHO_REQUIRE(loaded.has_value());
+    NINHO_REQUIRE(finite_reaction(*loaded));
+    NINHO_REQUIRE(length(loaded->torque) > 1000.0f);
+    NINHO_REQUIRE(std::abs(loaded->linear_separation) < 0.05f);
+    NINHO_REQUIRE(std::abs(loaded->angular_separation) < 0.2f);
+}
+
 NINHO_TEST("capability hit events are copied before mutation")
 {
     PhysicsWorld world(WorldConfig{.surface_gravity = 0});
@@ -161,6 +231,42 @@ NINHO_TEST("capability hit events are copied before mutation")
     NINHO_REQUIRE(retained.effective_mass > 0.0f);
     NINHO_REQUIRE(retained.derived_energy > 0.0f);
     NINHO_REQUIRE(is_finite(retained.point));
+}
+
+NINHO_TEST("capability asymmetric contact reports numeric mass energy and canonical materials")
+{
+    PhysicsWorld world(WorldConfig{.surface_gravity = 0});
+    BodyDesc light_desc = BodyDesc::dynamic_sphere(0.5f, {{-2, 5, 0}, {}}, 100);
+    light_desc.linear_velocity = {10, 0, 0};
+    light_desc.bullet = true;
+    light_desc.shapes.front().material_id = 111;
+    const BodyHandle light = world.create_body(light_desc).value;
+
+    BodyDesc heavy_desc = BodyDesc::dynamic_sphere(0.5f, {{2, 5, 0}, {}}, 400);
+    heavy_desc.linear_velocity = {-5, 0, 0};
+    heavy_desc.bullet = true;
+    heavy_desc.shapes.front().material_id = 222;
+    const BodyHandle heavy = world.create_body(heavy_desc).value;
+    world.step();
+    const float light_mass = world.state(light)->mass;
+    const float heavy_mass = world.state(heavy)->mass;
+
+    for (int tick = 0; tick < 30 && world.contact_hits().empty(); ++tick) {
+        world.step();
+    }
+    NINHO_REQUIRE(!world.contact_hits().empty());
+    const ContactHit& hit = world.contact_hits().front();
+    NINHO_REQUIRE(hit.a == light);
+    NINHO_REQUIRE(hit.b == heavy);
+    NINHO_REQUIRE(hit.material_a == 111);
+    NINHO_REQUIRE(hit.material_b == 222);
+
+    const float expected_mass = light_mass * heavy_mass / (light_mass + heavy_mass);
+    const float damaging_speed = std::max(0.0f, hit.approach_speed - 1.0f);
+    const float expected_energy =
+        0.5f * expected_mass * damaging_speed * damaging_speed;
+    NINHO_REQUIRE_NEAR(hit.effective_mass, expected_mass, expected_mass * 1.0e-5f);
+    NINHO_REQUIRE_NEAR(hit.derived_energy, expected_energy, expected_energy * 1.0e-5f);
 }
 
 NINHO_TEST("capability invalid hull is rejected before Box3D")
@@ -339,6 +445,74 @@ NINHO_TEST("capability body destruction invalidates attached joint handle")
     NINHO_REQUIRE(!world.joint_reaction(joint).has_value());
     NINHO_REQUIRE(world.destroy_joint(joint).code == StatusCode::InvalidHandle);
     NINHO_REQUIRE(world.metrics().joint_count == 0);
+}
+
+NINHO_TEST("capability auto removal invalidates attached joint before deferred body destruction")
+{
+    PhysicsWorld world(WorldConfig{.planet_radius = 10, .surface_gravity = 0});
+    BodyDesc doomed_desc =
+        BodyDesc::dynamic_box({0.5f, 0.5f, 0.5f}, {{0, 61, 0}, {}}, 10);
+    doomed_desc.radial_gravity = false;
+    doomed_desc.enable_sleep = false;
+    const BodyHandle doomed = world.create_body(doomed_desc).value;
+
+    BodyDesc survivor_desc =
+        BodyDesc::dynamic_box({0.5f, 0.5f, 0.5f}, {{0, 62, 0}, {}}, 10);
+    survivor_desc.radial_gravity = false;
+    survivor_desc.remove_beyond_six_r = false;
+    survivor_desc.enable_sleep = false;
+    const BodyHandle survivor = world.create_body(survivor_desc).value;
+    const JointHandle joint = world.create_joint(
+        DistanceJointDesc{.a = doomed, .b = survivor, .length = 1}).value;
+
+    world.step();
+    NINHO_REQUIRE(world.state(doomed).has_value());
+    NINHO_REQUIRE(!world.joint_reaction(joint).has_value());
+    NINHO_REQUIRE(std::ranges::none_of(
+        world.joint_reactions(),
+        [joint](const JointReaction& reaction) { return reaction.joint == joint; }));
+    NINHO_REQUIRE(world.metrics().joint_count == 0);
+    NINHO_REQUIRE(world.destroy_joint(joint).code == StatusCode::InvalidHandle);
+
+    world.step();
+    NINHO_REQUIRE(!world.state(doomed).has_value());
+    NINHO_REQUIRE(world.state(survivor).has_value());
+}
+
+NINHO_TEST("capability queued stale joint commands become safe no ops after body destruction")
+{
+    {
+        PhysicsWorld world(WorldConfig{.surface_gravity = 0});
+        const BodyHandle a =
+            world.create_body(BodyDesc::dynamic_sphere(0.5f, {}, 10)).value;
+        const BodyHandle b = world.create_body(
+            BodyDesc::dynamic_sphere(0.5f, {{2, 0, 0}, {}}, 10)).value;
+        const JointHandle joint = world.create_joint(
+            DistanceJointDesc{.a = a, .b = b, .length = 2}).value;
+        NINHO_REQUIRE(world.destroy_body(a).ok());
+        world.step();
+        NINHO_REQUIRE(!world.joint_reaction(joint).has_value());
+        NINHO_REQUIRE(world.destroy_joint(joint).code == StatusCode::InvalidHandle);
+        NINHO_REQUIRE(world.state(b).has_value());
+    }
+
+    {
+        PhysicsWorld world(WorldConfig{.surface_gravity = 0});
+        const BodyHandle a =
+            world.create_body(BodyDesc::dynamic_sphere(0.5f, {}, 10)).value;
+        const BodyHandle b = world.create_body(
+            BodyDesc::dynamic_sphere(0.5f, {{2, 0, 0}, {}}, 10)).value;
+        world.step();
+        const JointHandle joint = world.create_joint(
+            DistanceJointDesc{.a = a, .b = b, .length = 2}).value;
+        world.step();
+        NINHO_REQUIRE(world.destroy_joint(joint).ok());
+        NINHO_REQUIRE(world.destroy_body(a).ok());
+        world.step();
+        NINHO_REQUIRE(world.destroy_joint(joint).code == StatusCode::InvalidHandle);
+        NINHO_REQUIRE(world.metrics().joint_count == 0);
+        NINHO_REQUIRE(world.state(b).has_value());
+    }
 }
 
 NINHO_TEST("capability joint capacity is explicit and generation safe")
