@@ -24,8 +24,8 @@ Este marco não implementa menu final, aves especiais, inimigos, vinte materiais
 - `godot-cpp` é fixado em `godot-4.5-stable`, commit `e83fd0904c13356ed1d4c3d09f8bb9132bdc6b77`.
 - Box3D é fixado em `v0.1.0`, commit `8441b4a06d6d09dcfb0b0f704df4d847d1437b92`.
 - Box3D é compilado estaticamente e não é modificado.
-- Visual Studio 2026 `18.5.0` com MSVC `14.44`/v143 e Windows SDK `10.0.26100.7175` formam o compilador principal.
-- CMake `4.3.3`, Ninja `1.13.2` e generator `Ninja Multi-Config` são fixos.
+- Visual Studio 2026 `18.7.3` build `11925.98` com MSVC `14.44`/v143 e Windows SDK target `10.0.26100.0` formam o compilador principal.
+- CMake `4.3.3`, Ninja `1.13.2` e generator `Ninja` são fixos; Debug e Release usam diretórios separados para selecionar o target correspondente do godot-cpp.
 - O kernel usa C++20; Box3D usa C17.
 - Todos os alvos nativos usam CRT estático `/MTd` em Debug e `/MT` em Release, x64, sem `/fp:fast`.
 - A simulação usa `1/60 s`, quatro substeps por padrão e seis como fallback já aprovado exclusivamente para CCD, gravidade global zero e força radial explícita.
@@ -147,7 +147,7 @@ Cada cenário roda duas vezes no mesmo executável, com mesma seed e ordem de co
 |---|---|---|---|---|
 | CCD `isBullet` dinâmico–dinâmico | cenário 6.2 em 20 seeds | contato ocorre antes de atravessar a pilha em 20/20 | reduzir velocidade até 30 m/s e usar 6 substeps | tunneling persiste com o fallback |
 | shape cast/overlap | cast de esfera por 3 m em hulls | primeira saída e overlap coincidem com fixtures | raycast múltiplo somente para previsão, não para Nox | não há saída segura determinística para habilidade |
-| contact hit events | impactos com energias conhecidas | velocidade/normal/impulso são finitos, ordenáveis e coerentes | derivar energia de velocidades de bodies no tick | não é possível evitar duplicidade/substep de modo estável |
+| contact hit events | impactos com velocidades conhecidas | velocidade de aproximação, normal, materiais, massa efetiva e energia derivada são finitos, ordenáveis e coerentes | derivar energia das velocidades/massas dos bodies no tick | não é possível derivar energia ou evitar duplicidade/substep de modo estável |
 | força/torque de juntas | junta carregada até ruptura | leitura cresce monotonicamente e cruza limite conhecido | avaliar deformação/impulso relativo por dois ticks | nenhuma métrica permite ruptura previsível |
 | hulls/compounds | fixture com 8 hulls | massa, AABB e contatos passam tolerâncias | múltiplas shapes no mesmo body | crash, massa inválida ou contatos ausentes |
 | sleep sob gravidade radial | cenário 6.3 | atende todos os limites numéricos de 6.3 | omitir força em bodies asleep, política já prevista | qualquer limite de 6.3 falha |
@@ -190,13 +190,13 @@ Erros de configuração encerram o executável com código diferente de zero. �
 
 `tools/bootstrap.ps1` detecta antes de instalar. Ele prepara:
 
-- Visual Studio Community/Build Tools 2026 `18.5.0`, workload C++ x64, MSVC `14.44`/v143 e Windows SDK `10.0.26100.7175`;
+- Visual Studio Community/Build Tools 2026 `18.7.3` build `11925.98`, workload C++ x64, MSVC `14.44`/v143 e Windows SDK target `10.0.26100.0`;
 - CMake `4.3.3` e Ninja `1.13.2` portáteis;
 - Python 3.11+ para automação e scripts de validação;
 - Godot 4.5.1 x86_64 em diretório local de ferramentas;
 - templates de exportação somente quando o marco precisar gerar executável Godot.
 
-`tools/toolchain.lock.json` registra URL oficial, versão, SHA-256 e componente de cada download. O script recusa checksum divergente, verifica `cl`, SDK, `cmake`, `ninja` e Godot, e falha com mensagem acionável. Instalações que exigem elevação são separadas das etapas portáteis. `tools/build.ps1` e `tools/test.ps1` não alteram a máquina; usam a toolchain já detectada, generator `Ninja Multi-Config` e aceitam `-Configuration Debug|Release`.
+`tools/toolchain.lock.json` registra URL oficial, versão, SHA-256 e componente de cada download. O script recusa checksum divergente, verifica `cl`, SDK, `cmake`, `ninja` e Godot, e falha com mensagem acionável. Instalações que exigem elevação são separadas das etapas portáteis. `tools/build.ps1` e `tools/test.ps1` não alteram a máquina; usam a toolchain já detectada, generator `Ninja`, `build/debug|release`, e aceitam `-Configuration Debug|Release`.
 
 Box3D, godot-cpp e extensão usam a mesma arquitetura, toolset, Windows SDK e CRT. A extensão declara `compatibility_minimum = "4.5"` e usa a `extension_api.json` do tag fixado do godot-cpp. O smoke test do marco verifica ABI no Godot 4.5.1; o marco de entrega repete o pacote em VMs limpas Windows 10/11.
 

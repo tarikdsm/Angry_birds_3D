@@ -198,8 +198,8 @@ Comportamentos de material usam uma interface comum de eventos `on_contact`, `on
 - Box3D `v0.1.0`, commit `8441b4a06d6d09dcfb0b0f704df4d847d1437b92`, compilado estaticamente;
 - GDExtension C++ para conectar o núcleo físico ao Godot, usando `godot-cpp` `godot-4.5-stable`, commit `e83fd0904c13356ed1d4c3d09f8bb9132bdc6b77`;
 - C++20 para o código de integração e C17 para Box3D;
-- Visual Studio 2026 `18.5.0`/MSVC `14.44` (toolset v143), Windows SDK `10.0.26100.7175`, CMake `4.3.3` e Ninja `1.13.2`;
-- generator `Ninja Multi-Config`, arquitetura x64, CRT estático `/MTd` em Debug e `/MT` em Release, sem `/fp:fast`;
+- Visual Studio 2026 `18.7.3` build `11925.98`/MSVC `14.44` (toolset v143), Windows SDK target `10.0.26100.0`, CMake `4.3.3` e Ninja `1.13.2`;
+- generator `Ninja` com diretórios `build/debug` e `build/release` separados para selecionar `GODOTCPP_TARGET=template_debug|template_release`, arquitetura x64, CRT estático `/MTd` em Debug e `/MT` em Release, sem `/fp:fast`;
 - Blender 5.1 para modelagem, geração procedural, UVs, colisores e exportação glTF/GLB;
 - Git para versionamento; dependências externas sempre fixadas por tag e commit.
 
