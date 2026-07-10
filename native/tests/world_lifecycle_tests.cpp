@@ -150,19 +150,19 @@ NINHO_TEST("contract load validation rejects non finite force and impulse")
         physics.apply_impulse(handle, {}, {0, infinity, 0}).code == StatusCode::InvalidArgument);
 }
 
-NINHO_TEST("contract unsupported hull and compound geometry is explicit")
+NINHO_TEST("contract invalid hull and empty compound geometry is explicit")
 {
     PhysicsWorld physics(WorldConfig{});
 
     BodyDesc hull;
     hull.type = BodyType::Dynamic;
     hull.shapes.push_back(ShapeDesc{.geometry = HullShape{{{0, 0, 0}, {1, 0, 0}, {0, 1, 0}}, {}}});
-    NINHO_REQUIRE(physics.create_body(hull).status.code == StatusCode::Unsupported);
+    NINHO_REQUIRE(physics.create_body(hull).status.code == StatusCode::InvalidArgument);
 
     BodyDesc compound;
     compound.type = BodyType::Dynamic;
     compound.shapes.push_back(ShapeDesc{.geometry = CompoundShape{}});
-    NINHO_REQUIRE(physics.create_body(compound).status.code == StatusCode::Unsupported);
+    NINHO_REQUIRE(physics.create_body(compound).status.code == StatusCode::InvalidArgument);
 }
 
 NINHO_TEST("contract queue commands preserve order and cancel pre tick creation")

@@ -54,6 +54,7 @@ struct HullShape {
 };
 
 using PrimitiveShape = std::variant<SphereShape, BoxShape, CapsuleShape, HullShape>;
+using QueryShape = PrimitiveShape;
 
 struct CompoundShape {
     std::vector<PrimitiveShape> children;
@@ -106,6 +107,71 @@ struct BodyState {
     bool ejected{};
 };
 
+struct DistanceJointDesc {
+    BodyHandle a{};
+    BodyHandle b{};
+    Transform frame_a{};
+    Transform frame_b{};
+    float length{1.0f};
+    float hertz{4.0f};
+    float damping_ratio{1.0f};
+    bool collide_connected{};
+};
+
+struct WeldJointDesc {
+    BodyHandle a{};
+    BodyHandle b{};
+    Transform frame_a{};
+    Transform frame_b{};
+    float hertz{8.0f};
+    float damping_ratio{1.0f};
+    bool collide_connected{};
+};
+
+using JointDesc = std::variant<DistanceJointDesc, WeldJointDesc>;
+
+struct QueryHit {
+    BodyHandle body{};
+    Vec3 point{};
+    Vec3 normal{};
+    float fraction{};
+    std::uint64_t material_id{};
+};
+
+struct ContactHit {
+    BodyHandle a{};
+    BodyHandle b{};
+    Vec3 point{};
+    Vec3 normal{};
+    float approach_speed{};
+    float effective_mass{};
+    float derived_energy{};
+    std::uint64_t material_a{};
+    std::uint64_t material_b{};
+};
+
+struct JointReaction {
+    JointHandle joint{};
+    Vec3 force{};
+    Vec3 torque{};
+    float linear_separation{};
+    float angular_separation{};
+};
+
+struct Aabb {
+    Vec3 lower{};
+    Vec3 upper{};
+};
+
+struct WorldMetrics {
+    int body_count{};
+    int shape_count{};
+    int joint_count{};
+    int contact_count{};
+    int awake_count{};
+    double step_ms{};
+};
+
 class PhysicsWorld {
 public:
     explicit PhysicsWorld(WorldConfig config);
@@ -118,11 +184,25 @@ public:
 
     Result<BodyHandle> create_body(const BodyDesc& desc);
     Status destroy_body(BodyHandle body);
+    Result<JointHandle> create_joint(const JointDesc& desc);
+    Status destroy_joint(JointHandle joint);
     Status apply_force(BodyHandle body, Vec3 force, Vec3 point, bool wake = true);
     Status apply_impulse(BodyHandle body, Vec3 impulse, Vec3 point, bool wake = true);
     void step();
     [[nodiscard]] std::optional<BodyState> state(BodyHandle body) const;
     [[nodiscard]] std::span<const BodyState> states() const;
+    [[nodiscard]] std::vector<QueryHit> overlap_shape(
+        const QueryShape& shape, Transform transform) const;
+    [[nodiscard]] std::optional<QueryHit> cast_shape(
+        const QueryShape& shape, Transform transform, Vec3 translation) const;
+    [[nodiscard]] std::vector<QueryHit> overlap_sphere(Vec3 center, float radius) const;
+    [[nodiscard]] std::optional<QueryHit> cast_sphere(
+        Vec3 center, float radius, Vec3 translation) const;
+    [[nodiscard]] std::optional<Aabb> body_bounds(BodyHandle body) const;
+    [[nodiscard]] std::span<const ContactHit> contact_hits() const;
+    [[nodiscard]] std::span<const JointReaction> joint_reactions() const;
+    [[nodiscard]] std::optional<JointReaction> joint_reaction(JointHandle joint) const;
+    [[nodiscard]] WorldMetrics metrics() const;
     [[nodiscard]] const WorldConfig& config() const;
 
 private:

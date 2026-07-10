@@ -102,4 +102,16 @@ struct BodyHandle {
     auto operator<=>(const BodyHandle&) const = default;
 };
 
+struct JointHandle {
+    std::uint32_t index{};
+    std::uint32_t generation{};
+
+    [[nodiscard]] constexpr bool valid() const noexcept
+    {
+        return index != 0 && generation != 0;
+    }
+
+    auto operator<=>(const JointHandle&) const = default;
+};
+
 }
