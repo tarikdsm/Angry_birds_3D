@@ -135,7 +135,9 @@ Uma pilha combina densidades de 85 a 3.400 kg/m³ nas dimensões típicas do jog
 
 ### 6.5 Stress
 
-O cenário-alvo cria 500 corpos dinâmicos, 800 shapes e 250 juntas. Ele aquece por 300 ticks e mede 1.200. O gate funcional exige zero crash, corrupção, handle inválido, valor não finito ou crescimento de memória superior a 5% após dez ciclos completos de criar/simular/destruir. Percentis locais são informativos. A meta p95 de 8 ms só é gate obrigatório no hardware de referência e protocolo da especificação-mestra.
+O cenário-alvo cria 500 corpos dinâmicos, 800 shapes e 250 juntas. Cada ciclo aquece por 300 ticks e mede 1.200. O protocolo toca previamente seus buffers, executa dez ciclos completos de allocator warm-up e depois outros dez ciclos completos medidos de criar/simular/destruir; toda amostra ocorre somente após teardown completo. Em todos os builds, `b3GetByteCount()` deve começar em zero no processo isolado e retornar exatamente ao baseline antes/depois de cada cenário e após cada um dos 20 ciclos Stress; delta positivo ou negativo é `box3d_allocator_imbalance`. Em Debug `/MTd`, um ciclo completo adicional é envolvido por `_CrtMemCheckpoint`; diferenças `_NORMAL_BLOCK`/`_CLIENT_BLOCK` em count ou bytes devem ser exatamente zero. `_CRT_BLOCK` e free blocks não entram no gate.
+
+Uma única chamada `GetProcessMemoryInfo` também captura `PROCESS_MEMORY_COUNTERS_EX.PrivateUsage`, `WorkingSetSize` e `PeakWorkingSetSize`. Esses contadores medem footprint/residência do processo, não ownership do allocator Box3, e são sempre diagnósticos nesta foundation; Release `/MD` ainda é `configuration_mismatch` de toolchain, não falha do assessment. Ambos os builds serializam `gate_scope=release_mt`, `gate_applied=false`, `gate_status=diagnostic`, `budget_qualified=false` e `budget_scope=future_packaged_reference_hardware`. Para os warmups 6–10 (`W`) e medidos 6–10 (`M`), a matemática permanece congelada: mediana `s2`, growth de 5%, span central `(s3-s1)/s2`, span completo diagnóstico e guard M9/M10. O assessment adicional `pass|growth|unstable|unavailable` nunca altera exit, matriz ou hash. Os audits Debug e Release mostraram alternância/instabilidade de footprint e permanecem evidência do budget não qualificado. O target de 5% será gate futuro somente no Godot Release empacotado, em hardware de referência. Working Set é sempre diagnóstico. Timing, PrivateUsage, Working Set, Box3 allocator, CRT e warnings nunca entram no hash. O gate funcional também exige zero crash, corrupção, handle inválido ou valor não finito. Percentis locais são informativos. A meta p95 de 8 ms só é gate obrigatório no hardware de referência e protocolo da especificação-mestra.
 
 ### 6.6 Determinismo no mesmo build
 
@@ -151,7 +153,7 @@ Cada cenário roda duas vezes no mesmo executável, com mesma seed e ordem de co
 | força/torque de juntas | junta carregada até ruptura | leitura cresce monotonicamente e cruza limite conhecido | avaliar deformação/impulso relativo por dois ticks | nenhuma métrica permite ruptura previsível |
 | hulls/compounds | fixture com 8 hulls | massa, AABB e contatos passam tolerâncias | múltiplas shapes no mesmo body | crash, massa inválida ou contatos ausentes |
 | sleep sob gravidade radial | cenário 6.3 | atende todos os limites numéricos de 6.3 | omitir força em bodies asleep, política já prevista | qualquer limite de 6.3 falha |
-| criação/destruição em lote | 10 mil ciclos com handles | zero handle inválido, leak ou corrupção | reduzir batch por tick | crash, corrupção ou crescimento persistente |
+| criação/destruição em lote | 10 mil ciclos com handles, Box3/CRT e footprint diagnóstico | zero handle inválido/corrupção, retorno Box3 exato e CRT Debug sem live blocks | reduzir batch por tick | Box3/CRT desequilibrado ou configuração Release fora de `/MT`; PrivateUsage/Working Set não bloqueiam esta foundation |
 | replay/validação upstream | cenário mínimo gravado | ferramenta oficial valida o arquivo do mesmo build | usar apenas replay próprio de entradas/métricas | falha impede diagnóstico de bug reproduzível, mas não o runtime |
 
 Somente fallbacks listados podem ser adotados sem rever a especificação-mestra. Qualquer linha bloqueada produz relatório `bloquear` e interrompe o conteúdo.
@@ -182,9 +184,12 @@ O spike escreve JSON UTF-8 com:
 - resultado por cenário;
 - tempo mínimo, mediano, p95 e máximo do step;
 - pico de corpos acordados, contatos e memória quando disponível;
+- private commit e Working Set raw dos 10 warmups e 10 ciclos medidos, last/min/median/max das caudas, peak, growth, spans, estabilidade, assessment, scope/status e terminal guard;
+- Box3 allocator process/scenario baseline/final/max delta, retorno exato e 10+10 pós-teardown; CRT applicability e deltas live-block;
+- `repeat_observations[]` com índice, hash e telemetria completa Private/WS/Box3/CRT de cada repetição;
 - hash final e lista de invariantes violadas.
 
-Erros de configuração encerram o executável com código diferente de zero. “Violação fatal” significa crash, assert, timeout de 60 segundos, handle inválido, valor `NaN`/infinito, velocidade espontânea acima de `100 m/s`, body fora de `6R` sem ejeção, crescimento de memória acima de 5% no ciclo de stress ou quebra de um limite numérico das seções 6.1–6.7. Cada violação identifica cenário, tick, handle e valores relevantes. Logs do Godot não podem conter erro ao carregar a extensão. Artefatos de falha ficam em `artifacts/physics/`, ignorados pelo Git, com um resumo reproduzível que pode ser anexado a uma issue do Box3D.
+Erros de configuração encerram o executável com código diferente de zero. “Violação fatal” significa crash, assert, timeout de 60 segundos, handle inválido, valor `NaN`/infinito, velocidade espontânea acima de `100 m/s`, body fora de `6R` sem ejeção, desequilíbrio Box3/CRT, configuração Release fora de `/MT`, ou quebra funcional das seções 6.1–6.7. PrivateUsage e Working Set nunca transformam uma execução foundation em pass/fail; todo relatório inclui `private_commit_budget_unqualified` e `budget_qualification.status=deferred`. Sem violações normativas, a recomendação obrigatória é `prosseguir_com_limites`; qualquer violação produz `bloquear`. Cada violação identifica cenário, tick, handle e valores relevantes. Logs do Godot não podem conter erro ao carregar a extensão. Artefatos de falha ficam em `artifacts/physics/`, ignorados pelo Git, com um resumo reproduzível que pode ser anexado a uma issue do Box3D.
 
 ## 9. Toolchain reproduzível
 
@@ -230,6 +235,6 @@ O primeiro marco termina somente quando:
 - a cena gráfica mostra planeta, pilha e projétil sincronizados por Box3D;
 - não existem `RigidBody3D` nem outra física Godot na cena;
 - licenças MIT de Box3D, Godot e godot-cpp estão registradas;
-- um relatório do spike recomenda `prosseguir`, `prosseguir com limites` ou `bloquear`, apoiado em métricas e reproduções.
+- o relatório do spike recomenda `prosseguir_com_limites` quando não há violações normativas e `bloquear` quando há, preservando o warning de budget futuro.
 
 Se o resultado for `bloquear`, o produto não avança para conteúdo. A decisão documenta a falha e escolhe entre patch isolado, redução explícita de escopo ou espera por versão posterior do Box3D.

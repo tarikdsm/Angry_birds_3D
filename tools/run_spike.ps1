@@ -26,6 +26,18 @@ if (Test-Path -LiteralPath $report) {
     if ($LASTEXITCODE -ne 0) {
         exit $LASTEXITCODE
     }
+    $document = Get-Content -Raw -LiteralPath $report | ConvertFrom-Json
+    if ($spikeExitCode -eq 0) {
+        if (@($document.violations).Count -ne 0) {
+            [Console]::Error.WriteLine('successful spike report contains normative violations')
+            exit 1
+        }
+        if ($document.recommendation -ne 'prosseguir_com_limites') {
+            [Console]::Error.WriteLine(
+                "unexpected recommendation: $($document.recommendation)")
+            exit 1
+        }
+    }
 }
 
 exit $spikeExitCode

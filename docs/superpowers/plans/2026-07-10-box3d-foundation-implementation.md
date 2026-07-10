@@ -1012,7 +1012,7 @@ std::uint64_t hash_states(std::span<const BodyState> states) {
 }
 ```
 
-Use deterministic xorshift64 seed generation, stable handle creation order, warm-up/measurement tick counts from the spec, `std::chrono::steady_clock` for timing only, and numeric violations fixed before the run. `Stress` performs ten create/simulate/destroy cycles and records working-set change using `GetProcessMemoryInfo`; timing/memory do not enter the canonical hash.
+Use deterministic xorshift64 seed generation, stable handle creation order, warm-up/measurement tick counts from the spec, `std::chrono::steady_clock` for timing only, and numeric violations fixed before the run. `Stress` pre-touches fixed buffers, performs ten complete allocator warm-up cycles followed by ten distinct measured create/simulate/destroy cycles, and samples only after complete teardown. A private helper is the only new direct Box3 caller and exposes `b3GetByteCount()`; process/scenario baseline must be zero and all 10+10 post-teardown samples must return exactly to it. In Debug `/MTd`, checkpoint one prewarmed full cycle with `_CrtMemCheckpoint` and require zero `_NORMAL_BLOCK`/`_CLIENT_BLOCK` count+bytes delta. One `GetProcessMemoryInfo` call records `PrivateUsage`, `WorkingSetSize`, and `PeakWorkingSetSize`; preserve tail median/growth/trimmed/full spans/terminal assessment in both builds, but mark it permanently diagnostic/unqualified in this foundation. Release `/MD` remains configuration mismatch. Emit `private_commit_budget_unqualified`, defer the 5% gate to packaged Godot Release on reference hardware, and recommend `prosseguir_com_limites` when normative gates pass. Serialize Private/WS/Box3/CRT for both repeats. Timing, footprint, allocator, CRT and warnings stay outside the canonical hash.
 
 `CapabilityMatrix` additionally performs 10,000 body/handle create-destroy cycles, exercises the public sphere cast/overlap and joint reaction paths, and calls one private conformance helper that records and validates a minimal Box3D replay from the same pinned build. Direct `b3*` use is allowed only inside that helper under `native/kernel/src`; all gameplay assertions still pass through `PhysicsWorld`. Link `Psapi.lib` on Windows for working-set sampling.
 
@@ -1020,7 +1020,7 @@ Projectile gating is algorithmic: run each seed at 35 m/s and four substeps; if 
 
 The shape-query row passes only when the 3 m cast's first handle and the overlap-at-contact fixture agree; the documented multi-ray fallback is recorded as preview-only and does not turn the runtime row green. The contact row passes only with at least one real hit, finite positive `approach_speed`, `effective_mass`, `derived_energy`, finite normal/material IDs, and unique ordered body pairs after six substeps. If raw hit events are unusable, the only allowed fallback computes relative normal speed from copied body velocities for begin-contact pairs, applies the same effective-mass/energy equation, and records `fallback="derived_relative_energy"`; if energy or pair deduplication still fails, the row is blocked.
 
-`main.cpp` parses `--scenario`, `--all`, `--seed`, `--substeps`, `--repeat`, and `--json`; invalid options return 2, violations return 1, success returns 0. JSON includes tool/dependency commits, build type, CPU, scenario values, p50/p95/max step, final hashes, and violations.
+`main.cpp` parses `--scenario`, `--all`, `--seed`, `--substeps`, `--repeat`, and `--json`; invalid options return 2, violations return 1, success returns 0. JSON includes tool/dependency commits, build type, CPU, scenario values, p50/p95/max step, process/scenario Box3 allocator proof, final hashes, violations, and `repeat_observations[]` containing each repeat index, hash, Private/Working Set, Box3 and CRT. The Python smoke recomputes Release private tails for both repeats, verifies Debug diagnostic scope, Box3 exact return and Debug CRT deltas.
 
 Create `tools/run_spike.ps1` to build Release, create `artifacts/physics`, run all scenarios twice, validate JSON with `python -m json.tool`, and propagate nonzero exit.
 
@@ -1267,11 +1267,11 @@ Populate the report only from fresh Debug/Release outputs:
 
 - versions/commits/toolchain paths;
 - every go/no-go row with measured result and fallback used;
-- p50/p95/max, awake/contact/body/shape/joint peaks, hashes, memory-cycle delta;
+- p50/p95/max, awake/contact/body/shape/joint peaks, hashes, Box3 exact-return evidence, Debug CRT live-block deltas, diagnostic Private/Working Set 10+10 samples and unqualified budget warning for every repeat;
 - upstream test counts;
 - Godot headless log and graphical capture path;
 - known alpha limits and reproducible artifact paths;
-- recommendation. Use `bloquear` if any fatal invariant or unapproved fallback exists; use `prosseguir com limites` only for informational performance/visual constraints; otherwise `prosseguir`.
+- recommendation. Use `bloquear` if any normative violation exists; otherwise require `prosseguir_com_limites` because the private-commit budget is deferred to packaged reference-hardware qualification.
 
 - [ ] **Step 4: Run the complete fresh gate**
 

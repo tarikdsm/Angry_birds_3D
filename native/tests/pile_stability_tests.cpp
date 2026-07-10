@@ -36,6 +36,134 @@ NINHO_TEST("rolling energy detects an intermediate growing window")
         1.0e-12);
 }
 
+NINHO_TEST("private commit assessment uses trimmed central tail protocol")
+{
+    const std::array<std::size_t, 10> baseline{
+        90, 91, 92, 93, 94, 100, 100, 100, 100, 100};
+    const auto status = [&](const std::array<std::size_t, 10>& measured) {
+        return assess_private_commit(baseline, measured).status;
+    };
+    const std::array<std::size_t, 10> empirical{
+        1, 1, 1, 1, 1, 4886528, 4296704, 4292608, 4276224, 4272128};
+    const std::array<std::size_t, 10> empirical_baseline{
+        1, 1, 1, 1, 1, 4263936, 4280320, 4268032, 4255744, 4263936};
+    const auto empirical_result = assess_private_commit(empirical_baseline, empirical);
+    NINHO_REQUIRE(empirical_result.status == PrivateCommitStatus::Pass);
+    NINHO_REQUIRE(empirical_result.measured_trimmed_span_ratio <= 0.05);
+    NINHO_REQUIRE(empirical_result.measured_full_span_ratio > 0.05);
+
+    const std::array<std::size_t, 10> single_high{
+        1, 1, 1, 1, 1, 100, 100, 100, 100, 140};
+    const std::array<std::size_t, 10> single_low{
+        1, 1, 1, 1, 1, 60, 100, 100, 100, 100};
+    const std::array<std::size_t, 10> low_high{
+        1, 1, 1, 1, 1, 60, 100, 100, 100, 140};
+    NINHO_REQUIRE(status(single_high) == PrivateCommitStatus::Pass);
+    NINHO_REQUIRE(status(single_low) == PrivateCommitStatus::Pass);
+    NINHO_REQUIRE(status(low_high) == PrivateCommitStatus::Pass);
+
+    const std::array<std::size_t, 10> two_highs{
+        1, 1, 1, 1, 1, 106, 106, 100, 100, 100};
+    const std::array<std::size_t, 10> two_lows{
+        1, 1, 1, 1, 1, 94, 94, 100, 100, 100};
+    NINHO_REQUIRE(status(two_highs) == PrivateCommitStatus::Unstable);
+    NINHO_REQUIRE(status(two_lows) == PrivateCommitStatus::Unstable);
+
+    const std::array<std::size_t, 10> median_106{
+        1, 1, 1, 1, 1, 106, 106, 106, 106, 106};
+    const std::array<std::size_t, 10> exactly_105{
+        1, 1, 1, 1, 1, 105, 105, 105, 105, 105};
+    NINHO_REQUIRE(status(median_106) == PrivateCommitStatus::Growth);
+    NINHO_REQUIRE(status(exactly_105) == PrivateCommitStatus::Pass);
+
+    const std::array<std::size_t, 10> terminal_two{
+        1, 1, 1, 1, 1, 104, 104, 104, 106, 106};
+    const std::array<std::size_t, 10> terminal_one{
+        1, 1, 1, 1, 1, 104, 104, 104, 104, 106};
+    NINHO_REQUIRE(status(terminal_two) == PrivateCommitStatus::Growth);
+    NINHO_REQUIRE(status(terminal_one) == PrivateCommitStatus::Pass);
+
+    const std::array<std::size_t, 10> unstable_warmup{
+        1, 1, 1, 1, 1, 94, 94, 100, 100, 100};
+    NINHO_REQUIRE(
+        assess_private_commit(unstable_warmup, median_106).status
+        == PrivateCommitStatus::Unstable);
+
+    auto zero = baseline;
+    zero.back() = 0;
+    NINHO_REQUIRE(
+        assess_private_commit(zero, exactly_105).status
+        == PrivateCommitStatus::Unavailable);
+    NINHO_REQUIRE(
+        assess_private_commit(
+            std::span<const std::size_t>{baseline}.first(9), exactly_105)
+            .status
+        == PrivateCommitStatus::Unavailable);
+}
+
+NINHO_TEST("Box3 allocator returns exactly to zero after a complete world")
+{
+    const std::int64_t baseline = box3d_allocator_byte_count();
+    NINHO_REQUIRE(baseline == 0);
+    {
+        PhysicsWorld world(WorldConfig{.surface_gravity = 0, .max_bodies = 2});
+        const auto a = world.create_body(BodyDesc::dynamic_sphere(0.5f, {}, 10));
+        const auto b = world.create_body(
+            BodyDesc::dynamic_sphere(0.5f, {{1, 0, 0}, {}}, 10));
+        NINHO_REQUIRE(a);
+        NINHO_REQUIRE(b);
+        NINHO_REQUIRE(world.create_joint(DistanceJointDesc{.a = a.value, .b = b.value}));
+        world.step();
+        NINHO_REQUIRE(box3d_allocator_byte_count() > baseline);
+    }
+    NINHO_REQUIRE(box3d_allocator_byte_count() == baseline);
+    NINHO_REQUIRE(!box3d_allocator_exact_return(0, 1));
+    NINHO_REQUIRE(!box3d_allocator_exact_return(0, -1));
+    NINHO_REQUIRE(box3d_allocator_exact_return(0, 0));
+}
+
+NINHO_TEST("private commit gate scope follows the real CRT configuration")
+{
+    NINHO_REQUIRE(
+        evaluate_private_commit_gate_mode(true, true, false, false)
+        == PrivateCommitGateMode::ReleaseMt);
+    NINHO_REQUIRE(
+        evaluate_private_commit_gate_mode(true, true, true, false)
+        == PrivateCommitGateMode::ConfigurationMismatch);
+    NINHO_REQUIRE(
+        evaluate_private_commit_gate_mode(false, true, false, true)
+        == PrivateCommitGateMode::Diagnostic);
+    NINHO_REQUIRE(!private_commit_blocks(
+        PrivateCommitGateMode::Diagnostic, PrivateCommitStatus::Growth));
+    NINHO_REQUIRE(!private_commit_blocks(
+        PrivateCommitGateMode::Diagnostic, PrivateCommitStatus::Unstable));
+    NINHO_REQUIRE(!private_commit_blocks(
+        PrivateCommitGateMode::ReleaseMt, PrivateCommitStatus::Growth));
+    NINHO_REQUIRE(!private_commit_blocks(
+        PrivateCommitGateMode::ReleaseMt, PrivateCommitStatus::Unavailable));
+    NINHO_REQUIRE(private_commit_blocks(
+        PrivateCommitGateMode::ConfigurationMismatch, PrivateCommitStatus::Pass));
+}
+
+NINHO_TEST("Debug CRT probe detects and then frees an intentional allocation")
+{
+    const auto clean = debug_crt_allocation_probe(false);
+    const auto intentional = debug_crt_allocation_probe(true);
+#if defined(_MSC_VER) && defined(_DEBUG)
+    NINHO_REQUIRE(clean.applicable);
+    NINHO_REQUIRE(clean.balanced);
+    NINHO_REQUIRE(intentional.applicable);
+    NINHO_REQUIRE(!intentional.balanced);
+    NINHO_REQUIRE(intentional.normal_block_count_delta > 0);
+    NINHO_REQUIRE(intentional.normal_block_bytes_delta > 0);
+    NINHO_REQUIRE(debug_crt_allocation_probe(false).balanced);
+#else
+    NINHO_REQUIRE(!clean.applicable);
+    NINHO_REQUIRE(clean.balanced);
+    NINHO_REQUIRE(!intentional.applicable);
+#endif
+}
+
 NINHO_TEST("radial pile meets predetermined sleep limits")
 {
     const auto result = ScenarioRunner{}.run(ScenarioKind::RadialPile, 7, 4);
@@ -79,6 +207,7 @@ NINHO_TEST("stress uses the full fixed topology after allocator warmup")
     NINHO_REQUIRE(result.joint_count == 250);
     NINHO_REQUIRE(result.warmup_ticks == 300);
     NINHO_REQUIRE(result.measurement_ticks == 1200);
+    NINHO_REQUIRE(result.allocator_warmup_cycles == 10);
     NINHO_REQUIRE(result.stress_cycles == 10);
     const auto executed_substeps = std::find_if(
         result.metrics.begin(), result.metrics.end(), [](const ScenarioValue& value) {
@@ -87,8 +216,28 @@ NINHO_TEST("stress uses the full fixed topology after allocator warmup")
     NINHO_REQUIRE(executed_substeps != result.metrics.end());
     NINHO_REQUIRE(executed_substeps->value == 2.0);
 #ifdef _WIN32
+    NINHO_REQUIRE(result.private_commit_available);
+    NINHO_REQUIRE(result.private_commit_warmup_samples.size() == 10);
+    NINHO_REQUIRE(result.private_commit_cycle_samples.size() == 10);
+    NINHO_REQUIRE(result.box3d_allocator.baseline_bytes == 0);
+    NINHO_REQUIRE(result.box3d_allocator.final_bytes == 0);
+    NINHO_REQUIRE(result.box3d_allocator.exact_return);
+    NINHO_REQUIRE(result.box3d_allocator.warmup_post_teardown_bytes.size() == 10);
+    NINHO_REQUIRE(result.box3d_allocator.measured_post_teardown_bytes.size() == 10);
+    NINHO_REQUIRE(std::ranges::all_of(
+        result.box3d_allocator.warmup_post_teardown_bytes,
+        [](std::int64_t bytes) { return bytes == 0; }));
+    NINHO_REQUIRE(std::ranges::all_of(
+        result.box3d_allocator.measured_post_teardown_bytes,
+        [](std::int64_t bytes) { return bytes == 0; }));
+#if defined(_MSC_VER) && defined(_DEBUG)
+    NINHO_REQUIRE(!result.private_commit_gate_applied);
+    NINHO_REQUIRE(result.private_commit_gate_status == "diagnostic");
+    NINHO_REQUIRE(result.crt.applicable);
+    NINHO_REQUIRE(result.crt.balanced);
+#endif
     NINHO_REQUIRE(result.working_set_available);
-    NINHO_REQUIRE(result.working_set_warmup_samples.size() == 3);
+    NINHO_REQUIRE(result.working_set_warmup_samples.size() == 10);
     NINHO_REQUIRE(result.working_set_cycle_samples.size() == 10);
     NINHO_REQUIRE(result.working_set_baseline_low_bytes > 0);
     NINHO_REQUIRE(result.working_set_final_low_bytes > 0);

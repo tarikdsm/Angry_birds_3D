@@ -252,6 +252,11 @@ int main(int argc, char** argv)
         .substeps = options->substeps,
         .repeat = options->repeat,
     };
+    report.process_box3d_allocator.baseline_bytes = box3d_allocator_byte_count();
+    report.process_box3d_allocator.final_bytes =
+        report.process_box3d_allocator.baseline_bytes;
+    report.process_box3d_allocator.exact_return =
+        report.process_box3d_allocator.baseline_bytes == 0;
     ScenarioRunner::set_emergency_json_path(
         options->json_path
             ? std::optional<std::string>{options->json_path->string()}
@@ -291,9 +296,13 @@ int main(int argc, char** argv)
                 });
             }
             hashes.push_back(current.final_hash);
+            RepeatObservation observation =
+                make_repeat_observation(repeat_index, current);
             if (!first_result) {
                 first_result = std::move(current);
+                first_result->repeat_observations.push_back(std::move(observation));
             } else {
+                first_result->repeat_observations.push_back(std::move(observation));
                 first_result->violations.insert(
                     first_result->violations.end(),
                     current.violations.begin(),
@@ -310,6 +319,27 @@ int main(int argc, char** argv)
         }
         first_result->repeat_hashes = std::move(hashes);
         report.scenarios.push_back(std::move(*first_result));
+    }
+
+    report.process_box3d_allocator.final_bytes = box3d_allocator_byte_count();
+    report.process_box3d_allocator.max_abs_delta = std::abs(
+        report.process_box3d_allocator.final_bytes
+        - report.process_box3d_allocator.baseline_bytes);
+    report.process_box3d_allocator.exact_return =
+        report.process_box3d_allocator.exact_return
+        && report.process_box3d_allocator.final_bytes
+            == report.process_box3d_allocator.baseline_bytes;
+    if (!report.process_box3d_allocator.exact_return && !report.scenarios.empty()) {
+        report.scenarios.back().violations.push_back({
+            .scenario = "process",
+            .code = "box3d_allocator_imbalance",
+            .message = "Box3 allocator did not return to the isolated process baseline",
+            .details = {
+                {"baseline_bytes",
+                 std::to_string(report.process_box3d_allocator.baseline_bytes)},
+                {"final_bytes", std::to_string(report.process_box3d_allocator.final_bytes)},
+            },
+        });
     }
 
     std::string document;

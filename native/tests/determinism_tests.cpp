@@ -155,6 +155,35 @@ NINHO_TEST("scenario JSON preserves precise integer and textual violation contex
     NINHO_REQUIRE(json.find("\"value\":\"NaN\"") != std::string::npos);
 }
 
+NINHO_TEST("scenario JSON preserves memory telemetry for every repeat")
+{
+    ScenarioResult result;
+    result.name = "repeat_memory";
+    result.final_hash = 11;
+    result.private_commit_available = true;
+    result.private_commit_stable = true;
+    result.private_commit_baseline_median_bytes = 100;
+    result.private_commit_final_median_bytes = 101;
+    result.private_commit_warmup_samples.assign(10, 100);
+    result.private_commit_cycle_samples.assign(10, 101);
+    result.working_set_available = true;
+    result.working_set_warmup_samples.assign(10, 200);
+    result.working_set_cycle_samples.assign(10, 250);
+    result.repeat_observations.push_back(make_repeat_observation(1, result));
+    result.final_hash = 22;
+    result.private_commit_final_median_bytes = 102;
+    result.repeat_observations.push_back(make_repeat_observation(2, result));
+
+    const std::string json = result.to_json();
+    NINHO_REQUIRE(json.find("\"repeat_observations\":[{\"repeat\":1,\"hash\":11")
+        != std::string::npos);
+    NINHO_REQUIRE(json.find("{\"repeat\":2,\"hash\":22") != std::string::npos);
+    NINHO_REQUIRE(json.find("\"private_commit\":{\"available\":true")
+        != std::string::npos);
+    NINHO_REQUIRE(json.find("\"working_set\":{\"available\":true")
+        != std::string::npos);
+}
+
 NINHO_TEST("scenario JSON rejects malformed UTF-8")
 {
     const std::array malformed{
@@ -201,6 +230,36 @@ NINHO_TEST("scenario exit code distinguishes clean violation and hash mismatch")
         .message = "fatal",
     });
     NINHO_REQUIRE(scenario_exit_code(std::array{violated}, false) == 1);
+}
+
+NINHO_TEST("private budget assessments warn without changing normative exit")
+{
+    for (const std::string_view assessment : {
+             "pass", "growth", "unstable", "unavailable"}) {
+        ScenarioResult result;
+        result.name = "private_" + std::string{assessment};
+        result.private_commit_assessment_status = assessment;
+        result.warnings.push_back({
+            .code = "private_commit_budget_unqualified",
+            .message = "budget deferred",
+        });
+        NINHO_REQUIRE(scenario_exit_code(std::array{result}, false) == 0);
+    }
+}
+
+NINHO_TEST("report always defers private budget with limits recommendation")
+{
+    ScenarioReport report;
+    ScenarioResult result;
+    result.name = "clean";
+    report.scenarios.push_back(result);
+    const std::string json = report.to_json();
+    NINHO_REQUIRE(json.find("\"private_commit_budget_unqualified\"")
+        != std::string::npos);
+    NINHO_REQUIRE(json.find("\"status\":\"deferred\"") != std::string::npos);
+    NINHO_REQUIRE(json.find("\"target_growth_ratio\":0.05") != std::string::npos);
+    NINHO_REQUIRE(json.find("\"recommendation\":\"prosseguir_com_limites\"")
+        != std::string::npos);
 }
 
 NINHO_TEST("scenario watchdog uses sixty seconds and disarms after success")

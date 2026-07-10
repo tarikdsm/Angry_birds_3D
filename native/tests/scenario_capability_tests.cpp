@@ -101,6 +101,54 @@ NINHO_TEST("capability row hash covers every canonical field and ignores value o
     NINHO_REQUIRE(hash_capability_rows(changed) != baseline);
 }
 
+NINHO_TEST("lifecycle hash separates functional proof from memory gate")
+{
+    const CapabilityRow lifecycle{
+        .capability = "batch_lifecycle",
+        .status = CapabilityStatus::Pass,
+        .values = {
+            {"generation_cycles", 10000.0, "count"},
+            {"invalid_handles", 0.0, "count"},
+            {"private_commit_available", 1.0, "bool"},
+            {"private_commit_growth", 0.01, "ratio"},
+            {"working_set_available", 1.0, "bool"},
+            {"working_set_growth", 0.01, "ratio"},
+            {"step_p95_ms", 0.5, "ms"},
+            {"box3d_allocator_final_bytes", 0.0, "bytes"},
+            {"crt_normal_bytes_delta", 0.0, "bytes"},
+        },
+        .fixture_hashes = {0x0000000200000000ull},
+    };
+    NINHO_REQUIRE(canonical_functional_status(lifecycle) == CapabilityStatus::Pass);
+    const std::uint64_t baseline = hash_capability_rows(std::array{lifecycle});
+
+    auto memory_blocked = lifecycle;
+    memory_blocked.status = CapabilityStatus::Blocked;
+    memory_blocked.fallback = "working_set_unavailable";
+    memory_blocked.values[2].value = 0.0;
+    memory_blocked.values[3].value = 0.25;
+    memory_blocked.values[4].value = 0.0;
+    memory_blocked.values[5].value = 0.75;
+    memory_blocked.values[6].value = 99.0;
+    memory_blocked.values[7].value = 4096.0;
+    memory_blocked.values[8].value = 64.0;
+    NINHO_REQUIRE(hash_capability_rows(std::array{memory_blocked}) == baseline);
+
+    auto invalid_handles = lifecycle;
+    invalid_handles.values[1].value = 1.0;
+    NINHO_REQUIRE(
+        canonical_functional_status(invalid_handles) == CapabilityStatus::Blocked);
+    NINHO_REQUIRE(hash_capability_rows(std::array{invalid_handles}) != baseline);
+
+    auto incomplete = lifecycle;
+    incomplete.values[0].value = 9999.0;
+    NINHO_REQUIRE(hash_capability_rows(std::array{incomplete}) != baseline);
+
+    auto changed_fixture = lifecycle;
+    changed_fixture.fixture_hashes[0] += 1;
+    NINHO_REQUIRE(hash_capability_rows(std::array{changed_fixture}) != baseline);
+}
+
 NINHO_TEST("joint fallback requires two consecutive qualifying ticks")
 {
     const std::array isolated{0.02, 0.0, 0.03};
@@ -109,14 +157,23 @@ NINHO_TEST("joint fallback requires two consecutive qualifying ticks")
     NINHO_REQUIRE(has_two_consecutive_samples(consecutive, 0.01));
 }
 
-NINHO_TEST("lifecycle cannot pass without working set evidence")
+NINHO_TEST("lifecycle ignores private commit when functional evidence passes")
 {
     NINHO_REQUIRE(
         classify_lifecycle_status(10000, 0, std::nullopt)
-        == CapabilityStatus::Blocked);
+        == CapabilityStatus::Pass);
     NINHO_REQUIRE(
         classify_lifecycle_status(10000, 0, 0.01)
         == CapabilityStatus::Pass);
+    NINHO_REQUIRE(
+        classify_lifecycle_status(10000, 0, 0.051)
+        == CapabilityStatus::Pass);
+    NINHO_REQUIRE(
+        classify_lifecycle_status(9999, 0, 0.0)
+        == CapabilityStatus::Blocked);
+    NINHO_REQUIRE(
+        classify_lifecycle_status(10000, 1, 0.0)
+        == CapabilityStatus::Blocked);
 }
 
 NINHO_TEST("capability matrix keeps query contact and joint proof values")
@@ -148,6 +205,8 @@ NINHO_TEST("capability matrix keeps query contact and joint proof values")
     NINHO_REQUIRE_NEAR(value(compound, "bounds_lower_x"), -1.62, 1.0e-4);
     NINHO_REQUIRE_NEAR(value(compound, "bounds_upper_x"), 1.62, 1.0e-4);
     NINHO_REQUIRE(value(compound, "contacted") == 1.0);
+    NINHO_REQUIRE(value(compound, "box3d_allocator_baseline_bytes") == 0.0);
+    NINHO_REQUIRE(value(compound, "box3d_allocator_final_bytes") == 0.0);
 }
 
 NINHO_TEST("capability matrix performs lifecycle and official replay proof")
@@ -163,4 +222,6 @@ NINHO_TEST("capability matrix performs lifecycle and official replay proof")
         || (replay.status == CapabilityStatus::Fallback
             && replay.fallback == "input_metric_replay"));
     NINHO_REQUIRE(value(replay, "temporary_file_removed") == 1.0);
+    NINHO_REQUIRE(value(replay, "box3d_allocator_baseline_bytes") == 0.0);
+    NINHO_REQUIRE(value(replay, "box3d_allocator_final_bytes") == 0.0);
 }

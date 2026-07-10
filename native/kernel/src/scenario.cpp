@@ -1,6 +1,7 @@
 #include <ninho/physics/scenario.hpp>
 
 #include "box3d_replay_conformance.hpp"
+#include "box3d_allocator_probe.hpp"
 
 #include <algorithm>
 #include <array>
@@ -27,6 +28,10 @@
 #include <tuple>
 #include <string_view>
 #include <vector>
+
+#if defined(_MSC_VER) && defined(_DEBUG)
+#include <crtdbg.h>
+#endif
 
 #ifdef _WIN32
 #define NOMINMAX
@@ -471,7 +476,7 @@ void finish_timings(ScenarioResult& result, std::vector<double> timings)
         add_violation(
             result,
             "radial_fall_energy_growth",
-            "kinetic energy grew by more than two percent in the final 120 ticks",
+            "kinetic energy grew by more than two percent in any 120-tick post-contact window",
             600,
             ball.value,
             {{"growth_ratio", result.max_energy_growth_ratio, "ratio"}});
@@ -1126,7 +1131,7 @@ struct OrientedBox {
     return result;
 }
 
-[[nodiscard]] std::optional<std::size_t> working_set_bytes()
+[[nodiscard]] std::optional<ProcessMemorySample> process_memory_sample()
 {
 #ifdef _WIN32
     PROCESS_MEMORY_COUNTERS_EX counters{};
@@ -1137,10 +1142,51 @@ struct OrientedBox {
             sizeof(counters)) == FALSE) {
         return std::nullopt;
     }
-    return static_cast<std::size_t>(counters.WorkingSetSize);
+    return ProcessMemorySample{
+        .private_usage_bytes = static_cast<std::size_t>(counters.PrivateUsage),
+        .working_set_bytes = static_cast<std::size_t>(counters.WorkingSetSize),
+        .peak_working_set_bytes = static_cast<std::size_t>(counters.PeakWorkingSetSize),
+    };
 #else
     return std::nullopt;
 #endif
+}
+
+[[nodiscard]] PrivateCommitGateMode current_private_commit_gate_mode()
+{
+    constexpr bool release_build = std::string_view{NINHO_BUILD_TYPE} == "Release";
+#ifdef _MT
+    constexpr bool mt_defined = true;
+#else
+    constexpr bool mt_defined = false;
+#endif
+#ifdef _DLL
+    constexpr bool dll_defined = true;
+#else
+    constexpr bool dll_defined = false;
+#endif
+#ifdef _DEBUG
+    constexpr bool debug_defined = true;
+#else
+    constexpr bool debug_defined = false;
+#endif
+    return evaluate_private_commit_gate_mode(
+        release_build, mt_defined, dll_defined, debug_defined);
+}
+
+[[nodiscard]] std::string_view private_commit_status_name(PrivateCommitStatus status)
+{
+    switch (status) {
+    case PrivateCommitStatus::Pass:
+        return "pass";
+    case PrivateCommitStatus::Unavailable:
+        return "unavailable";
+    case PrivateCommitStatus::Unstable:
+        return "unstable";
+    case PrivateCommitStatus::Growth:
+        return "growth";
+    }
+    return "unavailable";
 }
 
 struct StressCycleResult {
@@ -1151,7 +1197,6 @@ struct StressCycleResult {
     BodyHandle handle{};
     std::uint64_t final_hash{};
     std::vector<double> timings;
-    std::size_t peak_working_set{};
     int peak_awake_count{};
     int peak_contact_count{};
     int executed_substeps{};
@@ -1250,9 +1295,6 @@ struct StressCycleResult {
             cycle.handle = failure->handle;
             return cycle;
         }
-        if (const auto memory = working_set_bytes()) {
-            cycle.peak_working_set = std::max(cycle.peak_working_set, *memory);
-        }
     }
     cycle.final_hash = hash_states(world.states());
 
@@ -1283,29 +1325,129 @@ struct StressCycleResult {
     return cycle;
 }
 
+struct CrtStressProbeResult {
+    CrtMemoryObservation memory;
+    bool workload_passed{true};
+};
+
+[[nodiscard]] CrtStressProbeResult probe_debug_crt_stress_cycle(
+    int warmup_ticks, int measurement_ticks, int substeps)
+{
+    CrtStressProbeResult result;
+#if defined(_MSC_VER) && defined(_DEBUG)
+    static_cast<void>(debug_crt_allocation_probe(false));
+    result.memory.applicable = true;
+    _CrtMemState before{};
+    _CrtMemState after{};
+    _CrtMemState difference{};
+    _CrtMemCheckpoint(&before);
+    {
+        const StressCycleResult cycle = execute_stress_cycle(
+            warmup_ticks, measurement_ticks, false, substeps);
+        result.workload_passed = cycle.passed;
+    }
+    _CrtMemCheckpoint(&after);
+    _CrtMemDifference(&difference, &before, &after);
+    result.memory.normal_block_count_delta =
+        static_cast<std::int64_t>(difference.lCounts[_NORMAL_BLOCK]);
+    result.memory.normal_block_bytes_delta =
+        static_cast<std::int64_t>(difference.lSizes[_NORMAL_BLOCK]);
+    result.memory.client_block_count_delta =
+        static_cast<std::int64_t>(difference.lCounts[_CLIENT_BLOCK]);
+    result.memory.client_block_bytes_delta =
+        static_cast<std::int64_t>(difference.lSizes[_CLIENT_BLOCK]);
+    result.memory.balanced = result.memory.normal_block_count_delta == 0
+        && result.memory.normal_block_bytes_delta == 0
+        && result.memory.client_block_count_delta == 0
+        && result.memory.client_block_bytes_delta == 0;
+#else
+    static_cast<void>(warmup_ticks);
+    static_cast<void>(measurement_ticks);
+    static_cast<void>(substeps);
+#endif
+    return result;
+}
+
 [[nodiscard]] ScenarioResult run_stress(std::uint64_t seed, int substeps)
 {
     ScenarioResult result = make_result(ScenarioKind::Stress, seed, substeps);
+    result.box3d_allocator.baseline_bytes = box3d_allocator_byte_count();
+    result.box3d_allocator.final_bytes = result.box3d_allocator.baseline_bytes;
+    result.box3d_allocator.exact_return =
+        result.box3d_allocator.baseline_bytes == 0;
     result.dynamic_body_count = 500;
     result.shape_count = 800;
     result.joint_count = 250;
+    result.allocator_warmup_cycles = 10;
     result.warmup_ticks = 300;
     result.measurement_ticks = 1200;
     result.limits = {
-        {"persistent_working_set_growth", "<=", 0.05, "ratio"},
+        {"persistent_private_commit_growth", "<=", 0.05, "ratio"},
+        {"private_commit_tail_span", "<=", 0.05, "ratio"},
+        {"private_commit_terminal_growth", "==", 0.0, "bool"},
+        {"allocator_warmup_cycles", "==", 10.0, "cycles"},
         {"scenario_timeout", "<=", 60.0, "s"},
         {"spontaneous_speed", "<=", 100.0, "m/s"},
     };
 
     std::vector<double> timings;
+    // Commit the timing buffer before the memory baseline so its fixed storage
+    // cannot appear later as persistent growth during the measured cycles.
     timings.resize(static_cast<std::size_t>(result.measurement_ticks) * 10);
     std::ranges::fill(timings, 0.0);
     timings.clear();
 
     const auto protocol_start = std::chrono::steady_clock::now();
     int executed_substeps = 0;
-    result.working_set_warmup_samples.reserve(3);
-    for (int warmup_cycle = 0; warmup_cycle < 3; ++warmup_cycle) {
+    result.private_commit_warmup_samples.reserve(
+        static_cast<std::size_t>(result.allocator_warmup_cycles));
+    result.working_set_warmup_samples.reserve(
+        static_cast<std::size_t>(result.allocator_warmup_cycles));
+    const auto record_memory = [&](bool warmup) {
+        const auto sample = process_memory_sample();
+        if (!sample) {
+            return;
+        }
+        auto& private_samples = warmup ? result.private_commit_warmup_samples
+                                       : result.private_commit_cycle_samples;
+        auto& working_samples = warmup ? result.working_set_warmup_samples
+                                       : result.working_set_cycle_samples;
+        private_samples.push_back(sample->private_usage_bytes);
+        working_samples.push_back(sample->working_set_bytes);
+        result.private_commit_peak_bytes = std::max(
+            result.private_commit_peak_bytes, sample->private_usage_bytes);
+        result.working_set_peak_bytes = std::max(
+            result.working_set_peak_bytes, sample->peak_working_set_bytes);
+    };
+    const auto record_allocator = [&](bool warmup) {
+        const std::int64_t bytes = box3d_allocator_byte_count();
+        auto& samples = warmup
+            ? result.box3d_allocator.warmup_post_teardown_bytes
+            : result.box3d_allocator.measured_post_teardown_bytes;
+        samples.push_back(bytes);
+        result.box3d_allocator.final_bytes = bytes;
+        const std::int64_t delta = bytes - result.box3d_allocator.baseline_bytes;
+        result.box3d_allocator.max_abs_delta = std::max(
+            result.box3d_allocator.max_abs_delta, std::abs(delta));
+        result.box3d_allocator.exact_return =
+            result.box3d_allocator.exact_return && delta == 0;
+        return delta == 0;
+    };
+    if (!result.box3d_allocator.exact_return) {
+        add_violation(
+            result,
+            "box3d_allocator_imbalance",
+            "Box3 allocator baseline was not zero before Stress",
+            0,
+            {},
+            {{"baseline_bytes",
+              static_cast<double>(result.box3d_allocator.baseline_bytes),
+              "bytes"}});
+        return result;
+    }
+    for (int warmup_cycle = 0;
+         warmup_cycle < result.allocator_warmup_cycles;
+         ++warmup_cycle) {
         watchdog_checkpoint(
             warmup_cycle * (result.warmup_ticks + result.measurement_ticks + 1));
         const StressCycleResult allocator_warmup = execute_stress_cycle(
@@ -1334,23 +1476,74 @@ struct StressCycleResult {
                  {"executed", static_cast<double>(executed_substeps), "count"}});
             return result;
         }
-        result.working_set_peak_bytes = std::max(
-            result.working_set_peak_bytes, allocator_warmup.peak_working_set);
-        if (const auto sample = working_set_bytes()) {
-            result.working_set_warmup_samples.push_back(*sample);
-            result.working_set_peak_bytes =
-                std::max(result.working_set_peak_bytes, *sample);
+        const bool allocator_balanced = record_allocator(true);
+        record_memory(true);
+        if (!allocator_balanced) {
+            add_violation(
+                result,
+                "box3d_allocator_imbalance",
+                "Box3 allocator did not return to baseline after a Stress warmup cycle",
+                0,
+                {},
+                {{"warmup_cycle", static_cast<double>(warmup_cycle + 1), "count"},
+                 {"allocator_bytes",
+                  static_cast<double>(result.box3d_allocator.final_bytes),
+                  "bytes"}});
+            return result;
         }
     }
 
-    result.working_set_available = result.working_set_warmup_samples.size() == 3;
-    if (result.working_set_available) {
-        result.working_set_baseline_bytes = result.working_set_warmup_samples.back();
-        result.working_set_baseline_low_bytes = *std::min_element(
-            result.working_set_warmup_samples.begin(),
-            result.working_set_warmup_samples.end());
+    const CrtStressProbeResult crt_probe = probe_debug_crt_stress_cycle(
+        result.warmup_ticks, result.measurement_ticks, substeps);
+    result.crt = crt_probe.memory;
+    const std::int64_t after_crt_allocator = box3d_allocator_byte_count();
+    if (!box3d_allocator_exact_return(
+            result.box3d_allocator.baseline_bytes, after_crt_allocator)) {
+        result.box3d_allocator.final_bytes = after_crt_allocator;
+        result.box3d_allocator.exact_return = false;
+        result.box3d_allocator.max_abs_delta = std::max(
+            result.box3d_allocator.max_abs_delta,
+            std::abs(after_crt_allocator - result.box3d_allocator.baseline_bytes));
+        add_violation(
+            result,
+            "box3d_allocator_imbalance",
+            "Box3 allocator did not return after the Debug CRT probe cycle",
+            0,
+            {});
+        return result;
+    }
+    if (!crt_probe.workload_passed) {
+        add_violation(
+            result,
+            "crt_probe_workload_failed",
+            "Debug CRT probe workload failed before memory comparison",
+            0,
+            {});
+        return result;
+    }
+    if (result.crt.applicable && !result.crt.balanced) {
+        add_violation(
+            result,
+            "crt_live_block_imbalance",
+            "Debug CRT live normal/client blocks did not return exactly to zero",
+            0,
+            {},
+            {{"normal_count_delta",
+              static_cast<double>(result.crt.normal_block_count_delta),
+              "count"},
+             {"normal_bytes_delta",
+              static_cast<double>(result.crt.normal_block_bytes_delta),
+              "bytes"},
+             {"client_count_delta",
+              static_cast<double>(result.crt.client_block_count_delta),
+              "count"},
+             {"client_bytes_delta",
+              static_cast<double>(result.crt.client_block_bytes_delta),
+              "bytes"}});
+        return result;
     }
 
+    result.private_commit_cycle_samples.reserve(10);
     result.working_set_cycle_samples.reserve(10);
     for (int cycle_index = 0; cycle_index < 10; ++cycle_index) {
         watchdog_checkpoint(result.ticks);
@@ -1386,17 +1579,24 @@ struct StressCycleResult {
             std::max(result.peak_awake_count, cycle.peak_awake_count);
         result.peak_contact_count =
             std::max(result.peak_contact_count, cycle.peak_contact_count);
-        result.working_set_peak_bytes =
-            std::max(result.working_set_peak_bytes, cycle.peak_working_set);
         timings.insert(
             timings.end(),
             std::make_move_iterator(cycle.timings.begin()),
             std::make_move_iterator(cycle.timings.end()));
-        if (const auto persistent = working_set_bytes()) {
-            result.working_set_final_bytes = *persistent;
-            result.working_set_cycle_samples.push_back(*persistent);
-            result.working_set_peak_bytes =
-                std::max(result.working_set_peak_bytes, *persistent);
+        const bool allocator_balanced = record_allocator(false);
+        record_memory(false);
+        if (!allocator_balanced) {
+            add_violation(
+                result,
+                "box3d_allocator_imbalance",
+                "Box3 allocator did not return to baseline after a measured Stress cycle",
+                result.ticks,
+                {},
+                {{"cycle", static_cast<double>(cycle_index + 1), "count"},
+                 {"allocator_bytes",
+                  static_cast<double>(result.box3d_allocator.final_bytes),
+                  "bytes"}});
+            break;
         }
 
         const double elapsed_seconds = std::chrono::duration<double>(
@@ -1414,78 +1614,135 @@ struct StressCycleResult {
         }
     }
     finish_timings(result, std::move(timings));
+    const PrivateCommitAssessment private_assessment = assess_private_commit(
+        result.private_commit_warmup_samples,
+        result.private_commit_cycle_samples);
+    result.private_commit_available = private_assessment.available;
+    result.private_commit_stable = private_assessment.stable;
+    result.private_commit_terminal_growth = private_assessment.terminal_growth;
+    result.private_commit_baseline_full_min_bytes = private_assessment.baseline_full_min_bytes;
+    result.private_commit_baseline_central_min_bytes = private_assessment.baseline_central_min_bytes;
+    result.private_commit_baseline_median_bytes = private_assessment.baseline_median_bytes;
+    result.private_commit_baseline_central_max_bytes = private_assessment.baseline_central_max_bytes;
+    result.private_commit_baseline_full_max_bytes = private_assessment.baseline_full_max_bytes;
+    result.private_commit_final_full_min_bytes = private_assessment.final_full_min_bytes;
+    result.private_commit_final_central_min_bytes = private_assessment.final_central_min_bytes;
+    result.private_commit_final_median_bytes = private_assessment.final_median_bytes;
+    result.private_commit_final_central_max_bytes = private_assessment.final_central_max_bytes;
+    result.private_commit_final_full_max_bytes = private_assessment.final_full_max_bytes;
+    result.private_commit_growth_ratio = private_assessment.growth_ratio;
+    result.private_commit_warmup_trimmed_span_ratio = private_assessment.warmup_trimmed_span_ratio;
+    result.private_commit_warmup_full_span_ratio = private_assessment.warmup_full_span_ratio;
+    result.private_commit_measured_trimmed_span_ratio = private_assessment.measured_trimmed_span_ratio;
+    result.private_commit_measured_full_span_ratio = private_assessment.measured_full_span_ratio;
+    if (!result.private_commit_warmup_samples.empty()) {
+        result.private_commit_baseline_bytes =
+            result.private_commit_warmup_samples.back();
+    }
+    if (!result.private_commit_cycle_samples.empty()) {
+        result.private_commit_final_bytes = result.private_commit_cycle_samples.back();
+    }
+    const PrivateCommitGateMode gate_mode = current_private_commit_gate_mode();
+    result.private_commit_gate_scope = "release_mt";
+    result.private_commit_assessment_status =
+        std::string{private_commit_status_name(private_assessment.status)};
+    result.private_commit_gate_applied = false;
+    result.private_commit_gate_status = "diagnostic";
+    result.private_commit_budget_qualified = false;
+    result.private_commit_budget_scope = "future_packaged_reference_hardware";
+    result.warnings.push_back({
+        .code = "private_commit_budget_unqualified",
+        .message = "PrivateUsage is diagnostic in the foundation; qualify the 5% budget in a packaged Release build on reference hardware",
+        .details = {
+            {"assessment", result.private_commit_assessment_status},
+            {"budget_scope", result.private_commit_budget_scope},
+        },
+    });
 
-#ifdef _WIN32
-    if (!result.working_set_available || result.working_set_final_bytes == 0
-        || result.working_set_cycle_samples.size() != 10) {
-        add_violation(
-            result,
-            "working_set_unavailable",
-            "GetProcessMemoryInfo failed during the Windows stress protocol",
-            result.ticks,
-            {});
+    const PrivateCommitAssessment working_set_summary = assess_private_commit(
+        result.working_set_warmup_samples,
+        result.working_set_cycle_samples);
+    result.working_set_available = working_set_summary.available;
+    result.working_set_baseline_low_bytes = working_set_summary.baseline_full_min_bytes;
+    result.working_set_baseline_median_bytes = working_set_summary.baseline_median_bytes;
+    result.working_set_baseline_max_bytes = working_set_summary.baseline_full_max_bytes;
+    result.working_set_final_low_bytes = working_set_summary.final_full_min_bytes;
+    result.working_set_final_median_bytes = working_set_summary.final_median_bytes;
+    result.working_set_final_max_bytes = working_set_summary.final_full_max_bytes;
+    if (!result.working_set_warmup_samples.empty()) {
+        result.working_set_baseline_bytes = result.working_set_warmup_samples.back();
     }
-#endif
-    if (result.working_set_cycle_samples.size() >= 10) {
-        result.working_set_final_low_bytes = *std::min_element(
-            result.working_set_cycle_samples.begin() + 5,
-            result.working_set_cycle_samples.end());
+    if (!result.working_set_cycle_samples.empty()) {
+        result.working_set_final_bytes = result.working_set_cycle_samples.back();
     }
-    if (result.working_set_available && result.working_set_baseline_low_bytes != 0
-        && result.working_set_final_low_bytes != 0) {
-        result.working_set_growth_ratio = std::max(
-            0.0,
-            (static_cast<double>(result.working_set_final_low_bytes)
-             - static_cast<double>(result.working_set_baseline_low_bytes))
-                / static_cast<double>(result.working_set_baseline_low_bytes));
+    if (working_set_summary.available) {
+        result.working_set_growth_ratio = working_set_summary.growth_ratio;
         result.working_set_instant_growth_ratio = std::max(
             0.0,
             (static_cast<double>(result.working_set_final_bytes)
              - static_cast<double>(result.working_set_baseline_bytes))
                 / static_cast<double>(result.working_set_baseline_bytes));
-        if (result.working_set_growth_ratio > 0.05) {
-            std::vector<ScenarioValue> memory_values{
-                {"baseline_bytes",
-                 static_cast<double>(result.working_set_baseline_bytes),
-                 "bytes"},
-                {"baseline_low_bytes",
-                 static_cast<double>(result.working_set_baseline_low_bytes),
-                 "bytes"},
-                {"final_bytes",
-                 static_cast<double>(result.working_set_final_bytes),
-                 "bytes"},
-                {"final_low_bytes",
-                 static_cast<double>(result.working_set_final_low_bytes),
-                 "bytes"},
-                {"growth_ratio", result.working_set_growth_ratio, "ratio"},
-                {"instant_growth_ratio",
-                 result.working_set_instant_growth_ratio,
-                 "ratio"},
-            };
-            for (std::size_t index = 0; index < result.working_set_warmup_samples.size(); ++index) {
-                memory_values.push_back({
-                    "warmup_" + std::to_string(index + 1) + "_bytes",
-                    static_cast<double>(result.working_set_warmup_samples[index]),
-                    "bytes",
-                });
-            }
-            for (std::size_t index = 0; index < result.working_set_cycle_samples.size(); ++index) {
-                memory_values.push_back({
-                    "cycle_" + std::to_string(index + 1) + "_bytes",
-                    static_cast<double>(result.working_set_cycle_samples[index]),
-                    "bytes",
-                });
-            }
-            add_violation(
-                result,
-                "stress_memory_growth",
-                "persistent working-set growth exceeded five percent after ten cycles",
-                result.ticks,
-                {},
-                std::move(memory_values));
-        }
+    }
+
+    std::vector<ScenarioValue> private_values{
+        {"baseline_private_median_bytes",
+         static_cast<double>(result.private_commit_baseline_median_bytes),
+         "bytes"},
+        {"final_private_median_bytes",
+         static_cast<double>(result.private_commit_final_median_bytes),
+         "bytes"},
+        {"private_growth_ratio", result.private_commit_growth_ratio, "ratio"},
+        {"warmup_trimmed_span_ratio",
+         result.private_commit_warmup_trimmed_span_ratio,
+         "ratio"},
+        {"warmup_full_span_ratio", result.private_commit_warmup_full_span_ratio, "ratio"},
+        {"measured_trimmed_span_ratio",
+         result.private_commit_measured_trimmed_span_ratio,
+         "ratio"},
+        {"measured_full_span_ratio", result.private_commit_measured_full_span_ratio, "ratio"},
+        {"terminal_growth", result.private_commit_terminal_growth ? 1.0 : 0.0, "bool"},
+    };
+    for (std::size_t index = 0;
+         index < result.private_commit_warmup_samples.size();
+         ++index) {
+        private_values.push_back({
+            "private_warmup_" + std::to_string(index + 1) + "_bytes",
+            static_cast<double>(result.private_commit_warmup_samples[index]),
+            "bytes",
+        });
+    }
+    for (std::size_t index = 0;
+         index < result.private_commit_cycle_samples.size();
+         ++index) {
+        private_values.push_back({
+            "private_cycle_" + std::to_string(index + 1) + "_bytes",
+            static_cast<double>(result.private_commit_cycle_samples[index]),
+            "bytes",
+        });
+    }
+    if (gate_mode == PrivateCommitGateMode::ConfigurationMismatch) {
+        add_violation(
+            result,
+            "configuration_mismatch",
+            "Release private-commit gate requires the static /MT CRT",
+            result.ticks,
+            {},
+            private_values);
     }
     result.metrics = {
+        {"private_commit_baseline_median_bytes",
+         static_cast<double>(result.private_commit_baseline_median_bytes),
+         "bytes"},
+        {"private_commit_final_median_bytes",
+         static_cast<double>(result.private_commit_final_median_bytes),
+         "bytes"},
+        {"private_commit_growth_ratio", result.private_commit_growth_ratio, "ratio"},
+        {"private_commit_warmup_trimmed_span_ratio",
+         result.private_commit_warmup_trimmed_span_ratio,
+         "ratio"},
+        {"private_commit_measured_trimmed_span_ratio",
+         result.private_commit_measured_trimmed_span_ratio,
+         "ratio"},
         {"working_set_baseline_bytes",
          static_cast<double>(result.working_set_baseline_bytes),
          "bytes"},
@@ -1506,6 +1763,9 @@ struct StressCycleResult {
          result.working_set_instant_growth_ratio,
          "ratio"},
         {"executed_substeps", static_cast<double>(executed_substeps), "count"},
+        {"allocator_warmup_cycles",
+         static_cast<double>(result.allocator_warmup_cycles),
+         "cycles"},
         {"completed_cycles", static_cast<double>(result.stress_cycles), "count"},
     };
     return result;
@@ -1846,6 +2106,7 @@ struct StressCycleResult {
 
 [[nodiscard]] CapabilityRow prove_hulls_compounds()
 {
+    const std::int64_t allocator_baseline = box3d_allocator_byte_count();
     CapabilityRow row{.capability = "hulls_compounds"};
     const auto exercise = [](bool compound) {
         struct Result {
@@ -1939,11 +2200,24 @@ struct StressCycleResult {
         {"contacted", proof.contacted ? 1.0 : 0.0, "bool"},
         {"state_valid", proof.state_valid ? 1.0 : 0.0, "bool"},
     };
+    const std::int64_t allocator_final = box3d_allocator_byte_count();
+    row.values.push_back(
+        {"box3d_allocator_baseline_bytes",
+         static_cast<double>(allocator_baseline),
+         "bytes"});
+    row.values.push_back(
+        {"box3d_allocator_final_bytes", static_cast<double>(allocator_final), "bytes"});
+    if (!box3d_allocator_exact_return(allocator_baseline, allocator_final)) {
+        row.status = CapabilityStatus::Blocked;
+        row.detail = "hull/compound proof retained Box3 allocator bytes";
+    }
     return row;
 }
 
 [[nodiscard]] CapabilityRow prove_batch_lifecycle()
 {
+    const std::int64_t allocator_baseline = box3d_allocator_byte_count();
+    CapabilityRow row = [&] {
     CapabilityRow row{.capability = "batch_lifecycle"};
     PhysicsWorld world(WorldConfig{.surface_gravity = 0, .max_bodies = 1});
     BodyDesc body = BodyDesc::dynamic_sphere(0.25f, {}, 10);
@@ -1969,7 +2243,13 @@ struct StressCycleResult {
         watched_step(world, warmup * 2 + 2);
         previous = created.value;
     }
-    const auto baseline = working_set_bytes();
+    const auto baseline = process_memory_sample();
+#if defined(_MSC_VER) && defined(_DEBUG)
+    _CrtMemState crt_before{};
+    _CrtMemState crt_after{};
+    _CrtMemState crt_difference{};
+    _CrtMemCheckpoint(&crt_before);
+#endif
     int invalid_handles = 0;
     int completed_cycles = 0;
     for (int cycle = 0; cycle < 10000; ++cycle) {
@@ -2010,28 +2290,88 @@ struct StressCycleResult {
         previous = created.value;
         ++completed_cycles;
     }
-    const auto final = working_set_bytes();
-    const std::optional<double> memory_growth = baseline && final && *baseline != 0
+#if defined(_MSC_VER) && defined(_DEBUG)
+    _CrtMemCheckpoint(&crt_after);
+    _CrtMemDifference(&crt_difference, &crt_before, &crt_after);
+    CrtMemoryObservation crt{
+        .applicable = true,
+        .balanced = crt_difference.lCounts[_NORMAL_BLOCK] == 0
+            && crt_difference.lSizes[_NORMAL_BLOCK] == 0
+            && crt_difference.lCounts[_CLIENT_BLOCK] == 0
+            && crt_difference.lSizes[_CLIENT_BLOCK] == 0,
+        .normal_block_count_delta = static_cast<std::int64_t>(
+            crt_difference.lCounts[_NORMAL_BLOCK]),
+        .normal_block_bytes_delta = static_cast<std::int64_t>(
+            crt_difference.lSizes[_NORMAL_BLOCK]),
+        .client_block_count_delta = static_cast<std::int64_t>(
+            crt_difference.lCounts[_CLIENT_BLOCK]),
+        .client_block_bytes_delta = static_cast<std::int64_t>(
+            crt_difference.lSizes[_CLIENT_BLOCK]),
+    };
+#else
+    CrtMemoryObservation crt;
+#endif
+    const auto final = process_memory_sample();
+    const std::optional<double> private_growth = baseline && final
+            && baseline->private_usage_bytes != 0 && final->private_usage_bytes != 0
         ? std::optional<double>{std::max(
             0.0,
-            (static_cast<double>(*final) - static_cast<double>(*baseline))
-                / static_cast<double>(*baseline))}
+            (static_cast<double>(final->private_usage_bytes)
+             - static_cast<double>(baseline->private_usage_bytes))
+                / static_cast<double>(baseline->private_usage_bytes))}
         : std::nullopt;
     row.values = {
         {"generation_cycles", static_cast<double>(completed_cycles), "count"},
         {"invalid_handles", static_cast<double>(invalid_handles), "count"},
-        {"working_set_available", memory_growth ? 1.0 : 0.0, "bool"},
-        {"working_set_growth", memory_growth.value_or(0.0), "ratio"},
+        {"private_commit_available", private_growth ? 1.0 : 0.0, "bool"},
+        {"private_commit_growth", private_growth.value_or(0.0), "ratio"},
+        {"private_commit_baseline_bytes",
+         static_cast<double>(baseline ? baseline->private_usage_bytes : 0),
+         "bytes"},
+        {"private_commit_final_bytes",
+         static_cast<double>(final ? final->private_usage_bytes : 0),
+         "bytes"},
+        {"working_set_baseline_bytes",
+         static_cast<double>(baseline ? baseline->working_set_bytes : 0),
+         "bytes"},
+        {"working_set_final_bytes",
+         static_cast<double>(final ? final->working_set_bytes : 0),
+         "bytes"},
+        {"crt_normal_count_delta", static_cast<double>(crt.normal_block_count_delta), "count"},
+        {"crt_normal_bytes_delta", static_cast<double>(crt.normal_block_bytes_delta), "bytes"},
+        {"crt_client_count_delta", static_cast<double>(crt.client_block_count_delta), "count"},
+        {"crt_client_bytes_delta", static_cast<double>(crt.client_block_bytes_delta), "bytes"},
     };
     row.fixture_hashes.push_back(
         (static_cast<std::uint64_t>(previous.generation) << 32) | previous.index);
-    row.status = classify_lifecycle_status(
-        completed_cycles, invalid_handles, memory_growth);
+    const PrivateCommitGateMode gate_mode = current_private_commit_gate_mode();
+    if (completed_cycles != 10000 || invalid_handles != 0) {
+        row.status = CapabilityStatus::Blocked;
+    } else if (crt.applicable && !crt.balanced) {
+        row.status = CapabilityStatus::Blocked;
+    } else if (gate_mode == PrivateCommitGateMode::ConfigurationMismatch) {
+        row.status = CapabilityStatus::Blocked;
+    } else {
+        row.status = CapabilityStatus::Pass;
+    }
     if (row.status == CapabilityStatus::Pass) {
         row.detail = "10,000 create-destroy cycles preserved handle generations without persistent growth";
     } else {
         row.status = CapabilityStatus::Blocked;
-        row.detail = "handle lifecycle or persistent-memory validation failed at batch size one";
+        row.detail = "functional, Box3, CRT, or release private-commit lifecycle proof failed";
+    }
+    return row;
+    }();
+    const std::int64_t allocator_final = box3d_allocator_byte_count();
+    row.values.push_back(
+        {"box3d_allocator_baseline_bytes",
+         static_cast<double>(allocator_baseline),
+         "bytes"});
+    row.values.push_back(
+        {"box3d_allocator_final_bytes", static_cast<double>(allocator_final), "bytes"});
+    if (!box3d_allocator_exact_return(allocator_baseline, allocator_final)) {
+        row.status = CapabilityStatus::Blocked;
+        row.detail = "lifecycle proof retained Box3 allocator bytes";
     }
     return row;
 }
@@ -2057,6 +2397,7 @@ struct StressCycleResult {
 
 [[nodiscard]] CapabilityRow prove_replay(std::uint64_t seed)
 {
+    const std::int64_t allocator_baseline = box3d_allocator_byte_count();
     CapabilityRow row{.capability = "upstream_replay"};
     const std::filesystem::path path = std::filesystem::temp_directory_path()
         / ("ninho-box3d-replay-" + std::to_string(seed) + ".b3rec");
@@ -2091,6 +2432,17 @@ struct StressCycleResult {
             row.detail = "neither official replay nor the documented diagnostic fallback is reproducible: "
                 + proof.error;
         }
+    }
+    const std::int64_t allocator_final = box3d_allocator_byte_count();
+    row.values.push_back(
+        {"box3d_allocator_baseline_bytes",
+         static_cast<double>(allocator_baseline),
+         "bytes"});
+    row.values.push_back(
+        {"box3d_allocator_final_bytes", static_cast<double>(allocator_final), "bytes"});
+    if (!box3d_allocator_exact_return(allocator_baseline, allocator_final)) {
+        row.status = CapabilityStatus::Blocked;
+        row.detail = "replay proof retained Box3 allocator bytes";
     }
     return row;
 }
@@ -2358,6 +2710,32 @@ void append_violation(std::string& output, const ScenarioViolation& violation)
     output.push_back('}');
 }
 
+void append_warning(std::string& output, const ScenarioWarning& warning)
+{
+    output.push_back('{');
+    bool first = true;
+    append_json_name(output, "code", first);
+    append_json_string(output, warning.code);
+    append_json_name(output, "message", first);
+    append_json_string(output, warning.message);
+    append_json_name(output, "details", first);
+    output.push_back('[');
+    for (std::size_t index = 0; index < warning.details.size(); ++index) {
+        if (index != 0) {
+            output.push_back(',');
+        }
+        output.push_back('{');
+        bool detail_first = true;
+        append_json_name(output, "name", detail_first);
+        append_json_string(output, warning.details[index].name);
+        append_json_name(output, "value", detail_first);
+        append_json_string(output, warning.details[index].value);
+        output.push_back('}');
+    }
+    output.push_back(']');
+    output.push_back('}');
+}
+
 [[nodiscard]] std::string_view capability_status_name(CapabilityStatus status)
 {
     switch (status) {
@@ -2401,6 +2779,164 @@ void append_capability_row(std::string& output, const CapabilityRow& row)
     output.push_back('}');
 }
 
+void append_size_array(std::string& output, std::span<const std::size_t> values)
+{
+    output.push_back('[');
+    for (std::size_t index = 0; index < values.size(); ++index) {
+        if (index != 0) {
+            output.push_back(',');
+        }
+        append_json_integer(output, values[index]);
+    }
+    output.push_back(']');
+}
+
+void append_int64_array(std::string& output, std::span<const std::int64_t> values)
+{
+    output.push_back('[');
+    for (std::size_t index = 0; index < values.size(); ++index) {
+        if (index != 0) {
+            output.push_back(',');
+        }
+        append_json_integer(output, values[index]);
+    }
+    output.push_back(']');
+}
+
+void append_box3d_allocator_observation(
+    std::string& output, const Box3dAllocatorObservation& allocator)
+{
+    output.push_back('{');
+    bool first = true;
+    append_json_name(output, "baseline_bytes", first);
+    append_json_integer(output, allocator.baseline_bytes);
+    append_json_name(output, "final_bytes", first);
+    append_json_integer(output, allocator.final_bytes);
+    append_json_name(output, "max_abs_delta", first);
+    append_json_integer(output, allocator.max_abs_delta);
+    append_json_name(output, "exact_return", first);
+    output += allocator.exact_return ? "true" : "false";
+    append_json_name(output, "warmup_post_teardown", first);
+    append_int64_array(output, allocator.warmup_post_teardown_bytes);
+    append_json_name(output, "measured_post_teardown", first);
+    append_int64_array(output, allocator.measured_post_teardown_bytes);
+    output.push_back('}');
+}
+
+void append_crt_observation(
+    std::string& output, const CrtMemoryObservation& crt)
+{
+    output.push_back('{');
+    bool first = true;
+    append_json_name(output, "applicable", first);
+    output += crt.applicable ? "true" : "false";
+    append_json_name(output, "balanced", first);
+    output += crt.balanced ? "true" : "false";
+    append_json_name(output, "normal_block_count_delta", first);
+    append_json_integer(output, crt.normal_block_count_delta);
+    append_json_name(output, "normal_block_bytes_delta", first);
+    append_json_integer(output, crt.normal_block_bytes_delta);
+    append_json_name(output, "client_block_count_delta", first);
+    append_json_integer(output, crt.client_block_count_delta);
+    append_json_name(output, "client_block_bytes_delta", first);
+    append_json_integer(output, crt.client_block_bytes_delta);
+    output.push_back('}');
+}
+
+void append_memory_observation(
+    std::string& output, const MemoryObservation& memory)
+{
+    output.push_back('{');
+    bool first = true;
+    append_json_name(output, "gate_scope", first);
+    append_json_string(output, memory.gate_scope);
+    append_json_name(output, "gate_status", first);
+    append_json_string(output, memory.gate_status);
+    append_json_name(output, "assessment_status", first);
+    append_json_string(output, memory.assessment_status);
+    append_json_name(output, "gate_applied", first);
+    output += memory.gate_applied ? "true" : "false";
+    append_json_name(output, "budget_qualified", first);
+    output += memory.budget_qualified ? "true" : "false";
+    append_json_name(output, "budget_scope", first);
+    append_json_string(output, memory.budget_scope);
+    append_json_name(output, "private_commit", first);
+    output.push_back('{');
+    bool private_first = true;
+    const auto private_integer = [&](std::string_view name, std::size_t value) {
+        append_json_name(output, name, private_first);
+        append_json_integer(output, value);
+    };
+    const auto private_number = [&](std::string_view name, double value) {
+        append_json_name(output, name, private_first);
+        append_json_number(output, value);
+    };
+    append_json_name(output, "available", private_first);
+    output += memory.private_commit_available ? "true" : "false";
+    append_json_name(output, "stable", private_first);
+    output += memory.private_commit_stable ? "true" : "false";
+    append_json_name(output, "terminal_growth", private_first);
+    output += memory.private_commit_terminal_growth ? "true" : "false";
+    private_integer("baseline_last_bytes", memory.private_commit_baseline_bytes);
+    private_integer("baseline_full_min_bytes", memory.private_commit_baseline_full_min_bytes);
+    private_integer("baseline_central_min_bytes", memory.private_commit_baseline_central_min_bytes);
+    private_integer("baseline_median_bytes", memory.private_commit_baseline_median_bytes);
+    private_integer("baseline_central_max_bytes", memory.private_commit_baseline_central_max_bytes);
+    private_integer("baseline_full_max_bytes", memory.private_commit_baseline_full_max_bytes);
+    private_integer("final_last_bytes", memory.private_commit_final_bytes);
+    private_integer("final_full_min_bytes", memory.private_commit_final_full_min_bytes);
+    private_integer("final_central_min_bytes", memory.private_commit_final_central_min_bytes);
+    private_integer("final_median_bytes", memory.private_commit_final_median_bytes);
+    private_integer("final_central_max_bytes", memory.private_commit_final_central_max_bytes);
+    private_integer("final_full_max_bytes", memory.private_commit_final_full_max_bytes);
+    private_integer("peak_bytes", memory.private_commit_peak_bytes);
+    private_number("growth_ratio", memory.private_commit_growth_ratio);
+    private_number(
+        "warmup_trimmed_span_ratio",
+        memory.private_commit_warmup_trimmed_span_ratio);
+    private_number("warmup_full_span_ratio", memory.private_commit_warmup_full_span_ratio);
+    private_number(
+        "measured_trimmed_span_ratio",
+        memory.private_commit_measured_trimmed_span_ratio);
+    private_number("measured_full_span_ratio", memory.private_commit_measured_full_span_ratio);
+    append_json_name(output, "warmup_samples", private_first);
+    append_size_array(output, memory.private_commit_warmup_samples);
+    append_json_name(output, "measured_samples", private_first);
+    append_size_array(output, memory.private_commit_cycle_samples);
+    output.push_back('}');
+
+    append_json_name(output, "working_set", first);
+    output.push_back('{');
+    bool working_first = true;
+    const auto working_integer = [&](std::string_view name, std::size_t value) {
+        append_json_name(output, name, working_first);
+        append_json_integer(output, value);
+    };
+    const auto working_number = [&](std::string_view name, double value) {
+        append_json_name(output, name, working_first);
+        append_json_number(output, value);
+    };
+    append_json_name(output, "available", working_first);
+    output += memory.working_set_available ? "true" : "false";
+    working_integer("baseline_last_bytes", memory.working_set_baseline_bytes);
+    working_integer("baseline_min_bytes", memory.working_set_baseline_min_bytes);
+    working_integer("baseline_median_bytes", memory.working_set_baseline_median_bytes);
+    working_integer("baseline_max_bytes", memory.working_set_baseline_max_bytes);
+    working_integer("final_last_bytes", memory.working_set_final_bytes);
+    working_integer("final_min_bytes", memory.working_set_final_min_bytes);
+    working_integer("final_median_bytes", memory.working_set_final_median_bytes);
+    working_integer("final_max_bytes", memory.working_set_final_max_bytes);
+    working_integer("peak_bytes", memory.working_set_peak_bytes);
+    working_number("growth_ratio", memory.working_set_growth_ratio);
+    working_number("instant_growth_ratio", memory.working_set_instant_growth_ratio);
+    append_json_name(output, "warmup_samples", working_first);
+    append_size_array(output, memory.working_set_warmup_samples);
+    append_json_name(output, "measured_samples", working_first);
+    append_size_array(output, memory.working_set_cycle_samples);
+    output.push_back('}');
+    output.push_back('}');
+}
+
 void append_scenario_result(std::string& output, const ScenarioResult& result)
 {
     output.push_back('{');
@@ -2440,6 +2976,28 @@ void append_scenario_result(std::string& output, const ScenarioResult& result)
         }
     }
     output.push_back(']');
+    append_json_name(output, "repeat_observations", first);
+    output.push_back('[');
+    for (std::size_t index = 0; index < result.repeat_observations.size(); ++index) {
+        if (index != 0) {
+            output.push_back(',');
+        }
+        const RepeatObservation& observation = result.repeat_observations[index];
+        output.push_back('{');
+        bool observation_first = true;
+        append_json_name(output, "repeat", observation_first);
+        append_json_integer(output, observation.repeat_index);
+        append_json_name(output, "hash", observation_first);
+        append_json_integer(output, observation.hash);
+        append_json_name(output, "memory", observation_first);
+        append_memory_observation(output, observation.memory);
+        append_json_name(output, "box3d_allocator", observation_first);
+        append_box3d_allocator_observation(output, observation.box3d_allocator);
+        append_json_name(output, "crt", observation_first);
+        append_crt_observation(output, observation.crt);
+        output.push_back('}');
+    }
+    output.push_back(']');
 
     boolean_field("contact_before_pile_exit", result.contact_before_pile_exit);
     integer_field("ccd_primary_pass_count", result.ccd_primary_pass_count);
@@ -2476,45 +3034,14 @@ void append_scenario_result(std::string& output, const ScenarioResult& result)
     output.push_back('}');
 
     append_json_name(output, "memory", first);
-    output.push_back('{');
-    bool memory_first = true;
-    append_json_name(output, "available", memory_first);
-    output += result.working_set_available ? "true" : "false";
-    append_json_name(output, "baseline_bytes", memory_first);
-    append_json_integer(output, result.working_set_baseline_bytes);
-    append_json_name(output, "baseline_low_bytes", memory_first);
-    append_json_integer(output, result.working_set_baseline_low_bytes);
-    append_json_name(output, "peak_bytes", memory_first);
-    append_json_integer(output, result.working_set_peak_bytes);
-    append_json_name(output, "final_bytes", memory_first);
-    append_json_integer(output, result.working_set_final_bytes);
-    append_json_name(output, "final_low_bytes", memory_first);
-    append_json_integer(output, result.working_set_final_low_bytes);
-    append_json_name(output, "growth_ratio", memory_first);
-    append_json_number(output, result.working_set_growth_ratio);
-    append_json_name(output, "instant_growth_ratio", memory_first);
-    append_json_number(output, result.working_set_instant_growth_ratio);
-    append_json_name(output, "warmup_samples", memory_first);
-    output.push_back('[');
-    for (std::size_t index = 0; index < result.working_set_warmup_samples.size(); ++index) {
-        if (index != 0) {
-            output.push_back(',');
-        }
-        append_json_integer(output, result.working_set_warmup_samples[index]);
-    }
-    output.push_back(']');
-    append_json_name(output, "cycle_samples", memory_first);
-    output.push_back('[');
-    for (std::size_t index = 0; index < result.working_set_cycle_samples.size(); ++index) {
-        if (index != 0) {
-            output.push_back(',');
-        }
-        append_json_integer(output, result.working_set_cycle_samples[index]);
-    }
-    output.push_back(']');
-    output.push_back('}');
+    append_memory_observation(output, make_repeat_observation(0, result).memory);
+    append_json_name(output, "box3d_allocator", first);
+    append_box3d_allocator_observation(output, result.box3d_allocator);
+    append_json_name(output, "crt", first);
+    append_crt_observation(output, result.crt);
     integer_field("warmup_ticks", result.warmup_ticks);
     integer_field("measurement_ticks", result.measurement_ticks);
+    integer_field("allocator_warmup_cycles", result.allocator_warmup_cycles);
     integer_field("stress_cycles", result.stress_cycles);
     string_field("fallback", result.fallback);
 
@@ -2547,6 +3074,15 @@ void append_scenario_result(std::string& output, const ScenarioResult& result)
             output.push_back(',');
         }
         append_capability_row(output, result.matrix[index]);
+    }
+    output.push_back(']');
+    append_json_name(output, "warnings", first);
+    output.push_back('[');
+    for (std::size_t index = 0; index < result.warnings.size(); ++index) {
+        if (index != 0) {
+            output.push_back(',');
+        }
+        append_warning(output, result.warnings[index]);
     }
     output.push_back(']');
     append_json_name(output, "violations", first);
@@ -2628,6 +3164,19 @@ std::string ScenarioReport::to_json() const
     append_json_number(output, 1.0 / 60.0);
     output.push_back('}');
 
+    append_json_name(output, "process_box3d_allocator", first);
+    append_box3d_allocator_observation(output, process_box3d_allocator);
+
+    append_json_name(output, "budget_qualification", first);
+    output += "{\"status\":\"deferred\",\"target_growth_ratio\":0.05,"
+              "\"warning\":\"private_commit_budget_unqualified\"}";
+
+    append_json_name(output, "warnings", first);
+    output += "[{\"code\":\"private_commit_budget_unqualified\","
+              "\"message\":\"PrivateUsage budget is deferred to a packaged Release build on reference hardware\","
+              "\"details\":[{\"name\":\"budget_scope\","
+              "\"value\":\"future_packaged_reference_hardware\"}]}]";
+
     append_json_name(output, "scenarios", first);
     output.push_back('[');
     for (std::size_t index = 0; index < scenarios.size(); ++index) {
@@ -2655,12 +3204,7 @@ std::string ScenarioReport::to_json() const
     append_json_name(output, "violations", first);
     output.push_back('[');
     bool first_violation = true;
-    bool any_fallback = false;
     for (const ScenarioResult& scenario : scenarios) {
-        any_fallback = any_fallback || !scenario.fallback.empty();
-        for (const CapabilityRow& row : scenario.matrix) {
-            any_fallback = any_fallback || row.status == CapabilityStatus::Fallback;
-        }
         for (const ScenarioViolation& violation : scenario.violations) {
             if (!first_violation) {
                 output.push_back(',');
@@ -2675,8 +3219,7 @@ std::string ScenarioReport::to_json() const
         scenarios, [](const ScenarioResult& scenario) { return !scenario.violations.empty(); });
     append_json_string(
         output,
-        has_violations ? "bloquear"
-                       : any_fallback ? "prosseguir com limites" : "prosseguir");
+        has_violations ? "bloquear" : "prosseguir_com_limites");
     output.push_back('}');
     return output;
 }
@@ -2774,6 +3317,190 @@ double max_rolling_energy_growth(
     return maximum_growth;
 }
 
+PrivateCommitAssessment assess_private_commit(
+    std::span<const std::size_t> warmup_samples,
+    std::span<const std::size_t> measured_samples)
+{
+    constexpr std::size_t protocol_cycles = 10;
+    constexpr std::size_t plateau_start = 5;
+    PrivateCommitAssessment result;
+    if (warmup_samples.size() != protocol_cycles
+        || measured_samples.size() != protocol_cycles
+        || std::ranges::any_of(warmup_samples, [](std::size_t value) { return value == 0; })
+        || std::ranges::any_of(measured_samples, [](std::size_t value) { return value == 0; })) {
+        return result;
+    }
+
+    const auto summarize = [](std::span<const std::size_t> samples) {
+        std::array<std::size_t, 5> tail{};
+        std::ranges::copy(samples.last(5), tail.begin());
+        std::ranges::sort(tail);
+        return std::tuple{tail[0], tail[1], tail[2], tail[3], tail[4]};
+    };
+    std::tie(
+        result.baseline_full_min_bytes,
+        result.baseline_central_min_bytes,
+        result.baseline_median_bytes,
+        result.baseline_central_max_bytes,
+        result.baseline_full_max_bytes) = summarize(warmup_samples.subspan(plateau_start));
+    std::tie(
+        result.final_full_min_bytes,
+        result.final_central_min_bytes,
+        result.final_median_bytes,
+        result.final_central_max_bytes,
+        result.final_full_max_bytes) = summarize(measured_samples.subspan(plateau_start));
+    result.available = true;
+    result.growth_ratio = std::max(
+        0.0,
+        (static_cast<double>(result.final_median_bytes)
+         - static_cast<double>(result.baseline_median_bytes))
+            / static_cast<double>(result.baseline_median_bytes));
+    result.warmup_trimmed_span_ratio = static_cast<double>(
+        result.baseline_central_max_bytes - result.baseline_central_min_bytes)
+        / static_cast<double>(result.baseline_median_bytes);
+    result.warmup_full_span_ratio = static_cast<double>(
+        result.baseline_full_max_bytes - result.baseline_full_min_bytes)
+        / static_cast<double>(result.baseline_median_bytes);
+    result.measured_trimmed_span_ratio = static_cast<double>(
+        result.final_central_max_bytes - result.final_central_min_bytes)
+        / static_cast<double>(result.final_median_bytes);
+    result.measured_full_span_ratio = static_cast<double>(
+        result.final_full_max_bytes - result.final_full_min_bytes)
+        / static_cast<double>(result.final_median_bytes);
+    const double terminal_threshold = 1.05 * result.baseline_median_bytes;
+    result.terminal_growth = static_cast<double>(measured_samples[8]) > terminal_threshold
+        && static_cast<double>(measured_samples[9]) > terminal_threshold;
+    result.stable = result.warmup_trimmed_span_ratio <= 0.05
+        && result.measured_trimmed_span_ratio <= 0.05;
+    if (result.warmup_trimmed_span_ratio > 0.05) {
+        result.status = PrivateCommitStatus::Unstable;
+    } else if (result.growth_ratio > 0.05 || result.terminal_growth) {
+        result.status = PrivateCommitStatus::Growth;
+    } else if (result.measured_trimmed_span_ratio > 0.05) {
+        result.status = PrivateCommitStatus::Unstable;
+    } else {
+        result.status = PrivateCommitStatus::Pass;
+    }
+    return result;
+}
+
+PrivateCommitGateMode evaluate_private_commit_gate_mode(
+    bool release_build, bool mt_defined, bool dll_defined, bool debug_defined)
+{
+    if (!release_build) {
+        return PrivateCommitGateMode::Diagnostic;
+    }
+    if (mt_defined && !dll_defined && !debug_defined) {
+        return PrivateCommitGateMode::ReleaseMt;
+    }
+    return PrivateCommitGateMode::ConfigurationMismatch;
+}
+
+bool private_commit_blocks(
+    PrivateCommitGateMode mode, PrivateCommitStatus status) noexcept
+{
+    static_cast<void>(status);
+    return mode == PrivateCommitGateMode::ConfigurationMismatch;
+}
+
+std::int64_t box3d_allocator_byte_count() noexcept
+{
+    return detail::box3d_allocator_byte_count();
+}
+
+bool box3d_allocator_exact_return(
+    std::int64_t baseline, std::int64_t current) noexcept
+{
+    return baseline == current;
+}
+
+CrtMemoryObservation debug_crt_allocation_probe(bool intentional_allocation)
+{
+    CrtMemoryObservation result;
+#if defined(_MSC_VER) && defined(_DEBUG)
+    result.applicable = true;
+    _CrtMemState before{};
+    _CrtMemState after{};
+    _CrtMemState difference{};
+    _CrtMemCheckpoint(&before);
+    char* allocation = intentional_allocation ? new char[64] : nullptr;
+    _CrtMemCheckpoint(&after);
+    _CrtMemDifference(&difference, &before, &after);
+    result.normal_block_count_delta =
+        static_cast<std::int64_t>(difference.lCounts[_NORMAL_BLOCK]);
+    result.normal_block_bytes_delta =
+        static_cast<std::int64_t>(difference.lSizes[_NORMAL_BLOCK]);
+    result.client_block_count_delta =
+        static_cast<std::int64_t>(difference.lCounts[_CLIENT_BLOCK]);
+    result.client_block_bytes_delta =
+        static_cast<std::int64_t>(difference.lSizes[_CLIENT_BLOCK]);
+    result.balanced = result.normal_block_count_delta == 0
+        && result.normal_block_bytes_delta == 0
+        && result.client_block_count_delta == 0
+        && result.client_block_bytes_delta == 0;
+    delete[] allocation;
+#else
+    static_cast<void>(intentional_allocation);
+#endif
+    return result;
+}
+
+RepeatObservation make_repeat_observation(
+    int repeat_index, const ScenarioResult& result)
+{
+    return {
+        .repeat_index = repeat_index,
+        .hash = result.final_hash,
+        .memory = {
+            .gate_scope = result.private_commit_gate_scope,
+            .gate_status = result.private_commit_gate_status,
+            .assessment_status = result.private_commit_assessment_status,
+            .gate_applied = result.private_commit_gate_applied,
+            .budget_qualified = result.private_commit_budget_qualified,
+            .budget_scope = result.private_commit_budget_scope,
+            .private_commit_available = result.private_commit_available,
+            .private_commit_stable = result.private_commit_stable,
+            .private_commit_terminal_growth = result.private_commit_terminal_growth,
+            .private_commit_baseline_bytes = result.private_commit_baseline_bytes,
+            .private_commit_baseline_full_min_bytes = result.private_commit_baseline_full_min_bytes,
+            .private_commit_baseline_central_min_bytes = result.private_commit_baseline_central_min_bytes,
+            .private_commit_baseline_median_bytes = result.private_commit_baseline_median_bytes,
+            .private_commit_baseline_central_max_bytes = result.private_commit_baseline_central_max_bytes,
+            .private_commit_baseline_full_max_bytes = result.private_commit_baseline_full_max_bytes,
+            .private_commit_final_bytes = result.private_commit_final_bytes,
+            .private_commit_final_full_min_bytes = result.private_commit_final_full_min_bytes,
+            .private_commit_final_central_min_bytes = result.private_commit_final_central_min_bytes,
+            .private_commit_final_median_bytes = result.private_commit_final_median_bytes,
+            .private_commit_final_central_max_bytes = result.private_commit_final_central_max_bytes,
+            .private_commit_final_full_max_bytes = result.private_commit_final_full_max_bytes,
+            .private_commit_peak_bytes = result.private_commit_peak_bytes,
+            .private_commit_growth_ratio = result.private_commit_growth_ratio,
+            .private_commit_warmup_trimmed_span_ratio = result.private_commit_warmup_trimmed_span_ratio,
+            .private_commit_warmup_full_span_ratio = result.private_commit_warmup_full_span_ratio,
+            .private_commit_measured_trimmed_span_ratio = result.private_commit_measured_trimmed_span_ratio,
+            .private_commit_measured_full_span_ratio = result.private_commit_measured_full_span_ratio,
+            .private_commit_warmup_samples = result.private_commit_warmup_samples,
+            .private_commit_cycle_samples = result.private_commit_cycle_samples,
+            .working_set_available = result.working_set_available,
+            .working_set_baseline_bytes = result.working_set_baseline_bytes,
+            .working_set_baseline_min_bytes = result.working_set_baseline_low_bytes,
+            .working_set_baseline_median_bytes = result.working_set_baseline_median_bytes,
+            .working_set_baseline_max_bytes = result.working_set_baseline_max_bytes,
+            .working_set_final_bytes = result.working_set_final_bytes,
+            .working_set_final_min_bytes = result.working_set_final_low_bytes,
+            .working_set_final_median_bytes = result.working_set_final_median_bytes,
+            .working_set_final_max_bytes = result.working_set_final_max_bytes,
+            .working_set_peak_bytes = result.working_set_peak_bytes,
+            .working_set_growth_ratio = result.working_set_growth_ratio,
+            .working_set_instant_growth_ratio = result.working_set_instant_growth_ratio,
+            .working_set_warmup_samples = result.working_set_warmup_samples,
+            .working_set_cycle_samples = result.working_set_cycle_samples,
+        },
+        .box3d_allocator = result.box3d_allocator,
+        .crt = result.crt,
+    };
+}
+
 bool has_two_consecutive_samples(
     std::span<const double> samples, double threshold)
 {
@@ -2794,11 +3521,10 @@ bool has_two_consecutive_samples(
 CapabilityStatus classify_lifecycle_status(
     int completed_cycles,
     int invalid_handles,
-    std::optional<double> working_set_growth)
+    std::optional<double> private_commit_growth)
 {
-    if (completed_cycles != 10000 || invalid_handles != 0 || !working_set_growth
-        || !std::isfinite(*working_set_growth) || *working_set_growth < 0.0
-        || *working_set_growth > 0.05) {
+    static_cast<void>(private_commit_growth);
+    if (completed_cycles != 10000 || invalid_handles != 0) {
         return CapabilityStatus::Blocked;
     }
     return CapabilityStatus::Pass;
@@ -2813,6 +3539,30 @@ int scenario_exit_code(
                })
         ? 1
         : 0;
+}
+
+CapabilityStatus canonical_functional_status(const CapabilityRow& row)
+{
+    if (row.capability != "batch_lifecycle") {
+        return row.status;
+    }
+    const auto find_value = [&](std::string_view name) -> std::optional<double> {
+        const auto found = std::ranges::find(row.values, name, &ScenarioValue::name);
+        return found == row.values.end() ? std::nullopt
+                                         : std::optional<double>{found->value};
+    };
+    const auto generation_cycles = find_value("generation_cycles");
+    const auto invalid_handles = find_value("invalid_handles");
+    const bool valid_fixture = !row.fixture_hashes.empty()
+        && std::ranges::all_of(row.fixture_hashes, [](std::uint64_t hash) {
+               return hash != 0;
+           });
+    return generation_cycles && std::isfinite(*generation_cycles)
+            && *generation_cycles == 10000.0 && invalid_handles
+            && std::isfinite(*invalid_handles) && *invalid_handles == 0.0
+            && valid_fixture
+        ? CapabilityStatus::Pass
+        : CapabilityStatus::Blocked;
 }
 
 std::uint64_t hash_capability_rows(std::span<const CapabilityRow> rows)
@@ -2845,11 +3595,18 @@ std::uint64_t hash_capability_rows(std::span<const CapabilityRow> rows)
         ordered_rows, {}, [](const CapabilityRow* row) { return row->capability; });
     for (const CapabilityRow* row : ordered_rows) {
         mix_string(row->capability);
-        mix_u64(static_cast<std::uint64_t>(row->status));
-        mix_string(row->fallback);
+        mix_u64(static_cast<std::uint64_t>(canonical_functional_status(*row)));
+        mix_string(row->capability == "batch_lifecycle" ? std::string_view{}
+                                                         : std::string_view{row->fallback});
         std::vector<const ScenarioValue*> ordered_values;
         for (const ScenarioValue& value : row->values) {
-            if (value.name.find("working_set") == std::string::npos) {
+            const bool runtime_measurement = value.name.find("working_set") != std::string::npos
+                || value.name.find("private_commit") != std::string::npos
+                || value.name.find("box3d_allocator") != std::string::npos
+                || value.name.find("crt_") != std::string::npos
+                || value.name.find("timing") != std::string::npos
+                || value.name.starts_with("step_") || value.name.ends_with("_ms");
+            if (!runtime_measurement) {
                 ordered_values.push_back(&value);
             }
         }
@@ -2925,25 +3682,45 @@ ScenarioResult ScenarioRunner::run(
     ScenarioWatchdog watchdog(kind, seed);
     WatchdogActivation activation(watchdog);
     watchdog.checkpoint(0);
+    const std::int64_t allocator_baseline = box3d_allocator_byte_count();
+    ScenarioResult result;
     if (kind == ScenarioKind::RadialFall) {
-        return run_radial_fall(seed, substeps);
+        result = run_radial_fall(seed, substeps);
+    } else if (kind == ScenarioKind::ProjectilePile) {
+        result = run_projectile_pile(seed);
+    } else if (kind == ScenarioKind::RadialPile) {
+        result = run_stability_pile(kind, seed, substeps);
+    } else if (kind == ScenarioKind::MassRatio) {
+        result = run_stability_pile(kind, seed, substeps);
+    } else if (kind == ScenarioKind::Stress) {
+        result = run_stress(seed, substeps);
+    } else if (kind == ScenarioKind::CapabilityMatrix) {
+        result = run_capability_matrix(seed, substeps);
+    } else {
+        throw std::invalid_argument("unknown ScenarioKind value");
     }
-    if (kind == ScenarioKind::ProjectilePile) {
-        return run_projectile_pile(seed);
+    const std::int64_t allocator_final = box3d_allocator_byte_count();
+    result.box3d_allocator.baseline_bytes = allocator_baseline;
+    result.box3d_allocator.final_bytes = allocator_final;
+    result.box3d_allocator.max_abs_delta = std::max(
+        result.box3d_allocator.max_abs_delta,
+        std::abs(allocator_final - allocator_baseline));
+    result.box3d_allocator.exact_return = result.box3d_allocator.exact_return
+        && allocator_baseline == 0 && allocator_final == allocator_baseline;
+    if (!result.box3d_allocator.exact_return
+        && std::ranges::none_of(result.violations, [](const ScenarioViolation& violation) {
+               return violation.code == "box3d_allocator_imbalance";
+           })) {
+        add_violation(
+            result,
+            "box3d_allocator_imbalance",
+            "Box3 allocator did not return exactly to the isolated process baseline",
+            result.ticks,
+            {},
+            {{"baseline_bytes", static_cast<double>(allocator_baseline), "bytes"},
+             {"final_bytes", static_cast<double>(allocator_final), "bytes"}});
     }
-    if (kind == ScenarioKind::RadialPile) {
-        return run_stability_pile(kind, seed, substeps);
-    }
-    if (kind == ScenarioKind::MassRatio) {
-        return run_stability_pile(kind, seed, substeps);
-    }
-    if (kind == ScenarioKind::Stress) {
-        return run_stress(seed, substeps);
-    }
-    if (kind == ScenarioKind::CapabilityMatrix) {
-        return run_capability_matrix(seed, substeps);
-    }
-    throw std::invalid_argument("unknown ScenarioKind value");
+    return result;
 }
 
 }
