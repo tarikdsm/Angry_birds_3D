@@ -1,0 +1,2207 @@
+#include <ninho/physics/scenario.hpp>
+
+#include "box3d_replay_conformance.hpp"
+
+#include <algorithm>
+#include <array>
+#include <chrono>
+#include <charconv>
+#include <cmath>
+#include <cstdint>
+#include <filesystem>
+#include <iterator>
+#include <limits>
+#include <optional>
+#include <ranges>
+#include <set>
+#include <stdexcept>
+#include <system_error>
+#include <string_view>
+#include <vector>
+
+#ifdef _WIN32
+#define NOMINMAX
+#include <windows.h>
+#include <psapi.h>
+#endif
+
+namespace ninho::physics {
+namespace {
+
+[[nodiscard]] std::string_view name_of(ScenarioKind kind)
+{
+    switch (kind) {
+    case ScenarioKind::RadialFall:
+        return "radial_fall";
+    case ScenarioKind::ProjectilePile:
+        return "projectile_pile";
+    case ScenarioKind::RadialPile:
+        return "radial_pile";
+    case ScenarioKind::MassRatio:
+        return "mass_ratio";
+    case ScenarioKind::Stress:
+        return "stress";
+    case ScenarioKind::CapabilityMatrix:
+        return "capability_matrix";
+    }
+    return "unknown";
+}
+
+[[nodiscard]] ScenarioResult make_result(
+    ScenarioKind kind, std::uint64_t seed, int substeps)
+{
+    return {
+        .kind = kind,
+        .name = std::string{name_of(kind)},
+        .seed = seed,
+        .substeps = substeps,
+    };
+}
+
+void add_violation(
+    ScenarioResult& result,
+    std::string code,
+    std::string message,
+    int tick,
+    BodyHandle handle,
+    std::vector<ScenarioValue> values = {})
+{
+    result.violations.push_back({
+        .scenario = result.name,
+        .code = std::move(code),
+        .message = std::move(message),
+        .tick = tick,
+        .handle = handle,
+        .values = std::move(values),
+    });
+}
+
+void sample_world_metrics(
+    ScenarioResult& result, const WorldMetrics& metrics, std::vector<double>& timings)
+{
+    timings.push_back(metrics.step_ms);
+    result.peak_awake_count = std::max(result.peak_awake_count, metrics.awake_count);
+    result.peak_contact_count = std::max(result.peak_contact_count, metrics.contact_count);
+}
+
+[[nodiscard]] double percentile(const std::vector<double>& sorted, double fraction)
+{
+    if (sorted.empty()) {
+        return 0.0;
+    }
+    const double rank = std::ceil(fraction * static_cast<double>(sorted.size()));
+    const std::size_t index = static_cast<std::size_t>(std::max(1.0, rank)) - 1;
+    return sorted[std::min(index, sorted.size() - 1)];
+}
+
+void finish_timings(ScenarioResult& result, std::vector<double> timings)
+{
+    if (timings.empty()) {
+        return;
+    }
+    std::ranges::sort(timings);
+    result.step_min_ms = timings.front();
+    result.step_p50_ms = percentile(timings, 0.50);
+    result.step_p95_ms = percentile(timings, 0.95);
+    result.step_max_ms = timings.back();
+}
+
+[[nodiscard]] double sphere_kinetic_energy(const BodyState& state, double radius)
+{
+    const double linear_speed = length(state.linear_velocity);
+    const double angular_speed = length(state.angular_velocity);
+    const double inertia = 0.4 * state.mass * radius * radius;
+    return 0.5 * state.mass * linear_speed * linear_speed
+        + 0.5 * inertia * angular_speed * angular_speed;
+}
+
+[[nodiscard]] ScenarioResult run_radial_fall(
+    std::uint64_t seed, int substeps)
+{
+    ScenarioResult result = make_result(ScenarioKind::RadialFall, seed, substeps);
+    result.ticks = 600;
+    result.limits = {
+        {"surface_separation_min", ">=", -0.02, "m"},
+        {"surface_separation_max", "<=", 0.03, "m"},
+        {"final_linear_speed", "<", 0.05, "m/s"},
+        {"final_angular_speed", "<", 0.10, "rad/s"},
+        {"max_energy_growth_ratio", "<=", 0.02, "ratio"},
+    };
+
+    constexpr float planet_radius = 10.0f;
+    constexpr float ball_radius = 0.4f;
+    PhysicsWorld world(WorldConfig{
+        .substeps = substeps,
+        .planet_radius = planet_radius,
+        .surface_gravity = 9.0f,
+        .max_bodies = 2,
+    });
+    const auto planet =
+        world.create_body(BodyDesc::static_sphere(planet_radius, {}));
+    const auto ball = world.create_body(
+        BodyDesc::dynamic_sphere(ball_radius, {{0, 15, 0}, {}}, 520.0f));
+    if (!planet || !ball) {
+        add_violation(
+            result,
+            "create_body",
+            "failed to create radial-fall fixture",
+            0,
+            ball.value,
+            {{"planet_status", static_cast<double>(planet.status.code), "status"},
+             {"ball_status", static_cast<double>(ball.status.code), "status"}});
+        return result;
+    }
+
+    std::vector<double> timings;
+    timings.reserve(result.ticks);
+    std::vector<double> trailing_energy;
+    trailing_energy.reserve(120);
+    for (int tick = 1; tick <= result.ticks; ++tick) {
+        world.step();
+        sample_world_metrics(result, world.metrics(), timings);
+        const auto state = world.state(ball.value);
+        if (!state || !is_finite(state->transform.position)
+            || !is_finite(state->linear_velocity) || !is_finite(state->angular_velocity)) {
+            add_violation(
+                result, "invalid_state", "radial-fall state is missing or non-finite", tick, ball.value);
+            break;
+        }
+        if (tick > result.ticks - 120) {
+            trailing_energy.push_back(sphere_kinetic_energy(*state, ball_radius));
+        }
+    }
+
+    finish_timings(result, std::move(timings));
+    const auto final_state = world.state(ball.value);
+    if (!final_state) {
+        if (result.violations.empty()) {
+            add_violation(result, "missing_body", "radial-fall body disappeared", 600, ball.value);
+        }
+        return result;
+    }
+    result.surface_separation =
+        length(final_state->transform.position) - planet_radius - ball_radius;
+    result.final_linear_speed = length(final_state->linear_velocity);
+    result.final_angular_speed = length(final_state->angular_velocity);
+    if (!trailing_energy.empty()) {
+        const double baseline = trailing_energy.front();
+        const double later_max = *std::max_element(
+            trailing_energy.begin() + std::min<std::size_t>(1, trailing_energy.size()),
+            trailing_energy.end());
+        result.max_energy_growth_ratio =
+            std::max(0.0, (later_max - baseline) / std::max(1.0e-9, baseline));
+    }
+    result.final_hash = hash_states(world.states());
+    result.metrics = {
+        {"surface_separation", result.surface_separation, "m"},
+        {"final_linear_speed", result.final_linear_speed, "m/s"},
+        {"final_angular_speed", result.final_angular_speed, "rad/s"},
+        {"max_energy_growth_ratio", result.max_energy_growth_ratio, "ratio"},
+    };
+
+    if (result.surface_separation < -0.02 || result.surface_separation > 0.03) {
+        add_violation(
+            result,
+            "radial_fall_separation",
+            "surface separation is outside the fixed interval",
+            600,
+            ball.value,
+            {{"surface_separation", result.surface_separation, "m"}});
+    }
+    if (result.final_linear_speed >= 0.05) {
+        add_violation(
+            result,
+            "radial_fall_linear_speed",
+            "final linear speed exceeds the fixed limit",
+            600,
+            ball.value,
+            {{"linear_speed", result.final_linear_speed, "m/s"}});
+    }
+    if (result.final_angular_speed >= 0.10) {
+        add_violation(
+            result,
+            "radial_fall_angular_speed",
+            "final angular speed exceeds the fixed limit",
+            600,
+            ball.value,
+            {{"angular_speed", result.final_angular_speed, "rad/s"}});
+    }
+    if (result.max_energy_growth_ratio > 0.02) {
+        add_violation(
+            result,
+            "radial_fall_energy_growth",
+            "kinetic energy grew by more than two percent in the final 120 ticks",
+            600,
+            ball.value,
+            {{"growth_ratio", result.max_energy_growth_ratio, "ratio"}});
+    }
+    return result;
+}
+
+class XorShift64 {
+public:
+    explicit XorShift64(std::uint64_t seed)
+        : state_(seed == 0 ? 0x9e3779b97f4a7c15ull : seed)
+    {
+    }
+
+    [[nodiscard]] std::uint64_t next()
+    {
+        state_ ^= state_ << 13;
+        state_ ^= state_ >> 7;
+        state_ ^= state_ << 17;
+        return state_;
+    }
+
+    [[nodiscard]] float centered(float magnitude)
+    {
+        const double unit = static_cast<double>(next() >> 11)
+            * (1.0 / 9007199254740992.0);
+        return static_cast<float>((unit * 2.0 - 1.0) * magnitude);
+    }
+
+private:
+    std::uint64_t state_;
+};
+
+struct ProjectileOutcome {
+    bool contact_before_exit{};
+    bool invalid_state{};
+    int ticks{};
+    BodyHandle projectile{};
+    double step_min_ms{};
+    double step_p50_ms{};
+    double step_p95_ms{};
+    double step_max_ms{};
+    int peak_awake_count{};
+    int peak_contact_count{};
+    std::uint64_t final_hash{};
+};
+
+[[nodiscard]] ProjectileOutcome simulate_projectile(
+    std::uint64_t seed, float speed, int substeps)
+{
+    constexpr float planet_radius = 10.0f;
+    constexpr float platform_half_height = 0.25f;
+    constexpr int block_count = 120;
+    PhysicsWorld world(WorldConfig{
+        .substeps = substeps,
+        .planet_radius = planet_radius,
+        .surface_gravity = 9.0f,
+        .max_bodies = block_count + 3,
+    });
+    const auto planet = world.create_body(BodyDesc::static_sphere(planet_radius, {}));
+    const auto platform = world.create_body(BodyDesc::static_box(
+        {4.0f, platform_half_height, 2.0f},
+        {{0, planet_radius + platform_half_height, 0}, {}}));
+    if (!planet || !platform) {
+        return {.invalid_state = true};
+    }
+
+    XorShift64 random(seed);
+    std::vector<BodyHandle> blocks;
+    blocks.reserve(block_count);
+    constexpr int columns = 6;
+    constexpr int rows = block_count / columns;
+    for (int row = 0; row < rows; ++row) {
+        for (int column = 0; column < columns; ++column) {
+            const float x = (static_cast<float>(column) - 2.5f) * 0.61f
+                + random.centered(0.0005f);
+            const float y = planet_radius + 0.5f + 0.26f
+                + static_cast<float>(row) * 0.51f;
+            BodyDesc block = BodyDesc::dynamic_box(
+                {0.30f, 0.25f, 0.50f},
+                {{x, y, random.centered(0.0005f)}, {}},
+                500.0f + random.centered(25.0f));
+            block.shapes.front().material_id = 1000u
+                + static_cast<std::uint64_t>(row * columns + column);
+            const auto created = world.create_body(block);
+            if (!created) {
+                return {.invalid_state = true};
+            }
+            blocks.push_back(created.value);
+        }
+    }
+
+    BodyDesc projectile = BodyDesc::dynamic_sphere(
+        0.45f, {{-8.0f, planet_radius + 3.25f, 0}, {}}, 520.0f);
+    projectile.linear_velocity = {speed, 0, 0};
+    projectile.bullet = true;
+    projectile.enable_sleep = false;
+    projectile.shapes.front().material_id = 9001;
+    const auto projectile_result = world.create_body(projectile);
+    if (!projectile_result) {
+        return {.invalid_state = true};
+    }
+
+    ProjectileOutcome outcome{.projectile = projectile_result.value};
+    std::vector<double> timings;
+    timings.reserve(90);
+    constexpr float pile_exit_x = 3.0f;
+    for (int tick = 1; tick <= 90; ++tick) {
+        world.step();
+        outcome.ticks = tick;
+        const WorldMetrics metrics = world.metrics();
+        timings.push_back(metrics.step_ms);
+        outcome.peak_awake_count = std::max(outcome.peak_awake_count, metrics.awake_count);
+        outcome.peak_contact_count = std::max(outcome.peak_contact_count, metrics.contact_count);
+
+        const auto projectile_state = world.state(projectile_result.value);
+        if (!projectile_state || !is_finite(projectile_state->transform.position)
+            || !is_finite(projectile_state->linear_velocity)
+            || !is_finite(projectile_state->angular_velocity)
+            || length(projectile_state->linear_velocity) > 100.0f) {
+            outcome.invalid_state = true;
+            break;
+        }
+        const bool exited = projectile_state->transform.position.x > pile_exit_x;
+        for (const ContactHit& hit : world.contact_hits()) {
+            const BodyHandle other = hit.a == projectile_result.value ? hit.b
+                : hit.b == projectile_result.value                    ? hit.a
+                                                                     : BodyHandle{};
+            if (other.valid() && std::ranges::find(blocks, other) != blocks.end()) {
+                outcome.contact_before_exit = !exited;
+                break;
+            }
+        }
+        if (outcome.contact_before_exit || exited) {
+            break;
+        }
+    }
+    std::ranges::sort(timings);
+    if (!timings.empty()) {
+        outcome.step_min_ms = timings.front();
+        outcome.step_p50_ms = percentile(timings, 0.50);
+        outcome.step_p95_ms = percentile(timings, 0.95);
+        outcome.step_max_ms = timings.back();
+    }
+    outcome.final_hash = hash_states(world.states());
+    return outcome;
+}
+
+struct ProjectileGate {
+    std::array<ProjectileOutcome, 20> primary;
+    std::array<ProjectileOutcome, 20> fallback;
+    int primary_pass_count{};
+    int fallback_pass_count{};
+    bool uses_fallback{};
+};
+
+[[nodiscard]] ProjectileGate run_projectile_gate()
+{
+    ProjectileGate gate{};
+    for (std::size_t index = 0; index < gate.primary.size(); ++index) {
+        gate.primary[index] = simulate_projectile(index + 1, 35.0f, 4);
+        gate.primary_pass_count += gate.primary[index].contact_before_exit
+            && !gate.primary[index].invalid_state;
+    }
+    if (gate.primary_pass_count != 20) {
+        gate.uses_fallback = true;
+        for (std::size_t index = 0; index < gate.fallback.size(); ++index) {
+            gate.fallback[index] = simulate_projectile(index + 1, 30.0f, 6);
+            gate.fallback_pass_count += gate.fallback[index].contact_before_exit
+                && !gate.fallback[index].invalid_state;
+        }
+    }
+    return gate;
+}
+
+[[nodiscard]] ScenarioResult run_projectile_pile(std::uint64_t seed)
+{
+    static const ProjectileGate gate = run_projectile_gate();
+    const bool fallback_passed = gate.uses_fallback && gate.fallback_pass_count == 20;
+    const bool use_fallback_outcome = gate.uses_fallback;
+    const float speed = use_fallback_outcome ? 30.0f : 35.0f;
+    const int substeps = use_fallback_outcome ? 6 : 4;
+
+    ScenarioResult result = make_result(ScenarioKind::ProjectilePile, seed, substeps);
+    result.dynamic_body_count = 121;
+    result.shape_count = 123;
+    result.ccd_primary_pass_count = gate.primary_pass_count;
+    result.ccd_fallback_pass_count = gate.fallback_pass_count;
+    result.projectile_speed = speed;
+    result.limits = {
+        {"primary_seed_passes", "==", 20, "seeds"},
+        {"fallback_seed_passes", "==", 20, "seeds"},
+        {"invalid_states", "==", 0, "states"},
+    };
+    if (fallback_passed) {
+        result.fallback = "speed30_substeps6";
+    }
+
+    ProjectileOutcome outcome{};
+    if (seed >= 1 && seed <= 20) {
+        const std::size_t index = static_cast<std::size_t>(seed - 1);
+        outcome = use_fallback_outcome ? gate.fallback[index] : gate.primary[index];
+    } else {
+        outcome = simulate_projectile(seed, speed, substeps);
+    }
+    result.contact_before_pile_exit = outcome.contact_before_exit;
+    result.ticks = outcome.ticks;
+    result.final_hash = outcome.final_hash;
+    result.step_min_ms = outcome.step_min_ms;
+    result.step_p50_ms = outcome.step_p50_ms;
+    result.step_p95_ms = outcome.step_p95_ms;
+    result.step_max_ms = outcome.step_max_ms;
+    result.peak_awake_count = outcome.peak_awake_count;
+    result.peak_contact_count = outcome.peak_contact_count;
+    result.metrics = {
+        {"primary_seed_passes", static_cast<double>(gate.primary_pass_count), "seeds"},
+        {"fallback_seed_passes", static_cast<double>(gate.fallback_pass_count), "seeds"},
+        {"projectile_speed", speed, "m/s"},
+    };
+
+    if (gate.uses_fallback && !fallback_passed) {
+        add_violation(
+            result,
+            "ccd_dynamic_dynamic",
+            "dynamic-dynamic CCD failed both approved 20-seed parameter sets",
+            outcome.ticks,
+            outcome.projectile,
+            {{"primary_passes", static_cast<double>(gate.primary_pass_count), "seeds"},
+             {"fallback_passes", static_cast<double>(gate.fallback_pass_count), "seeds"}});
+    } else if (!outcome.contact_before_exit || outcome.invalid_state) {
+        add_violation(
+            result,
+            "ccd_seed_miss",
+            "projectile did not contact a pile body before crossing the pile",
+            outcome.ticks,
+            outcome.projectile,
+            {{"speed", speed, "m/s"},
+             {"substeps", static_cast<double>(substeps), "count"}});
+    }
+    return result;
+}
+
+[[nodiscard]] double cube_kinetic_energy(const BodyState& state, double side)
+{
+    const double linear_speed = length(state.linear_velocity);
+    const double angular_speed = length(state.angular_velocity);
+    const double inertia = state.mass * side * side / 6.0;
+    return 0.5 * state.mass * linear_speed * linear_speed
+        + 0.5 * inertia * angular_speed * angular_speed;
+}
+
+struct OrientedBox {
+    Vec3 center{};
+    std::array<Vec3, 3> axes{};
+    Vec3 half_extents{};
+};
+
+[[nodiscard]] OrientedBox oriented_box(
+    const BodyState& state, Vec3 half_extents)
+{
+    const Quat q = state.transform.rotation;
+    const float xx = q.x * q.x;
+    const float yy = q.y * q.y;
+    const float zz = q.z * q.z;
+    const float xy = q.x * q.y;
+    const float xz = q.x * q.z;
+    const float yz = q.y * q.z;
+    const float wx = q.w * q.x;
+    const float wy = q.w * q.y;
+    const float wz = q.w * q.z;
+    return {
+        .center = state.transform.position,
+        .axes = {
+            Vec3{1 - 2 * (yy + zz), 2 * (xy + wz), 2 * (xz - wy)},
+            Vec3{2 * (xy - wz), 1 - 2 * (xx + zz), 2 * (yz + wx)},
+            Vec3{2 * (xz + wy), 2 * (yz - wx), 1 - 2 * (xx + yy)},
+        },
+        .half_extents = half_extents,
+    };
+}
+
+[[nodiscard]] double projection_radius(const OrientedBox& box, Vec3 axis)
+{
+    return std::abs(dot(box.axes[0], axis)) * box.half_extents.x
+        + std::abs(dot(box.axes[1], axis)) * box.half_extents.y
+        + std::abs(dot(box.axes[2], axis)) * box.half_extents.z;
+}
+
+[[nodiscard]] double obb_penetration(const OrientedBox& first, const OrientedBox& second)
+{
+    std::array<Vec3, 15> candidates{
+        first.axes[0],
+        first.axes[1],
+        first.axes[2],
+        second.axes[0],
+        second.axes[1],
+        second.axes[2],
+    };
+    std::size_t candidate_count = 6;
+    for (const Vec3 first_axis : first.axes) {
+        for (const Vec3 second_axis : second.axes) {
+            const Vec3 product = cross(first_axis, second_axis);
+            if (dot(product, product) > 1.0e-10f) {
+                candidates[candidate_count++] = normalized_or_zero(product);
+            }
+        }
+    }
+
+    double minimum_overlap = std::numeric_limits<double>::max();
+    const Vec3 center_delta = second.center - first.center;
+    for (std::size_t index = 0; index < candidate_count; ++index) {
+        const Vec3 axis = candidates[index];
+        const double overlap = projection_radius(first, axis)
+            + projection_radius(second, axis) - std::abs(dot(center_delta, axis));
+        if (overlap <= 0.0) {
+            return 0.0;
+        }
+        minimum_overlap = std::min(minimum_overlap, overlap);
+    }
+    return minimum_overlap;
+}
+
+[[nodiscard]] ScenarioResult run_stability_pile(
+    ScenarioKind kind, std::uint64_t seed, int substeps)
+{
+    const bool mass_ratio = kind == ScenarioKind::MassRatio;
+    const double sleep_limit = mass_ratio ? 0.80 : 0.90;
+    const double linear_limit = mass_ratio ? 0.10 : 0.05;
+    const double angular_limit = mass_ratio ? 0.20 : 0.10;
+    const double penetration_limit = mass_ratio ? 0.025 : 0.02;
+    const std::string code_prefix = mass_ratio ? "mass_ratio" : "radial_pile";
+    ScenarioResult result = make_result(kind, seed, substeps);
+    result.ticks = 1800;
+    result.dynamic_body_count = 80;
+    result.shape_count = 81;
+    result.minimum_density = mass_ratio ? 85.0 : 480.0;
+    result.maximum_density = mass_ratio ? 3400.0 : 520.0;
+    result.limits = {
+        {"sleep_ratio", ">=", sleep_limit, "ratio"},
+        {"p95_linear_speed", "<", linear_limit, "m/s"},
+        {"p95_angular_speed", "<", angular_limit, "rad/s"},
+        {"max_penetration", "<", penetration_limit, "m"},
+        {"spontaneous_speed", "<=", 100.0, "m/s"},
+        {"world_radius", "<=", 60.0, "m"},
+    };
+    if (!mass_ratio) {
+        result.limits.push_back(
+            {"energy_growth_from_tick_600", "<=", 0.02, "ratio"});
+    }
+
+    constexpr float planet_radius = 10.0f;
+    constexpr float platform_top = 10.5f;
+    constexpr float cube_side = 0.5f;
+    PhysicsWorld world(WorldConfig{
+        .substeps = substeps,
+        .planet_radius = planet_radius,
+        .surface_gravity = 9.0f,
+        .max_bodies = 81,
+    });
+    const auto platform = world.create_body(
+        BodyDesc::static_box({4, 0.25f, 4}, {{0, 10.25f, 0}, {}}));
+    if (!platform) {
+        add_violation(result, "create_body", "failed to create stability-pile platform", 0, {});
+        return result;
+    }
+
+    XorShift64 random(seed);
+    std::vector<BodyHandle> blocks;
+    blocks.reserve(80);
+    int block_index = 0;
+    for (int layer = 0; layer < 4; ++layer) {
+        for (int z_index = 0; z_index < 4; ++z_index) {
+            for (int x_index = 0; x_index < 5; ++x_index) {
+                const Vec3 position{
+                    (static_cast<float>(x_index) - 2.0f) * 0.51f
+                        + random.centered(0.0002f),
+                    platform_top + 0.26f + static_cast<float>(layer) * 0.51f,
+                    (static_cast<float>(z_index) - 1.5f) * 0.51f
+                        + random.centered(0.0002f),
+                };
+                const float density = mass_ratio
+                    ? 85.0f + (3400.0f - 85.0f)
+                        * static_cast<float>(block_index) / 79.0f
+                    : 500.0f + random.centered(20.0f);
+                BodyDesc block = BodyDesc::dynamic_box(
+                    {0.25f, 0.25f, 0.25f},
+                    {position, {}},
+                    density);
+                const auto created = world.create_body(block);
+                if (!created) {
+                    add_violation(
+                        result,
+                        "create_body",
+                        "failed to create all 80 stability-pile blocks",
+                        0,
+                        created.value,
+                        {{"created_blocks", static_cast<double>(blocks.size()), "count"}});
+                    return result;
+                }
+                blocks.push_back(created.value);
+                ++block_index;
+            }
+        }
+    }
+
+    std::vector<double> timings;
+    timings.reserve(result.ticks);
+    std::vector<double> measured_linear_speeds;
+    std::vector<double> measured_angular_speeds;
+    measured_linear_speeds.reserve(80 * 300);
+    measured_angular_speeds.reserve(80 * 300);
+    std::size_t sleeping_samples = 0;
+    std::size_t total_samples = 0;
+    double maximum_energy_after_600 = 0.0;
+    double maximum_platform_penetration = 0.0;
+    double maximum_pair_penetration = 0.0;
+    int penetration_tick = -1;
+    BodyHandle penetration_body{};
+    BodyHandle penetration_other{};
+
+    for (int tick = 1; tick <= result.ticks; ++tick) {
+        world.step();
+        sample_world_metrics(result, world.metrics(), timings);
+        double total_energy = 0.0;
+        bool invalid_tick = false;
+        std::vector<BodyState> measured_states;
+        if (tick > 1500) {
+            measured_states.reserve(blocks.size());
+        }
+        for (const BodyHandle block : blocks) {
+            const auto state = world.state(block);
+            if (!state || !is_finite(state->transform.position)
+                || !is_finite(state->linear_velocity) || !is_finite(state->angular_velocity)) {
+                add_violation(
+                    result, "invalid_state", "stability-pile state is missing or non-finite", tick, block);
+                invalid_tick = true;
+                break;
+            }
+            const double linear_speed = length(state->linear_velocity);
+            if (linear_speed > 100.0) {
+                add_violation(
+                    result,
+                    "spontaneous_speed",
+                    "stability-pile body exceeded 100 m/s",
+                    tick,
+                    block,
+                    {{"linear_speed", linear_speed, "m/s"}});
+                invalid_tick = true;
+                break;
+            }
+            const double radius = length(state->transform.position);
+            if (radius > 6.0 * planet_radius && !state->ejected) {
+                add_violation(
+                    result,
+                    "outside_world_without_ejection",
+                    "stability-pile body crossed 6R without valid ejection",
+                    tick,
+                    block,
+                    {{"radius", radius, "m"}});
+                invalid_tick = true;
+                break;
+            }
+            total_energy += cube_kinetic_energy(*state, cube_side);
+            if (tick > 1500) {
+                measured_linear_speeds.push_back(linear_speed);
+                measured_angular_speeds.push_back(length(state->angular_velocity));
+                sleeping_samples += !state->awake;
+                ++total_samples;
+                measured_states.push_back(*state);
+            }
+        }
+        if (invalid_tick) {
+            break;
+        }
+        if (tick == 600) {
+            result.energy_at_tick_600 = total_energy;
+        } else if (tick > 600) {
+            maximum_energy_after_600 = std::max(maximum_energy_after_600, total_energy);
+        }
+        if (tick > 1500) {
+            const auto platform_state = world.state(platform.value);
+            if (!platform_state) {
+                add_violation(
+                    result,
+                    "invalid_state",
+                    "stability-pile platform state is unavailable",
+                    tick,
+                    platform.value);
+                break;
+            }
+            const OrientedBox platform_box =
+                oriented_box(*platform_state, {4, 0.25f, 4});
+            for (std::size_t first = 0; first < measured_states.size(); ++first) {
+                const OrientedBox first_box =
+                    oriented_box(measured_states[first], {0.25f, 0.25f, 0.25f});
+                const double platform_penetration =
+                    obb_penetration(first_box, platform_box);
+                if (platform_penetration > result.max_penetration) {
+                    result.max_penetration = platform_penetration;
+                    penetration_tick = tick;
+                    penetration_body = blocks[first];
+                    penetration_other = platform.value;
+                }
+                maximum_platform_penetration =
+                    std::max(maximum_platform_penetration, platform_penetration);
+                for (std::size_t second = first + 1; second < measured_states.size(); ++second) {
+                    const OrientedBox second_box =
+                        oriented_box(measured_states[second], {0.25f, 0.25f, 0.25f});
+                    const double pair_penetration =
+                        obb_penetration(first_box, second_box);
+                    if (pair_penetration > result.max_penetration) {
+                        result.max_penetration = pair_penetration;
+                        penetration_tick = tick;
+                        penetration_body = blocks[first];
+                        penetration_other = blocks[second];
+                    }
+                    maximum_pair_penetration =
+                        std::max(maximum_pair_penetration, pair_penetration);
+                }
+            }
+        }
+    }
+
+    finish_timings(result, std::move(timings));
+    std::ranges::sort(measured_linear_speeds);
+    std::ranges::sort(measured_angular_speeds);
+    result.p95_linear_speed = percentile(measured_linear_speeds, 0.95);
+    result.p95_angular_speed = percentile(measured_angular_speeds, 0.95);
+    result.sleep_ratio = total_samples == 0
+        ? 0.0
+        : static_cast<double>(sleeping_samples) / static_cast<double>(total_samples);
+    result.max_energy_growth_ratio = std::max(
+        0.0,
+        (maximum_energy_after_600 - result.energy_at_tick_600)
+            / std::max(1.0e-9, result.energy_at_tick_600));
+    result.final_hash = hash_states(world.states());
+    result.metrics = {
+        {"sleep_ratio", result.sleep_ratio, "ratio"},
+        {"p95_linear_speed", result.p95_linear_speed, "m/s"},
+        {"p95_angular_speed", result.p95_angular_speed, "rad/s"},
+        {"max_penetration", result.max_penetration, "m"},
+        {"max_platform_penetration", maximum_platform_penetration, "m"},
+        {"max_pair_penetration", maximum_pair_penetration, "m"},
+        {"minimum_density", result.minimum_density, "kg/m3"},
+        {"maximum_density", result.maximum_density, "kg/m3"},
+        {"energy_at_tick_600", result.energy_at_tick_600, "J"},
+        {"max_energy_growth_ratio", result.max_energy_growth_ratio, "ratio"},
+    };
+
+    const auto fixed_gate = [&](bool failed,
+                                const char* code,
+                                const char* message,
+                                double value,
+                                const char* unit) {
+        if (failed) {
+            add_violation(
+                result, code, message, result.ticks, {}, {{code, value, unit}});
+        }
+    };
+    fixed_gate(
+        result.sleep_ratio < sleep_limit,
+        (code_prefix + "_sleep_ratio").c_str(),
+        "too few measured body samples slept",
+        result.sleep_ratio,
+        "ratio");
+    fixed_gate(
+        result.p95_linear_speed >= linear_limit,
+        (code_prefix + "_linear_p95").c_str(),
+        "p95 linear speed exceeded the fixed limit",
+        result.p95_linear_speed,
+        "m/s");
+    fixed_gate(
+        result.p95_angular_speed >= angular_limit,
+        (code_prefix + "_angular_p95").c_str(),
+        "p95 angular speed exceeded the fixed limit",
+        result.p95_angular_speed,
+        "rad/s");
+    fixed_gate(
+        result.max_penetration >= penetration_limit,
+        (code_prefix + "_penetration").c_str(),
+        "estimated maximum penetration exceeded the fixed limit",
+        result.max_penetration,
+        "m");
+    if (result.max_penetration >= penetration_limit && !result.violations.empty()) {
+        ScenarioViolation& violation = result.violations.back();
+        violation.tick = penetration_tick;
+        violation.handle = penetration_body;
+        violation.values.push_back(
+            {"other_handle_index", static_cast<double>(penetration_other.index), "index"});
+        violation.values.push_back(
+            {"other_handle_generation", static_cast<double>(penetration_other.generation), "generation"});
+        violation.values.push_back(
+            {"platform_penetration", maximum_platform_penetration, "m"});
+        violation.values.push_back({"pair_penetration", maximum_pair_penetration, "m"});
+    }
+    if (!mass_ratio) {
+        fixed_gate(
+            result.max_energy_growth_ratio > 0.02,
+            "radial_pile_energy_growth",
+            "kinetic energy grew more than two percent after tick 600",
+            result.max_energy_growth_ratio,
+            "ratio");
+    }
+    return result;
+}
+
+[[nodiscard]] std::optional<std::size_t> working_set_bytes()
+{
+#ifdef _WIN32
+    PROCESS_MEMORY_COUNTERS_EX counters{};
+    counters.cb = sizeof(counters);
+    if (GetProcessMemoryInfo(
+            GetCurrentProcess(),
+            reinterpret_cast<PROCESS_MEMORY_COUNTERS*>(&counters),
+            sizeof(counters)) == FALSE) {
+        return std::nullopt;
+    }
+    return static_cast<std::size_t>(counters.WorkingSetSize);
+#else
+    return std::nullopt;
+#endif
+}
+
+struct StressCycleResult {
+    bool passed{};
+    std::string code;
+    std::string detail;
+    int tick{-1};
+    BodyHandle handle{};
+    std::uint64_t final_hash{};
+    std::vector<double> timings;
+    std::size_t peak_working_set{};
+    int peak_awake_count{};
+    int peak_contact_count{};
+};
+
+[[nodiscard]] StressCycleResult execute_stress_cycle(
+    int warmup_ticks, int measurement_ticks, bool collect_timings)
+{
+    constexpr int body_count = 500;
+    constexpr int shape_count = 800;
+    constexpr int joint_count = 250;
+    StressCycleResult cycle;
+    PhysicsWorld world(WorldConfig{
+        .substeps = 4,
+        .planet_radius = 10,
+        .surface_gravity = 0,
+        .max_bodies = body_count,
+    });
+
+    std::vector<BodyHandle> bodies;
+    bodies.reserve(body_count);
+    for (int index = 0; index < body_count; ++index) {
+        const int pair = index / 2;
+        const float base_x = static_cast<float>(pair % 25) * 3.0f;
+        const float base_y = static_cast<float>(pair / 25) * 3.0f;
+        BodyDesc body{
+            .type = BodyType::Dynamic,
+            .transform = {{base_x + static_cast<float>(index % 2), base_y, 0}, {}},
+            .radial_gravity = false,
+            .remove_beyond_six_r = false,
+        };
+        const int shapes_on_body = index < 300 ? 2 : 1;
+        for (int shape = 0; shape < shapes_on_body; ++shape) {
+            const float local_x = shapes_on_body == 1
+                ? 0.0f
+                : (shape == 0 ? -0.12f : 0.12f);
+            body.shapes.push_back(ShapeDesc{
+                .geometry = BoxShape{{0.10f, 0.10f, 0.10f}, {{local_x, 0, 0}, {}}},
+                .density = 500.0f,
+            });
+        }
+        const auto created = world.create_body(body);
+        if (!created) {
+            cycle.code = "stress_create_body";
+            cycle.detail = created.status.message;
+            cycle.handle = created.value;
+            return cycle;
+        }
+        bodies.push_back(created.value);
+    }
+
+    std::vector<JointHandle> joints;
+    joints.reserve(joint_count);
+    for (int index = 0; index < joint_count; ++index) {
+        const auto created = world.create_joint(DistanceJointDesc{
+            .a = bodies[static_cast<std::size_t>(index) * 2],
+            .b = bodies[static_cast<std::size_t>(index) * 2 + 1],
+            .length = 1.0f,
+        });
+        if (!created) {
+            cycle.code = "stress_create_joint";
+            cycle.detail = created.status.message;
+            return cycle;
+        }
+        joints.push_back(created.value);
+    }
+
+    const int total_ticks = warmup_ticks + measurement_ticks;
+    if (collect_timings) {
+        cycle.timings.reserve(measurement_ticks);
+    }
+    for (int tick = 1; tick <= total_ticks; ++tick) {
+        world.step();
+        const WorldMetrics metrics = world.metrics();
+        cycle.peak_awake_count = std::max(cycle.peak_awake_count, metrics.awake_count);
+        cycle.peak_contact_count = std::max(cycle.peak_contact_count, metrics.contact_count);
+        if (tick == 1
+            && (metrics.body_count != body_count || metrics.shape_count != shape_count
+                || metrics.joint_count != joint_count)) {
+            cycle.code = "stress_topology";
+            cycle.detail = "world metrics do not match 500 bodies, 800 shapes, and 250 joints";
+            cycle.tick = tick;
+            return cycle;
+        }
+        if (collect_timings && tick > warmup_ticks) {
+            cycle.timings.push_back(metrics.step_ms);
+        }
+        if (tick == 1 || tick == warmup_ticks || tick == total_ticks) {
+            for (const BodyState& state : world.states()) {
+                if (!is_finite(state.transform.position) || !is_finite(state.linear_velocity)
+                    || !is_finite(state.angular_velocity)
+                    || length(state.linear_velocity) > 100.0f) {
+                    cycle.code = "stress_invalid_state";
+                    cycle.detail = "stress body state is non-finite or exceeds 100 m/s";
+                    cycle.tick = tick;
+                    cycle.handle = state.handle;
+                    return cycle;
+                }
+            }
+        }
+        if (const auto memory = working_set_bytes()) {
+            cycle.peak_working_set = std::max(cycle.peak_working_set, *memory);
+        }
+    }
+    cycle.final_hash = hash_states(world.states());
+
+    for (const JointHandle joint : joints) {
+        if (!world.destroy_joint(joint).ok()) {
+            cycle.code = "stress_destroy_joint";
+            cycle.detail = "failed to queue stress joint destruction";
+            return cycle;
+        }
+    }
+    for (const BodyHandle body : bodies) {
+        if (!world.destroy_body(body).ok()) {
+            cycle.code = "stress_destroy_body";
+            cycle.detail = "failed to queue stress body destruction";
+            cycle.handle = body;
+            return cycle;
+        }
+    }
+    world.step();
+    const WorldMetrics empty_metrics = world.metrics();
+    if (empty_metrics.body_count != 0 || empty_metrics.shape_count != 0
+        || empty_metrics.joint_count != 0 || !world.states().empty()) {
+        cycle.code = "stress_incomplete_destroy";
+        cycle.detail = "stress create/simulate/destroy cycle retained live resources";
+        return cycle;
+    }
+    cycle.passed = true;
+    return cycle;
+}
+
+[[nodiscard]] ScenarioResult run_stress(std::uint64_t seed, int substeps)
+{
+    ScenarioResult result = make_result(ScenarioKind::Stress, seed, substeps);
+    result.dynamic_body_count = 500;
+    result.shape_count = 800;
+    result.joint_count = 250;
+    result.warmup_ticks = 300;
+    result.measurement_ticks = 1200;
+    result.limits = {
+        {"persistent_working_set_growth", "<=", 0.05, "ratio"},
+        {"scenario_timeout", "<=", 60.0, "s"},
+        {"spontaneous_speed", "<=", 100.0, "m/s"},
+    };
+
+    std::vector<double> timings;
+    timings.resize(static_cast<std::size_t>(result.measurement_ticks) * 10);
+    std::ranges::fill(timings, 0.0);
+    timings.clear();
+
+    const auto protocol_start = std::chrono::steady_clock::now();
+    result.working_set_warmup_samples.reserve(3);
+    for (int warmup_cycle = 0; warmup_cycle < 3; ++warmup_cycle) {
+        const StressCycleResult allocator_warmup = execute_stress_cycle(
+            result.warmup_ticks, result.measurement_ticks, false);
+        if (!allocator_warmup.passed) {
+            add_violation(
+                result,
+                allocator_warmup.code,
+                "allocator warmup failed: " + allocator_warmup.detail,
+                allocator_warmup.tick,
+                allocator_warmup.handle,
+                {{"warmup_cycle", static_cast<double>(warmup_cycle + 1), "count"}});
+            return result;
+        }
+        result.working_set_peak_bytes = std::max(
+            result.working_set_peak_bytes, allocator_warmup.peak_working_set);
+        if (const auto sample = working_set_bytes()) {
+            result.working_set_warmup_samples.push_back(*sample);
+            result.working_set_peak_bytes =
+                std::max(result.working_set_peak_bytes, *sample);
+        }
+    }
+
+    result.working_set_available = result.working_set_warmup_samples.size() == 3;
+    if (result.working_set_available) {
+        result.working_set_baseline_bytes = result.working_set_warmup_samples.back();
+        result.working_set_baseline_low_bytes = *std::min_element(
+            result.working_set_warmup_samples.begin(),
+            result.working_set_warmup_samples.end());
+    }
+
+    result.working_set_cycle_samples.reserve(10);
+    for (int cycle_index = 0; cycle_index < 10; ++cycle_index) {
+        StressCycleResult cycle = execute_stress_cycle(
+            result.warmup_ticks, result.measurement_ticks, true);
+        if (!cycle.passed) {
+            add_violation(
+                result,
+                cycle.code,
+                "stress cycle failed: " + cycle.detail,
+                cycle.tick,
+                cycle.handle,
+                {{"cycle", static_cast<double>(cycle_index + 1), "count"}});
+            break;
+        }
+        ++result.stress_cycles;
+        result.ticks += result.warmup_ticks + result.measurement_ticks;
+        result.final_hash = cycle.final_hash;
+        result.peak_awake_count =
+            std::max(result.peak_awake_count, cycle.peak_awake_count);
+        result.peak_contact_count =
+            std::max(result.peak_contact_count, cycle.peak_contact_count);
+        result.working_set_peak_bytes =
+            std::max(result.working_set_peak_bytes, cycle.peak_working_set);
+        timings.insert(
+            timings.end(),
+            std::make_move_iterator(cycle.timings.begin()),
+            std::make_move_iterator(cycle.timings.end()));
+        if (const auto persistent = working_set_bytes()) {
+            result.working_set_final_bytes = *persistent;
+            result.working_set_cycle_samples.push_back(*persistent);
+            result.working_set_peak_bytes =
+                std::max(result.working_set_peak_bytes, *persistent);
+        }
+
+        const double elapsed_seconds = std::chrono::duration<double>(
+                                           std::chrono::steady_clock::now() - protocol_start)
+                                           .count();
+        if (elapsed_seconds > 60.0) {
+            add_violation(
+                result,
+                "stress_timeout",
+                "stress protocol exceeded the fixed 60 second timeout",
+                result.ticks,
+                {},
+                {{"elapsed", elapsed_seconds, "s"}});
+            break;
+        }
+    }
+    finish_timings(result, std::move(timings));
+
+#ifdef _WIN32
+    if (!result.working_set_available || result.working_set_final_bytes == 0
+        || result.working_set_cycle_samples.size() != 10) {
+        add_violation(
+            result,
+            "working_set_unavailable",
+            "GetProcessMemoryInfo failed during the Windows stress protocol",
+            result.ticks,
+            {});
+    }
+#endif
+    if (result.working_set_cycle_samples.size() >= 10) {
+        result.working_set_final_low_bytes = *std::min_element(
+            result.working_set_cycle_samples.begin() + 5,
+            result.working_set_cycle_samples.end());
+    }
+    if (result.working_set_available && result.working_set_baseline_low_bytes != 0
+        && result.working_set_final_low_bytes != 0) {
+        result.working_set_growth_ratio = std::max(
+            0.0,
+            (static_cast<double>(result.working_set_final_low_bytes)
+             - static_cast<double>(result.working_set_baseline_low_bytes))
+                / static_cast<double>(result.working_set_baseline_low_bytes));
+        result.working_set_instant_growth_ratio = std::max(
+            0.0,
+            (static_cast<double>(result.working_set_final_bytes)
+             - static_cast<double>(result.working_set_baseline_bytes))
+                / static_cast<double>(result.working_set_baseline_bytes));
+        if (result.working_set_growth_ratio > 0.05) {
+            std::vector<ScenarioValue> memory_values{
+                {"baseline_bytes",
+                 static_cast<double>(result.working_set_baseline_bytes),
+                 "bytes"},
+                {"baseline_low_bytes",
+                 static_cast<double>(result.working_set_baseline_low_bytes),
+                 "bytes"},
+                {"final_bytes",
+                 static_cast<double>(result.working_set_final_bytes),
+                 "bytes"},
+                {"final_low_bytes",
+                 static_cast<double>(result.working_set_final_low_bytes),
+                 "bytes"},
+                {"growth_ratio", result.working_set_growth_ratio, "ratio"},
+                {"instant_growth_ratio",
+                 result.working_set_instant_growth_ratio,
+                 "ratio"},
+            };
+            for (std::size_t index = 0; index < result.working_set_warmup_samples.size(); ++index) {
+                memory_values.push_back({
+                    "warmup_" + std::to_string(index + 1) + "_bytes",
+                    static_cast<double>(result.working_set_warmup_samples[index]),
+                    "bytes",
+                });
+            }
+            for (std::size_t index = 0; index < result.working_set_cycle_samples.size(); ++index) {
+                memory_values.push_back({
+                    "cycle_" + std::to_string(index + 1) + "_bytes",
+                    static_cast<double>(result.working_set_cycle_samples[index]),
+                    "bytes",
+                });
+            }
+            add_violation(
+                result,
+                "stress_memory_growth",
+                "persistent working-set growth exceeded five percent after ten cycles",
+                result.ticks,
+                {},
+                std::move(memory_values));
+        }
+    }
+    result.metrics = {
+        {"working_set_baseline_bytes",
+         static_cast<double>(result.working_set_baseline_bytes),
+         "bytes"},
+        {"working_set_baseline_low_bytes",
+         static_cast<double>(result.working_set_baseline_low_bytes),
+         "bytes"},
+        {"working_set_peak_bytes",
+         static_cast<double>(result.working_set_peak_bytes),
+         "bytes"},
+        {"working_set_final_bytes",
+         static_cast<double>(result.working_set_final_bytes),
+         "bytes"},
+        {"working_set_final_low_bytes",
+         static_cast<double>(result.working_set_final_low_bytes),
+         "bytes"},
+        {"working_set_growth_ratio", result.working_set_growth_ratio, "ratio"},
+        {"working_set_instant_growth_ratio",
+         result.working_set_instant_growth_ratio,
+         "ratio"},
+        {"completed_cycles", static_cast<double>(result.stress_cycles), "count"},
+    };
+    return result;
+}
+
+[[nodiscard]] CapabilityRow prove_ccd_capability()
+{
+    static const ProjectileGate gate = run_projectile_gate();
+    CapabilityRow row{.capability = "ccd_dynamic_dynamic"};
+    row.values = {
+        {"primary_passes", static_cast<double>(gate.primary_pass_count), "seeds"},
+        {"fallback_passes", static_cast<double>(gate.fallback_pass_count), "seeds"},
+        {"primary_speed", 35.0, "m/s"},
+        {"primary_substeps", 4.0, "count"},
+        {"fallback_speed", 30.0, "m/s"},
+        {"fallback_substeps", 6.0, "count"},
+    };
+    if (gate.primary_pass_count == 20) {
+        row.status = CapabilityStatus::Pass;
+        row.detail = "all 20 fixed seeds contacted a dynamic pile body at 35 m/s and four substeps";
+    } else if (gate.fallback_pass_count == 20) {
+        row.status = CapabilityStatus::Fallback;
+        row.fallback = "speed30_substeps6";
+        row.detail = "the complete fallback set passed 20 of 20 fixed seeds";
+    } else {
+        row.status = CapabilityStatus::Blocked;
+        row.detail = "dynamic-dynamic CCD tunneled in both approved parameter sets";
+    }
+    return row;
+}
+
+[[nodiscard]] CapabilityRow prove_shape_query()
+{
+    CapabilityRow row{.capability = "shape_cast_overlap"};
+    PhysicsWorld world(WorldConfig{.surface_gravity = 0, .max_bodies = 1});
+    BodyDesc target{.type = BodyType::Static};
+    target.shapes = {ShapeDesc{
+        .geometry = HullShape{{{-0.5f, -0.5f, -0.5f},
+                               {0.5f, -0.5f, -0.5f},
+                               {0, 0.5f, -0.5f},
+                               {0, 0, 0.5f}},
+                              {{0.2f, 0, 0}, {}}},
+        .material_id = 303,
+    }};
+    const auto created = world.create_body(target);
+    if (!created) {
+        row.status = CapabilityStatus::Blocked;
+        row.detail = "the transformed hull query fixture could not be created";
+        return row;
+    }
+    world.step();
+    const SphereShape query{.radius = 0.1f};
+    constexpr Vec3 origin{0, 2.5f, 0};
+    constexpr Vec3 translation{0, -3, 0};
+    const auto hit = world.cast_shape(query, {origin, {}}, translation);
+    bool overlap_matches = false;
+    if (hit) {
+        const Vec3 inside =
+            origin + translation * std::min(1.0f, hit->fraction + 0.05f);
+        const auto overlaps = world.overlap_shape(query, {inside, {}});
+        overlap_matches = std::ranges::any_of(overlaps, [&](const QueryHit& value) {
+            return value.body == created.value;
+        });
+    }
+    const bool finite_hit = hit && hit->body == created.value
+        && is_finite(hit->point) && is_finite(hit->normal)
+        && std::isfinite(hit->fraction) && hit->material_id == 303;
+    row.values = {
+        {"cast_distance", 3.0, "m"},
+        {"first_handle_index", hit ? static_cast<double>(hit->body.index) : 0.0, "index"},
+        {"first_handle_matches_overlap", overlap_matches ? 1.0 : 0.0, "bool"},
+        {"fraction", hit ? hit->fraction : -1.0, "ratio"},
+    };
+    if (finite_hit && overlap_matches) {
+        row.status = CapabilityStatus::Pass;
+        row.detail = "the first three-meter sphere cast handle agrees with overlap at contact";
+    } else {
+        row.status = CapabilityStatus::Blocked;
+        row.detail = "cast and overlap do not provide one safe deterministic runtime result";
+    }
+    return row;
+}
+
+[[nodiscard]] CapabilityRow prove_contact_events()
+{
+    CapabilityRow row{.capability = "contact_hit_events"};
+    PhysicsWorld world(WorldConfig{.substeps = 6, .surface_gravity = 0, .max_bodies = 2});
+    BodyDesc light_desc = BodyDesc::dynamic_sphere(0.5f, {{-2, 5, 0}, {}}, 100);
+    light_desc.linear_velocity = {10, 0, 0};
+    light_desc.bullet = true;
+    light_desc.shapes.front().material_id = 111;
+    const auto light = world.create_body(light_desc);
+    BodyDesc heavy_desc = BodyDesc::dynamic_sphere(0.5f, {{2, 5, 0}, {}}, 400);
+    heavy_desc.linear_velocity = {-5, 0, 0};
+    heavy_desc.bullet = true;
+    heavy_desc.shapes.front().material_id = 222;
+    const auto heavy = world.create_body(heavy_desc);
+    if (!light || !heavy) {
+        row.status = CapabilityStatus::Blocked;
+        row.detail = "the asymmetric contact fixture could not be created";
+        return row;
+    }
+    world.step();
+    const auto light_state = world.state(light.value);
+    const auto heavy_state = world.state(heavy.value);
+    for (int tick = 0; tick < 30 && world.contact_hits().empty(); ++tick) {
+        world.step();
+    }
+
+    std::set<std::pair<BodyHandle, BodyHandle>> unique_pairs;
+    bool pairs_are_unique = true;
+    for (const ContactHit& hit : world.contact_hits()) {
+        pairs_are_unique = pairs_are_unique && hit.a < hit.b
+            && unique_pairs.insert({hit.a, hit.b}).second;
+    }
+    const auto selected = std::find_if(
+        world.contact_hits().begin(),
+        world.contact_hits().end(),
+        [&](const ContactHit& hit) {
+            return hit.a == std::min(light.value, heavy.value)
+                && hit.b == std::max(light.value, heavy.value);
+        });
+    if (selected == world.contact_hits().end() || !light_state || !heavy_state) {
+        row.status = CapabilityStatus::Blocked;
+        row.detail = "no real asymmetric contact hit was copied by the public API";
+        row.values = {{"unique_pairs", static_cast<double>(unique_pairs.size()), "count"}};
+        return row;
+    }
+
+    double approach_speed = selected->approach_speed;
+    double effective_mass = selected->effective_mass;
+    double derived_energy = selected->derived_energy;
+    const bool common_data_valid = pairs_are_unique && is_finite(selected->normal)
+        && length(selected->normal) > 0.9f && is_finite(selected->point)
+        && selected->material_a == 111 && selected->material_b == 222;
+    const bool raw_numeric_valid = std::isfinite(approach_speed) && approach_speed > 0.0
+        && std::isfinite(effective_mass) && effective_mass > 0.0
+        && std::isfinite(derived_energy) && derived_energy > 0.0;
+    if (common_data_valid && raw_numeric_valid) {
+        row.status = CapabilityStatus::Pass;
+        row.detail = "real hit data is finite, energetic, material-tagged, and pair-unique at six substeps";
+    } else if (common_data_valid) {
+        const Vec3 relative_velocity =
+            heavy_state->linear_velocity - light_state->linear_velocity;
+        approach_speed = std::abs(dot(relative_velocity, selected->normal));
+        effective_mass = light_state->mass * heavy_state->mass
+            / (light_state->mass + heavy_state->mass);
+        const double damaging_speed = std::max(0.0, approach_speed - 1.0);
+        derived_energy = 0.5 * effective_mass * damaging_speed * damaging_speed;
+        if (approach_speed > 0.0 && effective_mass > 0.0 && derived_energy > 0.0
+            && std::isfinite(derived_energy)) {
+            row.status = CapabilityStatus::Fallback;
+            row.fallback = "derived_relative_energy";
+            row.detail = "energy was derived from copied body velocities with the approved equation";
+        } else {
+            row.status = CapabilityStatus::Blocked;
+            row.detail = "relative energy could not be derived from the real contact pair";
+        }
+    } else {
+        row.status = CapabilityStatus::Blocked;
+        row.detail = "contact normal, materials, or ordered-pair deduplication is unusable";
+    }
+    row.values = {
+        {"approach_speed", approach_speed, "m/s"},
+        {"effective_mass", effective_mass, "kg"},
+        {"derived_energy", derived_energy, "J"},
+        {"normal_length", length(selected->normal), "ratio"},
+        {"material_a", static_cast<double>(selected->material_a), "id"},
+        {"material_b", static_cast<double>(selected->material_b), "id"},
+        {"unique_pairs", static_cast<double>(unique_pairs.size()), "count"},
+        {"substeps", 6.0, "count"},
+    };
+    return row;
+}
+
+[[nodiscard]] CapabilityRow prove_joint_reaction()
+{
+    CapabilityRow row{.capability = "joint_force_torque"};
+    PhysicsWorld world(WorldConfig{.surface_gravity = 0, .max_bodies = 2});
+    const auto anchor = world.create_body(
+        BodyDesc::static_box({0.5f, 0.5f, 0.5f}, {{0, 0, 0}, {}}));
+    const auto loaded = world.create_body(
+        BodyDesc::dynamic_box({0.5f, 0.5f, 0.5f}, {{0, 1, 0}, {}}, 500));
+    if (!anchor || !loaded) {
+        row.status = CapabilityStatus::Blocked;
+        row.detail = "joint reaction bodies could not be created";
+        return row;
+    }
+    world.step();
+    const auto joint = world.create_joint(
+        DistanceJointDesc{.a = anchor.value, .b = loaded.value, .length = 1});
+    if (!joint) {
+        row.status = CapabilityStatus::Blocked;
+        row.detail = "distance joint could not be created";
+        return row;
+    }
+    float previous = 0.0f;
+    float maximum_force = 0.0f;
+    bool monotonic = true;
+    bool finite = true;
+    double maximum_deformation = 0.0;
+    for (int load = 1000; load <= 12000; load += 1000) {
+        world.apply_force(loaded.value, {static_cast<float>(load), 0, 0}, {0, 1, 0});
+        world.step();
+        const auto reaction = world.joint_reaction(joint.value);
+        if (!reaction || !is_finite(reaction->force) || !is_finite(reaction->torque)
+            || !std::isfinite(reaction->linear_separation)
+            || !std::isfinite(reaction->angular_separation)) {
+            finite = false;
+            continue;
+        }
+        const float current = length(reaction->force);
+        monotonic = monotonic && current + 50.0f >= previous;
+        previous = current;
+        maximum_force = std::max(maximum_force, current);
+        maximum_deformation = std::max(
+            maximum_deformation,
+            static_cast<double>(std::abs(reaction->linear_separation)));
+    }
+    if (finite && monotonic && maximum_force > 10000.0f) {
+        row.status = CapabilityStatus::Pass;
+        row.detail = "joint reaction grows within 50 N tolerance and crosses 10 kN";
+    } else if (std::isfinite(maximum_deformation) && maximum_deformation > 0.0) {
+        row.status = CapabilityStatus::Fallback;
+        row.fallback = "relative_deformation_two_ticks";
+        row.detail = "joint rupture can be evaluated from relative deformation over two ticks";
+    } else {
+        row.status = CapabilityStatus::Blocked;
+        row.detail = "no public joint metric supports a predictable rupture threshold";
+    }
+    row.values = {
+        {"monotonic_tolerance", 50.0, "N"},
+        {"maximum_force", maximum_force, "N"},
+        {"rupture_threshold", 10000.0, "N"},
+        {"maximum_deformation", maximum_deformation, "m"},
+    };
+    return row;
+}
+
+[[nodiscard]] BodyDesc eight_hull_body(bool compound)
+{
+    std::vector<PrimitiveShape> children;
+    children.reserve(8);
+    for (int index = 0; index < 8; ++index) {
+        children.push_back(HullShape{
+            {{-0.2f, -0.2f, -0.2f},
+             {0.2f, -0.2f, -0.2f},
+             {0, 0.2f, -0.2f},
+             {0, 0, 0.2f}},
+            {{(static_cast<float>(index) - 3.5f) * 0.4f, 0, 0}, {}},
+        });
+    }
+    BodyDesc body{
+        .type = BodyType::Dynamic,
+        .transform = {{0, 3, 0}, {}},
+        .radial_gravity = false,
+        .remove_beyond_six_r = false,
+    };
+    if (compound) {
+        body.shapes.push_back(ShapeDesc{
+            .geometry = CompoundShape{std::move(children)},
+            .density = 500,
+        });
+    } else {
+        for (PrimitiveShape& child : children) {
+            std::visit(
+                [&](auto&& geometry) {
+                    body.shapes.push_back(ShapeDesc{
+                        .geometry = std::move(geometry),
+                        .density = 500,
+                    });
+                },
+                std::move(child));
+        }
+    }
+    return body;
+}
+
+[[nodiscard]] CapabilityRow prove_hulls_compounds()
+{
+    CapabilityRow row{.capability = "hulls_compounds"};
+    const auto exercise = [](bool compound) {
+        struct Result {
+            bool created{};
+            bool valid_mass{};
+            bool valid_bounds{};
+            bool contacted{};
+            double mass{};
+            double bounds_width{};
+        } result;
+        PhysicsWorld world(WorldConfig{.surface_gravity = 0, .max_bodies = 2});
+        const auto body = world.create_body(eight_hull_body(compound));
+        const auto platform = world.create_body(
+            BodyDesc::static_box({4, 0.25f, 4}, {{0, 0, 0}, {}}));
+        if (!body || !platform) {
+            return result;
+        }
+        result.created = true;
+        world.step();
+        const auto state = world.state(body.value);
+        const auto bounds = world.body_bounds(body.value);
+        result.mass = state ? state->mass : 0.0;
+        result.bounds_width = bounds ? bounds->upper.x - bounds->lower.x : 0.0;
+        result.valid_mass = state && std::isfinite(state->mass) && state->mass > 0.0f;
+        result.valid_bounds = bounds && is_finite(bounds->lower) && is_finite(bounds->upper)
+            && result.bounds_width > 2.5;
+        for (int tick = 0; tick < 180 && world.contact_hits().empty(); ++tick) {
+            world.apply_force(body.value, {0, -4000, 0}, {0, 3, 0});
+            world.step();
+        }
+        result.contacted = std::ranges::any_of(world.contact_hits(), [&](const ContactHit& hit) {
+            return hit.a == std::min(body.value, platform.value)
+                && hit.b == std::max(body.value, platform.value);
+        });
+        return result;
+    };
+
+    auto proof = exercise(true);
+    if (proof.created && proof.valid_mass && proof.valid_bounds && proof.contacted) {
+        row.status = CapabilityStatus::Pass;
+        row.detail = "one compound containing eight hull children has valid mass, bounds, and contact";
+    } else {
+        const auto fallback = exercise(false);
+        proof = fallback;
+        if (fallback.created && fallback.valid_mass && fallback.valid_bounds
+            && fallback.contacted) {
+            row.status = CapabilityStatus::Fallback;
+            row.fallback = "multiple_shapes_same_body";
+            row.detail = "eight hulls pass as multiple shapes on the same body";
+        } else {
+            row.status = CapabilityStatus::Blocked;
+            row.detail = "neither compound nor approved multi-shape fixture is safe";
+        }
+    }
+    row.values = {
+        {"hull_count", 8.0, "count"},
+        {"mass", proof.mass, "kg"},
+        {"bounds_width", proof.bounds_width, "m"},
+        {"contacted", proof.contacted ? 1.0 : 0.0, "bool"},
+    };
+    return row;
+}
+
+[[nodiscard]] CapabilityRow prove_batch_lifecycle()
+{
+    CapabilityRow row{.capability = "batch_lifecycle"};
+    PhysicsWorld world(WorldConfig{.surface_gravity = 0, .max_bodies = 1});
+    BodyDesc body = BodyDesc::dynamic_sphere(0.25f, {}, 10);
+    body.radial_gravity = false;
+    body.remove_beyond_six_r = false;
+
+    BodyHandle previous{};
+    for (int warmup = 0; warmup < 64; ++warmup) {
+        const auto created = world.create_body(body);
+        if (!created) {
+            row.status = CapabilityStatus::Blocked;
+            row.detail = "allocator warmup creation failed";
+            return row;
+        }
+        world.step();
+        world.destroy_body(created.value);
+        world.step();
+        previous = created.value;
+    }
+    const auto baseline = working_set_bytes();
+    int invalid_handles = 0;
+    int completed_cycles = 0;
+    for (int cycle = 0; cycle < 10000; ++cycle) {
+        const auto created = world.create_body(body);
+        if (!created) {
+            ++invalid_handles;
+            break;
+        }
+        if (previous.valid()
+            && (created.value.index != previous.index
+                || created.value.generation == previous.generation)) {
+            ++invalid_handles;
+        }
+        world.step();
+        if (!world.state(created.value)) {
+            ++invalid_handles;
+        }
+        if (!world.destroy_body(created.value).ok()) {
+            ++invalid_handles;
+        }
+        if (world.apply_impulse(created.value, {}, {}).code != StatusCode::InvalidHandle) {
+            ++invalid_handles;
+        }
+        world.step();
+        if (world.state(created.value)) {
+            ++invalid_handles;
+        }
+        previous = created.value;
+        ++completed_cycles;
+    }
+    const auto final = working_set_bytes();
+    const double memory_growth = baseline && final && *baseline != 0
+        ? std::max(
+            0.0,
+            (static_cast<double>(*final) - static_cast<double>(*baseline))
+                / static_cast<double>(*baseline))
+        : 0.0;
+    row.values = {
+        {"generation_cycles", static_cast<double>(completed_cycles), "count"},
+        {"invalid_handles", static_cast<double>(invalid_handles), "count"},
+        {"working_set_growth", memory_growth, "ratio"},
+    };
+    const bool memory_available = baseline && final;
+    if (completed_cycles == 10000 && invalid_handles == 0
+        && (!memory_available || memory_growth <= 0.05)) {
+        row.status = CapabilityStatus::Pass;
+        row.detail = "10,000 create-destroy cycles preserved handle generations without persistent growth";
+    } else {
+        row.status = CapabilityStatus::Blocked;
+        row.detail = "handle lifecycle or persistent-memory validation failed at batch size one";
+    }
+    return row;
+}
+
+[[nodiscard]] std::uint64_t own_replay_hash(std::uint64_t seed)
+{
+    XorShift64 random(seed);
+    PhysicsWorld world(WorldConfig{.surface_gravity = 0, .max_bodies = 1});
+    BodyDesc body = BodyDesc::dynamic_sphere(
+        0.5f, {{random.centered(0.1f), 2, 0}, {}}, 100);
+    body.radial_gravity = false;
+    body.remove_beyond_six_r = false;
+    body.linear_velocity = {1, 0, 0};
+    world.create_body(body);
+    for (int tick = 0; tick < 60; ++tick) {
+        world.step();
+    }
+    return hash_states(world.states());
+}
+
+[[nodiscard]] CapabilityRow prove_replay(std::uint64_t seed)
+{
+    CapabilityRow row{.capability = "upstream_replay"};
+    const std::filesystem::path path = std::filesystem::temp_directory_path()
+        / ("ninho-box3d-replay-" + std::to_string(seed) + ".b3rec");
+    const detail::ReplayConformanceResult proof =
+        detail::validate_box3d_replay(path);
+    row.values = {
+        {"saved", proof.saved ? 1.0 : 0.0, "bool"},
+        {"loaded", proof.loaded ? 1.0 : 0.0, "bool"},
+        {"validated", proof.validated ? 1.0 : 0.0, "bool"},
+        {"recording_bytes", static_cast<double>(proof.bytes), "bytes"},
+        {"temporary_file_removed", proof.temporary_file_removed ? 1.0 : 0.0, "bool"},
+    };
+    if (proof.saved && proof.loaded && proof.validated && proof.temporary_file_removed) {
+        row.status = CapabilityStatus::Pass;
+        row.detail = "the pinned official recorder saved, loaded, and validated a minimal replay";
+    } else {
+        const std::uint64_t first = own_replay_hash(seed);
+        const std::uint64_t second = own_replay_hash(seed);
+        if (proof.temporary_file_removed && first == second) {
+            row.status = CapabilityStatus::Fallback;
+            row.fallback = "input_metric_replay";
+            row.detail = "official replay failed; deterministic input and metric replay remains available: "
+                + proof.error;
+        } else {
+            row.status = CapabilityStatus::Blocked;
+            row.detail = "neither official replay nor the documented diagnostic fallback is reproducible: "
+                + proof.error;
+        }
+    }
+    return row;
+}
+
+[[nodiscard]] ScenarioResult run_capability_matrix(
+    std::uint64_t seed, int substeps)
+{
+    ScenarioResult result = make_result(ScenarioKind::CapabilityMatrix, seed, substeps);
+    result.matrix.push_back(prove_ccd_capability());
+    result.matrix.push_back(prove_shape_query());
+    result.matrix.push_back(prove_contact_events());
+    result.matrix.push_back(prove_joint_reaction());
+    result.matrix.push_back(prove_hulls_compounds());
+
+    const ScenarioResult sleep =
+        run_stability_pile(ScenarioKind::RadialPile, seed, substeps);
+    CapabilityRow sleep_row{
+        .capability = "radial_sleep",
+        .status = sleep.violations.empty() ? CapabilityStatus::Pass
+                                           : CapabilityStatus::Blocked,
+        .detail = sleep.violations.empty()
+            ? "the public radial-gravity pile satisfies every fixed sleep limit"
+            : "the public radial-gravity pile violates at least one fixed sleep limit",
+        .values = {
+            {"sleep_ratio", sleep.sleep_ratio, "ratio"},
+            {"p95_linear_speed", sleep.p95_linear_speed, "m/s"},
+            {"p95_angular_speed", sleep.p95_angular_speed, "rad/s"},
+            {"max_penetration", sleep.max_penetration, "m"},
+            {"energy_growth", sleep.max_energy_growth_ratio, "ratio"},
+        },
+    };
+    result.matrix.push_back(std::move(sleep_row));
+    result.matrix.push_back(prove_batch_lifecycle());
+    result.matrix.push_back(prove_replay(seed));
+
+    result.ticks = sleep.ticks + 20000;
+    result.final_hash = sleep.final_hash;
+    result.step_min_ms = sleep.step_min_ms;
+    result.step_p50_ms = sleep.step_p50_ms;
+    result.step_p95_ms = sleep.step_p95_ms;
+    result.step_max_ms = sleep.step_max_ms;
+    result.peak_awake_count = sleep.peak_awake_count;
+    result.peak_contact_count = sleep.peak_contact_count;
+    for (const CapabilityRow& row : result.matrix) {
+        if (row.status == CapabilityStatus::Blocked) {
+            add_violation(
+                result,
+                "capability_blocked",
+                row.capability + ": " + row.detail,
+                result.ticks,
+                {});
+        }
+    }
+    return result;
+}
+
+void append_json_string(std::string& output, std::string_view value)
+{
+    constexpr char hex[] = "0123456789abcdef";
+    output.push_back('"');
+    for (const unsigned char byte : value) {
+        switch (byte) {
+        case '"':
+            output += "\\\"";
+            break;
+        case '\\':
+            output += "\\\\";
+            break;
+        case '\b':
+            output += "\\b";
+            break;
+        case '\f':
+            output += "\\f";
+            break;
+        case '\n':
+            output += "\\n";
+            break;
+        case '\r':
+            output += "\\r";
+            break;
+        case '\t':
+            output += "\\t";
+            break;
+        default:
+            if (byte < 0x20) {
+                output += "\\u00";
+                output.push_back(hex[byte >> 4]);
+                output.push_back(hex[byte & 0x0f]);
+            } else {
+                output.push_back(static_cast<char>(byte));
+            }
+            break;
+        }
+    }
+    output.push_back('"');
+}
+
+template<class Integer>
+void append_json_integer(std::string& output, Integer value)
+{
+    std::array<char, 32> buffer{};
+    const auto converted = std::to_chars(buffer.data(), buffer.data() + buffer.size(), value);
+    if (converted.ec != std::errc{}) {
+        throw std::invalid_argument("integer cannot be represented in scenario JSON");
+    }
+    output.append(buffer.data(), converted.ptr);
+}
+
+void append_json_number(std::string& output, double value)
+{
+    if (!std::isfinite(value)) {
+        throw std::invalid_argument("non-finite telemetry cannot be represented in JSON");
+    }
+    std::array<char, 64> buffer{};
+    const auto converted = std::to_chars(
+        buffer.data(),
+        buffer.data() + buffer.size(),
+        value,
+        std::chars_format::general,
+        std::numeric_limits<double>::max_digits10);
+    if (converted.ec != std::errc{}) {
+        throw std::invalid_argument("floating-point telemetry cannot be represented in JSON");
+    }
+    output.append(buffer.data(), converted.ptr);
+}
+
+void append_json_name(std::string& output, std::string_view name, bool& first)
+{
+    if (!first) {
+        output.push_back(',');
+    }
+    first = false;
+    append_json_string(output, name);
+    output.push_back(':');
+}
+
+void append_scenario_value(std::string& output, const ScenarioValue& value)
+{
+    output.push_back('{');
+    bool first = true;
+    append_json_name(output, "name", first);
+    append_json_string(output, value.name);
+    append_json_name(output, "value", first);
+    append_json_number(output, value.value);
+    append_json_name(output, "unit", first);
+    append_json_string(output, value.unit);
+    output.push_back('}');
+}
+
+void append_values(std::string& output, const std::vector<ScenarioValue>& values)
+{
+    output.push_back('[');
+    for (std::size_t index = 0; index < values.size(); ++index) {
+        if (index != 0) {
+            output.push_back(',');
+        }
+        append_scenario_value(output, values[index]);
+    }
+    output.push_back(']');
+}
+
+void append_violation(std::string& output, const ScenarioViolation& violation)
+{
+    output.push_back('{');
+    bool first = true;
+    append_json_name(output, "scenario", first);
+    append_json_string(output, violation.scenario);
+    append_json_name(output, "code", first);
+    append_json_string(output, violation.code);
+    append_json_name(output, "message", first);
+    append_json_string(output, violation.message);
+    append_json_name(output, "fatal", first);
+    output += violation.fatal ? "true" : "false";
+    append_json_name(output, "tick", first);
+    append_json_integer(output, violation.tick);
+    append_json_name(output, "handle", first);
+    output.push_back('{');
+    bool handle_first = true;
+    append_json_name(output, "index", handle_first);
+    append_json_integer(output, violation.handle.index);
+    append_json_name(output, "generation", handle_first);
+    append_json_integer(output, violation.handle.generation);
+    output.push_back('}');
+    append_json_name(output, "values", first);
+    append_values(output, violation.values);
+    output.push_back('}');
+}
+
+[[nodiscard]] std::string_view capability_status_name(CapabilityStatus status)
+{
+    switch (status) {
+    case CapabilityStatus::Pass:
+        return "pass";
+    case CapabilityStatus::Fallback:
+        return "fallback";
+    case CapabilityStatus::Blocked:
+        return "blocked";
+    }
+    return "blocked";
+}
+
+void append_capability_row(std::string& output, const CapabilityRow& row)
+{
+    output.push_back('{');
+    bool first = true;
+    append_json_name(output, "capability", first);
+    append_json_string(output, row.capability);
+    append_json_name(output, "status", first);
+    append_json_string(output, capability_status_name(row.status));
+    append_json_name(output, "fallback", first);
+    if (row.fallback.empty()) {
+        output += "null";
+    } else {
+        append_json_string(output, row.fallback);
+    }
+    append_json_name(output, "detail", first);
+    append_json_string(output, row.detail);
+    append_json_name(output, "values", first);
+    append_values(output, row.values);
+    output.push_back('}');
+}
+
+void append_scenario_result(std::string& output, const ScenarioResult& result)
+{
+    output.push_back('{');
+    bool first = true;
+    const auto string_field = [&](std::string_view name, std::string_view value) {
+        append_json_name(output, name, first);
+        append_json_string(output, value);
+    };
+    const auto number_field = [&](std::string_view name, double value) {
+        append_json_name(output, name, first);
+        append_json_number(output, value);
+    };
+    const auto integer_field = [&](std::string_view name, auto value) {
+        append_json_name(output, name, first);
+        append_json_integer(output, value);
+    };
+    const auto boolean_field = [&](std::string_view name, bool value) {
+        append_json_name(output, name, first);
+        output += value ? "true" : "false";
+    };
+
+    string_field("name", result.name);
+    integer_field("seed", result.seed);
+    integer_field("substeps", result.substeps);
+    integer_field("ticks", result.ticks);
+    integer_field("final_hash", result.final_hash);
+    append_json_name(output, "hashes", first);
+    output.push_back('[');
+    if (result.repeat_hashes.empty()) {
+        append_json_integer(output, result.final_hash);
+    } else {
+        for (std::size_t index = 0; index < result.repeat_hashes.size(); ++index) {
+            if (index != 0) {
+                output.push_back(',');
+            }
+            append_json_integer(output, result.repeat_hashes[index]);
+        }
+    }
+    output.push_back(']');
+
+    boolean_field("contact_before_pile_exit", result.contact_before_pile_exit);
+    integer_field("ccd_primary_pass_count", result.ccd_primary_pass_count);
+    integer_field("ccd_fallback_pass_count", result.ccd_fallback_pass_count);
+    number_field("projectile_speed", result.projectile_speed);
+    number_field("surface_separation", result.surface_separation);
+    number_field("final_linear_speed", result.final_linear_speed);
+    number_field("final_angular_speed", result.final_angular_speed);
+    number_field("p95_linear_speed", result.p95_linear_speed);
+    number_field("p95_angular_speed", result.p95_angular_speed);
+    number_field("sleep_ratio", result.sleep_ratio);
+    number_field("max_penetration", result.max_penetration);
+    number_field("minimum_density", result.minimum_density);
+    number_field("maximum_density", result.maximum_density);
+    number_field("energy_at_tick_600", result.energy_at_tick_600);
+    number_field("max_energy_growth_ratio", result.max_energy_growth_ratio);
+
+    integer_field("dynamic_body_count", result.dynamic_body_count);
+    integer_field("shape_count", result.shape_count);
+    integer_field("joint_count", result.joint_count);
+    integer_field("peak_awake_count", result.peak_awake_count);
+    integer_field("peak_contact_count", result.peak_contact_count);
+    append_json_name(output, "step_ms", first);
+    output.push_back('{');
+    bool timing_first = true;
+    append_json_name(output, "min", timing_first);
+    append_json_number(output, result.step_min_ms);
+    append_json_name(output, "p50", timing_first);
+    append_json_number(output, result.step_p50_ms);
+    append_json_name(output, "p95", timing_first);
+    append_json_number(output, result.step_p95_ms);
+    append_json_name(output, "max", timing_first);
+    append_json_number(output, result.step_max_ms);
+    output.push_back('}');
+
+    append_json_name(output, "memory", first);
+    output.push_back('{');
+    bool memory_first = true;
+    append_json_name(output, "available", memory_first);
+    output += result.working_set_available ? "true" : "false";
+    append_json_name(output, "baseline_bytes", memory_first);
+    append_json_integer(output, result.working_set_baseline_bytes);
+    append_json_name(output, "baseline_low_bytes", memory_first);
+    append_json_integer(output, result.working_set_baseline_low_bytes);
+    append_json_name(output, "peak_bytes", memory_first);
+    append_json_integer(output, result.working_set_peak_bytes);
+    append_json_name(output, "final_bytes", memory_first);
+    append_json_integer(output, result.working_set_final_bytes);
+    append_json_name(output, "final_low_bytes", memory_first);
+    append_json_integer(output, result.working_set_final_low_bytes);
+    append_json_name(output, "growth_ratio", memory_first);
+    append_json_number(output, result.working_set_growth_ratio);
+    append_json_name(output, "instant_growth_ratio", memory_first);
+    append_json_number(output, result.working_set_instant_growth_ratio);
+    append_json_name(output, "warmup_samples", memory_first);
+    output.push_back('[');
+    for (std::size_t index = 0; index < result.working_set_warmup_samples.size(); ++index) {
+        if (index != 0) {
+            output.push_back(',');
+        }
+        append_json_integer(output, result.working_set_warmup_samples[index]);
+    }
+    output.push_back(']');
+    append_json_name(output, "cycle_samples", memory_first);
+    output.push_back('[');
+    for (std::size_t index = 0; index < result.working_set_cycle_samples.size(); ++index) {
+        if (index != 0) {
+            output.push_back(',');
+        }
+        append_json_integer(output, result.working_set_cycle_samples[index]);
+    }
+    output.push_back(']');
+    output.push_back('}');
+    integer_field("warmup_ticks", result.warmup_ticks);
+    integer_field("measurement_ticks", result.measurement_ticks);
+    integer_field("stress_cycles", result.stress_cycles);
+    string_field("fallback", result.fallback);
+
+    append_json_name(output, "limits", first);
+    output.push_back('[');
+    for (std::size_t index = 0; index < result.limits.size(); ++index) {
+        if (index != 0) {
+            output.push_back(',');
+        }
+        const ScenarioLimit& limit = result.limits[index];
+        output.push_back('{');
+        bool limit_first = true;
+        append_json_name(output, "name", limit_first);
+        append_json_string(output, limit.name);
+        append_json_name(output, "comparison", limit_first);
+        append_json_string(output, limit.comparison);
+        append_json_name(output, "value", limit_first);
+        append_json_number(output, limit.value);
+        append_json_name(output, "unit", limit_first);
+        append_json_string(output, limit.unit);
+        output.push_back('}');
+    }
+    output.push_back(']');
+    append_json_name(output, "metrics", first);
+    append_values(output, result.metrics);
+    append_json_name(output, "matrix", first);
+    output.push_back('[');
+    for (std::size_t index = 0; index < result.matrix.size(); ++index) {
+        if (index != 0) {
+            output.push_back(',');
+        }
+        append_capability_row(output, result.matrix[index]);
+    }
+    output.push_back(']');
+    append_json_name(output, "violations", first);
+    output.push_back('[');
+    for (std::size_t index = 0; index < result.violations.size(); ++index) {
+        if (index != 0) {
+            output.push_back(',');
+        }
+        append_violation(output, result.violations[index]);
+    }
+    output.push_back(']');
+    output.push_back('}');
+}
+
+}
+
+std::string_view scenario_name(ScenarioKind kind)
+{
+    return name_of(kind);
+}
+
+std::optional<ScenarioKind> parse_scenario_kind(std::string_view name)
+{
+    constexpr std::array kinds{
+        ScenarioKind::RadialFall,
+        ScenarioKind::ProjectilePile,
+        ScenarioKind::RadialPile,
+        ScenarioKind::MassRatio,
+        ScenarioKind::Stress,
+        ScenarioKind::CapabilityMatrix,
+    };
+    const auto found = std::ranges::find_if(
+        kinds, [&](ScenarioKind kind) { return name_of(kind) == name; });
+    return found == kinds.end() ? std::nullopt : std::optional<ScenarioKind>{*found};
+}
+
+std::string ScenarioResult::to_json() const
+{
+    std::string output;
+    output.reserve(4096);
+    append_scenario_result(output, *this);
+    return output;
+}
+
+std::string ScenarioReport::to_json() const
+{
+    std::string output;
+    output.reserve(32768);
+    output.push_back('{');
+    bool first = true;
+    append_json_name(output, "schema", first);
+    append_json_string(output, "ninho.physics.scenario.v1");
+    append_json_name(output, "tool", first);
+    output += "{\"name\":\"ninho_physics_spike\",\"version\":\"0.1.0\"}";
+    append_json_name(output, "dependencies", first);
+    output += "{\"box3d\":{\"version\":\"0.1.0\",\"commit\":\"8441b4a06d6d09dcfb0b0f704df4d847d1437b92\"},"
+              "\"godot\":{\"version\":\"4.5.1-stable\",\"commit\":\"f62fdbde15035c5576dad93e586201f4d41ef0cb\"},"
+              "\"godot_cpp\":{\"version\":\"godot-4.5-stable\",\"commit\":\"e83fd0904c13356ed1d4c3d09f8bb9132bdc6b77\"}}";
+    append_json_name(output, "build_type", first);
+    append_json_string(output, build_type);
+    append_json_name(output, "cpu", first);
+    append_json_string(output, cpu);
+    append_json_name(output, "configuration", first);
+    output.push_back('{');
+    bool configuration_first = true;
+    append_json_name(output, "seed", configuration_first);
+    append_json_integer(output, seed);
+    append_json_name(output, "substeps", configuration_first);
+    append_json_integer(output, substeps);
+    append_json_name(output, "repeat", configuration_first);
+    append_json_integer(output, repeat);
+    append_json_name(output, "time_step", configuration_first);
+    append_json_number(output, 1.0 / 60.0);
+    output.push_back('}');
+
+    append_json_name(output, "scenarios", first);
+    output.push_back('[');
+    for (std::size_t index = 0; index < scenarios.size(); ++index) {
+        if (index != 0) {
+            output.push_back(',');
+        }
+        append_scenario_result(output, scenarios[index]);
+    }
+    output.push_back(']');
+
+    append_json_name(output, "matrix", first);
+    output.push_back('[');
+    bool first_matrix_row = true;
+    for (const ScenarioResult& scenario : scenarios) {
+        for (const CapabilityRow& row : scenario.matrix) {
+            if (!first_matrix_row) {
+                output.push_back(',');
+            }
+            first_matrix_row = false;
+            append_capability_row(output, row);
+        }
+    }
+    output.push_back(']');
+
+    append_json_name(output, "violations", first);
+    output.push_back('[');
+    bool first_violation = true;
+    bool any_fallback = false;
+    for (const ScenarioResult& scenario : scenarios) {
+        any_fallback = any_fallback || !scenario.fallback.empty();
+        for (const CapabilityRow& row : scenario.matrix) {
+            any_fallback = any_fallback || row.status == CapabilityStatus::Fallback;
+        }
+        for (const ScenarioViolation& violation : scenario.violations) {
+            if (!first_violation) {
+                output.push_back(',');
+            }
+            first_violation = false;
+            append_violation(output, violation);
+        }
+    }
+    output.push_back(']');
+    append_json_name(output, "recommendation", first);
+    const bool has_violations = std::ranges::any_of(
+        scenarios, [](const ScenarioResult& scenario) { return !scenario.violations.empty(); });
+    append_json_string(
+        output,
+        has_violations ? "bloquear"
+                       : any_fallback ? "prosseguir com limites" : "prosseguir");
+    output.push_back('}');
+    return output;
+}
+
+std::uint64_t hash_states(std::span<const BodyState> states)
+{
+    std::vector<BodyState> ordered(states.begin(), states.end());
+    std::ranges::sort(ordered, {}, &BodyState::handle);
+    std::uint64_t hash = 14695981039346656037ull;
+    const auto mix = [&hash](std::int64_t value) {
+        for (int index = 0; index < 8; ++index) {
+            hash ^= std::uint8_t(std::uint64_t(value) >> (index * 8));
+            hash *= 1099511628211ull;
+        }
+    };
+    for (const BodyState& state : ordered) {
+        mix(state.handle.index);
+        mix(state.handle.generation);
+        mix(std::llround(state.transform.position.x * 1000));
+        mix(std::llround(state.transform.position.y * 1000));
+        mix(std::llround(state.transform.position.z * 1000));
+        mix(std::llround(state.transform.rotation.x * 32767));
+        mix(std::llround(state.transform.rotation.y * 32767));
+        mix(std::llround(state.transform.rotation.z * 32767));
+        mix(std::llround(state.transform.rotation.w * 32767));
+        mix(std::llround(state.linear_velocity.x * 1000));
+        mix(std::llround(state.linear_velocity.y * 1000));
+        mix(std::llround(state.linear_velocity.z * 1000));
+        mix(std::llround(state.angular_velocity.x * 1000));
+        mix(std::llround(state.angular_velocity.y * 1000));
+        mix(std::llround(state.angular_velocity.z * 1000));
+        mix(state.awake);
+        mix(state.ejected);
+    }
+    return hash;
+}
+
+ScenarioResult ScenarioRunner::run(
+    ScenarioKind kind, std::uint64_t seed, int substeps) const
+{
+    if (kind == ScenarioKind::RadialFall) {
+        return run_radial_fall(seed, substeps);
+    }
+    if (kind == ScenarioKind::ProjectilePile) {
+        return run_projectile_pile(seed);
+    }
+    if (kind == ScenarioKind::RadialPile) {
+        return run_stability_pile(kind, seed, substeps);
+    }
+    if (kind == ScenarioKind::MassRatio) {
+        return run_stability_pile(kind, seed, substeps);
+    }
+    if (kind == ScenarioKind::Stress) {
+        return run_stress(seed, substeps);
+    }
+    if (kind == ScenarioKind::CapabilityMatrix) {
+        return run_capability_matrix(seed, substeps);
+    }
+    throw std::invalid_argument("unknown ScenarioKind value");
+}
+
+}
