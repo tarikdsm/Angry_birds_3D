@@ -32,7 +32,10 @@ function Get-LockedArchive([string]$name) {
         Invoke-WebRequest -UseBasicParsing -Uri $entry.url -OutFile $target
     }
     $actual = (Get-FileHash -Algorithm SHA256 -LiteralPath $target).Hash.ToLowerInvariant()
-    if ($actual -ne $entry.sha256) { throw "$name checksum mismatch: $actual" }
+    if ($actual -ne $entry.sha256) {
+        Remove-Item -LiteralPath $target -Force
+        throw "$name checksum mismatch: $actual"
+    }
     return $target
 }
 

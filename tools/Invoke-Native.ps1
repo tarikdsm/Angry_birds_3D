@@ -8,6 +8,11 @@ $vs = $check.visual_studio.path
 if (-not $vs) { throw 'Locked Visual Studio 18.7.3 was not found; run tools/bootstrap.ps1 -InstallVisualStudio' }
 $devCmd = Join-Path $vs 'Common7\Tools\VsDevCmd.bat'
 $environment = & cmd.exe /s /c "`"$devCmd`" -no_logo -arch=x64 -host_arch=x64 -vcvars_ver=14.44 -winsdk=10.0.26100.0 && set"
+$devCmdExitCode = $LASTEXITCODE
+if ($devCmdExitCode -ne 0) {
+    [Console]::Error.WriteLine("VsDevCmd failed with exit code ${devCmdExitCode}: $devCmd")
+    exit $devCmdExitCode
+}
 foreach ($line in $environment) {
     $split = $line.IndexOf('=')
     if ($split -gt 0) { Set-Item -Path "Env:$($line.Substring(0,$split))" -Value $line.Substring($split+1) }
