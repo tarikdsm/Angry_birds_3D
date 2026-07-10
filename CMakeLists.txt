@@ -14,6 +14,9 @@ include(CTest)
 add_subdirectory(native/kernel)
 add_subdirectory(native/spike)
 if(NINHO_BUILD_GDEXTENSION)
+  string(RANDOM LENGTH 32 ALPHABET 0123456789abcdef NINHO_GDEXTENSION_BUILD_TOKEN)
+  set(NINHO_GDEXTENSION_STAMP_PATH
+    "${CMAKE_BINARY_DIR}/native/extension/ninho_physics_extension.stamp")
   add_subdirectory(native/extension)
 endif()
 if(BUILD_TESTING)
@@ -28,8 +31,17 @@ if(NINHO_BUILD_GDEXTENSION AND BUILD_TESTING)
     NAME gdextension_binary_exists
     COMMAND "${CMAKE_COMMAND}"
       "-DDLL_PATH=${_ninho_gdextension_dll}"
+      "-DSTAMP_PATH=${NINHO_GDEXTENSION_STAMP_PATH}"
+      "-DEXPECTED_TOKEN=${NINHO_GDEXTENSION_BUILD_TOKEN}"
+      "-DEXPECTED_CONFIG=${CMAKE_BUILD_TYPE}"
+      "-DEXPECTED_TARGET=${GODOTCPP_TARGET}"
+      "-DEXPECTED_DLL_NAME=ninho_physics.windows.${GODOTCPP_TARGET}.x86_64.dll"
+      "-DDESCRIPTOR_PATH=${PROJECT_SOURCE_DIR}/game/bin/ninho_physics.gdextension"
       "-DDUMPBIN_EXECUTABLE=${NINHO_DUMPBIN_EXECUTABLE}"
       -P "${PROJECT_SOURCE_DIR}/cmake/VerifyGDExtension.cmake"
   )
   unset(_ninho_gdextension_dll)
 endif()
+
+unset(NINHO_GDEXTENSION_BUILD_TOKEN)
+unset(NINHO_GDEXTENSION_STAMP_PATH)

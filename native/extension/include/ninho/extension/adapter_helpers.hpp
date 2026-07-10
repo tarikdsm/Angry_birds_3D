@@ -11,16 +11,23 @@
 #include <bit>
 #include <cmath>
 #include <cstdint>
+#include <optional>
 
 namespace ninho::extension::detail {
 
-[[nodiscard]] inline physics::Vec3 to_kernel(const godot::Vector3& value) noexcept
+[[nodiscard]] std::optional<float> checked_finite_float(double value) noexcept;
+[[nodiscard]] std::optional<float> checked_positive_float(double value) noexcept;
+
+[[nodiscard]] inline std::optional<physics::Vec3> to_kernel_checked(
+    const godot::Vector3& value) noexcept
 {
-    return {
-        static_cast<float>(value.x),
-        static_cast<float>(value.y),
-        static_cast<float>(value.z),
-    };
+    const auto x = checked_finite_float(value.x);
+    const auto y = checked_finite_float(value.y);
+    const auto z = checked_finite_float(value.z);
+    if (!x || !y || !z) {
+        return std::nullopt;
+    }
+    return physics::Vec3{*x, *y, *z};
 }
 
 [[nodiscard]] inline godot::Vector3 to_godot(physics::Vec3 value) noexcept
@@ -28,14 +35,17 @@ namespace ninho::extension::detail {
     return {value.x, value.y, value.z};
 }
 
-[[nodiscard]] inline physics::Quat to_kernel(const godot::Quaternion& value) noexcept
+[[nodiscard]] inline std::optional<physics::Quat> to_kernel_checked(
+    const godot::Quaternion& value) noexcept
 {
-    return {
-        static_cast<float>(value.x),
-        static_cast<float>(value.y),
-        static_cast<float>(value.z),
-        static_cast<float>(value.w),
-    };
+    const auto x = checked_finite_float(value.x);
+    const auto y = checked_finite_float(value.y);
+    const auto z = checked_finite_float(value.z);
+    const auto w = checked_finite_float(value.w);
+    if (!x || !y || !z || !w) {
+        return std::nullopt;
+    }
+    return physics::Quat{*x, *y, *z, *w};
 }
 
 [[nodiscard]] inline godot::Quaternion to_godot(physics::Quat value) noexcept
@@ -43,9 +53,85 @@ namespace ninho::extension::detail {
     return {value.x, value.y, value.z, value.w};
 }
 
-[[nodiscard]] inline physics::Transform to_kernel(const godot::Transform3D& value) noexcept
+[[nodiscard]] inline std::optional<physics::Transform> to_kernel_checked(
+    const godot::Transform3D& value) noexcept
 {
-    return {to_kernel(value.origin), to_kernel(value.basis.get_quaternion())};
+    constexpr double rigid_tolerance = 1.0e-4;
+    const auto position = to_kernel_checked(value.origin);
+    if (!position) {
+        return std::nullopt;
+    }
+
+    // Kernel transforms are rigid. Reject scale, shear, reflection and
+    // degeneracy explicitly instead of silently discarding them as a quaternion.
+    const godot::Vector3 columns[] = {
+        value.basis.get_column(0),
+        value.basis.get_column(1),
+        value.basis.get_column(2),
+    };
+    const auto finite_column = [](const godot::Vector3& column) noexcept {
+        return std::isfinite(column.x) && std::isfinite(column.y) && std::isfinite(column.z);
+    };
+    for (const godot::Vector3& column : columns) {
+        if (!finite_column(column)) {
+            return std::nullopt;
+        }
+        const double length = std::sqrt(
+            static_cast<double>(column.x) * column.x
+            + static_cast<double>(column.y) * column.y
+            + static_cast<double>(column.z) * column.z);
+        if (!std::isfinite(length) || std::abs(length - 1.0) > rigid_tolerance) {
+            return std::nullopt;
+        }
+    }
+    const auto dot = [](const godot::Vector3& lhs, const godot::Vector3& rhs) noexcept {
+        return static_cast<double>(lhs.x) * rhs.x + static_cast<double>(lhs.y) * rhs.y
+            + static_cast<double>(lhs.z) * rhs.z;
+    };
+    if (std::abs(dot(columns[0], columns[1])) > rigid_tolerance
+        || std::abs(dot(columns[0], columns[2])) > rigid_tolerance
+        || std::abs(dot(columns[1], columns[2])) > rigid_tolerance) {
+        return std::nullopt;
+    }
+    const double determinant =
+        static_cast<double>(columns[0].x)
+            * (static_cast<double>(columns[1].y) * columns[2].z
+                - static_cast<double>(columns[1].z) * columns[2].y)
+        - static_cast<double>(columns[1].x)
+            * (static_cast<double>(columns[0].y) * columns[2].z
+                - static_cast<double>(columns[0].z) * columns[2].y)
+        + static_cast<double>(columns[2].x)
+            * (static_cast<double>(columns[0].y) * columns[1].z
+                - static_cast<double>(columns[0].z) * columns[1].y);
+    if (!std::isfinite(determinant) || determinant <= 0.0
+        || std::abs(determinant - 1.0) > rigid_tolerance) {
+        return std::nullopt;
+    }
+
+    const godot::Quaternion quaternion = value.basis.get_quaternion();
+    if (!std::isfinite(quaternion.x) || !std::isfinite(quaternion.y)
+        || !std::isfinite(quaternion.z) || !std::isfinite(quaternion.w)) {
+        return std::nullopt;
+    }
+    const double norm = std::sqrt(
+        static_cast<double>(quaternion.x) * quaternion.x
+        + static_cast<double>(quaternion.y) * quaternion.y
+        + static_cast<double>(quaternion.z) * quaternion.z
+        + static_cast<double>(quaternion.w) * quaternion.w);
+    if (!std::isfinite(norm) || norm <= 0.0 || std::abs(norm - 1.0) > rigid_tolerance) {
+        return std::nullopt;
+    }
+    const auto rotation_x = checked_finite_float(quaternion.x / norm);
+    const auto rotation_y = checked_finite_float(quaternion.y / norm);
+    const auto rotation_z = checked_finite_float(quaternion.z / norm);
+    const auto rotation_w = checked_finite_float(quaternion.w / norm);
+    if (!rotation_x || !rotation_y || !rotation_z || !rotation_w) {
+        return std::nullopt;
+    }
+    return physics::Transform{
+        *position,
+        {*rotation_x, *rotation_y, *rotation_z, *rotation_w},
+    };
 }
 
 [[nodiscard]] inline godot::Transform3D to_godot(const physics::Transform& value) noexcept
@@ -66,7 +152,7 @@ namespace ninho::extension::detail {
 
 [[nodiscard]] inline bool is_finite(const godot::Transform3D& value) noexcept
 {
-    return is_finite(value.origin) && is_finite(value.basis.get_quaternion());
+    return to_kernel_checked(value).has_value();
 }
 
 [[nodiscard]] inline std::int64_t pack_handle(physics::BodyHandle handle) noexcept
@@ -93,11 +179,11 @@ namespace ninho::extension::detail {
 }
 
 [[nodiscard]] inline physics::WorldConfig make_world_config(
-    double radius, double surface_gravity) noexcept
+    float radius, float surface_gravity) noexcept
 {
     physics::WorldConfig config;
-    config.planet_radius = static_cast<float>(radius);
-    config.surface_gravity = static_cast<float>(surface_gravity);
+    config.planet_radius = radius;
+    config.surface_gravity = surface_gravity;
     return config;
 }
 
@@ -107,20 +193,18 @@ namespace ninho::extension::detail {
 }
 
 [[nodiscard]] inline physics::BodyDesc make_box_desc(
-    const godot::Vector3& full_size, const godot::Transform3D& transform, double density)
+    physics::Vec3 full_size, const physics::Transform& transform, float density)
 {
-    return physics::BodyDesc::dynamic_box(
-        to_kernel(full_size) * 0.5F, to_kernel(transform), static_cast<float>(density));
+    return physics::BodyDesc::dynamic_box(full_size * 0.5F, transform, density);
 }
 
 [[nodiscard]] inline physics::BodyDesc make_projectile_desc(
-    double radius,
-    const godot::Transform3D& transform,
-    const godot::Vector3& velocity)
+    float radius,
+    const physics::Transform& transform,
+    physics::Vec3 velocity)
 {
-    physics::BodyDesc desc = physics::BodyDesc::dynamic_sphere(
-        static_cast<float>(radius), to_kernel(transform), 1.0F);
-    desc.linear_velocity = to_kernel(velocity);
+    physics::BodyDesc desc = physics::BodyDesc::dynamic_sphere(radius, transform, 1.0F);
+    desc.linear_velocity = velocity;
     desc.bullet = true;
     return desc;
 }
@@ -141,7 +225,15 @@ namespace ninho::extension::detail {
             "impulse and world point must be finite",
         };
     }
-    return world.apply_impulse(handle, to_kernel(impulse), to_kernel(world_point));
+    const auto kernel_impulse = to_kernel_checked(impulse);
+    const auto kernel_point = to_kernel_checked(world_point);
+    if (!kernel_impulse || !kernel_point) {
+        return {
+            physics::StatusCode::InvalidArgument,
+            "impulse and world point cannot be represented by the kernel",
+        };
+    }
+    return world.apply_impulse(handle, *kernel_impulse, *kernel_point);
 }
 
 struct TickSchedule {

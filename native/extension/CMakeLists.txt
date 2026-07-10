@@ -1,4 +1,5 @@
 add_library(ninho_physics_extension SHARED
+  src/adapter_helpers.cpp
   src/box3d_world_node.cpp
   src/register_types.cpp
 )
@@ -15,20 +16,35 @@ set_target_properties(ninho_physics_extension PROPERTIES
   OUTPUT_NAME "ninho_physics${GODOTCPP_SUFFIX}"
   RUNTIME_OUTPUT_DIRECTORY "$<1:${PROJECT_SOURCE_DIR}/game/bin>"
 )
+add_custom_command(
+  TARGET ninho_physics_extension POST_BUILD
+  BYPRODUCTS "${NINHO_GDEXTENSION_STAMP_PATH}"
+  COMMAND "${CMAKE_COMMAND}"
+    "-DDLL_PATH=$<TARGET_FILE:ninho_physics_extension>"
+    "-DSTAMP_PATH=${NINHO_GDEXTENSION_STAMP_PATH}"
+    "-DTOKEN=${NINHO_GDEXTENSION_BUILD_TOKEN}"
+    "-DCONFIG=$<CONFIG>"
+    "-DTARGET=${GODOTCPP_TARGET}"
+    "-DDLL_NAME=$<TARGET_FILE_NAME:ninho_physics_extension>"
+    -P "${PROJECT_SOURCE_DIR}/cmake/WriteGDExtensionStamp.cmake"
+  VERBATIM
+)
 
 if(MSVC)
   # The kernel reports invalid inputs with Status but can throw for construction
   # and catastrophic Box3D failures. /EHsc keeps those catchable inside this DLL;
   # every Godot-facing operation converts them to physics_fault before returning.
   target_compile_options(ninho_physics_extension PRIVATE
-    "$<$<COMPILE_LANGUAGE:CXX>:/W4;/permissive-;/fp:precise;/utf-8;/EHsc;/external:anglebrackets;/external:W0>"
+    "$<$<COMPILE_LANGUAGE:CXX>:/W4;/permissive-;/fp:precise;/utf-8;/EHsc>"
   )
 endif()
 
 if(BUILD_TESTING)
   add_executable(ninho_extension_adapter_tests
     "${PROJECT_SOURCE_DIR}/native/tests/test_main.cpp"
+    src/adapter_helpers.cpp
     tests/adapter_helpers_tests.cpp
+    tests/registration_contract_tests.cpp
   )
   target_include_directories(ninho_extension_adapter_tests PRIVATE
     include
@@ -38,7 +54,7 @@ if(BUILD_TESTING)
   target_compile_features(ninho_extension_adapter_tests PRIVATE cxx_std_20)
   if(MSVC)
     target_compile_options(ninho_extension_adapter_tests PRIVATE
-      "$<$<COMPILE_LANGUAGE:CXX>:/W4;/permissive-;/fp:precise;/utf-8;/EHsc;/external:anglebrackets;/external:W0>"
+      "$<$<COMPILE_LANGUAGE:CXX>:/W4;/permissive-;/fp:precise;/utf-8;/EHsc>"
     )
   endif()
   add_test(NAME gdextension_adapter_helpers COMMAND ninho_extension_adapter_tests)

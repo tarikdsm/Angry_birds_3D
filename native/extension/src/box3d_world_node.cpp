@@ -31,11 +31,6 @@ namespace {
     return "unknown_status";
 }
 
-[[nodiscard]] bool positive_finite(double value) noexcept
-{
-    return std::isfinite(value) && value > 0.0;
-}
-
 [[nodiscard]] bool positive_finite(const godot::Vector3& value) noexcept
 {
     return detail::is_finite(value) && value.x > 0.0 && value.y > 0.0 && value.z > 0.0;
@@ -137,13 +132,15 @@ bool Box3DWorldNode::recreate_world(const physics::WorldConfig& config)
 
 bool Box3DWorldNode::configure_planet(double radius, double surface_gravity)
 {
-    if (!positive_finite(radius) || !positive_finite(surface_gravity)) {
+    const auto kernel_radius = detail::checked_positive_float(radius);
+    const auto kernel_gravity = detail::checked_positive_float(surface_gravity);
+    if (!kernel_radius || !kernel_gravity) {
         emit_fault("invalid_argument", "planet radius and surface gravity must be finite and positive");
         return false;
     }
 
     try {
-        return recreate_world(detail::make_world_config(radius, surface_gravity));
+        return recreate_world(detail::make_world_config(*kernel_radius, *kernel_gravity));
     } catch (const std::exception& error) {
         emit_exception_fault("configure_planet", error.what());
     } catch (...) {
@@ -155,8 +152,10 @@ bool Box3DWorldNode::configure_planet(double radius, double surface_gravity)
 std::int64_t Box3DWorldNode::spawn_box(
     godot::Vector3 full_size, godot::Transform3D transform, double density)
 {
-    if (!positive_finite(full_size) || !detail::is_finite(transform)
-        || !positive_finite(density)) {
+    const auto kernel_size = detail::to_kernel_checked(full_size);
+    const auto kernel_transform = detail::to_kernel_checked(transform);
+    const auto kernel_density = detail::checked_positive_float(density);
+    if (!positive_finite(full_size) || !kernel_size || !kernel_transform || !kernel_density) {
         emit_fault("invalid_argument", "box size, transform, and density must be finite and positive");
         return 0;
     }
@@ -166,7 +165,8 @@ std::int64_t Box3DWorldNode::spawn_box(
 
     try {
         const physics::Result<physics::BodyHandle> created =
-            world_->create_body(detail::make_box_desc(full_size, transform, density));
+            world_->create_body(
+                detail::make_box_desc(*kernel_size, *kernel_transform, *kernel_density));
         if (!created) {
             emit_status_fault("spawn_box", created.status);
             return 0;
@@ -183,8 +183,10 @@ std::int64_t Box3DWorldNode::spawn_box(
 std::int64_t Box3DWorldNode::spawn_projectile(
     double radius, godot::Transform3D transform, godot::Vector3 velocity)
 {
-    if (!positive_finite(radius) || !detail::is_finite(transform)
-        || !detail::is_finite(velocity)) {
+    const auto kernel_radius = detail::checked_positive_float(radius);
+    const auto kernel_transform = detail::to_kernel_checked(transform);
+    const auto kernel_velocity = detail::to_kernel_checked(velocity);
+    if (!kernel_radius || !kernel_transform || !kernel_velocity) {
         emit_fault("invalid_argument", "projectile radius, transform, and velocity must be finite");
         return 0;
     }
@@ -194,7 +196,8 @@ std::int64_t Box3DWorldNode::spawn_projectile(
 
     try {
         const physics::Result<physics::BodyHandle> created =
-            world_->create_body(detail::make_projectile_desc(radius, transform, velocity));
+            world_->create_body(detail::make_projectile_desc(
+                *kernel_radius, *kernel_transform, *kernel_velocity));
         if (!created) {
             emit_status_fault("spawn_projectile", created.status);
             return 0;
