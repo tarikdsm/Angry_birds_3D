@@ -12,6 +12,7 @@
 #include <limits>
 #include <stdexcept>
 #include <string>
+#include <string_view>
 #include <type_traits>
 #include <utility>
 #include <variant>
@@ -254,6 +255,16 @@ struct PhysicsWorld::Impl {
         bool wake;
     };
 
+    struct Reservation {
+        BodyHandle handle;
+        bool reused{};
+    };
+
+    struct NativeShapeResult {
+        b3ShapeId id{};
+        const char* operation{};
+    };
+
     using Command = std::variant<CreateCommand, DestroyCommand, ForceCommand, ImpulseCommand>;
 
     explicit Impl(WorldConfig world_config)
@@ -262,18 +273,22 @@ struct PhysicsWorld::Impl {
                    .radius = config.planet_radius,
                    .surface_acceleration = config.surface_gravity})
     {
+        constexpr std::size_t initial_reserve_limit = 1024;
+        const std::size_t initial_body_capacity =
+            std::min(config.max_bodies, initial_reserve_limit);
+        slots.reserve(initial_body_capacity + 1);
+        free_slots.reserve(initial_body_capacity);
+        snapshots.reserve(initial_body_capacity);
+        slots.emplace_back();
+
         b3WorldDef world_def = b3DefaultWorldDef();
         world_def.gravity = {};
         world_def.workerCount = 1;
-        world = b3CreateWorld(&world_def);
-        if (B3_IS_NULL(world) || !b3World_IsValid(world)) {
-            throw std::runtime_error("Box3D failed to create the physics world");
+        const b3WorldId created_world = b3CreateWorld(&world_def);
+        if (B3_IS_NULL(created_world) || !b3World_IsValid(created_world)) {
+            throw std::runtime_error("Box3DFault: b3CreateWorld");
         }
-
-        constexpr std::size_t initial_reserve_limit = 1024;
-        slots.reserve(std::min(config.max_bodies + 1, initial_reserve_limit));
-        slots.emplace_back();
-        snapshots.reserve(std::min(config.max_bodies, initial_reserve_limit));
+        world = created_world;
     }
 
     ~Impl()
@@ -311,18 +326,26 @@ struct PhysicsWorld::Impl {
         return slot.generation == handle.generation ? &slot : nullptr;
     }
 
-    [[nodiscard]] BodyHandle reserve_handle()
+    [[nodiscard]] Reservation reserve_handle()
     {
         std::uint32_t index{};
+        bool reused = false;
         if (!free_slots.empty()) {
             index = free_slots.back();
-            free_slots.pop_back();
+            reused = true;
         } else {
+            const std::size_t required_free_capacity = slots.size() + 1;
+            if (free_slots.capacity() < required_free_capacity) {
+                free_slots.reserve(required_free_capacity);
+            }
             index = static_cast<std::uint32_t>(slots.size());
             slots.emplace_back();
         }
 
         Slot& slot = slots[index];
+        if (slot.generation != 0) {
+            ejection_tracker.reset({index, slot.generation});
+        }
         ++slot.generation;
         if (slot.generation == 0) {
             ++slot.generation;
@@ -330,7 +353,61 @@ struct PhysicsWorld::Impl {
         slot.state = SlotState::PendingCreate;
         slot.native = {};
         slot.ejected = false;
-        return {index, slot.generation};
+        const BodyHandle handle{index, slot.generation};
+        return {handle, reused};
+    }
+
+    void commit_reservation(const Reservation& reservation) noexcept
+    {
+        if (reservation.reused) {
+            free_slots.pop_back();
+        }
+    }
+
+    void rollback_reservation(const Reservation& reservation) noexcept
+    {
+        if (!reservation.reused) {
+            slots.pop_back();
+            return;
+        }
+
+        Slot& slot = slots[reservation.handle.index];
+        slot.state = SlotState::Free;
+        slot.native = {};
+        slot.type = BodyType::Static;
+        slot.radial_gravity = false;
+        slot.remove_beyond_six_r = false;
+        slot.ejected = false;
+    }
+
+    void release_slot(BodyHandle handle, b3BodyId native)
+    {
+        Slot* slot = matching_slot(handle);
+        if (slot == nullptr || slot->state == SlotState::Free) {
+            return;
+        }
+
+        free_slots.push_back(handle.index);
+        if (B3_IS_NON_NULL(native) && b3Body_IsValid(native)) {
+            b3DestroyBody(native);
+        }
+        ejection_tracker.reset(handle);
+        slot->native = {};
+        slot->state = SlotState::Free;
+        slot->type = BodyType::Static;
+        slot->radial_gravity = false;
+        slot->remove_beyond_six_r = false;
+        slot->ejected = false;
+        --reserved_body_count;
+    }
+
+    [[noreturn]] void fail_native_create(
+        BodyHandle handle,
+        b3BodyId native,
+        std::string_view operation)
+    {
+        release_slot(handle, native);
+        throw std::runtime_error("Box3DFault: " + std::string(operation));
     }
 
     void create_native_body(const CreateCommand& command)
@@ -356,6 +433,10 @@ struct PhysicsWorld::Impl {
         body_def.name = desc.name.empty() ? nullptr : desc.name.c_str();
 
         const b3BodyId native = b3CreateBody(world, &body_def);
+        if (B3_IS_NULL(native) || !b3Body_IsValid(native)) {
+            fail_native_create(command.handle, native, "b3CreateBody");
+        }
+
         for (const ShapeDesc& shape : desc.shapes) {
             b3ShapeDef shape_def = b3DefaultShapeDef();
             shape_def.density = shape.density;
@@ -364,20 +445,22 @@ struct PhysicsWorld::Impl {
             shape_def.baseMaterial.userMaterialId = shape.material_id;
             shape_def.enableHitEvents = shape.hit_events;
 
-            std::visit(
-                [&](const auto& geometry) {
+            const NativeShapeResult created_shape = std::visit(
+                [&](const auto& geometry) -> NativeShapeResult {
                     using Geometry = std::decay_t<decltype(geometry)>;
                     if constexpr (std::is_same_v<Geometry, SphereShape>) {
                         const b3Sphere sphere{
                             detail::to_box3d_vector(geometry.local.position), geometry.radius};
-                        b3CreateSphereShape(native, &shape_def, &sphere);
+                        return {b3CreateSphereShape(native, &shape_def, &sphere),
+                                "b3CreateSphereShape"};
                     } else if constexpr (std::is_same_v<Geometry, BoxShape>) {
                         const b3BoxHull box = b3MakeTransformedBoxHull(
                             geometry.half_extents.x,
                             geometry.half_extents.y,
                             geometry.half_extents.z,
                             detail::to_box3d_local(geometry.local));
-                        b3CreateHullShape(native, &shape_def, &box.base);
+                        return {b3CreateHullShape(native, &shape_def, &box.base),
+                                "b3CreateHullShape(box)"};
                     } else if constexpr (std::is_same_v<Geometry, CapsuleShape>) {
                         const b3Transform local = detail::to_box3d_local(geometry.local);
                         const b3Capsule capsule{
@@ -385,10 +468,16 @@ struct PhysicsWorld::Impl {
                             b3TransformPoint(local, {0.0f, geometry.half_height, 0.0f}),
                             geometry.radius,
                         };
-                        b3CreateCapsuleShape(native, &shape_def, &capsule);
+                        return {b3CreateCapsuleShape(native, &shape_def, &capsule),
+                                "b3CreateCapsuleShape"};
+                    } else {
+                        return {{}, "shape dispatch"};
                     }
                 },
                 shape.geometry);
+            if (B3_IS_NULL(created_shape.id) || !b3Shape_IsValid(created_shape.id)) {
+                fail_native_create(command.handle, native, created_shape.operation);
+            }
         }
 
         slot->native = native;
@@ -406,16 +495,7 @@ struct PhysicsWorld::Impl {
         if (slot == nullptr) {
             return;
         }
-        if (B3_IS_NON_NULL(slot->native) && b3Body_IsValid(slot->native)) {
-            b3DestroyBody(slot->native);
-        }
-        slot->native = {};
-        slot->state = SlotState::Free;
-        slot->radial_gravity = false;
-        slot->remove_beyond_six_r = false;
-        slot->ejected = false;
-        free_slots.push_back(command.handle.index);
-        --reserved_body_count;
+        release_slot(command.handle, slot->native);
     }
 
     void apply(const Command& command)
@@ -473,19 +553,29 @@ struct PhysicsWorld::Impl {
         }
     }
 
-    void queue_ejected_bodies()
+    void update_ejection_and_queue_removal()
     {
         const float removal_radius = 6.0f * config.planet_radius;
         for (BodyState& snapshot : snapshots) {
             Slot* slot = matching_slot(snapshot.handle);
-            if (slot == nullptr || slot->state != SlotState::Live || !slot->remove_beyond_six_r
-                || length(snapshot.transform.position) < removal_radius) {
+            if (slot == nullptr || slot->state != SlotState::Live) {
                 continue;
             }
-            snapshot.ejected = true;
-            slot->ejected = true;
-            slot->state = SlotState::PendingDestroy;
-            commands.push_back(DestroyCommand{snapshot.handle});
+
+            const float radius = length(snapshot.transform.position);
+            const Vec3 radial_direction = normalized_or_zero(snapshot.transform.position);
+            const float radial_speed = dot(snapshot.linear_velocity, radial_direction);
+            if (!slot->ejected
+                && ejection_tracker.update(
+                    snapshot.handle, radius, radial_speed, config.time_step, config.planet_radius)) {
+                slot->ejected = true;
+            }
+            snapshot.ejected = slot->ejected;
+
+            if (slot->remove_beyond_six_r && radius >= removal_radius) {
+                commands.push_back(DestroyCommand{snapshot.handle});
+                slot->state = SlotState::PendingDestroy;
+            }
         }
     }
 
@@ -497,6 +587,7 @@ struct PhysicsWorld::Impl {
     std::vector<Command> commands;
     std::vector<BodyState> snapshots;
     std::size_t reserved_body_count{};
+    EjectionTracker ejection_tracker;
 };
 
 PhysicsWorld::PhysicsWorld(WorldConfig config)
@@ -517,10 +608,19 @@ Result<BodyHandle> PhysicsWorld::create_body(const BodyDesc& desc)
     if (impl_->reserved_body_count >= impl_->config.max_bodies) {
         return {{}, {StatusCode::CapacityExceeded, "physics body capacity has been reached"}};
     }
-    const BodyHandle handle = impl_->reserve_handle();
+
+    Impl::CreateCommand command{{}, desc};
+    const Impl::Reservation reservation = impl_->reserve_handle();
+    command.handle = reservation.handle;
+    try {
+        impl_->commands.emplace_back(std::move(command));
+    } catch (...) {
+        impl_->rollback_reservation(reservation);
+        throw;
+    }
+    impl_->commit_reservation(reservation);
     ++impl_->reserved_body_count;
-    impl_->commands.push_back(Impl::CreateCommand{handle, desc});
-    return {handle, {}};
+    return {reservation.handle, {}};
 }
 
 Status PhysicsWorld::destroy_body(BodyHandle body)
@@ -528,9 +628,9 @@ Status PhysicsWorld::destroy_body(BodyHandle body)
     if (!impl_->accepts(body)) {
         return invalid_handle_status();
     }
+    impl_->commands.emplace_back(Impl::DestroyCommand{body});
     Impl::Slot& slot = impl_->slots[body.index];
     slot.state = Impl::SlotState::PendingDestroy;
-    impl_->commands.push_back(Impl::DestroyCommand{body});
     std::erase_if(impl_->snapshots, [body](const BodyState& value) { return value.handle == body; });
     return {};
 }
@@ -581,7 +681,7 @@ void PhysicsWorld::step()
 
     b3World_Step(impl_->world, impl_->config.time_step, impl_->config.substeps);
     impl_->rebuild_snapshots();
-    impl_->queue_ejected_bodies();
+    impl_->update_ejection_and_queue_removal();
 }
 
 std::optional<BodyState> PhysicsWorld::state(BodyHandle body) const

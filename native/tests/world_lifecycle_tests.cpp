@@ -193,6 +193,8 @@ NINHO_TEST("contract capacity counts reserved handles and permits reuse after de
     body.radial_gravity = false;
     body.remove_beyond_six_r = false;
 
+    const auto rejected = physics.create_body(BodyDesc::dynamic_sphere(0.0f, {}, 10.0f));
+    NINHO_REQUIRE(rejected.status.code == StatusCode::InvalidArgument);
     const auto first = physics.create_body(body);
     NINHO_REQUIRE(first.status.ok());
     NINHO_REQUIRE(physics.create_body(body).status.code == StatusCode::CapacityExceeded);
@@ -224,17 +226,66 @@ NINHO_TEST("contract capsule primitive with local transform contributes dynamic 
     NINHO_REQUIRE(physics.state(created.value)->mass > 0.0f);
 }
 
-NINHO_TEST("contract ejection remains in one snapshot before deferred removal")
+NINHO_TEST("contract outward motion beyond four radii becomes sticky ejection after half second")
 {
-    PhysicsWorld physics(WorldConfig{.planet_radius = 10.0f});
+    PhysicsWorld physics(WorldConfig{.planet_radius = 10.0f, .surface_gravity = 0.0f});
+    BodyDesc body = BodyDesc::dynamic_sphere(0.5f, {{0, 41, 0}, {}}, 10.0f);
+    body.linear_velocity = {0, 3, 0};
+    body.remove_beyond_six_r = false;
+    const BodyHandle handle = physics.create_body(body).value;
+
+    for (int tick = 0; tick < 29; ++tick) {
+        physics.step();
+        NINHO_REQUIRE(physics.state(handle).has_value());
+        NINHO_REQUIRE(!physics.state(handle)->ejected);
+    }
+    physics.step();
+    NINHO_REQUIRE(physics.state(handle)->ejected);
+}
+
+NINHO_TEST("contract slow outward tick resets ejection duration window")
+{
+    PhysicsWorld physics(WorldConfig{.planet_radius = 10.0f, .surface_gravity = 0.0f});
+    BodyDesc body = BodyDesc::dynamic_sphere(0.5f, {{0, 41, 0}, {}}, 10.0f);
+    body.linear_velocity = {0, 3, 0};
+    body.remove_beyond_six_r = false;
+    const BodyHandle handle = physics.create_body(body).value;
+
+    for (int tick = 0; tick < 29; ++tick) {
+        physics.step();
+        NINHO_REQUIRE(!physics.state(handle)->ejected);
+    }
+
+    const BodyState fast_state = *physics.state(handle);
+    NINHO_REQUIRE(physics.apply_impulse(
+        handle,
+        {0, -2.0f * fast_state.mass, 0},
+        fast_state.transform.position).ok());
+    physics.step();
+    NINHO_REQUIRE(!physics.state(handle)->ejected);
+
+    const BodyState slow_state = *physics.state(handle);
+    NINHO_REQUIRE(physics.apply_impulse(
+        handle,
+        {0, 2.0f * slow_state.mass, 0},
+        slow_state.transform.position).ok());
+    for (int tick = 0; tick < 29; ++tick) {
+        physics.step();
+        NINHO_REQUIRE(!physics.state(handle)->ejected);
+    }
+    physics.step();
+    NINHO_REQUIRE(physics.state(handle)->ejected);
+}
+
+NINHO_TEST("contract six radius removal does not fabricate ejection")
+{
+    PhysicsWorld physics(WorldConfig{.planet_radius = 10.0f, .surface_gravity = 0.0f});
     BodyDesc body = BodyDesc::dynamic_sphere(0.5f, {{0, 61, 0}, {}}, 10.0f);
-    body.radial_gravity = false;
     const BodyHandle handle = physics.create_body(body).value;
 
     physics.step();
     NINHO_REQUIRE(physics.state(handle).has_value());
-    NINHO_REQUIRE(physics.state(handle)->ejected);
-    NINHO_REQUIRE(physics.states().size() == 1);
+    NINHO_REQUIRE(!physics.state(handle)->ejected);
 
     physics.step();
     NINHO_REQUIRE(!physics.state(handle).has_value());
