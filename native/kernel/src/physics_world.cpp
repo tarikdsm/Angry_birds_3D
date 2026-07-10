@@ -267,6 +267,9 @@ struct PhysicsWorld::Impl {
 
     using Command = std::variant<CreateCommand, DestroyCommand, ForceCommand, ImpulseCommand>;
 
+    static_assert(std::is_nothrow_move_assignable_v<Command>);
+    static_assert(std::is_nothrow_destructible_v<Command>);
+
     explicit Impl(WorldConfig world_config)
         : config(validated_config(world_config))
         , gravity({.center = {},
@@ -531,6 +534,31 @@ struct PhysicsWorld::Impl {
             command);
     }
 
+    void discard_command_prefix(std::size_t prefix_count) noexcept
+    {
+        const std::size_t suffix_count = commands.size() - prefix_count;
+        for (std::size_t index = 0; index < suffix_count; ++index) {
+            commands[index] = std::move(commands[prefix_count + index]);
+        }
+        while (commands.size() > suffix_count) {
+            commands.pop_back();
+        }
+    }
+
+    void apply_queued_commands()
+    {
+        // Command application never enqueues. Auto-removal is a later phase after Box3D stepping.
+        for (std::size_t index = 0; index < commands.size(); ++index) {
+            try {
+                apply(commands[index]);
+            } catch (...) {
+                discard_command_prefix(index + 1);
+                throw;
+            }
+        }
+        commands.clear();
+    }
+
     void rebuild_snapshots()
     {
         snapshots.clear();
@@ -661,11 +689,7 @@ Status PhysicsWorld::apply_impulse(BodyHandle body, Vec3 impulse, Vec3 point, bo
 
 void PhysicsWorld::step()
 {
-    std::vector<Impl::Command> commands = std::move(impl_->commands);
-    impl_->commands.clear();
-    for (const Impl::Command& command : commands) {
-        impl_->apply(command);
-    }
+    impl_->apply_queued_commands();
 
     for (std::uint32_t index = 1; index < impl_->slots.size(); ++index) {
         Impl::Slot& slot = impl_->slots[index];
