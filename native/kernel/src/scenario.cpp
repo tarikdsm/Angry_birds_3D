@@ -1152,7 +1152,7 @@ struct OrientedBox {
 #endif
 }
 
-[[nodiscard]] PrivateCommitGateMode current_private_commit_gate_mode()
+[[nodiscard]] constexpr RuntimeConfiguration current_runtime_configuration()
 {
     constexpr bool release_build = std::string_view{NINHO_BUILD_TYPE} == "Release";
 #ifdef _MT
@@ -1170,8 +1170,12 @@ struct OrientedBox {
 #else
     constexpr bool debug_defined = false;
 #endif
-    return evaluate_private_commit_gate_mode(
-        release_build, mt_defined, dll_defined, debug_defined);
+    return {
+        .release_build = release_build,
+        .mt_defined = mt_defined,
+        .dll_defined = dll_defined,
+        .debug_defined = debug_defined,
+    };
 }
 
 [[nodiscard]] std::string_view private_commit_status_name(PrivateCommitStatus status)
@@ -1371,7 +1375,7 @@ struct CrtStressProbeResult {
 [[nodiscard]] ScenarioResult run_stress(std::uint64_t seed, int substeps)
 {
     ScenarioResult result = make_result(ScenarioKind::Stress, seed, substeps);
-    result.box3d_allocator.baseline_bytes = box3d_allocator_byte_count();
+    result.box3d_allocator.baseline_bytes = detail::box3d_allocator_byte_count();
     result.box3d_allocator.final_bytes = result.box3d_allocator.baseline_bytes;
     result.box3d_allocator.exact_return =
         result.box3d_allocator.baseline_bytes == 0;
@@ -1382,9 +1386,6 @@ struct CrtStressProbeResult {
     result.warmup_ticks = 300;
     result.measurement_ticks = 1200;
     result.limits = {
-        {"persistent_private_commit_growth", "<=", 0.05, "ratio"},
-        {"private_commit_tail_span", "<=", 0.05, "ratio"},
-        {"private_commit_terminal_growth", "==", 0.0, "bool"},
         {"allocator_warmup_cycles", "==", 10.0, "cycles"},
         {"scenario_timeout", "<=", 60.0, "s"},
         {"spontaneous_speed", "<=", 100.0, "m/s"},
@@ -1420,7 +1421,7 @@ struct CrtStressProbeResult {
             result.working_set_peak_bytes, sample->peak_working_set_bytes);
     };
     const auto record_allocator = [&](bool warmup) {
-        const std::int64_t bytes = box3d_allocator_byte_count();
+        const std::int64_t bytes = detail::box3d_allocator_byte_count();
         auto& samples = warmup
             ? result.box3d_allocator.warmup_post_teardown_bytes
             : result.box3d_allocator.measured_post_teardown_bytes;
@@ -1496,9 +1497,8 @@ struct CrtStressProbeResult {
     const CrtStressProbeResult crt_probe = probe_debug_crt_stress_cycle(
         result.warmup_ticks, result.measurement_ticks, substeps);
     result.crt = crt_probe.memory;
-    const std::int64_t after_crt_allocator = box3d_allocator_byte_count();
-    if (!box3d_allocator_exact_return(
-            result.box3d_allocator.baseline_bytes, after_crt_allocator)) {
+    const std::int64_t after_crt_allocator = detail::box3d_allocator_byte_count();
+    if (result.box3d_allocator.baseline_bytes != after_crt_allocator) {
         result.box3d_allocator.final_bytes = after_crt_allocator;
         result.box3d_allocator.exact_return = false;
         result.box3d_allocator.max_abs_delta = std::max(
@@ -1642,7 +1642,6 @@ struct CrtStressProbeResult {
     if (!result.private_commit_cycle_samples.empty()) {
         result.private_commit_final_bytes = result.private_commit_cycle_samples.back();
     }
-    const PrivateCommitGateMode gate_mode = current_private_commit_gate_mode();
     result.private_commit_gate_scope = "release_mt";
     result.private_commit_assessment_status =
         std::string{private_commit_status_name(private_assessment.status)};
@@ -1662,13 +1661,37 @@ struct CrtStressProbeResult {
     const PrivateCommitAssessment working_set_summary = assess_private_commit(
         result.working_set_warmup_samples,
         result.working_set_cycle_samples);
+    result.working_set_gate_status = "diagnostic";
+    result.working_set_assessment_status =
+        std::string{private_commit_status_name(working_set_summary.status)};
+    result.working_set_gate_applied = false;
+    result.working_set_budget_qualified = false;
+    result.working_set_budget_scope = "future_packaged_reference_hardware";
     result.working_set_available = working_set_summary.available;
+    result.working_set_stable = working_set_summary.stable;
+    result.working_set_terminal_growth = working_set_summary.terminal_growth;
     result.working_set_baseline_low_bytes = working_set_summary.baseline_full_min_bytes;
+    result.working_set_baseline_central_low_bytes =
+        working_set_summary.baseline_central_min_bytes;
     result.working_set_baseline_median_bytes = working_set_summary.baseline_median_bytes;
+    result.working_set_baseline_central_high_bytes =
+        working_set_summary.baseline_central_max_bytes;
     result.working_set_baseline_max_bytes = working_set_summary.baseline_full_max_bytes;
     result.working_set_final_low_bytes = working_set_summary.final_full_min_bytes;
+    result.working_set_final_central_low_bytes =
+        working_set_summary.final_central_min_bytes;
     result.working_set_final_median_bytes = working_set_summary.final_median_bytes;
+    result.working_set_final_central_high_bytes =
+        working_set_summary.final_central_max_bytes;
     result.working_set_final_max_bytes = working_set_summary.final_full_max_bytes;
+    result.working_set_warmup_trimmed_span_ratio =
+        working_set_summary.warmup_trimmed_span_ratio;
+    result.working_set_warmup_full_span_ratio =
+        working_set_summary.warmup_full_span_ratio;
+    result.working_set_measured_trimmed_span_ratio =
+        working_set_summary.measured_trimmed_span_ratio;
+    result.working_set_measured_full_span_ratio =
+        working_set_summary.measured_full_span_ratio;
     if (!result.working_set_warmup_samples.empty()) {
         result.working_set_baseline_bytes = result.working_set_warmup_samples.back();
     }
@@ -1684,52 +1707,11 @@ struct CrtStressProbeResult {
                 / static_cast<double>(result.working_set_baseline_bytes));
     }
 
-    std::vector<ScenarioValue> private_values{
-        {"baseline_private_median_bytes",
-         static_cast<double>(result.private_commit_baseline_median_bytes),
-         "bytes"},
-        {"final_private_median_bytes",
-         static_cast<double>(result.private_commit_final_median_bytes),
-         "bytes"},
-        {"private_growth_ratio", result.private_commit_growth_ratio, "ratio"},
-        {"warmup_trimmed_span_ratio",
-         result.private_commit_warmup_trimmed_span_ratio,
-         "ratio"},
-        {"warmup_full_span_ratio", result.private_commit_warmup_full_span_ratio, "ratio"},
-        {"measured_trimmed_span_ratio",
-         result.private_commit_measured_trimmed_span_ratio,
-         "ratio"},
-        {"measured_full_span_ratio", result.private_commit_measured_full_span_ratio, "ratio"},
-        {"terminal_growth", result.private_commit_terminal_growth ? 1.0 : 0.0, "bool"},
-    };
-    for (std::size_t index = 0;
-         index < result.private_commit_warmup_samples.size();
-         ++index) {
-        private_values.push_back({
-            "private_warmup_" + std::to_string(index + 1) + "_bytes",
-            static_cast<double>(result.private_commit_warmup_samples[index]),
-            "bytes",
-        });
-    }
-    for (std::size_t index = 0;
-         index < result.private_commit_cycle_samples.size();
-         ++index) {
-        private_values.push_back({
-            "private_cycle_" + std::to_string(index + 1) + "_bytes",
-            static_cast<double>(result.private_commit_cycle_samples[index]),
-            "bytes",
-        });
-    }
-    if (gate_mode == PrivateCommitGateMode::ConfigurationMismatch) {
-        add_violation(
-            result,
-            "configuration_mismatch",
-            "Release private-commit gate requires the static /MT CRT",
-            result.ticks,
-            {},
-            private_values);
-    }
     result.metrics = {
+        {"private_commit_diagnostic_growth_target", 0.05, "ratio"},
+        {"private_commit_diagnostic_trimmed_span_target", 0.05, "ratio"},
+        {"working_set_diagnostic_growth_target", 0.05, "ratio"},
+        {"working_set_diagnostic_trimmed_span_target", 0.05, "ratio"},
         {"private_commit_baseline_median_bytes",
          static_cast<double>(result.private_commit_baseline_median_bytes),
          "bytes"},
@@ -2106,7 +2088,7 @@ struct CrtStressProbeResult {
 
 [[nodiscard]] CapabilityRow prove_hulls_compounds()
 {
-    const std::int64_t allocator_baseline = box3d_allocator_byte_count();
+    const std::int64_t allocator_baseline = detail::box3d_allocator_byte_count();
     CapabilityRow row{.capability = "hulls_compounds"};
     const auto exercise = [](bool compound) {
         struct Result {
@@ -2200,14 +2182,16 @@ struct CrtStressProbeResult {
         {"contacted", proof.contacted ? 1.0 : 0.0, "bool"},
         {"state_valid", proof.state_valid ? 1.0 : 0.0, "bool"},
     };
-    const std::int64_t allocator_final = box3d_allocator_byte_count();
+    row.functional_status = row.status;
+    row.functional_fallback = row.fallback;
+    const std::int64_t allocator_final = detail::box3d_allocator_byte_count();
     row.values.push_back(
         {"box3d_allocator_baseline_bytes",
          static_cast<double>(allocator_baseline),
          "bytes"});
     row.values.push_back(
         {"box3d_allocator_final_bytes", static_cast<double>(allocator_final), "bytes"});
-    if (!box3d_allocator_exact_return(allocator_baseline, allocator_final)) {
+    if (allocator_baseline != allocator_final) {
         row.status = CapabilityStatus::Blocked;
         row.detail = "hull/compound proof retained Box3 allocator bytes";
     }
@@ -2216,7 +2200,7 @@ struct CrtStressProbeResult {
 
 [[nodiscard]] CapabilityRow prove_batch_lifecycle()
 {
-    const std::int64_t allocator_baseline = box3d_allocator_byte_count();
+    const std::int64_t allocator_baseline = detail::box3d_allocator_byte_count();
     CapabilityRow row = [&] {
     CapabilityRow row{.capability = "batch_lifecycle"};
     PhysicsWorld world(WorldConfig{.surface_gravity = 0, .max_bodies = 1});
@@ -2344,15 +2328,11 @@ struct CrtStressProbeResult {
     };
     row.fixture_hashes.push_back(
         (static_cast<std::uint64_t>(previous.generation) << 32) | previous.index);
-    const PrivateCommitGateMode gate_mode = current_private_commit_gate_mode();
-    if (completed_cycles != 10000 || invalid_handles != 0) {
+    row.functional_status = classify_lifecycle_status(
+        completed_cycles, invalid_handles, private_growth);
+    row.status = row.functional_status;
+    if (crt.applicable && !crt.balanced) {
         row.status = CapabilityStatus::Blocked;
-    } else if (crt.applicable && !crt.balanced) {
-        row.status = CapabilityStatus::Blocked;
-    } else if (gate_mode == PrivateCommitGateMode::ConfigurationMismatch) {
-        row.status = CapabilityStatus::Blocked;
-    } else {
-        row.status = CapabilityStatus::Pass;
     }
     if (row.status == CapabilityStatus::Pass) {
         row.detail = "10,000 create-destroy cycles preserved handle generations without persistent growth";
@@ -2362,14 +2342,14 @@ struct CrtStressProbeResult {
     }
     return row;
     }();
-    const std::int64_t allocator_final = box3d_allocator_byte_count();
+    const std::int64_t allocator_final = detail::box3d_allocator_byte_count();
     row.values.push_back(
         {"box3d_allocator_baseline_bytes",
          static_cast<double>(allocator_baseline),
          "bytes"});
     row.values.push_back(
         {"box3d_allocator_final_bytes", static_cast<double>(allocator_final), "bytes"});
-    if (!box3d_allocator_exact_return(allocator_baseline, allocator_final)) {
+    if (allocator_baseline != allocator_final) {
         row.status = CapabilityStatus::Blocked;
         row.detail = "lifecycle proof retained Box3 allocator bytes";
     }
@@ -2397,7 +2377,7 @@ struct CrtStressProbeResult {
 
 [[nodiscard]] CapabilityRow prove_replay(std::uint64_t seed)
 {
-    const std::int64_t allocator_baseline = box3d_allocator_byte_count();
+    const std::int64_t allocator_baseline = detail::box3d_allocator_byte_count();
     CapabilityRow row{.capability = "upstream_replay"};
     const std::filesystem::path path = std::filesystem::temp_directory_path()
         / ("ninho-box3d-replay-" + std::to_string(seed) + ".b3rec");
@@ -2433,14 +2413,16 @@ struct CrtStressProbeResult {
                 + proof.error;
         }
     }
-    const std::int64_t allocator_final = box3d_allocator_byte_count();
+    row.functional_status = row.status;
+    row.functional_fallback = row.fallback;
+    const std::int64_t allocator_final = detail::box3d_allocator_byte_count();
     row.values.push_back(
         {"box3d_allocator_baseline_bytes",
          static_cast<double>(allocator_baseline),
          "bytes"});
     row.values.push_back(
         {"box3d_allocator_final_bytes", static_cast<double>(allocator_final), "bytes"});
-    if (!box3d_allocator_exact_return(allocator_baseline, allocator_final)) {
+    if (allocator_baseline != allocator_final) {
         row.status = CapabilityStatus::Blocked;
         row.detail = "replay proof retained Box3 allocator bytes";
     }
@@ -2451,10 +2433,15 @@ struct CrtStressProbeResult {
     std::uint64_t seed, int substeps)
 {
     ScenarioResult result = make_result(ScenarioKind::CapabilityMatrix, seed, substeps);
-    result.matrix.push_back(prove_ccd_capability());
-    result.matrix.push_back(prove_shape_query());
-    result.matrix.push_back(prove_contact_events());
-    result.matrix.push_back(prove_joint_reaction());
+    const auto append_functional_row = [&](CapabilityRow row) {
+        row.functional_status = row.status;
+        row.functional_fallback = row.fallback;
+        result.matrix.push_back(std::move(row));
+    };
+    append_functional_row(prove_ccd_capability());
+    append_functional_row(prove_shape_query());
+    append_functional_row(prove_contact_events());
+    append_functional_row(prove_joint_reaction());
     result.matrix.push_back(prove_hulls_compounds());
 
     const ScenarioResult sleep =
@@ -2463,6 +2450,8 @@ struct CrtStressProbeResult {
         .capability = "radial_sleep",
         .status = sleep.violations.empty() ? CapabilityStatus::Pass
                                            : CapabilityStatus::Blocked,
+        .functional_status = sleep.violations.empty() ? CapabilityStatus::Pass
+                                                      : CapabilityStatus::Blocked,
         .detail = sleep.violations.empty()
             ? "the public radial-gravity pile satisfies every fixed sleep limit"
             : "the public radial-gravity pile violates at least one fixed sleep limit",
@@ -2763,6 +2752,14 @@ void append_capability_row(std::string& output, const CapabilityRow& row)
     } else {
         append_json_string(output, row.fallback);
     }
+    append_json_name(output, "functional_status", first);
+    append_json_string(output, capability_status_name(row.functional_status));
+    append_json_name(output, "functional_fallback", first);
+    if (row.functional_fallback.empty()) {
+        output += "null";
+    } else {
+        append_json_string(output, row.functional_fallback);
+    }
     append_json_name(output, "detail", first);
     append_json_string(output, row.detail);
     append_json_name(output, "values", first);
@@ -2918,17 +2915,55 @@ void append_memory_observation(
     };
     append_json_name(output, "available", working_first);
     output += memory.working_set_available ? "true" : "false";
+    append_json_name(output, "stable", working_first);
+    output += memory.working_set_stable ? "true" : "false";
+    append_json_name(output, "terminal_growth", working_first);
+    output += memory.working_set_terminal_growth ? "true" : "false";
+    append_json_name(output, "assessment_status", working_first);
+    append_json_string(output, memory.working_set_assessment_status);
+    append_json_name(output, "gate_status", working_first);
+    append_json_string(output, memory.working_set_gate_status);
+    append_json_name(output, "gate_applied", working_first);
+    output += memory.working_set_gate_applied ? "true" : "false";
+    append_json_name(output, "budget_qualified", working_first);
+    output += memory.working_set_budget_qualified ? "true" : "false";
+    append_json_name(output, "budget_scope", working_first);
+    append_json_string(output, memory.working_set_budget_scope);
     working_integer("baseline_last_bytes", memory.working_set_baseline_bytes);
-    working_integer("baseline_min_bytes", memory.working_set_baseline_min_bytes);
+    working_integer("baseline_full_min_bytes", memory.working_set_baseline_full_min_bytes);
+    working_integer(
+        "baseline_central_min_bytes",
+        memory.working_set_baseline_central_min_bytes);
     working_integer("baseline_median_bytes", memory.working_set_baseline_median_bytes);
-    working_integer("baseline_max_bytes", memory.working_set_baseline_max_bytes);
+    working_integer(
+        "baseline_central_max_bytes",
+        memory.working_set_baseline_central_max_bytes);
+    working_integer("baseline_full_max_bytes", memory.working_set_baseline_full_max_bytes);
     working_integer("final_last_bytes", memory.working_set_final_bytes);
-    working_integer("final_min_bytes", memory.working_set_final_min_bytes);
+    working_integer("final_full_min_bytes", memory.working_set_final_full_min_bytes);
+    working_integer(
+        "final_central_min_bytes",
+        memory.working_set_final_central_min_bytes);
     working_integer("final_median_bytes", memory.working_set_final_median_bytes);
-    working_integer("final_max_bytes", memory.working_set_final_max_bytes);
+    working_integer(
+        "final_central_max_bytes",
+        memory.working_set_final_central_max_bytes);
+    working_integer("final_full_max_bytes", memory.working_set_final_full_max_bytes);
     working_integer("peak_bytes", memory.working_set_peak_bytes);
     working_number("growth_ratio", memory.working_set_growth_ratio);
     working_number("instant_growth_ratio", memory.working_set_instant_growth_ratio);
+    working_number(
+        "warmup_trimmed_span_ratio",
+        memory.working_set_warmup_trimmed_span_ratio);
+    working_number(
+        "warmup_full_span_ratio",
+        memory.working_set_warmup_full_span_ratio);
+    working_number(
+        "measured_trimmed_span_ratio",
+        memory.working_set_measured_trimmed_span_ratio);
+    working_number(
+        "measured_full_span_ratio",
+        memory.working_set_measured_full_span_ratio);
     append_json_name(output, "warmup_samples", working_first);
     append_size_array(output, memory.working_set_warmup_samples);
     append_json_name(output, "measured_samples", working_first);
@@ -3396,24 +3431,6 @@ PrivateCommitGateMode evaluate_private_commit_gate_mode(
     return PrivateCommitGateMode::ConfigurationMismatch;
 }
 
-bool private_commit_blocks(
-    PrivateCommitGateMode mode, PrivateCommitStatus status) noexcept
-{
-    static_cast<void>(status);
-    return mode == PrivateCommitGateMode::ConfigurationMismatch;
-}
-
-std::int64_t box3d_allocator_byte_count() noexcept
-{
-    return detail::box3d_allocator_byte_count();
-}
-
-bool box3d_allocator_exact_return(
-    std::int64_t baseline, std::int64_t current) noexcept
-{
-    return baseline == current;
-}
-
 CrtMemoryObservation debug_crt_allocation_probe(bool intentional_allocation)
 {
     CrtMemoryObservation result;
@@ -3481,18 +3498,41 @@ RepeatObservation make_repeat_observation(
             .private_commit_measured_full_span_ratio = result.private_commit_measured_full_span_ratio,
             .private_commit_warmup_samples = result.private_commit_warmup_samples,
             .private_commit_cycle_samples = result.private_commit_cycle_samples,
+            .working_set_gate_status = result.working_set_gate_status,
+            .working_set_assessment_status = result.working_set_assessment_status,
+            .working_set_gate_applied = result.working_set_gate_applied,
+            .working_set_budget_qualified = result.working_set_budget_qualified,
+            .working_set_budget_scope = result.working_set_budget_scope,
             .working_set_available = result.working_set_available,
+            .working_set_stable = result.working_set_stable,
+            .working_set_terminal_growth = result.working_set_terminal_growth,
             .working_set_baseline_bytes = result.working_set_baseline_bytes,
-            .working_set_baseline_min_bytes = result.working_set_baseline_low_bytes,
+            .working_set_baseline_full_min_bytes = result.working_set_baseline_low_bytes,
+            .working_set_baseline_central_min_bytes =
+                result.working_set_baseline_central_low_bytes,
             .working_set_baseline_median_bytes = result.working_set_baseline_median_bytes,
-            .working_set_baseline_max_bytes = result.working_set_baseline_max_bytes,
+            .working_set_baseline_central_max_bytes =
+                result.working_set_baseline_central_high_bytes,
+            .working_set_baseline_full_max_bytes = result.working_set_baseline_max_bytes,
             .working_set_final_bytes = result.working_set_final_bytes,
-            .working_set_final_min_bytes = result.working_set_final_low_bytes,
+            .working_set_final_full_min_bytes = result.working_set_final_low_bytes,
+            .working_set_final_central_min_bytes =
+                result.working_set_final_central_low_bytes,
             .working_set_final_median_bytes = result.working_set_final_median_bytes,
-            .working_set_final_max_bytes = result.working_set_final_max_bytes,
+            .working_set_final_central_max_bytes =
+                result.working_set_final_central_high_bytes,
+            .working_set_final_full_max_bytes = result.working_set_final_max_bytes,
             .working_set_peak_bytes = result.working_set_peak_bytes,
             .working_set_growth_ratio = result.working_set_growth_ratio,
             .working_set_instant_growth_ratio = result.working_set_instant_growth_ratio,
+            .working_set_warmup_trimmed_span_ratio =
+                result.working_set_warmup_trimmed_span_ratio,
+            .working_set_warmup_full_span_ratio =
+                result.working_set_warmup_full_span_ratio,
+            .working_set_measured_trimmed_span_ratio =
+                result.working_set_measured_trimmed_span_ratio,
+            .working_set_measured_full_span_ratio =
+                result.working_set_measured_full_span_ratio,
             .working_set_warmup_samples = result.working_set_warmup_samples,
             .working_set_cycle_samples = result.working_set_cycle_samples,
         },
@@ -3521,9 +3561,11 @@ bool has_two_consecutive_samples(
 CapabilityStatus classify_lifecycle_status(
     int completed_cycles,
     int invalid_handles,
-    std::optional<double> private_commit_growth)
+    std::optional<double> private_commit_growth,
+    std::optional<PrivateCommitStatus> working_set_status)
 {
     static_cast<void>(private_commit_growth);
+    static_cast<void>(working_set_status);
     if (completed_cycles != 10000 || invalid_handles != 0) {
         return CapabilityStatus::Blocked;
     }
@@ -3539,30 +3581,6 @@ int scenario_exit_code(
                })
         ? 1
         : 0;
-}
-
-CapabilityStatus canonical_functional_status(const CapabilityRow& row)
-{
-    if (row.capability != "batch_lifecycle") {
-        return row.status;
-    }
-    const auto find_value = [&](std::string_view name) -> std::optional<double> {
-        const auto found = std::ranges::find(row.values, name, &ScenarioValue::name);
-        return found == row.values.end() ? std::nullopt
-                                         : std::optional<double>{found->value};
-    };
-    const auto generation_cycles = find_value("generation_cycles");
-    const auto invalid_handles = find_value("invalid_handles");
-    const bool valid_fixture = !row.fixture_hashes.empty()
-        && std::ranges::all_of(row.fixture_hashes, [](std::uint64_t hash) {
-               return hash != 0;
-           });
-    return generation_cycles && std::isfinite(*generation_cycles)
-            && *generation_cycles == 10000.0 && invalid_handles
-            && std::isfinite(*invalid_handles) && *invalid_handles == 0.0
-            && valid_fixture
-        ? CapabilityStatus::Pass
-        : CapabilityStatus::Blocked;
 }
 
 std::uint64_t hash_capability_rows(std::span<const CapabilityRow> rows)
@@ -3595,18 +3613,19 @@ std::uint64_t hash_capability_rows(std::span<const CapabilityRow> rows)
         ordered_rows, {}, [](const CapabilityRow* row) { return row->capability; });
     for (const CapabilityRow* row : ordered_rows) {
         mix_string(row->capability);
-        mix_u64(static_cast<std::uint64_t>(canonical_functional_status(*row)));
-        mix_string(row->capability == "batch_lifecycle" ? std::string_view{}
-                                                         : std::string_view{row->fallback});
+        mix_u64(static_cast<std::uint64_t>(row->functional_status));
+        mix_string(row->functional_fallback);
         std::vector<const ScenarioValue*> ordered_values;
         for (const ScenarioValue& value : row->values) {
-            const bool runtime_measurement = value.name.find("working_set") != std::string::npos
+            const bool nonfunctional_value =
+                value.name.find("working_set") != std::string::npos
                 || value.name.find("private_commit") != std::string::npos
                 || value.name.find("box3d_allocator") != std::string::npos
                 || value.name.find("crt_") != std::string::npos
+                || value.name.find("warning") != std::string::npos
                 || value.name.find("timing") != std::string::npos
                 || value.name.starts_with("step_") || value.name.ends_with("_ms");
-            if (!runtime_measurement) {
+            if (!nonfunctional_value) {
                 ordered_values.push_back(&value);
             }
         }
@@ -3679,10 +3698,48 @@ std::uint64_t hash_states(std::span<const BodyState> states)
 ScenarioResult ScenarioRunner::run(
     ScenarioKind kind, std::uint64_t seed, int substeps) const
 {
+    return run_with_configuration(
+        kind, seed, substeps, current_runtime_configuration());
+}
+
+ScenarioResult ScenarioRunner::run_with_configuration(
+    ScenarioKind kind,
+    std::uint64_t seed,
+    int substeps,
+    RuntimeConfiguration configuration) const
+{
+    constexpr std::array valid_kinds{
+        ScenarioKind::RadialFall,
+        ScenarioKind::ProjectilePile,
+        ScenarioKind::RadialPile,
+        ScenarioKind::MassRatio,
+        ScenarioKind::Stress,
+        ScenarioKind::CapabilityMatrix,
+    };
+    if (std::ranges::find(valid_kinds, kind) == valid_kinds.end()) {
+        throw std::invalid_argument("unknown ScenarioKind value");
+    }
+    if (evaluate_private_commit_gate_mode(
+            configuration.release_build,
+            configuration.mt_defined,
+            configuration.dll_defined,
+            configuration.debug_defined)
+        == PrivateCommitGateMode::ConfigurationMismatch) {
+        ScenarioResult mismatch = make_result(kind, seed, substeps);
+        add_violation(
+            mismatch,
+            "configuration_mismatch",
+            "Release scenarios require the static /MT CRT",
+            0,
+            {},
+            {},
+            {{"required_crt", "/MT"}, {"detected_crt", "/MD or non-/MT"}});
+        return mismatch;
+    }
     ScenarioWatchdog watchdog(kind, seed);
     WatchdogActivation activation(watchdog);
     watchdog.checkpoint(0);
-    const std::int64_t allocator_baseline = box3d_allocator_byte_count();
+    const std::int64_t allocator_baseline = detail::box3d_allocator_byte_count();
     ScenarioResult result;
     if (kind == ScenarioKind::RadialFall) {
         result = run_radial_fall(seed, substeps);
@@ -3696,10 +3753,8 @@ ScenarioResult ScenarioRunner::run(
         result = run_stress(seed, substeps);
     } else if (kind == ScenarioKind::CapabilityMatrix) {
         result = run_capability_matrix(seed, substeps);
-    } else {
-        throw std::invalid_argument("unknown ScenarioKind value");
     }
-    const std::int64_t allocator_final = box3d_allocator_byte_count();
+    const std::int64_t allocator_final = detail::box3d_allocator_byte_count();
     result.box3d_allocator.baseline_bytes = allocator_baseline;
     result.box3d_allocator.final_bytes = allocator_final;
     result.box3d_allocator.max_abs_delta = std::max(

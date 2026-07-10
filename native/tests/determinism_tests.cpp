@@ -167,6 +167,10 @@ NINHO_TEST("scenario JSON preserves memory telemetry for every repeat")
     result.private_commit_warmup_samples.assign(10, 100);
     result.private_commit_cycle_samples.assign(10, 101);
     result.working_set_available = true;
+    result.working_set_assessment_status = "growth";
+    result.working_set_stable = true;
+    result.working_set_terminal_growth = true;
+    result.working_set_gate_status = "diagnostic";
     result.working_set_warmup_samples.assign(10, 200);
     result.working_set_cycle_samples.assign(10, 250);
     result.repeat_observations.push_back(make_repeat_observation(1, result));
@@ -182,6 +186,9 @@ NINHO_TEST("scenario JSON preserves memory telemetry for every repeat")
         != std::string::npos);
     NINHO_REQUIRE(json.find("\"working_set\":{\"available\":true")
         != std::string::npos);
+    NINHO_REQUIRE(json.find("\"assessment_status\":\"growth\"")
+        != std::string::npos);
+    NINHO_REQUIRE(json.find("\"gate_applied\":false") != std::string::npos);
 }
 
 NINHO_TEST("scenario JSON rejects malformed UTF-8")
@@ -243,6 +250,19 @@ NINHO_TEST("private budget assessments warn without changing normative exit")
             .code = "private_commit_budget_unqualified",
             .message = "budget deferred",
         });
+        NINHO_REQUIRE(scenario_exit_code(std::array{result}, false) == 0);
+    }
+}
+
+NINHO_TEST("working set assessments never change normative exit")
+{
+    for (const std::string_view assessment : {"growth", "unstable"}) {
+        ScenarioResult result;
+        result.name = "working_set_" + std::string{assessment};
+        result.working_set_assessment_status = assessment;
+        result.working_set_gate_status = "diagnostic";
+        result.working_set_gate_applied = false;
+        result.working_set_budget_qualified = false;
         NINHO_REQUIRE(scenario_exit_code(std::array{result}, false) == 0);
     }
 }

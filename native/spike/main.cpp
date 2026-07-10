@@ -1,5 +1,7 @@
 #include <ninho/physics/scenario.hpp>
 
+#include "box3d_allocator_probe.hpp"
+
 #include <algorithm>
 #include <array>
 #include <charconv>
@@ -252,7 +254,8 @@ int main(int argc, char** argv)
         .substeps = options->substeps,
         .repeat = options->repeat,
     };
-    report.process_box3d_allocator.baseline_bytes = box3d_allocator_byte_count();
+    report.process_box3d_allocator.baseline_bytes =
+        detail::box3d_allocator_byte_count();
     report.process_box3d_allocator.final_bytes =
         report.process_box3d_allocator.baseline_bytes;
     report.process_box3d_allocator.exact_return =
@@ -321,7 +324,8 @@ int main(int argc, char** argv)
         report.scenarios.push_back(std::move(*first_result));
     }
 
-    report.process_box3d_allocator.final_bytes = box3d_allocator_byte_count();
+    report.process_box3d_allocator.final_bytes =
+        detail::box3d_allocator_byte_count();
     report.process_box3d_allocator.max_abs_delta = std::abs(
         report.process_box3d_allocator.final_bytes
         - report.process_box3d_allocator.baseline_bytes);

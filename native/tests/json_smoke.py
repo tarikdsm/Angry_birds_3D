@@ -95,17 +95,82 @@ def validate_stress_observation(observation: dict, release_build: bool) -> None:
         raise AssertionError("WorkingSetSize diagnostics are unavailable")
     working_expected = {
         "baseline_last_bytes": working["warmup_samples"][-1],
-        "baseline_min_bytes": working_baseline[0],
+        "baseline_full_min_bytes": working_baseline[0],
+        "baseline_central_min_bytes": working_baseline[1],
         "baseline_median_bytes": working_baseline[2],
-        "baseline_max_bytes": working_baseline[4],
+        "baseline_central_max_bytes": working_baseline[3],
+        "baseline_full_max_bytes": working_baseline[4],
         "final_last_bytes": working["measured_samples"][-1],
-        "final_min_bytes": working_final[0],
+        "final_full_min_bytes": working_final[0],
+        "final_central_min_bytes": working_final[1],
         "final_median_bytes": working_final[2],
-        "final_max_bytes": working_final[4],
+        "final_central_max_bytes": working_final[3],
+        "final_full_max_bytes": working_final[4],
     }
     for name, expected in working_expected.items():
         if working[name] != expected:
             raise AssertionError(f"working set {name}: {working[name]} != {expected}")
+    working_growth = max(
+        0.0, (working_final[2] - working_baseline[2]) / working_baseline[2]
+    )
+    working_warmup_trimmed = (
+        working_baseline[3] - working_baseline[1]
+    ) / working_baseline[2]
+    working_warmup_full = (
+        working_baseline[4] - working_baseline[0]
+    ) / working_baseline[2]
+    working_measured_trimmed = (
+        working_final[3] - working_final[1]
+    ) / working_final[2]
+    working_measured_full = (
+        working_final[4] - working_final[0]
+    ) / working_final[2]
+    working_instant = max(
+        0.0,
+        (working["measured_samples"][-1] - working["warmup_samples"][-1])
+        / working["warmup_samples"][-1],
+    )
+    working_terminal_threshold = 1.05 * working_baseline[2]
+    working_terminal = (
+        working["measured_samples"][8] > working_terminal_threshold
+        and working["measured_samples"][9] > working_terminal_threshold
+    )
+    working_stable = (
+        working_warmup_trimmed <= 0.05 and working_measured_trimmed <= 0.05
+    )
+    if working_warmup_trimmed > 0.05:
+        working_assessment = "unstable"
+    elif working_growth > 0.05 or working_terminal:
+        working_assessment = "growth"
+    elif working_measured_trimmed > 0.05:
+        working_assessment = "unstable"
+    else:
+        working_assessment = "pass"
+    for name, expected in {
+        "growth_ratio": working_growth,
+        "instant_growth_ratio": working_instant,
+        "warmup_trimmed_span_ratio": working_warmup_trimmed,
+        "warmup_full_span_ratio": working_warmup_full,
+        "measured_trimmed_span_ratio": working_measured_trimmed,
+        "measured_full_span_ratio": working_measured_full,
+    }.items():
+        assert_close(working[name], expected, f"working set {name}")
+    if working["terminal_growth"] != working_terminal:
+        raise AssertionError("working set terminal guard mismatch")
+    if working["stable"] != working_stable:
+        raise AssertionError("working set stability mismatch")
+    if working["assessment_status"] != working_assessment:
+        raise AssertionError("working set assessment mismatch")
+    if working["gate_status"] != "diagnostic" or working["gate_applied"]:
+        raise AssertionError("working set must remain diagnostic-only")
+    if working["budget_qualified"]:
+        raise AssertionError("working set budget must remain unqualified")
+    if working["budget_scope"] != "future_packaged_reference_hardware":
+        raise AssertionError("unexpected working set budget scope")
+    if working["peak_bytes"] < max(
+        working["warmup_samples"] + working["measured_samples"]
+    ):
+        raise AssertionError("working set peak is below a raw sample")
 
 
 def validate_repeat_observations(document: dict) -> None:
@@ -264,6 +329,14 @@ def main() -> int:
             raise AssertionError("expected all eight capability rows")
         if any(row["status"] == "blocked" for row in document["matrix"]):
             raise AssertionError("capability matrix contains a blocked row")
+        for row in document["matrix"]:
+            if row["functional_status"] not in {"pass", "fallback", "blocked"}:
+                raise AssertionError("invalid functional capability status")
+            if row["functional_status"] == "fallback":
+                if not row["functional_fallback"]:
+                    raise AssertionError("functional fallback is missing")
+            elif row["functional_fallback"] is not None:
+                raise AssertionError("unexpected functional fallback")
         if any(not row["fixture_hashes"] for row in document["matrix"]):
             raise AssertionError("capability matrix row is missing fixture hashes")
 

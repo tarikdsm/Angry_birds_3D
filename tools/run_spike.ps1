@@ -37,6 +37,17 @@ if (Test-Path -LiteralPath $report) {
                 "unexpected recommendation: $($document.recommendation)")
             exit 1
         }
+        if ($document.budget_qualification.status -ne 'deferred' -or
+            $document.budget_qualification.warning -ne
+                'private_commit_budget_unqualified') {
+            [Console]::Error.WriteLine('private commit budget must remain deferred')
+            exit 1
+        }
+        if (-not (@($document.warnings).code -contains
+                'private_commit_budget_unqualified')) {
+            [Console]::Error.WriteLine('missing permanent private budget warning')
+            exit 1
+        }
     }
 }
 

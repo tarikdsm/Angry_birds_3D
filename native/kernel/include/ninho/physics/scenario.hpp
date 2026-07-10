@@ -67,6 +67,8 @@ struct CapabilityRow {
     std::string capability;
     CapabilityStatus status{CapabilityStatus::Blocked};
     std::string fallback;
+    CapabilityStatus functional_status{CapabilityStatus::Blocked};
+    std::string functional_fallback;
     std::string detail;
     std::vector<ScenarioValue> values;
     std::vector<std::uint64_t> fixture_hashes;
@@ -152,18 +154,33 @@ struct MemoryObservation {
     std::vector<std::size_t> private_commit_warmup_samples;
     std::vector<std::size_t> private_commit_cycle_samples;
 
+    std::string working_set_gate_status{"diagnostic"};
+    std::string working_set_assessment_status{"unavailable"};
+    bool working_set_gate_applied{};
+    bool working_set_budget_qualified{};
+    std::string working_set_budget_scope{"future_packaged_reference_hardware"};
     bool working_set_available{};
+    bool working_set_stable{};
+    bool working_set_terminal_growth{};
     std::size_t working_set_baseline_bytes{};
-    std::size_t working_set_baseline_min_bytes{};
+    std::size_t working_set_baseline_full_min_bytes{};
+    std::size_t working_set_baseline_central_min_bytes{};
     std::size_t working_set_baseline_median_bytes{};
-    std::size_t working_set_baseline_max_bytes{};
+    std::size_t working_set_baseline_central_max_bytes{};
+    std::size_t working_set_baseline_full_max_bytes{};
     std::size_t working_set_final_bytes{};
-    std::size_t working_set_final_min_bytes{};
+    std::size_t working_set_final_full_min_bytes{};
+    std::size_t working_set_final_central_min_bytes{};
     std::size_t working_set_final_median_bytes{};
-    std::size_t working_set_final_max_bytes{};
+    std::size_t working_set_final_central_max_bytes{};
+    std::size_t working_set_final_full_max_bytes{};
     std::size_t working_set_peak_bytes{};
     double working_set_growth_ratio{};
     double working_set_instant_growth_ratio{};
+    double working_set_warmup_trimmed_span_ratio{};
+    double working_set_warmup_full_span_ratio{};
+    double working_set_measured_trimmed_span_ratio{};
+    double working_set_measured_full_span_ratio{};
     std::vector<std::size_t> working_set_warmup_samples;
     std::vector<std::size_t> working_set_cycle_samples;
 };
@@ -245,18 +262,33 @@ struct ScenarioResult {
     std::vector<std::size_t> private_commit_warmup_samples;
     std::vector<std::size_t> private_commit_cycle_samples;
 
+    std::string working_set_gate_status{"diagnostic"};
+    std::string working_set_assessment_status{"unavailable"};
+    bool working_set_gate_applied{};
+    bool working_set_budget_qualified{};
+    std::string working_set_budget_scope{"future_packaged_reference_hardware"};
     bool working_set_available{};
+    bool working_set_stable{};
+    bool working_set_terminal_growth{};
     std::size_t working_set_baseline_bytes{};
     std::size_t working_set_baseline_low_bytes{};
+    std::size_t working_set_baseline_central_low_bytes{};
     std::size_t working_set_baseline_median_bytes{};
+    std::size_t working_set_baseline_central_high_bytes{};
     std::size_t working_set_baseline_max_bytes{};
     std::size_t working_set_peak_bytes{};
     std::size_t working_set_final_bytes{};
     std::size_t working_set_final_low_bytes{};
+    std::size_t working_set_final_central_low_bytes{};
     std::size_t working_set_final_median_bytes{};
+    std::size_t working_set_final_central_high_bytes{};
     std::size_t working_set_final_max_bytes{};
     double working_set_growth_ratio{};
     double working_set_instant_growth_ratio{};
+    double working_set_warmup_trimmed_span_ratio{};
+    double working_set_warmup_full_span_ratio{};
+    double working_set_measured_trimmed_span_ratio{};
+    double working_set_measured_full_span_ratio{};
     std::vector<std::size_t> working_set_warmup_samples;
     std::vector<std::size_t> working_set_cycle_samples;
     int allocator_warmup_cycles{};
@@ -286,6 +318,13 @@ struct ScenarioReport {
     [[nodiscard]] std::string to_json() const;
 };
 
+struct RuntimeConfiguration {
+    bool release_build{};
+    bool mt_defined{};
+    bool dll_defined{};
+    bool debug_defined{};
+};
+
 [[nodiscard]] std::uint64_t hash_states(std::span<const BodyState> states);
 [[nodiscard]] double max_rolling_energy_growth(
     std::span<const double> energies, std::size_t window, double epsilon);
@@ -294,23 +333,18 @@ struct ScenarioReport {
     std::span<const std::size_t> measured_samples);
 [[nodiscard]] PrivateCommitGateMode evaluate_private_commit_gate_mode(
     bool release_build, bool mt_defined, bool dll_defined, bool debug_defined);
-[[nodiscard]] bool private_commit_blocks(
-    PrivateCommitGateMode mode, PrivateCommitStatus status) noexcept;
-[[nodiscard]] std::int64_t box3d_allocator_byte_count() noexcept;
-[[nodiscard]] bool box3d_allocator_exact_return(
-    std::int64_t baseline, std::int64_t current) noexcept;
 [[nodiscard]] CrtMemoryObservation debug_crt_allocation_probe(
     bool intentional_allocation);
 [[nodiscard]] RepeatObservation make_repeat_observation(
     int repeat_index, const ScenarioResult& result);
 [[nodiscard]] std::uint64_t hash_capability_rows(std::span<const CapabilityRow> rows);
-[[nodiscard]] CapabilityStatus canonical_functional_status(const CapabilityRow& row);
 [[nodiscard]] bool has_two_consecutive_samples(
     std::span<const double> samples, double threshold);
 [[nodiscard]] CapabilityStatus classify_lifecycle_status(
     int completed_cycles,
     int invalid_handles,
-    std::optional<double> private_commit_growth);
+    std::optional<double> private_commit_growth,
+    std::optional<PrivateCommitStatus> working_set_status = std::nullopt);
 [[nodiscard]] int scenario_exit_code(
     std::span<const ScenarioResult> scenarios, bool hash_mismatch);
 [[nodiscard]] std::optional<StateValidationFailure> validate_body_state(
@@ -329,6 +363,11 @@ public:
 
     [[nodiscard]] ScenarioResult run(
         ScenarioKind kind, std::uint64_t seed, int substeps) const;
+    [[nodiscard]] ScenarioResult run_with_configuration(
+        ScenarioKind kind,
+        std::uint64_t seed,
+        int substeps,
+        RuntimeConfiguration configuration) const;
 };
 
 }

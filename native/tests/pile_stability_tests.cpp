@@ -101,25 +101,14 @@ NINHO_TEST("private commit assessment uses trimmed central tail protocol")
         == PrivateCommitStatus::Unavailable);
 }
 
-NINHO_TEST("Box3 allocator returns exactly to zero after a complete world")
+NINHO_TEST("Box3 allocator observation returns exactly to zero after a complete scenario")
 {
-    const std::int64_t baseline = box3d_allocator_byte_count();
-    NINHO_REQUIRE(baseline == 0);
-    {
-        PhysicsWorld world(WorldConfig{.surface_gravity = 0, .max_bodies = 2});
-        const auto a = world.create_body(BodyDesc::dynamic_sphere(0.5f, {}, 10));
-        const auto b = world.create_body(
-            BodyDesc::dynamic_sphere(0.5f, {{1, 0, 0}, {}}, 10));
-        NINHO_REQUIRE(a);
-        NINHO_REQUIRE(b);
-        NINHO_REQUIRE(world.create_joint(DistanceJointDesc{.a = a.value, .b = b.value}));
-        world.step();
-        NINHO_REQUIRE(box3d_allocator_byte_count() > baseline);
-    }
-    NINHO_REQUIRE(box3d_allocator_byte_count() == baseline);
-    NINHO_REQUIRE(!box3d_allocator_exact_return(0, 1));
-    NINHO_REQUIRE(!box3d_allocator_exact_return(0, -1));
-    NINHO_REQUIRE(box3d_allocator_exact_return(0, 0));
+    const ScenarioResult result =
+        ScenarioRunner{}.run(ScenarioKind::RadialFall, 1, 4);
+    NINHO_REQUIRE(result.box3d_allocator.baseline_bytes == 0);
+    NINHO_REQUIRE(result.box3d_allocator.final_bytes == 0);
+    NINHO_REQUIRE(result.box3d_allocator.max_abs_delta == 0);
+    NINHO_REQUIRE(result.box3d_allocator.exact_return);
 }
 
 NINHO_TEST("private commit gate scope follows the real CRT configuration")
@@ -133,16 +122,49 @@ NINHO_TEST("private commit gate scope follows the real CRT configuration")
     NINHO_REQUIRE(
         evaluate_private_commit_gate_mode(false, true, false, true)
         == PrivateCommitGateMode::Diagnostic);
-    NINHO_REQUIRE(!private_commit_blocks(
-        PrivateCommitGateMode::Diagnostic, PrivateCommitStatus::Growth));
-    NINHO_REQUIRE(!private_commit_blocks(
-        PrivateCommitGateMode::Diagnostic, PrivateCommitStatus::Unstable));
-    NINHO_REQUIRE(!private_commit_blocks(
-        PrivateCommitGateMode::ReleaseMt, PrivateCommitStatus::Growth));
-    NINHO_REQUIRE(!private_commit_blocks(
-        PrivateCommitGateMode::ReleaseMt, PrivateCommitStatus::Unavailable));
-    NINHO_REQUIRE(private_commit_blocks(
-        PrivateCommitGateMode::ConfigurationMismatch, PrivateCommitStatus::Pass));
+}
+
+NINHO_TEST("Release dynamic CRT mismatch blocks every scenario before dispatch")
+{
+    constexpr RuntimeConfiguration release_md{
+        .release_build = true,
+        .mt_defined = true,
+        .dll_defined = true,
+        .debug_defined = false,
+    };
+    constexpr std::array kinds{
+        ScenarioKind::RadialFall,
+        ScenarioKind::ProjectilePile,
+        ScenarioKind::RadialPile,
+        ScenarioKind::MassRatio,
+        ScenarioKind::Stress,
+        ScenarioKind::CapabilityMatrix,
+    };
+    for (const ScenarioKind kind : kinds) {
+        const ScenarioResult result = ScenarioRunner{}.run_with_configuration(
+            kind, 9, 4, release_md);
+        NINHO_REQUIRE(result.ticks == 0);
+        NINHO_REQUIRE(result.violations.size() == 1);
+        NINHO_REQUIRE(result.violations.front().code == "configuration_mismatch");
+        NINHO_REQUIRE(scenario_exit_code(std::array{result}, false) == 1);
+    }
+}
+
+NINHO_TEST("Debug static CRT configuration remains diagnostic")
+{
+    constexpr RuntimeConfiguration debug_mtd{
+        .release_build = false,
+        .mt_defined = true,
+        .dll_defined = false,
+        .debug_defined = true,
+    };
+    NINHO_REQUIRE(
+        evaluate_private_commit_gate_mode(
+            debug_mtd.release_build,
+            debug_mtd.mt_defined,
+            debug_mtd.dll_defined,
+            debug_mtd.debug_defined)
+        == PrivateCommitGateMode::Diagnostic);
 }
 
 NINHO_TEST("Debug CRT probe detects and then frees an intentional allocation")
@@ -240,9 +262,54 @@ NINHO_TEST("stress uses the full fixed topology after allocator warmup")
     NINHO_REQUIRE(result.working_set_warmup_samples.size() == 10);
     NINHO_REQUIRE(result.working_set_cycle_samples.size() == 10);
     NINHO_REQUIRE(result.working_set_baseline_low_bytes > 0);
+    NINHO_REQUIRE(result.working_set_baseline_central_low_bytes > 0);
+    NINHO_REQUIRE(result.working_set_baseline_central_high_bytes > 0);
     NINHO_REQUIRE(result.working_set_final_low_bytes > 0);
+    NINHO_REQUIRE(result.working_set_final_central_low_bytes > 0);
+    NINHO_REQUIRE(result.working_set_final_central_high_bytes > 0);
     NINHO_REQUIRE(result.working_set_final_low_bytes <= result.working_set_peak_bytes);
+    const PrivateCommitAssessment expected_working_set = assess_private_commit(
+        result.working_set_warmup_samples,
+        result.working_set_cycle_samples);
+    const std::string_view expected_assessment = [&] {
+        switch (expected_working_set.status) {
+        case PrivateCommitStatus::Pass:
+            return std::string_view{"pass"};
+        case PrivateCommitStatus::Growth:
+            return std::string_view{"growth"};
+        case PrivateCommitStatus::Unstable:
+            return std::string_view{"unstable"};
+        case PrivateCommitStatus::Unavailable:
+            return std::string_view{"unavailable"};
+        }
+        return std::string_view{"unavailable"};
+    }();
+    NINHO_REQUIRE(
+        result.working_set_assessment_status
+        == expected_assessment);
+    NINHO_REQUIRE(result.working_set_stable == expected_working_set.stable);
+    NINHO_REQUIRE(
+        result.working_set_terminal_growth
+        == expected_working_set.terminal_growth);
+    NINHO_REQUIRE_NEAR(
+        result.working_set_warmup_trimmed_span_ratio,
+        expected_working_set.warmup_trimmed_span_ratio,
+        1.0e-12);
+    NINHO_REQUIRE_NEAR(
+        result.working_set_warmup_full_span_ratio,
+        expected_working_set.warmup_full_span_ratio,
+        1.0e-12);
+    NINHO_REQUIRE_NEAR(
+        result.working_set_measured_trimmed_span_ratio,
+        expected_working_set.measured_trimmed_span_ratio,
+        1.0e-12);
+    NINHO_REQUIRE_NEAR(
+        result.working_set_measured_full_span_ratio,
+        expected_working_set.measured_full_span_ratio,
+        1.0e-12);
+    NINHO_REQUIRE(!result.working_set_gate_applied);
+    NINHO_REQUIRE(!result.working_set_budget_qualified);
+    NINHO_REQUIRE(result.working_set_gate_status == "diagnostic");
 #endif
-    NINHO_REQUIRE(result.working_set_growth_ratio <= 0.05);
     NINHO_REQUIRE(result.violations.empty());
 }

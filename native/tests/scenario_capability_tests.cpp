@@ -68,11 +68,14 @@ NINHO_TEST("capability row hash covers every canonical field and ignores value o
     std::vector<CapabilityRow> rows{
         {.capability = "a",
          .status = CapabilityStatus::Pass,
+         .functional_status = CapabilityStatus::Pass,
          .values = {{"z", 2, "m"}, {"a", 1, "m"}},
          .fixture_hashes = {11, 22}},
         {.capability = "b",
          .status = CapabilityStatus::Fallback,
          .fallback = "approved",
+         .functional_status = CapabilityStatus::Fallback,
+         .functional_fallback = "approved",
          .values = {{"value", 3, "N"}},
          .fixture_hashes = {33}},
     };
@@ -92,9 +95,15 @@ NINHO_TEST("capability row hash covers every canonical field and ignores value o
     NINHO_REQUIRE(hash_capability_rows(changed) != baseline);
     changed = rows;
     changed[0].status = CapabilityStatus::Blocked;
-    NINHO_REQUIRE(hash_capability_rows(changed) != baseline);
+    NINHO_REQUIRE(hash_capability_rows(changed) == baseline);
     changed = rows;
     changed[0].fallback = "changed";
+    NINHO_REQUIRE(hash_capability_rows(changed) == baseline);
+    changed = rows;
+    changed[0].functional_status = CapabilityStatus::Blocked;
+    NINHO_REQUIRE(hash_capability_rows(changed) != baseline);
+    changed = rows;
+    changed[1].functional_fallback = "changed";
     NINHO_REQUIRE(hash_capability_rows(changed) != baseline);
     changed = rows;
     changed[0].fixture_hashes[0] += 1;
@@ -106,6 +115,7 @@ NINHO_TEST("lifecycle hash separates functional proof from memory gate")
     const CapabilityRow lifecycle{
         .capability = "batch_lifecycle",
         .status = CapabilityStatus::Pass,
+        .functional_status = CapabilityStatus::Pass,
         .values = {
             {"generation_cycles", 10000.0, "count"},
             {"invalid_handles", 0.0, "count"},
@@ -119,7 +129,7 @@ NINHO_TEST("lifecycle hash separates functional proof from memory gate")
         },
         .fixture_hashes = {0x0000000200000000ull},
     };
-    NINHO_REQUIRE(canonical_functional_status(lifecycle) == CapabilityStatus::Pass);
+    NINHO_REQUIRE(lifecycle.functional_status == CapabilityStatus::Pass);
     const std::uint64_t baseline = hash_capability_rows(std::array{lifecycle});
 
     auto memory_blocked = lifecycle;
@@ -136,8 +146,7 @@ NINHO_TEST("lifecycle hash separates functional proof from memory gate")
 
     auto invalid_handles = lifecycle;
     invalid_handles.values[1].value = 1.0;
-    NINHO_REQUIRE(
-        canonical_functional_status(invalid_handles) == CapabilityStatus::Blocked);
+    invalid_handles.functional_status = CapabilityStatus::Blocked;
     NINHO_REQUIRE(hash_capability_rows(std::array{invalid_handles}) != baseline);
 
     auto incomplete = lifecycle;
@@ -147,6 +156,48 @@ NINHO_TEST("lifecycle hash separates functional proof from memory gate")
     auto changed_fixture = lifecycle;
     changed_fixture.fixture_hashes[0] += 1;
     NINHO_REQUIRE(hash_capability_rows(std::array{changed_fixture}) != baseline);
+}
+
+NINHO_TEST("hull and replay allocator gates are excluded from canonical hashes")
+{
+    for (const std::string_view capability : {"hulls_compounds", "upstream_replay"}) {
+        const CapabilityRow functional{
+            .capability = std::string{capability},
+            .status = CapabilityStatus::Pass,
+            .functional_status = CapabilityStatus::Pass,
+            .values = {
+                {"functional_value", 1.0, "bool"},
+                {"box3d_allocator_baseline_bytes", 0.0, "bytes"},
+                {"box3d_allocator_final_bytes", 0.0, "bytes"},
+            },
+            .fixture_hashes = {77},
+        };
+        const std::uint64_t baseline = hash_capability_rows(std::array{functional});
+        auto allocator_blocked = functional;
+        allocator_blocked.status = CapabilityStatus::Blocked;
+        allocator_blocked.values[2].value = 64.0;
+        NINHO_REQUIRE(
+            hash_capability_rows(std::array{allocator_blocked}) == baseline);
+        auto functional_blocked = functional;
+        functional_blocked.functional_status = CapabilityStatus::Blocked;
+        NINHO_REQUIRE(hash_capability_rows(std::array{functional_blocked}) != baseline);
+    }
+}
+
+NINHO_TEST("replay functional fallback remains canonical")
+{
+    CapabilityRow replay{
+        .capability = "upstream_replay",
+        .status = CapabilityStatus::Fallback,
+        .fallback = "input_metric_replay",
+        .functional_status = CapabilityStatus::Fallback,
+        .functional_fallback = "input_metric_replay",
+        .values = {{"validated", 0.0, "bool"}},
+        .fixture_hashes = {88},
+    };
+    const std::uint64_t baseline = hash_capability_rows(std::array{replay});
+    replay.functional_fallback = "different_functional_fallback";
+    NINHO_REQUIRE(hash_capability_rows(std::array{replay}) != baseline);
 }
 
 NINHO_TEST("joint fallback requires two consecutive qualifying ticks")
@@ -167,6 +218,14 @@ NINHO_TEST("lifecycle ignores private commit when functional evidence passes")
         == CapabilityStatus::Pass);
     NINHO_REQUIRE(
         classify_lifecycle_status(10000, 0, 0.051)
+        == CapabilityStatus::Pass);
+    NINHO_REQUIRE(
+        classify_lifecycle_status(
+            10000, 0, 0.051, PrivateCommitStatus::Growth)
+        == CapabilityStatus::Pass);
+    NINHO_REQUIRE(
+        classify_lifecycle_status(
+            10000, 0, 0.051, PrivateCommitStatus::Unstable)
         == CapabilityStatus::Pass);
     NINHO_REQUIRE(
         classify_lifecycle_status(9999, 0, 0.0)
