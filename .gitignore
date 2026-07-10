@@ -8,5 +8,6 @@
 /game/.godot/
 /game/bin/*.dll
 /game/bin/*.pdb
+/game/bin/*.ilk
 *.user
 *.suo

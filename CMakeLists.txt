@@ -13,6 +13,23 @@ include(cmake/Dependencies.cmake)
 include(CTest)
 add_subdirectory(native/kernel)
 add_subdirectory(native/spike)
+if(NINHO_BUILD_GDEXTENSION)
+  add_subdirectory(native/extension)
+endif()
 if(BUILD_TESTING)
   add_subdirectory(native/tests)
+endif()
+
+if(NINHO_BUILD_GDEXTENSION AND BUILD_TESTING)
+  find_program(NINHO_DUMPBIN_EXECUTABLE dumpbin REQUIRED)
+  set(_ninho_gdextension_dll
+    "${PROJECT_SOURCE_DIR}/game/bin/ninho_physics.windows.${GODOTCPP_TARGET}.x86_64.dll")
+  add_test(
+    NAME gdextension_binary_exists
+    COMMAND "${CMAKE_COMMAND}"
+      "-DDLL_PATH=${_ninho_gdextension_dll}"
+      "-DDUMPBIN_EXECUTABLE=${NINHO_DUMPBIN_EXECUTABLE}"
+      -P "${PROJECT_SOURCE_DIR}/cmake/VerifyGDExtension.cmake"
+  )
+  unset(_ninho_gdextension_dll)
 endif()
