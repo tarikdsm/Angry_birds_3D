@@ -483,35 +483,71 @@ NINHO_TEST("capability queued stale joint commands become safe no ops after body
 {
     {
         PhysicsWorld world(WorldConfig{.surface_gravity = 0});
-        const BodyHandle a =
-            world.create_body(BodyDesc::dynamic_sphere(0.5f, {}, 10)).value;
-        const BodyHandle b = world.create_body(
-            BodyDesc::dynamic_sphere(0.5f, {{2, 0, 0}, {}}, 10)).value;
-        const JointHandle joint = world.create_joint(
-            DistanceJointDesc{.a = a, .b = b, .length = 2}).value;
+        const auto a_result =
+            world.create_body(BodyDesc::dynamic_sphere(0.5f, {}, 10));
+        const auto b_result = world.create_body(
+            BodyDesc::dynamic_sphere(0.5f, {{2, 0, 0}, {}}, 10));
+        NINHO_REQUIRE(a_result.status.ok());
+        NINHO_REQUIRE(b_result.status.ok());
+        const BodyHandle a = a_result.value;
+        const BodyHandle b = b_result.value;
+        const auto joint_result = world.create_joint(
+            DistanceJointDesc{.a = a, .b = b, .length = 2});
+        NINHO_REQUIRE(joint_result.status.ok());
+        const JointHandle joint = joint_result.value;
+
+        // Queue order: stale CreateJoint, DestroyBody, Impulse, CreateBody.
         NINHO_REQUIRE(world.destroy_body(a).ok());
+        NINHO_REQUIRE(world.apply_impulse(b, {10, 0, 0}, {2, 0, 0}).ok());
+        const auto third_result = world.create_body(
+            BodyDesc::dynamic_sphere(0.5f, {{10, 0, 0}, {}}, 10));
+        NINHO_REQUIRE(third_result.status.ok());
         world.step();
         NINHO_REQUIRE(!world.joint_reaction(joint).has_value());
         NINHO_REQUIRE(world.destroy_joint(joint).code == StatusCode::InvalidHandle);
-        NINHO_REQUIRE(world.state(b).has_value());
+        const auto b_state = world.state(b);
+        NINHO_REQUIRE(b_state.has_value());
+        NINHO_REQUIRE_NEAR(
+            b_state->linear_velocity.x, 10.0f / b_state->mass, 1.0e-5f);
+        NINHO_REQUIRE(world.state(third_result.value).has_value());
     }
 
     {
         PhysicsWorld world(WorldConfig{.surface_gravity = 0});
-        const BodyHandle a =
-            world.create_body(BodyDesc::dynamic_sphere(0.5f, {}, 10)).value;
-        const BodyHandle b = world.create_body(
-            BodyDesc::dynamic_sphere(0.5f, {{2, 0, 0}, {}}, 10)).value;
+        const auto a_result =
+            world.create_body(BodyDesc::dynamic_sphere(0.5f, {}, 10));
+        const auto b_result = world.create_body(
+            BodyDesc::dynamic_sphere(0.5f, {{2, 0, 0}, {}}, 10));
+        NINHO_REQUIRE(a_result.status.ok());
+        NINHO_REQUIRE(b_result.status.ok());
+        const BodyHandle a = a_result.value;
+        const BodyHandle b = b_result.value;
         world.step();
-        const JointHandle joint = world.create_joint(
-            DistanceJointDesc{.a = a, .b = b, .length = 2}).value;
+        const auto joint_result = world.create_joint(
+            DistanceJointDesc{.a = a, .b = b, .length = 2});
+        NINHO_REQUIRE(joint_result.status.ok());
+        const JointHandle joint = joint_result.value;
         world.step();
+
+        // Queue order: stale DestroyJoint, DestroyBody, Impulse, CreateBody.
         NINHO_REQUIRE(world.destroy_joint(joint).ok());
         NINHO_REQUIRE(world.destroy_body(a).ok());
+        const auto before = world.state(b);
+        NINHO_REQUIRE(before.has_value());
+        NINHO_REQUIRE(world.apply_impulse(b, {10, 0, 0}, {2, 0, 0}).ok());
+        const auto third_result = world.create_body(
+            BodyDesc::dynamic_sphere(0.5f, {{10, 0, 0}, {}}, 10));
+        NINHO_REQUIRE(third_result.status.ok());
         world.step();
         NINHO_REQUIRE(world.destroy_joint(joint).code == StatusCode::InvalidHandle);
         NINHO_REQUIRE(world.metrics().joint_count == 0);
-        NINHO_REQUIRE(world.state(b).has_value());
+        const auto after = world.state(b);
+        NINHO_REQUIRE(after.has_value());
+        NINHO_REQUIRE_NEAR(
+            after->linear_velocity.x,
+            before->linear_velocity.x + 10.0f / before->mass,
+            1.0e-5f);
+        NINHO_REQUIRE(world.state(third_result.value).has_value());
     }
 }
 
