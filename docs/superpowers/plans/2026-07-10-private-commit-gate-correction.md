@@ -108,6 +108,7 @@
 - [ ] Add RED assertions for every Working Set tail statistic, span, growth, terminal/stability flag, assessment enum, and diagnostic qualification field.
 - [ ] Mirror the frozen 10+10 private calculation for Working Set and serialize all derived values per repeat.
 - [ ] Remove runtime footprint thresholds from CTest; prove synthetic Growth/Unstable assessments do not alter lifecycle status or scenario exit.
+- [ ] Treat unavailable PrivateUsage/Working Set as diagnostic: empty coherent raws, `assessment_status=unavailable`, no CTest/exit failure.
 
 ### Task 7: Canonical functional row state
 
@@ -129,6 +130,7 @@
 
 - [ ] Add RED coverage dispatching all six scenario kinds through a simulated Release `/MD` configuration.
 - [ ] Return `configuration_mismatch` before scenario execution for every kind; keep Debug `/MTd` diagnostic and valid.
+- [ ] Keep simulated configuration evaluation and mismatch construction in a private kernel header; `ScenarioRunner` exposes only real-configuration `run()`.
 
 ### Task 9: Final policy verification
 

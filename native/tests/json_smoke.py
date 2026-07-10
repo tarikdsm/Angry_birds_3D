@@ -19,158 +19,186 @@ def tail_summary(samples: list[int]) -> tuple[int, int, int, int, int]:
     return tail[0], tail[1], tail[2], tail[3], tail[4]
 
 
-def validate_stress_observation(observation: dict, release_build: bool) -> None:
-    memory = observation["memory"]
-    private = observation["memory"]["private_commit"]
-    working = observation["memory"]["working_set"]
-    if not private["available"]:
-        raise AssertionError("PrivateUsage is unavailable")
-    baseline_full_min, baseline_central_min, baseline_median, baseline_central_max, baseline_full_max = tail_summary(private["warmup_samples"])
-    final_full_min, final_central_min, final_median, final_central_max, final_full_max = tail_summary(private["measured_samples"])
-    expected_growth = max(0.0, (final_median - baseline_median) / baseline_median)
-    warmup_trimmed_span = (baseline_central_max - baseline_central_min) / baseline_median
-    warmup_full_span = (baseline_full_max - baseline_full_min) / baseline_median
-    measured_trimmed_span = (final_central_max - final_central_min) / final_median
-    measured_full_span = (final_full_max - final_full_min) / final_median
-    terminal_threshold = 1.05 * baseline_median
+def expected_assessment(
+    warmup_trimmed: float,
+    growth: float,
+    terminal_growth: bool,
+    measured_trimmed: float,
+) -> str:
+    if warmup_trimmed > 0.05:
+        return "unstable"
+    if growth > 0.05 or terminal_growth:
+        return "growth"
+    if measured_trimmed > 0.05:
+        return "unstable"
+    return "pass"
+
+
+def validate_unavailable_counter(counter: dict, label: str) -> None:
+    if counter["warmup_samples"] or counter["measured_samples"]:
+        raise AssertionError(f"{label} unavailable raw arrays must be empty")
+    if counter["stable"] or counter["terminal_growth"]:
+        raise AssertionError(f"{label} unavailable flags are incoherent")
+    numeric_fields = [
+        name
+        for name in counter
+        if name.endswith("_bytes") or name.endswith("_ratio")
+    ]
+    if any(counter[name] != 0 for name in numeric_fields):
+        raise AssertionError(f"{label} unavailable derived values must be zero")
+
+
+def validate_available_counter(
+    counter: dict, label: str, include_instant: bool
+) -> str:
+    baseline = tail_summary(counter["warmup_samples"])
+    final = tail_summary(counter["measured_samples"])
+    growth = max(0.0, (final[2] - baseline[2]) / baseline[2])
+    warmup_trimmed = (baseline[3] - baseline[1]) / baseline[2]
+    warmup_full = (baseline[4] - baseline[0]) / baseline[2]
+    measured_trimmed = (final[3] - final[1]) / final[2]
+    measured_full = (final[4] - final[0]) / final[2]
+    terminal_threshold = 1.05 * baseline[2]
     terminal_growth = (
-        private["measured_samples"][8] > terminal_threshold
-        and private["measured_samples"][9] > terminal_threshold
+        counter["measured_samples"][8] > terminal_threshold
+        and counter["measured_samples"][9] > terminal_threshold
     )
-    expected_stable = warmup_trimmed_span <= 0.05 and measured_trimmed_span <= 0.05
+    stable = warmup_trimmed <= 0.05 and measured_trimmed <= 0.05
     expected_integers = {
-        "baseline_last_bytes": private["warmup_samples"][-1],
-        "baseline_full_min_bytes": baseline_full_min,
-        "baseline_central_min_bytes": baseline_central_min,
-        "baseline_median_bytes": baseline_median,
-        "baseline_central_max_bytes": baseline_central_max,
-        "baseline_full_max_bytes": baseline_full_max,
-        "final_last_bytes": private["measured_samples"][-1],
-        "final_full_min_bytes": final_full_min,
-        "final_central_min_bytes": final_central_min,
-        "final_median_bytes": final_median,
-        "final_central_max_bytes": final_central_max,
-        "final_full_max_bytes": final_full_max,
+        "baseline_last_bytes": counter["warmup_samples"][-1],
+        "baseline_full_min_bytes": baseline[0],
+        "baseline_central_min_bytes": baseline[1],
+        "baseline_median_bytes": baseline[2],
+        "baseline_central_max_bytes": baseline[3],
+        "baseline_full_max_bytes": baseline[4],
+        "final_last_bytes": counter["measured_samples"][-1],
+        "final_full_min_bytes": final[0],
+        "final_central_min_bytes": final[1],
+        "final_median_bytes": final[2],
+        "final_central_max_bytes": final[3],
+        "final_full_max_bytes": final[4],
     }
     for name, expected in expected_integers.items():
-        if private[name] != expected:
-            raise AssertionError(f"private {name}: {private[name]} != {expected}")
-    assert_close(private["growth_ratio"], expected_growth, "private growth")
-    assert_close(private["warmup_trimmed_span_ratio"], warmup_trimmed_span, "private warmup trimmed span")
-    assert_close(private["warmup_full_span_ratio"], warmup_full_span, "private warmup full span")
-    assert_close(private["measured_trimmed_span_ratio"], measured_trimmed_span, "private measured trimmed span")
-    assert_close(private["measured_full_span_ratio"], measured_full_span, "private measured full span")
-    if private["terminal_growth"] != terminal_growth:
-        raise AssertionError("private terminal guard mismatch")
-    if private["stable"] != expected_stable:
-        raise AssertionError("private stability mismatch")
-    if private["peak_bytes"] < max(
-        private["warmup_samples"] + private["measured_samples"]
+        if counter[name] != expected:
+            raise AssertionError(f"{label} {name}: {counter[name]} != {expected}")
+    expected_ratios = {
+        "growth_ratio": growth,
+        "warmup_trimmed_span_ratio": warmup_trimmed,
+        "warmup_full_span_ratio": warmup_full,
+        "measured_trimmed_span_ratio": measured_trimmed,
+        "measured_full_span_ratio": measured_full,
+    }
+    if include_instant:
+        expected_ratios["instant_growth_ratio"] = max(
+            0.0,
+            (counter["measured_samples"][-1] - counter["warmup_samples"][-1])
+            / counter["warmup_samples"][-1],
+        )
+    for name, expected in expected_ratios.items():
+        assert_close(counter[name], expected, f"{label} {name}")
+    if counter["terminal_growth"] != terminal_growth:
+        raise AssertionError(f"{label} terminal guard mismatch")
+    if counter["stable"] != stable:
+        raise AssertionError(f"{label} stability mismatch")
+    if counter["peak_bytes"] < max(
+        counter["warmup_samples"] + counter["measured_samples"]
     ):
-        raise AssertionError("private peak is below a raw sample")
-    if warmup_trimmed_span > 0.05:
-        assessment_status = "unstable"
-    elif expected_growth > 0.05 or terminal_growth:
-        assessment_status = "growth"
-    elif measured_trimmed_span > 0.05:
-        assessment_status = "unstable"
-    else:
-        assessment_status = "pass"
-    if memory["assessment_status"] != assessment_status:
-        raise AssertionError("private assessment status mismatch")
+        raise AssertionError(f"{label} peak is below a raw sample")
+    return expected_assessment(
+        warmup_trimmed, growth, terminal_growth, measured_trimmed
+    )
+
+
+def validate_stress_observation(observation: dict, release_build: bool) -> None:
+    del release_build
+    memory = observation["memory"]
+    private = memory["private_commit"]
+    working = memory["working_set"]
     if memory["gate_scope"] != "release_mt":
         raise AssertionError("unexpected private gate scope")
-    if memory["gate_applied"]:
-        raise AssertionError("foundation must not apply the private budget gate")
-    if memory["gate_status"] != "diagnostic":
-        raise AssertionError("private gate status mismatch")
+    if memory["gate_status"] != "diagnostic" or memory["gate_applied"]:
+        raise AssertionError("PrivateUsage must remain diagnostic-only")
     if memory["budget_qualified"]:
         raise AssertionError("foundation private budget must remain unqualified")
     if memory["budget_scope"] != "future_packaged_reference_hardware":
         raise AssertionError("unexpected future private budget scope")
-
-    working_baseline = tail_summary(working["warmup_samples"])
-    working_final = tail_summary(working["measured_samples"])
-    if not working["available"]:
-        raise AssertionError("WorkingSetSize diagnostics are unavailable")
-    working_expected = {
-        "baseline_last_bytes": working["warmup_samples"][-1],
-        "baseline_full_min_bytes": working_baseline[0],
-        "baseline_central_min_bytes": working_baseline[1],
-        "baseline_median_bytes": working_baseline[2],
-        "baseline_central_max_bytes": working_baseline[3],
-        "baseline_full_max_bytes": working_baseline[4],
-        "final_last_bytes": working["measured_samples"][-1],
-        "final_full_min_bytes": working_final[0],
-        "final_central_min_bytes": working_final[1],
-        "final_median_bytes": working_final[2],
-        "final_central_max_bytes": working_final[3],
-        "final_full_max_bytes": working_final[4],
-    }
-    for name, expected in working_expected.items():
-        if working[name] != expected:
-            raise AssertionError(f"working set {name}: {working[name]} != {expected}")
-    working_growth = max(
-        0.0, (working_final[2] - working_baseline[2]) / working_baseline[2]
-    )
-    working_warmup_trimmed = (
-        working_baseline[3] - working_baseline[1]
-    ) / working_baseline[2]
-    working_warmup_full = (
-        working_baseline[4] - working_baseline[0]
-    ) / working_baseline[2]
-    working_measured_trimmed = (
-        working_final[3] - working_final[1]
-    ) / working_final[2]
-    working_measured_full = (
-        working_final[4] - working_final[0]
-    ) / working_final[2]
-    working_instant = max(
-        0.0,
-        (working["measured_samples"][-1] - working["warmup_samples"][-1])
-        / working["warmup_samples"][-1],
-    )
-    working_terminal_threshold = 1.05 * working_baseline[2]
-    working_terminal = (
-        working["measured_samples"][8] > working_terminal_threshold
-        and working["measured_samples"][9] > working_terminal_threshold
-    )
-    working_stable = (
-        working_warmup_trimmed <= 0.05 and working_measured_trimmed <= 0.05
-    )
-    if working_warmup_trimmed > 0.05:
-        working_assessment = "unstable"
-    elif working_growth > 0.05 or working_terminal:
-        working_assessment = "growth"
-    elif working_measured_trimmed > 0.05:
-        working_assessment = "unstable"
+    if private["available"]:
+        private_assessment = validate_available_counter(
+            private, "private", include_instant=False
+        )
     else:
-        working_assessment = "pass"
-    for name, expected in {
-        "growth_ratio": working_growth,
-        "instant_growth_ratio": working_instant,
-        "warmup_trimmed_span_ratio": working_warmup_trimmed,
-        "warmup_full_span_ratio": working_warmup_full,
-        "measured_trimmed_span_ratio": working_measured_trimmed,
-        "measured_full_span_ratio": working_measured_full,
-    }.items():
-        assert_close(working[name], expected, f"working set {name}")
-    if working["terminal_growth"] != working_terminal:
-        raise AssertionError("working set terminal guard mismatch")
-    if working["stable"] != working_stable:
-        raise AssertionError("working set stability mismatch")
-    if working["assessment_status"] != working_assessment:
-        raise AssertionError("working set assessment mismatch")
+        validate_unavailable_counter(private, "private")
+        private_assessment = "unavailable"
+    if memory["assessment_status"] != private_assessment:
+        raise AssertionError("private assessment status mismatch")
+
     if working["gate_status"] != "diagnostic" or working["gate_applied"]:
-        raise AssertionError("working set must remain diagnostic-only")
+        raise AssertionError("Working Set must remain diagnostic-only")
     if working["budget_qualified"]:
         raise AssertionError("working set budget must remain unqualified")
     if working["budget_scope"] != "future_packaged_reference_hardware":
         raise AssertionError("unexpected working set budget scope")
-    if working["peak_bytes"] < max(
-        working["warmup_samples"] + working["measured_samples"]
-    ):
-        raise AssertionError("working set peak is below a raw sample")
+    if working["available"]:
+        working_assessment = validate_available_counter(
+            working, "working set", include_instant=True
+        )
+    else:
+        validate_unavailable_counter(working, "working set")
+        working_assessment = "unavailable"
+    if working["assessment_status"] != working_assessment:
+        raise AssertionError("working set assessment mismatch")
+
+
+def validate_unavailable_memory_contract() -> None:
+    private = {
+        "available": False,
+        "stable": False,
+        "terminal_growth": False,
+        "baseline_last_bytes": 0,
+        "baseline_full_min_bytes": 0,
+        "baseline_central_min_bytes": 0,
+        "baseline_median_bytes": 0,
+        "baseline_central_max_bytes": 0,
+        "baseline_full_max_bytes": 0,
+        "final_last_bytes": 0,
+        "final_full_min_bytes": 0,
+        "final_central_min_bytes": 0,
+        "final_median_bytes": 0,
+        "final_central_max_bytes": 0,
+        "final_full_max_bytes": 0,
+        "peak_bytes": 0,
+        "growth_ratio": 0.0,
+        "warmup_trimmed_span_ratio": 0.0,
+        "warmup_full_span_ratio": 0.0,
+        "measured_trimmed_span_ratio": 0.0,
+        "measured_full_span_ratio": 0.0,
+        "warmup_samples": [],
+        "measured_samples": [],
+    }
+    working = {
+        **private,
+        "assessment_status": "unavailable",
+        "gate_status": "diagnostic",
+        "gate_applied": False,
+        "budget_qualified": False,
+        "budget_scope": "future_packaged_reference_hardware",
+        "instant_growth_ratio": 0.0,
+    }
+    validate_stress_observation(
+        {
+            "memory": {
+                "gate_scope": "release_mt",
+                "gate_status": "diagnostic",
+                "assessment_status": "unavailable",
+                "gate_applied": False,
+                "budget_qualified": False,
+                "budget_scope": "future_packaged_reference_hardware",
+                "private_commit": private,
+                "working_set": working,
+            }
+        },
+        release_build=False,
+    )
 
 
 def validate_repeat_observations(document: dict) -> None:
@@ -219,6 +247,7 @@ def validate_repeat_observations(document: dict) -> None:
 
 
 def main() -> int:
+    validate_unavailable_memory_contract()
     executable = pathlib.Path(sys.argv[1])
     failure_report = executable.parent / "ninho-spike-smoke-failure.json"
     failure_report.unlink(missing_ok=True)

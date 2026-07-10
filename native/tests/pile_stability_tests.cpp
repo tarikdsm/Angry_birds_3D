@@ -2,11 +2,155 @@
 
 #include <ninho/physics/scenario.hpp>
 
+#include "scenario_configuration.hpp"
+
 #include <algorithm>
 #include <array>
 #include <string_view>
 
 using namespace ninho::physics;
+
+namespace {
+
+std::string_view assessment_name(PrivateCommitStatus status)
+{
+    switch (status) {
+    case PrivateCommitStatus::Pass:
+        return "pass";
+    case PrivateCommitStatus::Growth:
+        return "growth";
+    case PrivateCommitStatus::Unstable:
+        return "unstable";
+    case PrivateCommitStatus::Unavailable:
+        return "unavailable";
+    }
+    return "unavailable";
+}
+
+void require_private_memory_contract(const ScenarioResult& result)
+{
+    NINHO_REQUIRE(result.private_commit_gate_status == "diagnostic");
+    NINHO_REQUIRE(!result.private_commit_gate_applied);
+    NINHO_REQUIRE(!result.private_commit_budget_qualified);
+    if (!result.private_commit_available) {
+        NINHO_REQUIRE(result.private_commit_assessment_status == "unavailable");
+        NINHO_REQUIRE(result.private_commit_warmup_samples.empty());
+        NINHO_REQUIRE(result.private_commit_cycle_samples.empty());
+        NINHO_REQUIRE(!result.private_commit_stable);
+        NINHO_REQUIRE(!result.private_commit_terminal_growth);
+        return;
+    }
+    NINHO_REQUIRE(result.private_commit_warmup_samples.size() == 10);
+    NINHO_REQUIRE(result.private_commit_cycle_samples.size() == 10);
+    const PrivateCommitAssessment expected = assess_private_commit(
+        result.private_commit_warmup_samples,
+        result.private_commit_cycle_samples);
+    NINHO_REQUIRE(result.private_commit_assessment_status == assessment_name(expected.status));
+    NINHO_REQUIRE(result.private_commit_stable == expected.stable);
+    NINHO_REQUIRE(result.private_commit_terminal_growth == expected.terminal_growth);
+    NINHO_REQUIRE(
+        result.private_commit_baseline_full_min_bytes
+        == expected.baseline_full_min_bytes);
+    NINHO_REQUIRE(
+        result.private_commit_baseline_central_min_bytes
+        == expected.baseline_central_min_bytes);
+    NINHO_REQUIRE(
+        result.private_commit_baseline_median_bytes
+        == expected.baseline_median_bytes);
+    NINHO_REQUIRE(
+        result.private_commit_baseline_central_max_bytes
+        == expected.baseline_central_max_bytes);
+    NINHO_REQUIRE(
+        result.private_commit_baseline_full_max_bytes
+        == expected.baseline_full_max_bytes);
+    NINHO_REQUIRE(
+        result.private_commit_final_full_min_bytes == expected.final_full_min_bytes);
+    NINHO_REQUIRE(
+        result.private_commit_final_central_min_bytes
+        == expected.final_central_min_bytes);
+    NINHO_REQUIRE(
+        result.private_commit_final_median_bytes == expected.final_median_bytes);
+    NINHO_REQUIRE(
+        result.private_commit_final_central_max_bytes
+        == expected.final_central_max_bytes);
+    NINHO_REQUIRE(
+        result.private_commit_final_full_max_bytes == expected.final_full_max_bytes);
+    NINHO_REQUIRE_NEAR(result.private_commit_growth_ratio, expected.growth_ratio, 1e-12);
+    NINHO_REQUIRE_NEAR(
+        result.private_commit_warmup_trimmed_span_ratio,
+        expected.warmup_trimmed_span_ratio,
+        1e-12);
+    NINHO_REQUIRE_NEAR(
+        result.private_commit_warmup_full_span_ratio,
+        expected.warmup_full_span_ratio,
+        1e-12);
+    NINHO_REQUIRE_NEAR(
+        result.private_commit_measured_trimmed_span_ratio,
+        expected.measured_trimmed_span_ratio,
+        1e-12);
+    NINHO_REQUIRE_NEAR(
+        result.private_commit_measured_full_span_ratio,
+        expected.measured_full_span_ratio,
+        1e-12);
+}
+
+void require_working_set_contract(const ScenarioResult& result)
+{
+    NINHO_REQUIRE(result.working_set_gate_status == "diagnostic");
+    NINHO_REQUIRE(!result.working_set_gate_applied);
+    NINHO_REQUIRE(!result.working_set_budget_qualified);
+    if (!result.working_set_available) {
+        NINHO_REQUIRE(result.working_set_assessment_status == "unavailable");
+        NINHO_REQUIRE(result.working_set_warmup_samples.empty());
+        NINHO_REQUIRE(result.working_set_cycle_samples.empty());
+        NINHO_REQUIRE(!result.working_set_stable);
+        NINHO_REQUIRE(!result.working_set_terminal_growth);
+        return;
+    }
+    NINHO_REQUIRE(result.working_set_warmup_samples.size() == 10);
+    NINHO_REQUIRE(result.working_set_cycle_samples.size() == 10);
+    const PrivateCommitAssessment expected = assess_private_commit(
+        result.working_set_warmup_samples,
+        result.working_set_cycle_samples);
+    NINHO_REQUIRE(result.working_set_assessment_status == assessment_name(expected.status));
+    NINHO_REQUIRE(result.working_set_stable == expected.stable);
+    NINHO_REQUIRE(result.working_set_terminal_growth == expected.terminal_growth);
+    NINHO_REQUIRE(result.working_set_baseline_low_bytes == expected.baseline_full_min_bytes);
+    NINHO_REQUIRE(
+        result.working_set_baseline_central_low_bytes
+        == expected.baseline_central_min_bytes);
+    NINHO_REQUIRE(result.working_set_baseline_median_bytes == expected.baseline_median_bytes);
+    NINHO_REQUIRE(
+        result.working_set_baseline_central_high_bytes
+        == expected.baseline_central_max_bytes);
+    NINHO_REQUIRE(result.working_set_baseline_max_bytes == expected.baseline_full_max_bytes);
+    NINHO_REQUIRE(result.working_set_final_low_bytes == expected.final_full_min_bytes);
+    NINHO_REQUIRE(
+        result.working_set_final_central_low_bytes == expected.final_central_min_bytes);
+    NINHO_REQUIRE(result.working_set_final_median_bytes == expected.final_median_bytes);
+    NINHO_REQUIRE(
+        result.working_set_final_central_high_bytes == expected.final_central_max_bytes);
+    NINHO_REQUIRE(result.working_set_final_max_bytes == expected.final_full_max_bytes);
+    NINHO_REQUIRE_NEAR(result.working_set_growth_ratio, expected.growth_ratio, 1e-12);
+    NINHO_REQUIRE_NEAR(
+        result.working_set_warmup_trimmed_span_ratio,
+        expected.warmup_trimmed_span_ratio,
+        1e-12);
+    NINHO_REQUIRE_NEAR(
+        result.working_set_warmup_full_span_ratio,
+        expected.warmup_full_span_ratio,
+        1e-12);
+    NINHO_REQUIRE_NEAR(
+        result.working_set_measured_trimmed_span_ratio,
+        expected.measured_trimmed_span_ratio,
+        1e-12);
+    NINHO_REQUIRE_NEAR(
+        result.working_set_measured_full_span_ratio,
+        expected.measured_full_span_ratio,
+        1e-12);
+}
+
+}
 
 NINHO_TEST("radial fall settles inside every fixed limit")
 {
@@ -111,26 +255,34 @@ NINHO_TEST("Box3 allocator observation returns exactly to zero after a complete 
     NINHO_REQUIRE(result.box3d_allocator.exact_return);
 }
 
-NINHO_TEST("private commit gate scope follows the real CRT configuration")
+NINHO_TEST("runtime configuration evaluator follows the real CRT configuration")
 {
     NINHO_REQUIRE(
-        evaluate_private_commit_gate_mode(true, true, false, false)
-        == PrivateCommitGateMode::ReleaseMt);
+        detail::evaluate_runtime_configuration(
+            {.release_build = true, .mt_defined = true})
+        == detail::RuntimeConfigurationStatus::ReleaseMt);
     NINHO_REQUIRE(
-        evaluate_private_commit_gate_mode(true, true, true, false)
-        == PrivateCommitGateMode::ConfigurationMismatch);
+        detail::evaluate_runtime_configuration(
+            {.release_build = true, .mt_defined = true, .dll_defined = true})
+        == detail::RuntimeConfigurationStatus::ConfigurationMismatch);
     NINHO_REQUIRE(
-        evaluate_private_commit_gate_mode(false, true, false, true)
-        == PrivateCommitGateMode::Diagnostic);
+        detail::evaluate_runtime_configuration(
+            {.mt_defined = true, .debug_defined = true})
+        == detail::RuntimeConfigurationStatus::Diagnostic);
 }
 
-NINHO_TEST("Release dynamic CRT mismatch blocks every scenario before dispatch")
+NINHO_TEST("internal configuration dispatch blocks every scenario before execution")
 {
-    constexpr RuntimeConfiguration release_md{
-        .release_build = true,
-        .mt_defined = true,
-        .dll_defined = true,
-        .debug_defined = false,
+    constexpr std::array mismatches{
+        detail::RuntimeConfiguration{
+            .release_build = true,
+            .mt_defined = true,
+            .dll_defined = true,
+        },
+        detail::RuntimeConfiguration{
+            .release_build = true,
+            .mt_defined = false,
+        },
     };
     constexpr std::array kinds{
         ScenarioKind::RadialFall,
@@ -140,31 +292,50 @@ NINHO_TEST("Release dynamic CRT mismatch blocks every scenario before dispatch")
         ScenarioKind::Stress,
         ScenarioKind::CapabilityMatrix,
     };
-    for (const ScenarioKind kind : kinds) {
-        const ScenarioResult result = ScenarioRunner{}.run_with_configuration(
-            kind, 9, 4, release_md);
-        NINHO_REQUIRE(result.ticks == 0);
-        NINHO_REQUIRE(result.violations.size() == 1);
-        NINHO_REQUIRE(result.violations.front().code == "configuration_mismatch");
-        NINHO_REQUIRE(scenario_exit_code(std::array{result}, false) == 1);
+    for (const detail::RuntimeConfiguration configuration : mismatches) {
+        for (const ScenarioKind kind : kinds) {
+            const auto result = detail::configuration_mismatch_result(
+                kind, 9, 4, configuration);
+            NINHO_REQUIRE(result.has_value());
+            NINHO_REQUIRE(result->ticks == 0);
+            NINHO_REQUIRE(result->violations.size() == 1);
+            NINHO_REQUIRE(result->violations.front().code == "configuration_mismatch");
+            NINHO_REQUIRE(scenario_exit_code(std::array{*result}, false) == 1);
+        }
     }
 }
 
 NINHO_TEST("Debug static CRT configuration remains diagnostic")
 {
-    constexpr RuntimeConfiguration debug_mtd{
+    constexpr detail::RuntimeConfiguration debug_mtd{
         .release_build = false,
         .mt_defined = true,
         .dll_defined = false,
         .debug_defined = true,
     };
     NINHO_REQUIRE(
-        evaluate_private_commit_gate_mode(
-            debug_mtd.release_build,
-            debug_mtd.mt_defined,
-            debug_mtd.dll_defined,
-            debug_mtd.debug_defined)
-        == PrivateCommitGateMode::Diagnostic);
+        detail::evaluate_runtime_configuration(debug_mtd)
+        == detail::RuntimeConfigurationStatus::Diagnostic);
+}
+
+NINHO_TEST("unavailable footprint remains diagnostic with limits recommendation")
+{
+    ScenarioResult result;
+    result.name = "unavailable_memory";
+    result.warnings.push_back({
+        .code = "private_commit_budget_unqualified",
+        .message = "budget deferred",
+    });
+    require_private_memory_contract(result);
+    require_working_set_contract(result);
+    NINHO_REQUIRE(scenario_exit_code(std::array{result}, false) == 0);
+    ScenarioReport report;
+    report.scenarios.push_back(result);
+    const std::string json = report.to_json();
+    NINHO_REQUIRE(json.find("\"private_commit_budget_unqualified\"")
+        != std::string::npos);
+    NINHO_REQUIRE(json.find("\"recommendation\":\"prosseguir_com_limites\"")
+        != std::string::npos);
 }
 
 NINHO_TEST("Debug CRT probe detects and then frees an intentional allocation")
@@ -238,9 +409,7 @@ NINHO_TEST("stress uses the full fixed topology after allocator warmup")
     NINHO_REQUIRE(executed_substeps != result.metrics.end());
     NINHO_REQUIRE(executed_substeps->value == 2.0);
 #ifdef _WIN32
-    NINHO_REQUIRE(result.private_commit_available);
-    NINHO_REQUIRE(result.private_commit_warmup_samples.size() == 10);
-    NINHO_REQUIRE(result.private_commit_cycle_samples.size() == 10);
+    require_private_memory_contract(result);
     NINHO_REQUIRE(result.box3d_allocator.baseline_bytes == 0);
     NINHO_REQUIRE(result.box3d_allocator.final_bytes == 0);
     NINHO_REQUIRE(result.box3d_allocator.exact_return);
@@ -258,58 +427,7 @@ NINHO_TEST("stress uses the full fixed topology after allocator warmup")
     NINHO_REQUIRE(result.crt.applicable);
     NINHO_REQUIRE(result.crt.balanced);
 #endif
-    NINHO_REQUIRE(result.working_set_available);
-    NINHO_REQUIRE(result.working_set_warmup_samples.size() == 10);
-    NINHO_REQUIRE(result.working_set_cycle_samples.size() == 10);
-    NINHO_REQUIRE(result.working_set_baseline_low_bytes > 0);
-    NINHO_REQUIRE(result.working_set_baseline_central_low_bytes > 0);
-    NINHO_REQUIRE(result.working_set_baseline_central_high_bytes > 0);
-    NINHO_REQUIRE(result.working_set_final_low_bytes > 0);
-    NINHO_REQUIRE(result.working_set_final_central_low_bytes > 0);
-    NINHO_REQUIRE(result.working_set_final_central_high_bytes > 0);
-    NINHO_REQUIRE(result.working_set_final_low_bytes <= result.working_set_peak_bytes);
-    const PrivateCommitAssessment expected_working_set = assess_private_commit(
-        result.working_set_warmup_samples,
-        result.working_set_cycle_samples);
-    const std::string_view expected_assessment = [&] {
-        switch (expected_working_set.status) {
-        case PrivateCommitStatus::Pass:
-            return std::string_view{"pass"};
-        case PrivateCommitStatus::Growth:
-            return std::string_view{"growth"};
-        case PrivateCommitStatus::Unstable:
-            return std::string_view{"unstable"};
-        case PrivateCommitStatus::Unavailable:
-            return std::string_view{"unavailable"};
-        }
-        return std::string_view{"unavailable"};
-    }();
-    NINHO_REQUIRE(
-        result.working_set_assessment_status
-        == expected_assessment);
-    NINHO_REQUIRE(result.working_set_stable == expected_working_set.stable);
-    NINHO_REQUIRE(
-        result.working_set_terminal_growth
-        == expected_working_set.terminal_growth);
-    NINHO_REQUIRE_NEAR(
-        result.working_set_warmup_trimmed_span_ratio,
-        expected_working_set.warmup_trimmed_span_ratio,
-        1.0e-12);
-    NINHO_REQUIRE_NEAR(
-        result.working_set_warmup_full_span_ratio,
-        expected_working_set.warmup_full_span_ratio,
-        1.0e-12);
-    NINHO_REQUIRE_NEAR(
-        result.working_set_measured_trimmed_span_ratio,
-        expected_working_set.measured_trimmed_span_ratio,
-        1.0e-12);
-    NINHO_REQUIRE_NEAR(
-        result.working_set_measured_full_span_ratio,
-        expected_working_set.measured_full_span_ratio,
-        1.0e-12);
-    NINHO_REQUIRE(!result.working_set_gate_applied);
-    NINHO_REQUIRE(!result.working_set_budget_qualified);
-    NINHO_REQUIRE(result.working_set_gate_status == "diagnostic");
+    require_working_set_contract(result);
 #endif
     NINHO_REQUIRE(result.violations.empty());
 }

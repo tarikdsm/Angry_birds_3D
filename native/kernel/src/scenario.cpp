@@ -2,6 +2,7 @@
 
 #include "box3d_replay_conformance.hpp"
 #include "box3d_allocator_probe.hpp"
+#include "scenario_configuration.hpp"
 
 #include <algorithm>
 #include <array>
@@ -1152,7 +1153,7 @@ struct OrientedBox {
 #endif
 }
 
-[[nodiscard]] constexpr RuntimeConfiguration current_runtime_configuration()
+[[nodiscard]] constexpr detail::RuntimeConfiguration current_runtime_configuration()
 {
     constexpr bool release_build = std::string_view{NINHO_BUILD_TYPE} == "Release";
 #ifdef _MT
@@ -1635,11 +1636,15 @@ struct CrtStressProbeResult {
     result.private_commit_warmup_full_span_ratio = private_assessment.warmup_full_span_ratio;
     result.private_commit_measured_trimmed_span_ratio = private_assessment.measured_trimmed_span_ratio;
     result.private_commit_measured_full_span_ratio = private_assessment.measured_full_span_ratio;
-    if (!result.private_commit_warmup_samples.empty()) {
+    if (!private_assessment.available) {
+        result.private_commit_warmup_samples.clear();
+        result.private_commit_cycle_samples.clear();
+        result.private_commit_peak_bytes = 0;
+    } else if (!result.private_commit_warmup_samples.empty()) {
         result.private_commit_baseline_bytes =
             result.private_commit_warmup_samples.back();
     }
-    if (!result.private_commit_cycle_samples.empty()) {
+    if (private_assessment.available && !result.private_commit_cycle_samples.empty()) {
         result.private_commit_final_bytes = result.private_commit_cycle_samples.back();
     }
     result.private_commit_gate_scope = "release_mt";
@@ -1692,10 +1697,14 @@ struct CrtStressProbeResult {
         working_set_summary.measured_trimmed_span_ratio;
     result.working_set_measured_full_span_ratio =
         working_set_summary.measured_full_span_ratio;
-    if (!result.working_set_warmup_samples.empty()) {
+    if (!working_set_summary.available) {
+        result.working_set_warmup_samples.clear();
+        result.working_set_cycle_samples.clear();
+        result.working_set_peak_bytes = 0;
+    } else if (!result.working_set_warmup_samples.empty()) {
         result.working_set_baseline_bytes = result.working_set_warmup_samples.back();
     }
-    if (!result.working_set_cycle_samples.empty()) {
+    if (working_set_summary.available && !result.working_set_cycle_samples.empty()) {
         result.working_set_final_bytes = result.working_set_cycle_samples.back();
     }
     if (working_set_summary.available) {
@@ -3160,6 +3169,35 @@ std::optional<ScenarioKind> parse_scenario_kind(std::string_view name)
     return found == kinds.end() ? std::nullopt : std::optional<ScenarioKind>{*found};
 }
 
+std::optional<ScenarioResult> detail::configuration_mismatch_result(
+    ScenarioKind kind,
+    std::uint64_t seed,
+    int substeps,
+    RuntimeConfiguration configuration)
+{
+    if (evaluate_runtime_configuration(configuration)
+        != RuntimeConfigurationStatus::ConfigurationMismatch) {
+        return std::nullopt;
+    }
+    ScenarioResult mismatch{
+        .kind = kind,
+        .name = std::string{scenario_name(kind)},
+        .seed = seed,
+        .substeps = substeps,
+    };
+    mismatch.violations.push_back({
+        .scenario = mismatch.name,
+        .code = "configuration_mismatch",
+        .message = "Release scenarios require the static /MT CRT",
+        .tick = 0,
+        .details = {
+            {"required_crt", "/MT"},
+            {"detected_crt", "/MD or non-/MT"},
+        },
+    });
+    return mismatch;
+}
+
 std::string ScenarioResult::to_json() const
 {
     std::string output;
@@ -3417,18 +3455,6 @@ PrivateCommitAssessment assess_private_commit(
         result.status = PrivateCommitStatus::Pass;
     }
     return result;
-}
-
-PrivateCommitGateMode evaluate_private_commit_gate_mode(
-    bool release_build, bool mt_defined, bool dll_defined, bool debug_defined)
-{
-    if (!release_build) {
-        return PrivateCommitGateMode::Diagnostic;
-    }
-    if (mt_defined && !dll_defined && !debug_defined) {
-        return PrivateCommitGateMode::ReleaseMt;
-    }
-    return PrivateCommitGateMode::ConfigurationMismatch;
 }
 
 CrtMemoryObservation debug_crt_allocation_probe(bool intentional_allocation)
@@ -3698,16 +3724,6 @@ std::uint64_t hash_states(std::span<const BodyState> states)
 ScenarioResult ScenarioRunner::run(
     ScenarioKind kind, std::uint64_t seed, int substeps) const
 {
-    return run_with_configuration(
-        kind, seed, substeps, current_runtime_configuration());
-}
-
-ScenarioResult ScenarioRunner::run_with_configuration(
-    ScenarioKind kind,
-    std::uint64_t seed,
-    int substeps,
-    RuntimeConfiguration configuration) const
-{
     constexpr std::array valid_kinds{
         ScenarioKind::RadialFall,
         ScenarioKind::ProjectilePile,
@@ -3719,22 +3735,9 @@ ScenarioResult ScenarioRunner::run_with_configuration(
     if (std::ranges::find(valid_kinds, kind) == valid_kinds.end()) {
         throw std::invalid_argument("unknown ScenarioKind value");
     }
-    if (evaluate_private_commit_gate_mode(
-            configuration.release_build,
-            configuration.mt_defined,
-            configuration.dll_defined,
-            configuration.debug_defined)
-        == PrivateCommitGateMode::ConfigurationMismatch) {
-        ScenarioResult mismatch = make_result(kind, seed, substeps);
-        add_violation(
-            mismatch,
-            "configuration_mismatch",
-            "Release scenarios require the static /MT CRT",
-            0,
-            {},
-            {},
-            {{"required_crt", "/MT"}, {"detected_crt", "/MD or non-/MT"}});
-        return mismatch;
+    if (auto mismatch = detail::configuration_mismatch_result(
+            kind, seed, substeps, current_runtime_configuration())) {
+        return std::move(*mismatch);
     }
     ScenarioWatchdog watchdog(kind, seed);
     WatchdogActivation activation(watchdog);

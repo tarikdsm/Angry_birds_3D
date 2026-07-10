@@ -11,6 +11,7 @@ add_executable(ninho_physics_tests
 
 target_include_directories(ninho_physics_tests PRIVATE
   "${CMAKE_CURRENT_SOURCE_DIR}"
+  "${PROJECT_SOURCE_DIR}/native/kernel/src"
 )
 target_link_libraries(ninho_physics_tests PRIVATE ninho::physics)
 target_compile_features(ninho_physics_tests PRIVATE cxx_std_20)

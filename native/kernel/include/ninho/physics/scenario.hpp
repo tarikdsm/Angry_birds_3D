@@ -75,8 +75,6 @@ struct CapabilityRow {
 };
 
 enum class PrivateCommitStatus { Pass, Unavailable, Unstable, Growth };
-enum class PrivateCommitGateMode { Diagnostic, ReleaseMt, ConfigurationMismatch };
-
 struct PrivateCommitAssessment {
     PrivateCommitStatus status{PrivateCommitStatus::Unavailable};
     bool available{};
@@ -318,21 +316,12 @@ struct ScenarioReport {
     [[nodiscard]] std::string to_json() const;
 };
 
-struct RuntimeConfiguration {
-    bool release_build{};
-    bool mt_defined{};
-    bool dll_defined{};
-    bool debug_defined{};
-};
-
 [[nodiscard]] std::uint64_t hash_states(std::span<const BodyState> states);
 [[nodiscard]] double max_rolling_energy_growth(
     std::span<const double> energies, std::size_t window, double epsilon);
 [[nodiscard]] PrivateCommitAssessment assess_private_commit(
     std::span<const std::size_t> warmup_samples,
     std::span<const std::size_t> measured_samples);
-[[nodiscard]] PrivateCommitGateMode evaluate_private_commit_gate_mode(
-    bool release_build, bool mt_defined, bool dll_defined, bool debug_defined);
 [[nodiscard]] CrtMemoryObservation debug_crt_allocation_probe(
     bool intentional_allocation);
 [[nodiscard]] RepeatObservation make_repeat_observation(
@@ -363,11 +352,6 @@ public:
 
     [[nodiscard]] ScenarioResult run(
         ScenarioKind kind, std::uint64_t seed, int substeps) const;
-    [[nodiscard]] ScenarioResult run_with_configuration(
-        ScenarioKind kind,
-        std::uint64_t seed,
-        int substeps,
-        RuntimeConfiguration configuration) const;
 };
 
 }
