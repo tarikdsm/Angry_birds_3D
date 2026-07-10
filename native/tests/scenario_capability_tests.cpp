@@ -57,6 +57,66 @@ NINHO_TEST("capability matrix reports every mandatory row without blocked status
         NINHO_REQUIRE(row(result, capability).status != CapabilityStatus::Blocked);
     }
     NINHO_REQUIRE(result.violations.empty());
+    const auto repeated = ScenarioRunner{}.run(ScenarioKind::CapabilityMatrix, 5, 4);
+    const auto radial = ScenarioRunner{}.run(ScenarioKind::RadialPile, 5, 4);
+    NINHO_REQUIRE(result.final_hash == repeated.final_hash);
+    NINHO_REQUIRE(result.final_hash != radial.final_hash);
+}
+
+NINHO_TEST("capability row hash covers every canonical field and ignores value order")
+{
+    std::vector<CapabilityRow> rows{
+        {.capability = "a",
+         .status = CapabilityStatus::Pass,
+         .values = {{"z", 2, "m"}, {"a", 1, "m"}},
+         .fixture_hashes = {11, 22}},
+        {.capability = "b",
+         .status = CapabilityStatus::Fallback,
+         .fallback = "approved",
+         .values = {{"value", 3, "N"}},
+         .fixture_hashes = {33}},
+    };
+    const std::uint64_t baseline = hash_capability_rows(rows);
+    std::swap(rows[0].values[0], rows[0].values[1]);
+    std::swap(rows[0], rows[1]);
+    NINHO_REQUIRE(hash_capability_rows(rows) == baseline);
+    std::swap(rows[0], rows[1]);
+
+    for (std::size_t index = 0; index < rows.size(); ++index) {
+        auto changed = rows;
+        changed[index].values.front().value += 1;
+        NINHO_REQUIRE(hash_capability_rows(changed) != baseline);
+    }
+    auto changed = rows;
+    changed[0].capability = "changed";
+    NINHO_REQUIRE(hash_capability_rows(changed) != baseline);
+    changed = rows;
+    changed[0].status = CapabilityStatus::Blocked;
+    NINHO_REQUIRE(hash_capability_rows(changed) != baseline);
+    changed = rows;
+    changed[0].fallback = "changed";
+    NINHO_REQUIRE(hash_capability_rows(changed) != baseline);
+    changed = rows;
+    changed[0].fixture_hashes[0] += 1;
+    NINHO_REQUIRE(hash_capability_rows(changed) != baseline);
+}
+
+NINHO_TEST("joint fallback requires two consecutive qualifying ticks")
+{
+    const std::array isolated{0.02, 0.0, 0.03};
+    const std::array consecutive{0.0, 0.02, 0.03};
+    NINHO_REQUIRE(!has_two_consecutive_samples(isolated, 0.01));
+    NINHO_REQUIRE(has_two_consecutive_samples(consecutive, 0.01));
+}
+
+NINHO_TEST("lifecycle cannot pass without working set evidence")
+{
+    NINHO_REQUIRE(
+        classify_lifecycle_status(10000, 0, std::nullopt)
+        == CapabilityStatus::Blocked);
+    NINHO_REQUIRE(
+        classify_lifecycle_status(10000, 0, 0.01)
+        == CapabilityStatus::Pass);
 }
 
 NINHO_TEST("capability matrix keeps query contact and joint proof values")
@@ -82,6 +142,12 @@ NINHO_TEST("capability matrix keeps query contact and joint proof values")
     NINHO_REQUIRE(joint.status != CapabilityStatus::Blocked);
     NINHO_REQUIRE(value(joint, "monotonic_tolerance") == 50.0);
     NINHO_REQUIRE(value(joint, "maximum_force") > 10000.0);
+
+    const auto& compound = row(result, "hulls_compounds");
+    NINHO_REQUIRE_NEAR(value(compound, "mass"), value(compound, "expected_mass"), 1.0e-4);
+    NINHO_REQUIRE_NEAR(value(compound, "bounds_lower_x"), -1.62, 1.0e-4);
+    NINHO_REQUIRE_NEAR(value(compound, "bounds_upper_x"), 1.62, 1.0e-4);
+    NINHO_REQUIRE(value(compound, "contacted") == 1.0);
 }
 
 NINHO_TEST("capability matrix performs lifecycle and official replay proof")

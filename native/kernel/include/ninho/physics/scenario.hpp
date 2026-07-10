@@ -36,6 +36,11 @@ struct ScenarioLimit {
     std::string unit;
 };
 
+struct ScenarioDetail {
+    std::string name;
+    std::string value;
+};
+
 struct ScenarioViolation {
     std::string scenario;
     std::string code;
@@ -43,7 +48,13 @@ struct ScenarioViolation {
     int tick{-1};
     BodyHandle handle{};
     std::vector<ScenarioValue> values;
+    std::vector<ScenarioDetail> details;
     bool fatal{true};
+};
+
+struct StateValidationFailure {
+    std::string field;
+    double value{};
 };
 
 struct CapabilityRow {
@@ -52,6 +63,7 @@ struct CapabilityRow {
     std::string fallback;
     std::string detail;
     std::vector<ScenarioValue> values;
+    std::vector<std::uint64_t> fixture_hashes;
 };
 
 struct ScenarioResult {
@@ -125,11 +137,31 @@ struct ScenarioReport {
 };
 
 [[nodiscard]] std::uint64_t hash_states(std::span<const BodyState> states);
+[[nodiscard]] double max_rolling_energy_growth(
+    std::span<const double> energies, std::size_t window, double epsilon);
+[[nodiscard]] std::uint64_t hash_capability_rows(std::span<const CapabilityRow> rows);
+[[nodiscard]] bool has_two_consecutive_samples(
+    std::span<const double> samples, double threshold);
+[[nodiscard]] CapabilityStatus classify_lifecycle_status(
+    int completed_cycles,
+    int invalid_handles,
+    std::optional<double> working_set_growth);
+[[nodiscard]] int scenario_exit_code(
+    std::span<const ScenarioResult> scenarios, bool hash_mismatch);
+[[nodiscard]] std::optional<StateValidationFailure> validate_body_state(
+    const BodyState& state, double planet_radius);
 [[nodiscard]] std::string_view scenario_name(ScenarioKind kind);
 [[nodiscard]] std::optional<ScenarioKind> parse_scenario_kind(std::string_view name);
 
 class ScenarioRunner {
 public:
+    [[nodiscard]] static constexpr int watchdog_timeout_seconds() noexcept
+    {
+        return 60;
+    }
+
+    static void set_emergency_json_path(std::optional<std::string> path);
+
     [[nodiscard]] ScenarioResult run(
         ScenarioKind kind, std::uint64_t seed, int substeps) const;
 };

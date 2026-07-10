@@ -4,18 +4,27 @@
 
 #include <algorithm>
 #include <array>
+#include <atomic>
+#include <bit>
 #include <chrono>
 #include <charconv>
 #include <cmath>
+#include <condition_variable>
 #include <cstdint>
+#include <cstdio>
+#include <cstdlib>
 #include <filesystem>
+#include <fstream>
 #include <iterator>
 #include <limits>
+#include <mutex>
 #include <optional>
 #include <ranges>
 #include <set>
 #include <stdexcept>
+#include <thread>
 #include <system_error>
+#include <tuple>
 #include <string_view>
 #include <vector>
 
@@ -47,6 +56,156 @@ namespace {
     return "unknown";
 }
 
+std::mutex emergency_json_mutex;
+std::optional<std::string> emergency_json_path;
+
+class ScenarioWatchdog {
+public:
+    ScenarioWatchdog(ScenarioKind kind, std::uint64_t seed)
+        : scenario_(name_of(kind))
+        , seed_(seed)
+        , deadline_(
+              std::chrono::steady_clock::now()
+              + std::chrono::seconds(ScenarioRunner::watchdog_timeout_seconds()))
+    {
+        {
+            const std::scoped_lock lock(emergency_json_mutex);
+            path_ = emergency_json_path;
+        }
+        worker_ = std::thread([this] {
+            std::unique_lock lock(mutex_);
+            if (!condition_.wait_until(lock, deadline_, [this] { return done_; })) {
+                lock.unlock();
+                terminate_process();
+            }
+        });
+    }
+
+    ScenarioWatchdog(const ScenarioWatchdog&) = delete;
+    ScenarioWatchdog& operator=(const ScenarioWatchdog&) = delete;
+
+    ~ScenarioWatchdog()
+    {
+        {
+            const std::scoped_lock lock(mutex_);
+            done_ = true;
+        }
+        condition_.notify_one();
+        if (worker_.joinable()) {
+            worker_.join();
+        }
+    }
+
+    void checkpoint(int tick)
+    {
+        tick_.store(tick, std::memory_order_relaxed);
+        if (std::chrono::steady_clock::now() >= deadline_) {
+            terminate_process();
+        }
+    }
+
+private:
+    [[noreturn]] void terminate_process()
+    {
+        if (terminating_.test_and_set(std::memory_order_acq_rel)) {
+            for (;;) {
+                std::this_thread::yield();
+            }
+        }
+        const int tick = tick_.load(std::memory_order_relaxed);
+        std::fprintf(
+            stderr,
+            "error: scenario watchdog expired: scenario=%.*s seed=%llu tick=%d "
+            "timeout_seconds=%d\n",
+            static_cast<int>(scenario_.size()),
+            scenario_.data(),
+            static_cast<unsigned long long>(seed_),
+            tick,
+            ScenarioRunner::watchdog_timeout_seconds());
+        std::fflush(stderr);
+        write_emergency_json(tick);
+#ifdef _WIN32
+        TerminateProcess(GetCurrentProcess(), 1);
+#endif
+        std::_Exit(1);
+    }
+
+    void write_emergency_json(int tick) const noexcept
+    {
+        if (!path_) {
+            return;
+        }
+        try {
+            const std::filesystem::path path{*path_};
+            if (const auto parent = path.parent_path(); !parent.empty()) {
+                std::error_code error;
+                std::filesystem::create_directories(parent, error);
+                if (error) {
+                    return;
+                }
+            }
+            std::ofstream stream(path, std::ios::binary | std::ios::trunc);
+            if (!stream) {
+                return;
+            }
+            stream << "{\"watchdog\":{\"scenario\":\"" << scenario_
+                   << "\",\"seed\":" << seed_ << ",\"tick\":" << tick
+                   << ",\"timeout_seconds\":"
+                   << ScenarioRunner::watchdog_timeout_seconds()
+                   << "},\"violations\":[{\"scenario\":\"" << scenario_
+                   << "\",\"code\":\"scenario_timeout\",\"message\":\"scenario "
+                      "exceeded the fixed 60 second timeout\",\"tick\":"
+                   << tick << ",\"fatal\":true}]}";
+            stream.flush();
+        } catch (...) {
+        }
+    }
+
+    std::string_view scenario_;
+    std::uint64_t seed_{};
+    std::chrono::steady_clock::time_point deadline_;
+    std::optional<std::string> path_;
+    std::atomic<int> tick_{0};
+    std::atomic_flag terminating_ = ATOMIC_FLAG_INIT;
+    std::mutex mutex_;
+    std::condition_variable condition_;
+    bool done_{};
+    std::thread worker_;
+};
+
+thread_local ScenarioWatchdog* active_watchdog{};
+
+class WatchdogActivation {
+public:
+    explicit WatchdogActivation(ScenarioWatchdog& watchdog)
+        : previous_(active_watchdog)
+    {
+        active_watchdog = &watchdog;
+    }
+
+    ~WatchdogActivation()
+    {
+        active_watchdog = previous_;
+    }
+
+private:
+    ScenarioWatchdog* previous_{};
+};
+
+void watchdog_checkpoint(int tick)
+{
+    if (active_watchdog) {
+        active_watchdog->checkpoint(tick);
+    }
+}
+
+void watched_step(PhysicsWorld& world, int tick)
+{
+    watchdog_checkpoint(tick);
+    world.step();
+    watchdog_checkpoint(tick);
+}
+
 [[nodiscard]] ScenarioResult make_result(
     ScenarioKind kind, std::uint64_t seed, int substeps)
 {
@@ -64,7 +223,8 @@ void add_violation(
     std::string message,
     int tick,
     BodyHandle handle,
-    std::vector<ScenarioValue> values = {})
+    std::vector<ScenarioValue> values = {},
+    std::vector<ScenarioDetail> details = {})
 {
     result.violations.push_back({
         .scenario = result.name,
@@ -73,7 +233,67 @@ void add_violation(
         .tick = tick,
         .handle = handle,
         .values = std::move(values),
+        .details = std::move(details),
     });
+}
+
+[[nodiscard]] std::string exact_value_text(double value)
+{
+    if (std::isnan(value)) {
+        return "NaN";
+    }
+    if (std::isinf(value)) {
+        return value < 0.0 ? "-Inf" : "Inf";
+    }
+    std::array<char, 64> buffer{};
+    const auto converted = std::to_chars(
+        buffer.data(),
+        buffer.data() + buffer.size(),
+        value,
+        std::chars_format::general,
+        std::numeric_limits<double>::max_digits10);
+    if (converted.ec != std::errc{}) {
+        throw std::invalid_argument("state value cannot be formatted");
+    }
+    return std::string{buffer.data(), converted.ptr};
+}
+
+struct StateScanFailure {
+    BodyHandle handle{};
+    StateValidationFailure invariant;
+};
+
+[[nodiscard]] std::optional<StateScanFailure> scan_body_states(
+    std::span<const BodyState> states, double planet_radius)
+{
+    for (const BodyState& state : states) {
+        if (const auto failure = validate_body_state(state, planet_radius)) {
+            return StateScanFailure{state.handle, *failure};
+        }
+    }
+    return std::nullopt;
+}
+
+[[nodiscard]] bool record_state_scan(
+    ScenarioResult& result,
+    std::span<const BodyState> states,
+    int tick,
+    double planet_radius)
+{
+    const auto failure = scan_body_states(states, planet_radius);
+    if (!failure) {
+        return true;
+    }
+    const std::string value = exact_value_text(failure->invariant.value);
+    add_violation(
+        result,
+        "fatal_state_invariant",
+        "body state invariant failed: " + failure->invariant.field + '=' + value,
+        tick,
+        failure->handle,
+        {},
+        {{"field", failure->invariant.field}, {"value", value}});
+    return false;
 }
 
 void sample_world_metrics(
@@ -154,11 +374,17 @@ void finish_timings(ScenarioResult& result, std::vector<double> timings)
 
     std::vector<double> timings;
     timings.reserve(result.ticks);
-    std::vector<double> trailing_energy;
-    trailing_energy.reserve(120);
+    constexpr std::size_t energy_window = 120;
+    constexpr double energy_epsilon = 1.0e-9;
+    std::vector<double> post_impact_energy;
+    post_impact_energy.reserve(result.ticks);
+    bool contacted = false;
     for (int tick = 1; tick <= result.ticks; ++tick) {
-        world.step();
+        watched_step(world, tick);
         sample_world_metrics(result, world.metrics(), timings);
+        if (!record_state_scan(result, world.states(), tick, planet_radius)) {
+            break;
+        }
         const auto state = world.state(ball.value);
         if (!state || !is_finite(state->transform.position)
             || !is_finite(state->linear_velocity) || !is_finite(state->angular_velocity)) {
@@ -166,12 +392,21 @@ void finish_timings(ScenarioResult& result, std::vector<double> timings)
                 result, "invalid_state", "radial-fall state is missing or non-finite", tick, ball.value);
             break;
         }
-        if (tick > result.ticks - 120) {
-            trailing_energy.push_back(sphere_kinetic_energy(*state, ball_radius));
+        if (!contacted) {
+            contacted = std::ranges::any_of(world.contact_hits(), [&](const ContactHit& hit) {
+                return hit.a == std::min(planet.value, ball.value)
+                    && hit.b == std::max(planet.value, ball.value);
+            });
+        }
+        if (contacted) {
+            post_impact_energy.push_back(sphere_kinetic_energy(*state, ball_radius));
         }
     }
 
     finish_timings(result, std::move(timings));
+    if (!result.violations.empty()) {
+        return result;
+    }
     const auto final_state = world.state(ball.value);
     if (!final_state) {
         if (result.violations.empty()) {
@@ -183,20 +418,26 @@ void finish_timings(ScenarioResult& result, std::vector<double> timings)
         length(final_state->transform.position) - planet_radius - ball_radius;
     result.final_linear_speed = length(final_state->linear_velocity);
     result.final_angular_speed = length(final_state->angular_velocity);
-    if (!trailing_energy.empty()) {
-        const double baseline = trailing_energy.front();
-        const double later_max = *std::max_element(
-            trailing_energy.begin() + std::min<std::size_t>(1, trailing_energy.size()),
-            trailing_energy.end());
-        result.max_energy_growth_ratio =
-            std::max(0.0, (later_max - baseline) / std::max(1.0e-9, baseline));
+    if (post_impact_energy.size() < energy_window) {
+        add_violation(
+            result,
+            "radial_fall_energy_samples",
+            "fewer than 120 post-impact energy samples were recorded",
+            result.ticks,
+            ball.value,
+            {{"samples", static_cast<double>(post_impact_energy.size()), "ticks"}});
+        return result;
     }
+    result.max_energy_growth_ratio = max_rolling_energy_growth(
+        post_impact_energy, energy_window, energy_epsilon);
     result.final_hash = hash_states(world.states());
     result.metrics = {
         {"surface_separation", result.surface_separation, "m"},
         {"final_linear_speed", result.final_linear_speed, "m/s"},
         {"final_angular_speed", result.final_angular_speed, "rad/s"},
         {"max_energy_growth_ratio", result.max_energy_growth_ratio, "ratio"},
+        {"energy_window", static_cast<double>(energy_window), "ticks"},
+        {"energy_epsilon", energy_epsilon, "J"},
     };
 
     if (result.surface_separation < -0.02 || result.surface_separation > 0.03) {
@@ -276,6 +517,7 @@ struct ProjectileOutcome {
     int peak_awake_count{};
     int peak_contact_count{};
     std::uint64_t final_hash{};
+    std::optional<StateScanFailure> state_failure;
 };
 
 [[nodiscard]] ProjectileOutcome simulate_projectile(
@@ -339,12 +581,18 @@ struct ProjectileOutcome {
     timings.reserve(90);
     constexpr float pile_exit_x = 3.0f;
     for (int tick = 1; tick <= 90; ++tick) {
-        world.step();
+        watched_step(world, tick);
         outcome.ticks = tick;
         const WorldMetrics metrics = world.metrics();
         timings.push_back(metrics.step_ms);
         outcome.peak_awake_count = std::max(outcome.peak_awake_count, metrics.awake_count);
         outcome.peak_contact_count = std::max(outcome.peak_contact_count, metrics.contact_count);
+
+        if (const auto failure = scan_body_states(world.states(), planet_radius)) {
+            outcome.invalid_state = true;
+            outcome.state_failure = failure;
+            break;
+        }
 
         const auto projectile_state = world.state(projectile_result.value);
         if (!projectile_state || !is_finite(projectile_state->transform.position)
@@ -375,7 +623,9 @@ struct ProjectileOutcome {
         outcome.step_p95_ms = percentile(timings, 0.95);
         outcome.step_max_ms = timings.back();
     }
-    outcome.final_hash = hash_states(world.states());
+    if (!outcome.invalid_state) {
+        outcome.final_hash = hash_states(world.states());
+    }
     return outcome;
 }
 
@@ -384,6 +634,8 @@ struct ProjectileGate {
     std::array<ProjectileOutcome, 20> fallback;
     int primary_pass_count{};
     int fallback_pass_count{};
+    int primary_invalid_count{};
+    int fallback_invalid_count{};
     bool uses_fallback{};
 };
 
@@ -392,6 +644,7 @@ struct ProjectileGate {
     ProjectileGate gate{};
     for (std::size_t index = 0; index < gate.primary.size(); ++index) {
         gate.primary[index] = simulate_projectile(index + 1, 35.0f, 4);
+        gate.primary_invalid_count += gate.primary[index].invalid_state;
         gate.primary_pass_count += gate.primary[index].contact_before_exit
             && !gate.primary[index].invalid_state;
     }
@@ -399,6 +652,7 @@ struct ProjectileGate {
         gate.uses_fallback = true;
         for (std::size_t index = 0; index < gate.fallback.size(); ++index) {
             gate.fallback[index] = simulate_projectile(index + 1, 30.0f, 6);
+            gate.fallback_invalid_count += gate.fallback[index].invalid_state;
             gate.fallback_pass_count += gate.fallback[index].contact_before_exit
                 && !gate.fallback[index].invalid_state;
         }
@@ -420,11 +674,17 @@ struct ProjectileGate {
     result.ccd_primary_pass_count = gate.primary_pass_count;
     result.ccd_fallback_pass_count = gate.fallback_pass_count;
     result.projectile_speed = speed;
-    result.limits = {
-        {"primary_seed_passes", "==", 20, "seeds"},
-        {"fallback_seed_passes", "==", 20, "seeds"},
-        {"invalid_states", "==", 0, "states"},
-    };
+    result.limits = gate.uses_fallback
+        ? std::vector<ScenarioLimit>{
+              {"primary_seed_passes", "<", 20, "seeds"},
+              {"fallback_seed_passes", "==", 20, "seeds"},
+              {"invalid_states", "==", 0, "states"},
+          }
+        : std::vector<ScenarioLimit>{
+              {"primary_seed_passes", "==", 20, "seeds"},
+              {"fallback_seed_passes", "==", 0, "seeds"},
+              {"invalid_states", "==", 0, "states"},
+          };
     if (fallback_passed) {
         result.fallback = "speed30_substeps6";
     }
@@ -449,9 +709,21 @@ struct ProjectileGate {
         {"primary_seed_passes", static_cast<double>(gate.primary_pass_count), "seeds"},
         {"fallback_seed_passes", static_cast<double>(gate.fallback_pass_count), "seeds"},
         {"projectile_speed", speed, "m/s"},
+        {"primary_invalid_states", static_cast<double>(gate.primary_invalid_count), "count"},
+        {"fallback_invalid_states", static_cast<double>(gate.fallback_invalid_count), "count"},
+        {"fallback_seed_evaluated", gate.uses_fallback ? 1.0 : 0.0, "bool"},
     };
 
-    if (gate.uses_fallback && !fallback_passed) {
+    if (gate.primary_invalid_count != 0 || gate.fallback_invalid_count != 0) {
+        add_violation(
+            result,
+            "fatal_state_invariant",
+            "CCD gate encountered an invalid body state in a fixed seed set",
+            outcome.ticks,
+            outcome.projectile,
+            {{"primary_invalid_states", static_cast<double>(gate.primary_invalid_count), "count"},
+             {"fallback_invalid_states", static_cast<double>(gate.fallback_invalid_count), "count"}});
+    } else if (gate.uses_fallback && !fallback_passed) {
         add_violation(
             result,
             "ccd_dynamic_dynamic",
@@ -460,6 +732,17 @@ struct ProjectileGate {
             outcome.projectile,
             {{"primary_passes", static_cast<double>(gate.primary_pass_count), "seeds"},
              {"fallback_passes", static_cast<double>(gate.fallback_pass_count), "seeds"}});
+    } else if (outcome.state_failure) {
+        const std::string value = exact_value_text(outcome.state_failure->invariant.value);
+        add_violation(
+            result,
+            "fatal_state_invariant",
+            "projectile fixture state invariant failed: "
+                + outcome.state_failure->invariant.field + '=' + value,
+            outcome.ticks,
+            outcome.state_failure->handle,
+            {},
+            {{"field", outcome.state_failure->invariant.field}, {"value", value}});
     } else if (!outcome.contact_before_exit || outcome.invalid_state) {
         add_violation(
             result,
@@ -652,8 +935,11 @@ struct OrientedBox {
     BodyHandle penetration_other{};
 
     for (int tick = 1; tick <= result.ticks; ++tick) {
-        world.step();
+        watched_step(world, tick);
         sample_world_metrics(result, world.metrics(), timings);
+        if (!record_state_scan(result, world.states(), tick, planet_radius)) {
+            break;
+        }
         double total_energy = 0.0;
         bool invalid_tick = false;
         std::vector<BodyState> measured_states;
@@ -755,6 +1041,9 @@ struct OrientedBox {
     }
 
     finish_timings(result, std::move(timings));
+    if (!result.violations.empty()) {
+        return result;
+    }
     std::ranges::sort(measured_linear_speeds);
     std::ranges::sort(measured_angular_speeds);
     result.p95_linear_speed = percentile(measured_linear_speeds, 0.95);
@@ -865,31 +1154,35 @@ struct StressCycleResult {
     std::size_t peak_working_set{};
     int peak_awake_count{};
     int peak_contact_count{};
+    int executed_substeps{};
 };
 
 [[nodiscard]] StressCycleResult execute_stress_cycle(
-    int warmup_ticks, int measurement_ticks, bool collect_timings)
+    int warmup_ticks, int measurement_ticks, bool collect_timings, int substeps)
 {
     constexpr int body_count = 500;
     constexpr int shape_count = 800;
     constexpr int joint_count = 250;
     StressCycleResult cycle;
     PhysicsWorld world(WorldConfig{
-        .substeps = 4,
+        .substeps = substeps,
         .planet_radius = 10,
         .surface_gravity = 0,
         .max_bodies = body_count,
     });
+    cycle.executed_substeps = world.config().substeps;
 
     std::vector<BodyHandle> bodies;
     bodies.reserve(body_count);
     for (int index = 0; index < body_count; ++index) {
         const int pair = index / 2;
-        const float base_x = static_cast<float>(pair % 25) * 3.0f;
-        const float base_y = static_cast<float>(pair / 25) * 3.0f;
+        const float base_x = static_cast<float>(pair % 10) * 3.0f;
+        const float base_y = static_cast<float>((pair / 10) % 5) * 3.0f;
+        const float base_z = static_cast<float>(pair / 50) * 3.0f;
         BodyDesc body{
             .type = BodyType::Dynamic,
-            .transform = {{base_x + static_cast<float>(index % 2), base_y, 0}, {}},
+            .transform = {
+                {base_x + static_cast<float>(index % 2), base_y, base_z}, {}},
             .radial_gravity = false,
             .remove_beyond_six_r = false,
         };
@@ -934,7 +1227,7 @@ struct StressCycleResult {
         cycle.timings.reserve(measurement_ticks);
     }
     for (int tick = 1; tick <= total_ticks; ++tick) {
-        world.step();
+        watched_step(world, tick);
         const WorldMetrics metrics = world.metrics();
         cycle.peak_awake_count = std::max(cycle.peak_awake_count, metrics.awake_count);
         cycle.peak_contact_count = std::max(cycle.peak_contact_count, metrics.contact_count);
@@ -949,18 +1242,13 @@ struct StressCycleResult {
         if (collect_timings && tick > warmup_ticks) {
             cycle.timings.push_back(metrics.step_ms);
         }
-        if (tick == 1 || tick == warmup_ticks || tick == total_ticks) {
-            for (const BodyState& state : world.states()) {
-                if (!is_finite(state.transform.position) || !is_finite(state.linear_velocity)
-                    || !is_finite(state.angular_velocity)
-                    || length(state.linear_velocity) > 100.0f) {
-                    cycle.code = "stress_invalid_state";
-                    cycle.detail = "stress body state is non-finite or exceeds 100 m/s";
-                    cycle.tick = tick;
-                    cycle.handle = state.handle;
-                    return cycle;
-                }
-            }
+        if (const auto failure = scan_body_states(world.states(), 10.0)) {
+            cycle.code = "fatal_state_invariant";
+            cycle.detail = failure->invariant.field + '='
+                + exact_value_text(failure->invariant.value);
+            cycle.tick = tick;
+            cycle.handle = failure->handle;
+            return cycle;
         }
         if (const auto memory = working_set_bytes()) {
             cycle.peak_working_set = std::max(cycle.peak_working_set, *memory);
@@ -983,7 +1271,7 @@ struct StressCycleResult {
             return cycle;
         }
     }
-    world.step();
+    watched_step(world, total_ticks + 1);
     const WorldMetrics empty_metrics = world.metrics();
     if (empty_metrics.body_count != 0 || empty_metrics.shape_count != 0
         || empty_metrics.joint_count != 0 || !world.states().empty()) {
@@ -1015,10 +1303,15 @@ struct StressCycleResult {
     timings.clear();
 
     const auto protocol_start = std::chrono::steady_clock::now();
+    int executed_substeps = 0;
     result.working_set_warmup_samples.reserve(3);
     for (int warmup_cycle = 0; warmup_cycle < 3; ++warmup_cycle) {
+        watchdog_checkpoint(
+            warmup_cycle * (result.warmup_ticks + result.measurement_ticks + 1));
         const StressCycleResult allocator_warmup = execute_stress_cycle(
-            result.warmup_ticks, result.measurement_ticks, false);
+            result.warmup_ticks, result.measurement_ticks, false, substeps);
+        watchdog_checkpoint(
+            (warmup_cycle + 1) * (result.warmup_ticks + result.measurement_ticks + 1));
         if (!allocator_warmup.passed) {
             add_violation(
                 result,
@@ -1027,6 +1320,18 @@ struct StressCycleResult {
                 allocator_warmup.tick,
                 allocator_warmup.handle,
                 {{"warmup_cycle", static_cast<double>(warmup_cycle + 1), "count"}});
+            return result;
+        }
+        executed_substeps = allocator_warmup.executed_substeps;
+        if (executed_substeps != substeps) {
+            add_violation(
+                result,
+                "stress_substeps_mismatch",
+                "stress world did not execute the requested substep count",
+                0,
+                {},
+                {{"requested", static_cast<double>(substeps), "count"},
+                 {"executed", static_cast<double>(executed_substeps), "count"}});
             return result;
         }
         result.working_set_peak_bytes = std::max(
@@ -1048,8 +1353,9 @@ struct StressCycleResult {
 
     result.working_set_cycle_samples.reserve(10);
     for (int cycle_index = 0; cycle_index < 10; ++cycle_index) {
+        watchdog_checkpoint(result.ticks);
         StressCycleResult cycle = execute_stress_cycle(
-            result.warmup_ticks, result.measurement_ticks, true);
+            result.warmup_ticks, result.measurement_ticks, true, substeps);
         if (!cycle.passed) {
             add_violation(
                 result,
@@ -1060,8 +1366,21 @@ struct StressCycleResult {
                 {{"cycle", static_cast<double>(cycle_index + 1), "count"}});
             break;
         }
+        executed_substeps = cycle.executed_substeps;
+        if (executed_substeps != substeps) {
+            add_violation(
+                result,
+                "stress_substeps_mismatch",
+                "stress cycle did not execute the requested substep count",
+                result.ticks,
+                {},
+                {{"requested", static_cast<double>(substeps), "count"},
+                 {"executed", static_cast<double>(executed_substeps), "count"}});
+            break;
+        }
         ++result.stress_cycles;
         result.ticks += result.warmup_ticks + result.measurement_ticks;
+        watchdog_checkpoint(result.ticks);
         result.final_hash = cycle.final_hash;
         result.peak_awake_count =
             std::max(result.peak_awake_count, cycle.peak_awake_count);
@@ -1186,6 +1505,7 @@ struct StressCycleResult {
         {"working_set_instant_growth_ratio",
          result.working_set_instant_growth_ratio,
          "ratio"},
+        {"executed_substeps", static_cast<double>(executed_substeps), "count"},
         {"completed_cycles", static_cast<double>(result.stress_cycles), "count"},
     };
     return result;
@@ -1202,8 +1522,18 @@ struct StressCycleResult {
         {"primary_substeps", 4.0, "count"},
         {"fallback_speed", 30.0, "m/s"},
         {"fallback_substeps", 6.0, "count"},
+        {"fallback_evaluated", gate.uses_fallback ? 1.0 : 0.0, "bool"},
+        {"primary_invalid_states", static_cast<double>(gate.primary_invalid_count), "count"},
+        {"fallback_invalid_states", static_cast<double>(gate.fallback_invalid_count), "count"},
     };
-    if (gate.primary_pass_count == 20) {
+    const auto& outcomes = gate.primary_pass_count == 20 ? gate.primary : gate.fallback;
+    for (const ProjectileOutcome& outcome : outcomes) {
+        row.fixture_hashes.push_back(outcome.final_hash);
+    }
+    if (gate.primary_invalid_count != 0 || gate.fallback_invalid_count != 0) {
+        row.status = CapabilityStatus::Blocked;
+        row.detail = "a fixed CCD seed produced an invalid body state";
+    } else if (gate.primary_pass_count == 20) {
         row.status = CapabilityStatus::Pass;
         row.detail = "all 20 fixed seeds contacted a dynamic pile body at 35 m/s and four substeps";
     } else if (gate.fallback_pass_count == 20) {
@@ -1236,7 +1566,15 @@ struct StressCycleResult {
         row.detail = "the transformed hull query fixture could not be created";
         return row;
     }
-    world.step();
+    watched_step(world, 1);
+    if (const auto failure = scan_body_states(world.states(), 10.0)) {
+        row.status = CapabilityStatus::Blocked;
+        row.detail = "shape-query fixture state failed: " + failure->invariant.field
+            + '=' + exact_value_text(failure->invariant.value);
+        row.values = {{"invalid_handle", static_cast<double>(failure->handle.index), "index"}};
+        return row;
+    }
+    row.fixture_hashes.push_back(hash_states(world.states()));
     const SphereShape query{.radius = 0.1f};
     constexpr Vec3 origin{0, 2.5f, 0};
     constexpr Vec3 translation{0, -3, 0};
@@ -1288,12 +1626,25 @@ struct StressCycleResult {
         row.detail = "the asymmetric contact fixture could not be created";
         return row;
     }
-    world.step();
+    watched_step(world, 1);
+    if (const auto failure = scan_body_states(world.states(), 10.0)) {
+        row.status = CapabilityStatus::Blocked;
+        row.detail = "contact fixture state failed: " + failure->invariant.field
+            + '=' + exact_value_text(failure->invariant.value);
+        return row;
+    }
     const auto light_state = world.state(light.value);
     const auto heavy_state = world.state(heavy.value);
     for (int tick = 0; tick < 30 && world.contact_hits().empty(); ++tick) {
-        world.step();
+        watched_step(world, tick + 2);
+        if (const auto failure = scan_body_states(world.states(), 10.0)) {
+            row.status = CapabilityStatus::Blocked;
+            row.detail = "contact fixture state failed: " + failure->invariant.field
+                + '=' + exact_value_text(failure->invariant.value);
+            return row;
+        }
     }
+    row.fixture_hashes.push_back(hash_states(world.states()));
 
     std::set<std::pair<BodyHandle, BodyHandle>> unique_pairs;
     bool pairs_are_unique = true;
@@ -1374,7 +1725,13 @@ struct StressCycleResult {
         row.detail = "joint reaction bodies could not be created";
         return row;
     }
-    world.step();
+    watched_step(world, 1);
+    if (const auto failure = scan_body_states(world.states(), 10.0)) {
+        row.status = CapabilityStatus::Blocked;
+        row.detail = "joint fixture state failed: " + failure->invariant.field
+            + '=' + exact_value_text(failure->invariant.value);
+        return row;
+    }
     const auto joint = world.create_joint(
         DistanceJointDesc{.a = anchor.value, .b = loaded.value, .length = 1});
     if (!joint) {
@@ -1387,9 +1744,30 @@ struct StressCycleResult {
     bool monotonic = true;
     bool finite = true;
     double maximum_deformation = 0.0;
+    std::vector<double> deformation_samples;
+    constexpr double deformation_threshold = 0.01;
     for (int load = 1000; load <= 12000; load += 1000) {
         world.apply_force(loaded.value, {static_cast<float>(load), 0, 0}, {0, 1, 0});
-        world.step();
+        watched_step(world, load / 1000 + 1);
+        if (const auto failure = scan_body_states(world.states(), 10.0)) {
+            row.status = CapabilityStatus::Blocked;
+            row.detail = "joint fixture state failed: " + failure->invariant.field
+                + '=' + exact_value_text(failure->invariant.value);
+            return row;
+        }
+        const auto anchor_state = world.state(anchor.value);
+        const auto loaded_state = world.state(loaded.value);
+        if (!anchor_state || !loaded_state) {
+            row.status = CapabilityStatus::Blocked;
+            row.detail = "joint fixture body state disappeared";
+            return row;
+        }
+        const double relative_deformation = std::abs(
+            static_cast<double>(length(
+                loaded_state->transform.position - anchor_state->transform.position))
+            - 1.0);
+        deformation_samples.push_back(relative_deformation);
+        maximum_deformation = std::max(maximum_deformation, relative_deformation);
         const auto reaction = world.joint_reaction(joint.value);
         if (!reaction || !is_finite(reaction->force) || !is_finite(reaction->torque)
             || !std::isfinite(reaction->linear_separation)
@@ -1401,14 +1779,14 @@ struct StressCycleResult {
         monotonic = monotonic && current + 50.0f >= previous;
         previous = current;
         maximum_force = std::max(maximum_force, current);
-        maximum_deformation = std::max(
-            maximum_deformation,
-            static_cast<double>(std::abs(reaction->linear_separation)));
     }
+    row.fixture_hashes.push_back(hash_states(world.states()));
+    const bool consecutive_deformation =
+        has_two_consecutive_samples(deformation_samples, deformation_threshold);
     if (finite && monotonic && maximum_force > 10000.0f) {
         row.status = CapabilityStatus::Pass;
         row.detail = "joint reaction grows within 50 N tolerance and crosses 10 kN";
-    } else if (std::isfinite(maximum_deformation) && maximum_deformation > 0.0) {
+    } else if (consecutive_deformation) {
         row.status = CapabilityStatus::Fallback;
         row.fallback = "relative_deformation_two_ticks";
         row.detail = "joint rupture can be evaluated from relative deformation over two ticks";
@@ -1421,6 +1799,8 @@ struct StressCycleResult {
         {"maximum_force", maximum_force, "N"},
         {"rupture_threshold", 10000.0, "N"},
         {"maximum_deformation", maximum_deformation, "m"},
+        {"deformation_threshold", deformation_threshold, "m"},
+        {"consecutive_deformation_ticks", consecutive_deformation ? 2.0 : 0.0, "ticks"},
     };
     return row;
 }
@@ -1473,9 +1853,14 @@ struct StressCycleResult {
             bool valid_mass{};
             bool valid_bounds{};
             bool contacted{};
+            bool state_valid{true};
             double mass{};
-            double bounds_width{};
+            Aabb bounds{};
+            std::uint64_t fixture_hash{};
         } result;
+        constexpr double expected_mass = 42.666666666666664;
+        constexpr double tolerance = 1.0e-4;
+        constexpr Aabb expected_bounds{{-1.62f, 2.78f, -0.22f}, {1.62f, 3.22f, 0.22f}};
         PhysicsWorld world(WorldConfig{.surface_gravity = 0, .max_bodies = 2});
         const auto body = world.create_body(eight_hull_body(compound));
         const auto platform = world.create_body(
@@ -1484,34 +1869,50 @@ struct StressCycleResult {
             return result;
         }
         result.created = true;
-        world.step();
+        watched_step(world, 1);
+        if (scan_body_states(world.states(), 10.0)) {
+            result.state_valid = false;
+            return result;
+        }
         const auto state = world.state(body.value);
         const auto bounds = world.body_bounds(body.value);
         result.mass = state ? state->mass : 0.0;
-        result.bounds_width = bounds ? bounds->upper.x - bounds->lower.x : 0.0;
-        result.valid_mass = state && std::isfinite(state->mass) && state->mass > 0.0f;
+        result.bounds = bounds.value_or(Aabb{});
+        result.valid_mass = state
+            && std::abs(static_cast<double>(state->mass) - expected_mass) <= tolerance;
         result.valid_bounds = bounds && is_finite(bounds->lower) && is_finite(bounds->upper)
-            && result.bounds_width > 2.5;
+            && std::abs(bounds->lower.x - expected_bounds.lower.x) <= tolerance
+            && std::abs(bounds->lower.y - expected_bounds.lower.y) <= tolerance
+            && std::abs(bounds->lower.z - expected_bounds.lower.z) <= tolerance
+            && std::abs(bounds->upper.x - expected_bounds.upper.x) <= tolerance
+            && std::abs(bounds->upper.y - expected_bounds.upper.y) <= tolerance
+            && std::abs(bounds->upper.z - expected_bounds.upper.z) <= tolerance;
         for (int tick = 0; tick < 180 && world.contact_hits().empty(); ++tick) {
             world.apply_force(body.value, {0, -4000, 0}, {0, 3, 0});
-            world.step();
+            watched_step(world, tick + 2);
+            if (scan_body_states(world.states(), 10.0)) {
+                result.state_valid = false;
+                return result;
+            }
         }
         result.contacted = std::ranges::any_of(world.contact_hits(), [&](const ContactHit& hit) {
             return hit.a == std::min(body.value, platform.value)
                 && hit.b == std::max(body.value, platform.value);
         });
+        result.fixture_hash = hash_states(world.states());
         return result;
     };
 
     auto proof = exercise(true);
-    if (proof.created && proof.valid_mass && proof.valid_bounds && proof.contacted) {
+    if (proof.created && proof.state_valid && proof.valid_mass && proof.valid_bounds
+        && proof.contacted) {
         row.status = CapabilityStatus::Pass;
         row.detail = "one compound containing eight hull children has valid mass, bounds, and contact";
-    } else {
+    } else if (!proof.created) {
         const auto fallback = exercise(false);
         proof = fallback;
-        if (fallback.created && fallback.valid_mass && fallback.valid_bounds
-            && fallback.contacted) {
+        if (fallback.created && fallback.state_valid && fallback.valid_mass
+            && fallback.valid_bounds && fallback.contacted) {
             row.status = CapabilityStatus::Fallback;
             row.fallback = "multiple_shapes_same_body";
             row.detail = "eight hulls pass as multiple shapes on the same body";
@@ -1519,12 +1920,24 @@ struct StressCycleResult {
             row.status = CapabilityStatus::Blocked;
             row.detail = "neither compound nor approved multi-shape fixture is safe";
         }
+    } else {
+        row.status = CapabilityStatus::Blocked;
+        row.detail = "the primary compound was created but failed exact mass, bounds, state, or contact proof";
     }
+    row.fixture_hashes.push_back(proof.fixture_hash);
     row.values = {
         {"hull_count", 8.0, "count"},
+        {"expected_mass", 42.666666666666664, "kg"},
         {"mass", proof.mass, "kg"},
-        {"bounds_width", proof.bounds_width, "m"},
+        {"bounds_lower_x", proof.bounds.lower.x, "m"},
+        {"bounds_lower_y", proof.bounds.lower.y, "m"},
+        {"bounds_lower_z", proof.bounds.lower.z, "m"},
+        {"bounds_upper_x", proof.bounds.upper.x, "m"},
+        {"bounds_upper_y", proof.bounds.upper.y, "m"},
+        {"bounds_upper_z", proof.bounds.upper.z, "m"},
+        {"bounds_tolerance", 1.0e-4, "m"},
         {"contacted", proof.contacted ? 1.0 : 0.0, "bool"},
+        {"state_valid", proof.state_valid ? 1.0 : 0.0, "bool"},
     };
     return row;
 }
@@ -1545,9 +1958,15 @@ struct StressCycleResult {
             row.detail = "allocator warmup creation failed";
             return row;
         }
-        world.step();
+        watched_step(world, warmup * 2 + 1);
+        if (const auto failure = scan_body_states(world.states(), 10.0)) {
+            row.status = CapabilityStatus::Blocked;
+            row.detail = "lifecycle warmup state failed: " + failure->invariant.field
+                + '=' + exact_value_text(failure->invariant.value);
+            return row;
+        }
         world.destroy_body(created.value);
-        world.step();
+        watched_step(world, warmup * 2 + 2);
         previous = created.value;
     }
     const auto baseline = working_set_bytes();
@@ -1564,7 +1983,17 @@ struct StressCycleResult {
                 || created.value.generation == previous.generation)) {
             ++invalid_handles;
         }
-        world.step();
+        watched_step(world, cycle * 2 + 1);
+        if (const auto failure = scan_body_states(world.states(), 10.0)) {
+            row.status = CapabilityStatus::Blocked;
+            row.detail = "lifecycle state failed: " + failure->invariant.field
+                + '=' + exact_value_text(failure->invariant.value);
+            row.values = {
+                {"generation_cycles", static_cast<double>(completed_cycles), "count"},
+                {"invalid_handle_index", static_cast<double>(failure->handle.index), "index"},
+            };
+            return row;
+        }
         if (!world.state(created.value)) {
             ++invalid_handles;
         }
@@ -1574,7 +2003,7 @@ struct StressCycleResult {
         if (world.apply_impulse(created.value, {}, {}).code != StatusCode::InvalidHandle) {
             ++invalid_handles;
         }
-        world.step();
+        watched_step(world, cycle * 2 + 2);
         if (world.state(created.value)) {
             ++invalid_handles;
         }
@@ -1582,21 +2011,23 @@ struct StressCycleResult {
         ++completed_cycles;
     }
     const auto final = working_set_bytes();
-    const double memory_growth = baseline && final && *baseline != 0
-        ? std::max(
+    const std::optional<double> memory_growth = baseline && final && *baseline != 0
+        ? std::optional<double>{std::max(
             0.0,
             (static_cast<double>(*final) - static_cast<double>(*baseline))
-                / static_cast<double>(*baseline))
-        : 0.0;
+                / static_cast<double>(*baseline))}
+        : std::nullopt;
     row.values = {
         {"generation_cycles", static_cast<double>(completed_cycles), "count"},
         {"invalid_handles", static_cast<double>(invalid_handles), "count"},
-        {"working_set_growth", memory_growth, "ratio"},
+        {"working_set_available", memory_growth ? 1.0 : 0.0, "bool"},
+        {"working_set_growth", memory_growth.value_or(0.0), "ratio"},
     };
-    const bool memory_available = baseline && final;
-    if (completed_cycles == 10000 && invalid_handles == 0
-        && (!memory_available || memory_growth <= 0.05)) {
-        row.status = CapabilityStatus::Pass;
+    row.fixture_hashes.push_back(
+        (static_cast<std::uint64_t>(previous.generation) << 32) | previous.index);
+    row.status = classify_lifecycle_status(
+        completed_cycles, invalid_handles, memory_growth);
+    if (row.status == CapabilityStatus::Pass) {
         row.detail = "10,000 create-destroy cycles preserved handle generations without persistent growth";
     } else {
         row.status = CapabilityStatus::Blocked;
@@ -1605,7 +2036,7 @@ struct StressCycleResult {
     return row;
 }
 
-[[nodiscard]] std::uint64_t own_replay_hash(std::uint64_t seed)
+[[nodiscard]] std::optional<std::uint64_t> own_replay_hash(std::uint64_t seed)
 {
     XorShift64 random(seed);
     PhysicsWorld world(WorldConfig{.surface_gravity = 0, .max_bodies = 1});
@@ -1616,7 +2047,10 @@ struct StressCycleResult {
     body.linear_velocity = {1, 0, 0};
     world.create_body(body);
     for (int tick = 0; tick < 60; ++tick) {
-        world.step();
+        watched_step(world, tick + 1);
+        if (scan_body_states(world.states(), 10.0)) {
+            return std::nullopt;
+        }
     }
     return hash_states(world.states());
 }
@@ -1628,6 +2062,11 @@ struct StressCycleResult {
         / ("ninho-box3d-replay-" + std::to_string(seed) + ".b3rec");
     const detail::ReplayConformanceResult proof =
         detail::validate_box3d_replay(path);
+    const auto own_first = own_replay_hash(seed);
+    const auto own_second = own_replay_hash(seed);
+    if (own_first) {
+        row.fixture_hashes.push_back(*own_first);
+    }
     row.values = {
         {"saved", proof.saved ? 1.0 : 0.0, "bool"},
         {"loaded", proof.loaded ? 1.0 : 0.0, "bool"},
@@ -1635,13 +2074,14 @@ struct StressCycleResult {
         {"recording_bytes", static_cast<double>(proof.bytes), "bytes"},
         {"temporary_file_removed", proof.temporary_file_removed ? 1.0 : 0.0, "bool"},
     };
-    if (proof.saved && proof.loaded && proof.validated && proof.temporary_file_removed) {
+    if (!own_first || !own_second) {
+        row.status = CapabilityStatus::Blocked;
+        row.detail = "public replay fallback fixture produced an invalid body state";
+    } else if (proof.saved && proof.loaded && proof.validated && proof.temporary_file_removed) {
         row.status = CapabilityStatus::Pass;
         row.detail = "the pinned official recorder saved, loaded, and validated a minimal replay";
     } else {
-        const std::uint64_t first = own_replay_hash(seed);
-        const std::uint64_t second = own_replay_hash(seed);
-        if (proof.temporary_file_removed && first == second) {
+        if (proof.temporary_file_removed && own_first == own_second) {
             row.status = CapabilityStatus::Fallback;
             row.fallback = "input_metric_replay";
             row.detail = "official replay failed; deterministic input and metric replay remains available: "
@@ -1681,13 +2121,14 @@ struct StressCycleResult {
             {"max_penetration", sleep.max_penetration, "m"},
             {"energy_growth", sleep.max_energy_growth_ratio, "ratio"},
         },
+        .fixture_hashes = {sleep.final_hash},
     };
     result.matrix.push_back(std::move(sleep_row));
     result.matrix.push_back(prove_batch_lifecycle());
     result.matrix.push_back(prove_replay(seed));
 
     result.ticks = sleep.ticks + 20000;
-    result.final_hash = sleep.final_hash;
+    result.final_hash = hash_capability_rows(result.matrix);
     result.step_min_ms = sleep.step_min_ms;
     result.step_p50_ms = sleep.step_p50_ms;
     result.step_p95_ms = sleep.step_p95_ms;
@@ -1701,14 +2142,77 @@ struct StressCycleResult {
                 "capability_blocked",
                 row.capability + ": " + row.detail,
                 result.ticks,
-                {});
+                {},
+                row.values,
+                {{"capability", row.capability},
+                 {"status", "blocked"},
+                 {"fallback", row.fallback}});
         }
     }
     return result;
 }
 
+[[nodiscard]] bool valid_utf8(std::string_view value)
+{
+    const auto continuation = [](unsigned char byte) {
+        return byte >= 0x80 && byte <= 0xbf;
+    };
+    std::size_t index = 0;
+    while (index < value.size()) {
+        const unsigned char first = static_cast<unsigned char>(value[index]);
+        if (first <= 0x7f) {
+            ++index;
+            continue;
+        }
+        if (first >= 0xc2 && first <= 0xdf) {
+            if (index + 1 >= value.size()
+                || !continuation(static_cast<unsigned char>(value[index + 1]))) {
+                return false;
+            }
+            index += 2;
+            continue;
+        }
+        if (first >= 0xe0 && first <= 0xef) {
+            if (index + 2 >= value.size()) {
+                return false;
+            }
+            const unsigned char second = static_cast<unsigned char>(value[index + 1]);
+            const unsigned char third = static_cast<unsigned char>(value[index + 2]);
+            const bool valid_second = first == 0xe0 ? second >= 0xa0 && second <= 0xbf
+                : first == 0xed                 ? second >= 0x80 && second <= 0x9f
+                                                : continuation(second);
+            if (!valid_second || !continuation(third)) {
+                return false;
+            }
+            index += 3;
+            continue;
+        }
+        if (first >= 0xf0 && first <= 0xf4) {
+            if (index + 3 >= value.size()) {
+                return false;
+            }
+            const unsigned char second = static_cast<unsigned char>(value[index + 1]);
+            const bool valid_second = first == 0xf0 ? second >= 0x90 && second <= 0xbf
+                : first == 0xf4                 ? second >= 0x80 && second <= 0x8f
+                                                : continuation(second);
+            if (!valid_second
+                || !continuation(static_cast<unsigned char>(value[index + 2]))
+                || !continuation(static_cast<unsigned char>(value[index + 3]))) {
+                return false;
+            }
+            index += 4;
+            continue;
+        }
+        return false;
+    }
+    return true;
+}
+
 void append_json_string(std::string& output, std::string_view value)
 {
+    if (!valid_utf8(value)) {
+        throw std::invalid_argument("invalid UTF-8 in scenario JSON string");
+    }
     constexpr char hex[] = "0123456789abcdef";
     output.push_back('"');
     for (const unsigned char byte : value) {
@@ -1836,6 +2340,21 @@ void append_violation(std::string& output, const ScenarioViolation& violation)
     output.push_back('}');
     append_json_name(output, "values", first);
     append_values(output, violation.values);
+    append_json_name(output, "details", first);
+    output.push_back('[');
+    for (std::size_t index = 0; index < violation.details.size(); ++index) {
+        if (index != 0) {
+            output.push_back(',');
+        }
+        output.push_back('{');
+        bool detail_first = true;
+        append_json_name(output, "name", detail_first);
+        append_json_string(output, violation.details[index].name);
+        append_json_name(output, "value", detail_first);
+        append_json_string(output, violation.details[index].value);
+        output.push_back('}');
+    }
+    output.push_back(']');
     output.push_back('}');
 }
 
@@ -1870,6 +2389,15 @@ void append_capability_row(std::string& output, const CapabilityRow& row)
     append_json_string(output, row.detail);
     append_json_name(output, "values", first);
     append_values(output, row.values);
+    append_json_name(output, "fixture_hashes", first);
+    output.push_back('[');
+    for (std::size_t index = 0; index < row.fixture_hashes.size(); ++index) {
+        if (index != 0) {
+            output.push_back(',');
+        }
+        append_json_integer(output, row.fixture_hashes[index]);
+    }
+    output.push_back(']');
     output.push_back('}');
 }
 
@@ -2035,6 +2563,12 @@ void append_scenario_result(std::string& output, const ScenarioResult& result)
 
 }
 
+void ScenarioRunner::set_emergency_json_path(std::optional<std::string> path)
+{
+    const std::scoped_lock lock(emergency_json_mutex);
+    emergency_json_path = std::move(path);
+}
+
 std::string_view scenario_name(ScenarioKind kind)
 {
     return name_of(kind);
@@ -2147,6 +2681,199 @@ std::string ScenarioReport::to_json() const
     return output;
 }
 
+std::optional<StateValidationFailure> validate_body_state(
+    const BodyState& state, double planet_radius)
+{
+    if (!std::isfinite(planet_radius) || planet_radius <= 0.0) {
+        throw std::invalid_argument("planet radius must be finite and positive");
+    }
+    if (!state.handle.valid()) {
+        return StateValidationFailure{"handle", static_cast<double>(state.handle.index)};
+    }
+    const auto finite_component = [](float value, const char* field)
+        -> std::optional<StateValidationFailure> {
+        return std::isfinite(value)
+            ? std::nullopt
+            : std::optional<StateValidationFailure>{{field, value}};
+    };
+    const std::array components{
+        std::pair{state.transform.position.x, "position.x"},
+        std::pair{state.transform.position.y, "position.y"},
+        std::pair{state.transform.position.z, "position.z"},
+        std::pair{state.transform.rotation.x, "rotation.x"},
+        std::pair{state.transform.rotation.y, "rotation.y"},
+        std::pair{state.transform.rotation.z, "rotation.z"},
+        std::pair{state.transform.rotation.w, "rotation.w"},
+        std::pair{state.linear_velocity.x, "linear_velocity.x"},
+        std::pair{state.linear_velocity.y, "linear_velocity.y"},
+        std::pair{state.linear_velocity.z, "linear_velocity.z"},
+        std::pair{state.angular_velocity.x, "angular_velocity.x"},
+        std::pair{state.angular_velocity.y, "angular_velocity.y"},
+        std::pair{state.angular_velocity.z, "angular_velocity.z"},
+    };
+    for (const auto& [value, field] : components) {
+        if (const auto failure = finite_component(value, field)) {
+            return failure;
+        }
+    }
+    constexpr double quaternion_norm_tolerance = 1.0e-3;
+    const Quat rotation = state.transform.rotation;
+    const double rotation_norm_squared = static_cast<double>(rotation.x) * rotation.x
+        + static_cast<double>(rotation.y) * rotation.y
+        + static_cast<double>(rotation.z) * rotation.z
+        + static_cast<double>(rotation.w) * rotation.w;
+    if (std::abs(rotation_norm_squared - 1.0) > quaternion_norm_tolerance) {
+        return StateValidationFailure{"rotation_norm", rotation_norm_squared};
+    }
+    if (!std::isfinite(state.mass) || state.mass < 0.0f) {
+        return StateValidationFailure{"mass", state.mass};
+    }
+    const Vec3 linear = state.linear_velocity;
+    const double linear_speed = std::sqrt(
+        static_cast<double>(linear.x) * linear.x
+        + static_cast<double>(linear.y) * linear.y
+        + static_cast<double>(linear.z) * linear.z);
+    if (!std::isfinite(linear_speed) || linear_speed > 100.0) {
+        return StateValidationFailure{"linear_speed", linear_speed};
+    }
+    const Vec3 position = state.transform.position;
+    const double radius = std::sqrt(
+        static_cast<double>(position.x) * position.x
+        + static_cast<double>(position.y) * position.y
+        + static_cast<double>(position.z) * position.z);
+    if (!std::isfinite(radius)) {
+        return StateValidationFailure{"radius", radius};
+    }
+    if (radius >= 6.0 * planet_radius && !state.ejected) {
+        return StateValidationFailure{"radius_without_ejection", radius};
+    }
+    return std::nullopt;
+}
+
+double max_rolling_energy_growth(
+    std::span<const double> energies, std::size_t window, double epsilon)
+{
+    if (window < 2 || energies.size() < window) {
+        throw std::invalid_argument("energy window must contain at least two complete samples");
+    }
+    if (!std::isfinite(epsilon) || epsilon <= 0.0) {
+        throw std::invalid_argument("energy epsilon must be finite and positive");
+    }
+    for (const double energy : energies) {
+        if (!std::isfinite(energy) || energy < 0.0) {
+            throw std::invalid_argument("energy samples must be finite and non-negative");
+        }
+    }
+    double maximum_growth = 0.0;
+    for (std::size_t start = 0; start + window <= energies.size(); ++start) {
+        const double initial = energies[start];
+        const double final = energies[start + window - 1];
+        const double growth = (final - initial) / std::max(initial, epsilon);
+        maximum_growth = std::max(maximum_growth, growth);
+    }
+    return maximum_growth;
+}
+
+bool has_two_consecutive_samples(
+    std::span<const double> samples, double threshold)
+{
+    if (!std::isfinite(threshold) || threshold < 0.0) {
+        throw std::invalid_argument("consecutive sample threshold must be finite and non-negative");
+    }
+    for (std::size_t index = 1; index < samples.size(); ++index) {
+        if (!std::isfinite(samples[index - 1]) || !std::isfinite(samples[index])) {
+            throw std::invalid_argument("consecutive samples must be finite");
+        }
+        if (samples[index - 1] >= threshold && samples[index] >= threshold) {
+            return true;
+        }
+    }
+    return false;
+}
+
+CapabilityStatus classify_lifecycle_status(
+    int completed_cycles,
+    int invalid_handles,
+    std::optional<double> working_set_growth)
+{
+    if (completed_cycles != 10000 || invalid_handles != 0 || !working_set_growth
+        || !std::isfinite(*working_set_growth) || *working_set_growth < 0.0
+        || *working_set_growth > 0.05) {
+        return CapabilityStatus::Blocked;
+    }
+    return CapabilityStatus::Pass;
+}
+
+int scenario_exit_code(
+    std::span<const ScenarioResult> scenarios, bool hash_mismatch)
+{
+    return hash_mismatch
+            || std::ranges::any_of(scenarios, [](const ScenarioResult& result) {
+                   return !result.violations.empty();
+               })
+        ? 1
+        : 0;
+}
+
+std::uint64_t hash_capability_rows(std::span<const CapabilityRow> rows)
+{
+    std::uint64_t hash = 14695981039346656037ull;
+    const auto mix_byte = [&hash](std::uint8_t byte) {
+        hash ^= byte;
+        hash *= 1099511628211ull;
+    };
+    const auto mix_u64 = [&](std::uint64_t value) {
+        for (int index = 0; index < 8; ++index) {
+            mix_byte(static_cast<std::uint8_t>(value >> (index * 8)));
+        }
+    };
+    const auto mix_string = [&](std::string_view value) {
+        if (!valid_utf8(value)) {
+            throw std::invalid_argument("invalid UTF-8 in capability hash field");
+        }
+        mix_u64(value.size());
+        for (const unsigned char byte : value) {
+            mix_byte(byte);
+        }
+    };
+    std::vector<const CapabilityRow*> ordered_rows;
+    ordered_rows.reserve(rows.size());
+    for (const CapabilityRow& row : rows) {
+        ordered_rows.push_back(&row);
+    }
+    std::ranges::sort(
+        ordered_rows, {}, [](const CapabilityRow* row) { return row->capability; });
+    for (const CapabilityRow* row : ordered_rows) {
+        mix_string(row->capability);
+        mix_u64(static_cast<std::uint64_t>(row->status));
+        mix_string(row->fallback);
+        std::vector<const ScenarioValue*> ordered_values;
+        for (const ScenarioValue& value : row->values) {
+            if (value.name.find("working_set") == std::string::npos) {
+                ordered_values.push_back(&value);
+            }
+        }
+        std::ranges::sort(ordered_values, [](const ScenarioValue* lhs, const ScenarioValue* rhs) {
+            return std::tie(lhs->name, lhs->unit) < std::tie(rhs->name, rhs->unit);
+        });
+        for (const ScenarioValue* value : ordered_values) {
+            if (!std::isfinite(value->value)) {
+                throw std::invalid_argument("non-finite capability hash value");
+            }
+            mix_string(value->name);
+            mix_string(value->unit);
+            mix_u64(std::bit_cast<std::uint64_t>(value->value));
+        }
+        std::vector<std::uint64_t> fixture_hashes = row->fixture_hashes;
+        std::ranges::sort(fixture_hashes);
+        mix_u64(fixture_hashes.size());
+        for (const std::uint64_t fixture_hash : fixture_hashes) {
+            mix_u64(fixture_hash);
+        }
+    }
+    return hash;
+}
+
 std::uint64_t hash_states(std::span<const BodyState> states)
 {
     std::vector<BodyState> ordered(states.begin(), states.end());
@@ -2158,22 +2885,34 @@ std::uint64_t hash_states(std::span<const BodyState> states)
             hash *= 1099511628211ull;
         }
     };
+    const auto quantize = [](float value, double scale, const char* field) {
+        if (!std::isfinite(value)) {
+            throw std::invalid_argument(std::string{"non-finite hash field: "} + field);
+        }
+        const double scaled = static_cast<double>(value) * scale;
+        constexpr double minimum = -9223372036854775808.0;
+        constexpr double exclusive_maximum = 9223372036854775808.0;
+        if (!std::isfinite(scaled) || scaled < minimum || scaled >= exclusive_maximum) {
+            throw std::invalid_argument(std::string{"out-of-range hash field: "} + field);
+        }
+        return static_cast<std::int64_t>(std::llround(scaled));
+    };
     for (const BodyState& state : ordered) {
         mix(state.handle.index);
         mix(state.handle.generation);
-        mix(std::llround(state.transform.position.x * 1000));
-        mix(std::llround(state.transform.position.y * 1000));
-        mix(std::llround(state.transform.position.z * 1000));
-        mix(std::llround(state.transform.rotation.x * 32767));
-        mix(std::llround(state.transform.rotation.y * 32767));
-        mix(std::llround(state.transform.rotation.z * 32767));
-        mix(std::llround(state.transform.rotation.w * 32767));
-        mix(std::llround(state.linear_velocity.x * 1000));
-        mix(std::llround(state.linear_velocity.y * 1000));
-        mix(std::llround(state.linear_velocity.z * 1000));
-        mix(std::llround(state.angular_velocity.x * 1000));
-        mix(std::llround(state.angular_velocity.y * 1000));
-        mix(std::llround(state.angular_velocity.z * 1000));
+        mix(quantize(state.transform.position.x, 1000, "position.x"));
+        mix(quantize(state.transform.position.y, 1000, "position.y"));
+        mix(quantize(state.transform.position.z, 1000, "position.z"));
+        mix(quantize(state.transform.rotation.x, 32767, "rotation.x"));
+        mix(quantize(state.transform.rotation.y, 32767, "rotation.y"));
+        mix(quantize(state.transform.rotation.z, 32767, "rotation.z"));
+        mix(quantize(state.transform.rotation.w, 32767, "rotation.w"));
+        mix(quantize(state.linear_velocity.x, 1000, "linear_velocity.x"));
+        mix(quantize(state.linear_velocity.y, 1000, "linear_velocity.y"));
+        mix(quantize(state.linear_velocity.z, 1000, "linear_velocity.z"));
+        mix(quantize(state.angular_velocity.x, 1000, "angular_velocity.x"));
+        mix(quantize(state.angular_velocity.y, 1000, "angular_velocity.y"));
+        mix(quantize(state.angular_velocity.z, 1000, "angular_velocity.z"));
         mix(state.awake);
         mix(state.ejected);
     }
@@ -2183,6 +2922,9 @@ std::uint64_t hash_states(std::span<const BodyState> states)
 ScenarioResult ScenarioRunner::run(
     ScenarioKind kind, std::uint64_t seed, int substeps) const
 {
+    ScenarioWatchdog watchdog(kind, seed);
+    WatchdogActivation activation(watchdog);
+    watchdog.checkpoint(0);
     if (kind == ScenarioKind::RadialFall) {
         return run_radial_fall(seed, substeps);
     }

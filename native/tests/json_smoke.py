@@ -24,6 +24,20 @@ def main() -> int:
                 f"invalid arguments returned {completed.returncode}: {arguments}"
             )
     with tempfile.TemporaryDirectory(prefix="ninho-json-") as directory:
+        write_failure = subprocess.run(
+            [
+                str(executable),
+                "--scenario",
+                "radial_fall",
+                "--json",
+                directory,
+            ],
+            check=False,
+        )
+        if write_failure.returncode != 1:
+            raise AssertionError(
+                f"JSON write failure returned {write_failure.returncode}, expected 1"
+            )
         report = pathlib.Path(directory) / "relatorio-çã.json"
         completed = subprocess.run(
             [
@@ -53,10 +67,16 @@ def main() -> int:
         for scenario in document["scenarios"]:
             if len(scenario["hashes"]) != 2 or len(set(scenario["hashes"])) != 1:
                 raise AssertionError(f"non-deterministic hashes: {scenario['name']}")
+        hashes = {scenario["name"]: scenario["hashes"][0] for scenario in document["scenarios"]}
+        if hashes["capability_matrix"] == hashes["radial_pile"]:
+            raise AssertionError("capability matrix reused the radial pile hash")
         if len(document["matrix"]) != 8:
             raise AssertionError("expected all eight capability rows")
         if any(row["status"] == "blocked" for row in document["matrix"]):
             raise AssertionError("capability matrix contains a blocked row")
+        if any(not row["fixture_hashes"] for row in document["matrix"]):
+            raise AssertionError("capability matrix row is missing fixture hashes")
+
     return 0
 
 

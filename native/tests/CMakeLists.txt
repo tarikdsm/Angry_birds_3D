@@ -36,6 +36,7 @@ add_test(NAME canonical_hash COMMAND ninho_physics_tests --filter "canonical sta
 add_test(NAME scenario_json COMMAND ninho_physics_tests --filter "scenario JSON")
 add_test(NAME scenario_invalid_kind COMMAND ninho_physics_tests --filter "unknown enum")
 add_test(NAME scenario_capabilities COMMAND ninho_physics_tests --filter "capability matrix")
+add_test(NAME scenario_watchdog COMMAND ninho_physics_tests --filter "scenario watchdog")
 
 find_package(Python3 3.11 REQUIRED COMPONENTS Interpreter)
 add_test(
@@ -63,3 +64,24 @@ set_tests_properties(
   runner_rejects_extra_arguments
   PROPERTIES WILL_FAIL TRUE
 )
+
+set_tests_properties(
+  projectile_ccd
+  projectile_gate
+  radial_fall_scenario
+  pile_stability
+  mass_ratio_scenario
+  stress_protocol
+  determinism
+  canonical_hash
+  scenario_json
+  scenario_invalid_kind
+  scenario_capabilities
+  scenario_watchdog
+  PROPERTIES TIMEOUT 65
+)
+
+# This is one real process containing six scenarios repeated twice. The internal
+# watchdog still enforces 60 seconds per scenario; this aggregate timeout only
+# bounds the complete 12-run CLI protocol.
+set_tests_properties(spike_json_smoke PROPERTIES TIMEOUT 150)

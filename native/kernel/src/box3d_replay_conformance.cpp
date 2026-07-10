@@ -31,13 +31,27 @@ ReplayConformanceResult validate_box3d_replay(
 {
     ReplayConformanceResult result;
     std::error_code filesystem_error;
+    const auto temporary_file_absent = [&] {
+        filesystem_error.clear();
+        const bool exists = std::filesystem::exists(temporary_path, filesystem_error);
+        return !filesystem_error && !exists;
+    };
+    const auto remove_temporary_file = [&] {
+        filesystem_error.clear();
+        std::filesystem::remove(temporary_path, filesystem_error);
+        return !filesystem_error && temporary_file_absent();
+    };
+
     std::filesystem::remove(temporary_path, filesystem_error);
-    filesystem_error.clear();
+    if (filesystem_error || !temporary_file_absent()) {
+        result.error = "initial temporary replay file cleanup failed";
+        return result;
+    }
 
     RecordingOwner recording{b3CreateRecording(0)};
     if (recording.value == nullptr) {
         result.error = "b3CreateRecording returned null";
-        result.temporary_file_removed = true;
+        result.temporary_file_removed = temporary_file_absent();
         return result;
     }
 
@@ -45,7 +59,7 @@ ReplayConformanceResult validate_box3d_replay(
     WorldOwner world{b3CreateWorld(&world_def)};
     if (B3_IS_NULL(world.value) || !b3World_IsValid(world.value)) {
         result.error = "b3CreateWorld returned an invalid id";
-        result.temporary_file_removed = true;
+        result.temporary_file_removed = temporary_file_absent();
         return result;
     }
 
@@ -93,9 +107,7 @@ ReplayConformanceResult validate_box3d_replay(
         }
     }
 
-    std::filesystem::remove(temporary_path, filesystem_error);
-    result.temporary_file_removed =
-        !filesystem_error && !std::filesystem::exists(temporary_path);
+    result.temporary_file_removed = remove_temporary_file();
     if (!result.temporary_file_removed && result.error.empty()) {
         result.error = "temporary replay file cleanup failed";
     }

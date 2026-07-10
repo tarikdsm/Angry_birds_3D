@@ -204,10 +204,10 @@ void add_determinism_violation(
         .code = "determinism_hash_mismatch",
         .message = "canonical hashes differ inside the same executable and configuration",
         .tick = result.ticks,
-        .values = {
-            {"repeat", static_cast<double>(repeat_index), "count"},
-            {"expected_hash", static_cast<double>(expected), "uint64"},
-            {"actual_hash", static_cast<double>(actual), "uint64"},
+        .values = {{"repeat", static_cast<double>(repeat_index), "count"}},
+        .details = {
+            {"expected_hash", std::to_string(expected)},
+            {"actual_hash", std::to_string(actual)},
         },
     });
 }
@@ -252,7 +252,12 @@ int main(int argc, char** argv)
         .substeps = options->substeps,
         .repeat = options->repeat,
     };
+    ScenarioRunner::set_emergency_json_path(
+        options->json_path
+            ? std::optional<std::string>{options->json_path->string()}
+            : std::nullopt);
     ScenarioRunner runner;
+    bool hash_mismatch = false;
     for (const ScenarioKind kind : selected_scenarios(*options)) {
         std::optional<ScenarioResult> first_result;
         std::vector<std::uint64_t> hashes;
@@ -294,6 +299,7 @@ int main(int argc, char** argv)
                     current.violations.begin(),
                     current.violations.end());
                 if (current.final_hash != hashes.front()) {
+                    hash_mismatch = true;
                     add_determinism_violation(
                         *first_result,
                         repeat_index,
@@ -317,14 +323,11 @@ int main(int argc, char** argv)
         if (!write_binary_utf8(*options->json_path, document)) {
             std::cerr << "error: could not write JSON report: "
                       << options->json_path->string() << '\n';
-            return 2;
+            return 1;
         }
     } else {
         std::cout << document << '\n';
     }
 
-    const bool fatal = std::ranges::any_of(
-        report.scenarios,
-        [](const ScenarioResult& result) { return !result.violations.empty(); });
-    return fatal ? 1 : 0;
+    return scenario_exit_code(report.scenarios, hash_mismatch);
 }
