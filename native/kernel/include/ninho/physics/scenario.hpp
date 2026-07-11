@@ -96,6 +96,7 @@ struct PrivateCommitAssessment {
     std::size_t final_central_max_bytes{};
     std::size_t final_full_max_bytes{};
     double growth_ratio{};
+    double instant_growth_ratio{};
     double warmup_trimmed_span_ratio{};
     double warmup_full_span_ratio{};
     double measured_trimmed_span_ratio{};
@@ -150,6 +151,7 @@ struct MemoryObservation {
     std::size_t private_commit_final_full_max_bytes{};
     std::size_t private_commit_peak_bytes{};
     double private_commit_growth_ratio{};
+    double private_commit_instant_growth_ratio{};
     double private_commit_warmup_trimmed_span_ratio{};
     double private_commit_warmup_full_span_ratio{};
     double private_commit_measured_trimmed_span_ratio{};
@@ -266,6 +268,7 @@ struct ScenarioResult {
     std::size_t private_commit_final_full_max_bytes{};
     std::size_t private_commit_peak_bytes{};
     double private_commit_growth_ratio{};
+    double private_commit_instant_growth_ratio{};
     double private_commit_warmup_trimmed_span_ratio{};
     double private_commit_warmup_full_span_ratio{};
     double private_commit_measured_trimmed_span_ratio{};

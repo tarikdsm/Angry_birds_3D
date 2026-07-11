@@ -6,6 +6,7 @@ param(
 $ErrorActionPreference = 'Stop'
 Import-Module (Join-Path $Root 'tools\UpstreamBox3DGate.psm1') -Force
 Import-Module (Join-Path $Root 'tools\SafePath.psm1') -Force
+$PSDefaultParameterValues['Assert-NinhoUpstreamCompileDatabase:AllowedRoot'] = $Root
 
 function Assert-True {
     param([bool]$Condition, [string]$Message)
@@ -45,6 +46,9 @@ Assert-Throws {
 Assert-NinhoNoReparseAncestors -Path $configurationPath -AllowedRoot $Root | Out-Null
 New-Item -ItemType Directory -Force -Path $configurationPath | Out-Null
 $compileDatabase = Join-Path $configurationPath 'compile_commands.json'
+$manifest = Join-Path $configurationPath 'sources.txt'
+@('src/body.c', 'test/test_world.c') |
+    Set-Content -LiteralPath $manifest -Encoding ascii
 $good = @(
     [ordered]@{
         directory = $configurationPath
@@ -58,7 +62,21 @@ $good = @(
     }
 )
 $good | ConvertTo-Json | Set-Content -LiteralPath $compileDatabase -Encoding utf8
-Assert-NinhoUpstreamCompileDatabase -Path $compileDatabase -Configuration Debug
+Assert-NinhoUpstreamCompileDatabase -Path $compileDatabase -Configuration Debug -ManifestPath $manifest
+
+@($good | Select-Object -First 1) | ConvertTo-Json |
+    Set-Content -LiteralPath $compileDatabase -Encoding utf8
+Assert-Throws {
+    Assert-NinhoUpstreamCompileDatabase -Path $compileDatabase -Configuration Debug -ManifestPath $manifest
+} 'source coverage differs'
+
+@($good + $good[0]) | ConvertTo-Json |
+    Set-Content -LiteralPath $compileDatabase -Encoding utf8
+Assert-Throws {
+    Assert-NinhoUpstreamCompileDatabase -Path $compileDatabase -Configuration Debug -ManifestPath $manifest
+} 'duplicate source entries'
+
+$good | ConvertTo-Json | Set-Content -LiteralPath $compileDatabase -Encoding utf8
 
 $unknown = @($good | ForEach-Object { [ordered]@{ directory=$_.directory; command=$_.command; file=$_.file } })
 $unknown += [ordered]@{
@@ -68,28 +86,28 @@ $unknown += [ordered]@{
 }
 $unknown | ConvertTo-Json | Set-Content -LiteralPath $compileDatabase -Encoding utf8
 Assert-Throws {
-    Assert-NinhoUpstreamCompileDatabase -Path $compileDatabase -Configuration Debug
+    Assert-NinhoUpstreamCompileDatabase -Path $compileDatabase -Configuration Debug -ManifestPath $manifest
 } 'unexpected source entry'
 
 $badRuntime = @($good | ForEach-Object { [ordered]@{ directory=$_.directory; command=$_.command; file=$_.file } })
 $badRuntime[1].command = $badRuntime[1].command.Replace('/MTd', '/MDd')
 $badRuntime | ConvertTo-Json | Set-Content -LiteralPath $compileDatabase -Encoding utf8
 Assert-Throws {
-    Assert-NinhoUpstreamCompileDatabase -Path $compileDatabase -Configuration Debug
+    Assert-NinhoUpstreamCompileDatabase -Path $compileDatabase -Configuration Debug -ManifestPath $manifest
 } 'forbidden dynamic CRT'
 
 $badFloat = @($good | ForEach-Object { [ordered]@{ directory=$_.directory; command=$_.command; file=$_.file } })
 $badFloat[0].command += ' /fp:fast'
 $badFloat | ConvertTo-Json | Set-Content -LiteralPath $compileDatabase -Encoding utf8
 Assert-Throws {
-    Assert-NinhoUpstreamCompileDatabase -Path $compileDatabase -Configuration Debug
+    Assert-NinhoUpstreamCompileDatabase -Path $compileDatabase -Configuration Debug -ManifestPath $manifest
 } 'forbidden floating-point flag'
 
 $badDebugOptimization = @($good | ForEach-Object { [ordered]@{ directory=$_.directory; command=$_.command; file=$_.file } })
 $badDebugOptimization[0].command += ' /O1'
 $badDebugOptimization | ConvertTo-Json | Set-Content -LiteralPath $compileDatabase -Encoding utf8
 Assert-Throws {
-    Assert-NinhoUpstreamCompileDatabase -Path $compileDatabase -Configuration Debug
+    Assert-NinhoUpstreamCompileDatabase -Path $compileDatabase -Configuration Debug -ManifestPath $manifest
 } 'conflicting optimization flags'
 
 foreach ($conflictingCommand in @(
@@ -99,7 +117,7 @@ foreach ($conflictingCommand in @(
     $conflictingRuntime[0].command = $conflictingCommand
     $conflictingRuntime | ConvertTo-Json | Set-Content -LiteralPath $compileDatabase -Encoding utf8
     Assert-Throws {
-        Assert-NinhoUpstreamCompileDatabase -Path $compileDatabase -Configuration Debug
+        Assert-NinhoUpstreamCompileDatabase -Path $compileDatabase -Configuration Debug -ManifestPath $manifest
     } 'exactly one /MTd CRT flag'
 }
 
@@ -112,7 +130,7 @@ $release = @($good | ForEach-Object {
     }
 })
 $release | ConvertTo-Json | Set-Content -LiteralPath $compileDatabase -Encoding utf8
-Assert-NinhoUpstreamCompileDatabase -Path $compileDatabase -Configuration Release
+Assert-NinhoUpstreamCompileDatabase -Path $compileDatabase -Configuration Release -ManifestPath $manifest
 $releaseBaseline = $release[0].command
 foreach ($conflictingCommand in @(
         ($releaseBaseline + ' /O1'),
@@ -120,14 +138,14 @@ foreach ($conflictingCommand in @(
     $release[0].command = $conflictingCommand
     $release | ConvertTo-Json | Set-Content -LiteralPath $compileDatabase -Encoding utf8
     Assert-Throws {
-        Assert-NinhoUpstreamCompileDatabase -Path $compileDatabase -Configuration Release
+        Assert-NinhoUpstreamCompileDatabase -Path $compileDatabase -Configuration Release -ManifestPath $manifest
     } 'conflicting optimization flags'
 }
 $release[0].command = $releaseBaseline
 $release[1].command += ' /RTC1'
 $release | ConvertTo-Json | Set-Content -LiteralPath $compileDatabase -Encoding utf8
 Assert-Throws {
-    Assert-NinhoUpstreamCompileDatabase -Path $compileDatabase -Configuration Release
+    Assert-NinhoUpstreamCompileDatabase -Path $compileDatabase -Configuration Release -ManifestPath $manifest
 } 'Debug contamination'
 
 $tempBase = [System.IO.Path]::GetTempPath().TrimEnd('\', '/')

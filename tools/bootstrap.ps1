@@ -11,9 +11,10 @@ $root = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 $tools = Join-Path $root '.tools'
 $downloads = Join-Path $tools 'downloads'
 $lockPath = Join-Path $PSScriptRoot 'toolchain.lock.json'
-$lock = Get-Content -Raw -LiteralPath $lockPath | ConvertFrom-Json
 $errors = [System.Collections.Generic.List[string]]::new()
 Import-Module (Join-Path $PSScriptRoot 'SafePath.psm1') -Force
+Assert-NinhoNoReparseAncestors -Path $lockPath -AllowedRoot $PSScriptRoot | Out-Null
+$lock = Get-Content -Raw -LiteralPath $lockPath | ConvertFrom-Json
 
 function Test-HexSha([string]$value) { return $value -match '^[0-9a-f]{64}$' }
 foreach ($name in 'cmake','ninja','godot','visual_studio') {
@@ -34,6 +35,8 @@ function Get-LockedArchive([string]$name) {
     if (-not (Test-Path -LiteralPath $target)) {
         Invoke-WebRequest -UseBasicParsing -Uri $entry.url -OutFile $target
     }
+    # The downloader may have replaced the output or an ancestor.
+    Assert-NinhoNoReparseAncestors -Path $target -AllowedRoot $downloads | Out-Null
     $actual = (Get-FileHash -Algorithm SHA256 -LiteralPath $target).Hash.ToLowerInvariant()
     if ($actual -ne $entry.sha256) {
         Remove-Item -LiteralPath $target -Force
@@ -50,8 +53,12 @@ function Install-Portable([string]$name) {
     if (-not (Test-Path -LiteralPath $exe)) {
         $archive = Get-LockedArchive $name
         New-Item -ItemType Directory -Force $destination | Out-Null
+        Assert-NinhoNoReparseAncestors -Path $archive -AllowedRoot $downloads | Out-Null
         Expand-Archive -LiteralPath $archive -DestinationPath $destination -Force
+        Assert-NinhoNoReparseAncestors -Path $destination -AllowedRoot $root | Out-Null
+        Assert-NinhoNoReparseAncestors -Path $exe -AllowedRoot $root | Out-Null
     }
+    Assert-NinhoNoReparseAncestors -Path $exe -AllowedRoot $root | Out-Null
     return $exe
 }
 
@@ -91,15 +98,32 @@ if ($InstallVisualStudio -and $errors.Count -eq 0) {
 
 if ($CheckOnly -or $InstallPortable) {
     foreach ($pair in @(@('cmake',$cmake),@('ninja',$ninja),@('godot',$godot))) {
-        if (-not (Test-Path -LiteralPath $pair[1])) { $errors.Add("$($pair[0]) missing: $($pair[1])") }
-    }
-    if (Test-Path $cmake) { if ((& $cmake --version | Select-Object -First 1) -notmatch '4\.3\.3') { $errors.Add('CMake executable version mismatch') } }
-    if (Test-Path $ninja) { if ((& $ninja --version) -ne '1.13.2') { $errors.Add('Ninja executable version mismatch') } }
-    if (Test-Path $godot) { if ((& $godot --version) -notmatch '^4\.5\.1\.stable') { $errors.Add('Godot executable version mismatch') } }
-    foreach ($pair in @(@('cmake',$cmake),@('ninja',$ninja),@('godot',$godot))) {
-        if (Test-Path $pair[1]) {
-            $actualExe=(Get-FileHash -Algorithm SHA256 -LiteralPath $pair[1]).Hash.ToLowerInvariant()
-            if ($actualExe -ne $lock.($pair[0]).exe_sha256) { $errors.Add("$($pair[0]) executable checksum mismatch") }
+        Assert-NinhoNoReparseAncestors -Path $pair[1] -AllowedRoot $root | Out-Null
+        if (-not (Test-Path -LiteralPath $pair[1])) {
+            $errors.Add("$($pair[0]) missing: $($pair[1])")
+            continue
+        }
+        $actualExe=(Get-FileHash -Algorithm SHA256 -LiteralPath $pair[1]).Hash.ToLowerInvariant()
+        if ($actualExe -ne $lock.($pair[0]).exe_sha256) {
+            $errors.Add("$($pair[0]) executable checksum mismatch")
+            continue
+        }
+        switch ($pair[0]) {
+            'cmake' {
+                if ((& $pair[1] --version | Select-Object -First 1) -notmatch '4\.3\.3') {
+                    $errors.Add('CMake executable version mismatch')
+                }
+            }
+            'ninja' {
+                if ((& $pair[1] --version) -ne '1.13.2') {
+                    $errors.Add('Ninja executable version mismatch')
+                }
+            }
+            'godot' {
+                if ((& $pair[1] --version) -notmatch '^4\.5\.1\.stable') {
+                    $errors.Add('Godot executable version mismatch')
+                }
+            }
         }
     }
     $pythonVersion = $null

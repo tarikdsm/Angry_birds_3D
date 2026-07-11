@@ -36,9 +36,12 @@ function Assert-NinhoUpstreamCompileDatabase {
         [Parameter(Mandatory)] [string]$Path,
         [Parameter(Mandatory)]
         [ValidateSet('Debug', 'Release')]
-        [string]$Configuration
+        [string]$Configuration,
+        [Parameter(Mandatory)] [string]$ManifestPath,
+        [Parameter(Mandatory)] [string]$AllowedRoot
     )
 
+    Assert-NinhoNoReparseAncestors -Path $Path -AllowedRoot $AllowedRoot | Out-Null
     if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) {
         throw "Upstream compile database missing: $Path"
     }
@@ -47,11 +50,44 @@ function Assert-NinhoUpstreamCompileDatabase {
     if ($entries.Count -eq 0) {
         throw 'Upstream compile database has no Box3D/test objects'
     }
+    Assert-NinhoNoReparseAncestors `
+        -Path $ManifestPath `
+        -AllowedRoot $AllowedRoot | Out-Null
+    if (-not (Test-Path -LiteralPath $ManifestPath -PathType Leaf)) {
+        throw "Upstream source manifest missing: $ManifestPath"
+    }
+    $expectedSources = @(
+        [System.IO.File]::ReadAllLines([System.IO.Path]::GetFullPath($ManifestPath)) |
+            ForEach-Object { $_.Trim().Replace('\', '/') } |
+            Where-Object { $_ })
+    if ($expectedSources.Count -eq 0 -or
+            @($expectedSources | Sort-Object -Unique).Count -ne $expectedSources.Count) {
+        throw 'Upstream source manifest is empty or contains duplicates'
+    }
+    $actualSources = [System.Collections.Generic.List[string]]::new()
     foreach ($entry in $entries) {
         if ($entry.PSObject.Properties.Name -notcontains 'file' -or
                 $entry.file -notmatch '(?i)[\\/]box3d(?:-src)?[\\/](src|shared|test)[\\/].+\.(c|cc|cpp|cxx)$') {
             throw "Upstream compile database contains an unexpected source entry: $($entry.file)"
         }
+        $normalizedFile = ([string]$entry.file).Replace('\', '/')
+        $sourceMatch = [regex]::Match(
+            $normalizedFile,
+            '(?i)[/]box3d(?:-src)?[/]((?:src|shared|test)/.+\.(?:c|cc|cpp|cxx))$')
+        if (-not $sourceMatch.Success) {
+            throw "Upstream compile database cannot normalize source entry: $($entry.file)"
+        }
+        $actualSources.Add($sourceMatch.Groups[1].Value.ToLowerInvariant())
+    }
+    if (@($actualSources | Sort-Object -Unique).Count -ne $actualSources.Count) {
+        throw 'Upstream compile database contains duplicate source entries'
+    }
+    $coverageDifference = @(Compare-Object `
+        -ReferenceObject @($expectedSources | Sort-Object) `
+        -DifferenceObject @($actualSources | Sort-Object) `
+        -CaseSensitive)
+    if ($coverageDifference.Count -ne 0 -or $actualSources.Count -ne $expectedSources.Count) {
+        throw 'Upstream compile database source coverage differs from pinned Box3D v0.1.0 manifest'
     }
     $relevant = $entries
     $libraryEntries = @($entries | Where-Object { $_.file -match '[\\/]src[\\/]' })

@@ -82,7 +82,8 @@ function Assert-NinhoMemoryCounter {
     param(
         [object]$Counter,
         [string]$Context,
-        [switch]$IncludeInstant
+        [switch]$IncludeInstant,
+        [switch]$RequireExactPeak
     )
     foreach ($name in @(
             'available','stable','terminal_growth','baseline_last_bytes',
@@ -158,10 +159,10 @@ function Assert-NinhoMemoryCounter {
         [double]$measured[9] -gt $terminalThreshold
     $stable = $warmupTrimmed -le 0.05 -and $measuredTrimmed -le 0.05
     $sampleMaximum = [double](($warmup + $measured | Measure-Object -Maximum).Maximum)
-    $peakMismatch = if ($IncludeInstant) {
-        [double]$Counter.peak_bytes -lt $sampleMaximum
-    } else {
+    $peakMismatch = if ($RequireExactPeak) {
         [double]$Counter.peak_bytes -ne $sampleMaximum
+    } else {
+        [double]$Counter.peak_bytes -lt $sampleMaximum
     }
     if ($Counter.terminal_growth -ne $terminalGrowth -or $Counter.stable -ne $stable -or
             $peakMismatch) {
@@ -190,7 +191,8 @@ function Assert-NinhoMemoryObservation {
         throw "Spike evidence memory gate contract mismatch at $Context"
     }
     $privateAssessment = Assert-NinhoMemoryCounter `
-        -Counter $Memory.private_commit -Context "$Context/private_commit"
+        -Counter $Memory.private_commit -Context "$Context/private_commit" `
+        -IncludeInstant -RequireExactPeak
     if ($Memory.assessment_status -cne $privateAssessment) {
         throw "Spike evidence derived summary mismatch at $Context/private assessment"
     }
@@ -365,7 +367,15 @@ function Assert-NinhoSpikeEvidenceDocument {
         projectile_pile = @('primary_seed_passes','fallback_seed_passes','projectile_speed','primary_invalid_states','fallback_invalid_states','fallback_seed_evaluated')
         radial_pile = @('sleep_ratio','p95_linear_speed','p95_angular_speed','max_penetration','max_platform_penetration','max_pair_penetration','minimum_density','maximum_density','energy_at_tick_600','max_energy_growth_ratio')
         mass_ratio = @('sleep_ratio','p95_linear_speed','p95_angular_speed','max_penetration','max_platform_penetration','max_pair_penetration','minimum_density','maximum_density','energy_at_tick_600','max_energy_growth_ratio')
-        stress = @('private_commit_diagnostic_growth_target','private_commit_diagnostic_trimmed_span_target','working_set_diagnostic_growth_target','working_set_diagnostic_trimmed_span_target','private_commit_baseline_median_bytes','private_commit_final_median_bytes','private_commit_growth_ratio','private_commit_warmup_trimmed_span_ratio','private_commit_measured_trimmed_span_ratio','working_set_baseline_bytes','working_set_baseline_low_bytes','working_set_peak_bytes','working_set_final_bytes','working_set_final_low_bytes','working_set_growth_ratio','working_set_instant_growth_ratio','executed_substeps','allocator_warmup_cycles','completed_cycles')
+        stress = @('private_commit_diagnostic_growth_target','private_commit_diagnostic_trimmed_span_target','working_set_diagnostic_growth_target','working_set_diagnostic_trimmed_span_target','private_commit_baseline_median_bytes','private_commit_final_median_bytes','private_commit_growth_ratio','private_commit_instant_growth_ratio','private_commit_warmup_trimmed_span_ratio','private_commit_measured_trimmed_span_ratio','working_set_baseline_bytes','working_set_baseline_low_bytes','working_set_peak_bytes','working_set_final_bytes','working_set_final_low_bytes','working_set_growth_ratio','working_set_instant_growth_ratio','executed_substeps','allocator_warmup_cycles','completed_cycles')
+        capability_matrix = @()
+    }
+    $expectedMetricUnits = @{
+        radial_fall = @('m','m/s','rad/s','ratio','ticks','J')
+        projectile_pile = @('seeds','seeds','m/s','count','count','bool')
+        radial_pile = @('ratio','m/s','rad/s','m','m','m','kg/m3','kg/m3','J','ratio')
+        mass_ratio = @('ratio','m/s','rad/s','m','m','m','kg/m3','kg/m3','J','ratio')
+        stress = @('ratio','ratio','ratio','ratio','bytes','bytes','ratio','ratio','ratio','ratio','bytes','bytes','bytes','bytes','bytes','ratio','ratio','count','cycles','count')
         capability_matrix = @()
     }
     $scenarios = @($Document.scenarios)
@@ -388,6 +398,22 @@ function Assert-NinhoSpikeEvidenceDocument {
         }
         if ([string]$scenario.final_hash -cne $expectedScenarioHashes[$name]) {
             throw "Spike evidence canonical scenario hash mismatch for $name"
+        }
+        Assert-NinhoProperty $scenario 'step_ms' "scenario/$name"
+        $stepValues = @()
+        foreach ($stepName in @('min', 'p50', 'p95', 'max')) {
+            Assert-NinhoProperty $scenario.step_ms $stepName "scenario/$name/step_ms"
+            $stepValue = [double]$scenario.step_ms.$stepName
+            if ([double]::IsNaN($stepValue) -or [double]::IsInfinity($stepValue) -or
+                    $stepValue -lt 0) {
+                throw "Spike evidence invalid step_ms value for $name/$stepName"
+            }
+            $stepValues += $stepValue
+        }
+        if ($stepValues[0] -gt $stepValues[1] -or
+                $stepValues[1] -gt $stepValues[2] -or
+                $stepValues[2] -gt $stepValues[3]) {
+            throw "Spike evidence step_ms ordering mismatch for $name"
         }
         $limits = @($scenario.limits)
         if ($limits.Count -ne $expectedLimits[$name].Count) {
@@ -475,6 +501,16 @@ function Assert-NinhoSpikeEvidenceDocument {
         if ($metricNameDifference.Count -ne 0 -or
                 @($metricNames | Sort-Object -Unique).Count -ne $metricNames.Count) {
             throw "Spike evidence scenario metric set mismatch at $name"
+        }
+        for ($metricIndex = 0; $metricIndex -lt $expectedMetricNames[$name].Count; ++$metricIndex) {
+            $metricName = $expectedMetricNames[$name][$metricIndex]
+            $metric = @($scenario.metrics | Where-Object name -CEQ $metricName)[0]
+            $metricValue = [double]$metric.value
+            if ($metric.unit -cne $expectedMetricUnits[$name][$metricIndex] -or
+                    [double]::IsNaN($metricValue) -or
+                    [double]::IsInfinity($metricValue)) {
+                throw "Spike evidence scenario metric value or unit mismatch for $name/$metricName"
+            }
         }
         foreach ($propertyName in @(
                 'surface_separation', 'final_linear_speed', 'final_angular_speed',
@@ -595,6 +631,7 @@ function Assert-NinhoSpikeEvidenceDocument {
                 private_commit_baseline_median_bytes = [double]$memory.private_commit.baseline_median_bytes
                 private_commit_final_median_bytes = [double]$memory.private_commit.final_median_bytes
                 private_commit_growth_ratio = [double]$memory.private_commit.growth_ratio
+                private_commit_instant_growth_ratio = [double]$memory.private_commit.instant_growth_ratio
                 private_commit_warmup_trimmed_span_ratio = [double]$memory.private_commit.warmup_trimmed_span_ratio
                 private_commit_measured_trimmed_span_ratio = [double]$memory.private_commit.measured_trimmed_span_ratio
                 working_set_baseline_bytes = [double]$memory.working_set.baseline_last_bytes
@@ -648,6 +685,16 @@ function Assert-NinhoSpikeEvidenceDocument {
         batch_lifecycle = @('generation_cycles','invalid_handles','private_commit_available','private_commit_growth','private_commit_baseline_bytes','private_commit_final_bytes','working_set_baseline_bytes','working_set_final_bytes','crt_normal_count_delta','crt_normal_bytes_delta','crt_client_count_delta','crt_client_bytes_delta','box3d_allocator_baseline_bytes','box3d_allocator_final_bytes')
         upstream_replay = @('saved','loaded','validated','recording_bytes','temporary_file_removed','box3d_allocator_baseline_bytes','box3d_allocator_final_bytes')
     }
+    $expectedCapabilityValueUnits = @{
+        ccd_dynamic_dynamic = @('seeds','seeds','m/s','count','m/s','count','bool','count','count')
+        shape_cast_overlap = @('m','index','bool','ratio')
+        contact_hit_events = @('m/s','kg','J','ratio','id','id','count','count')
+        joint_force_torque = @('N','N','N','m','m','ticks')
+        hulls_compounds = @('count','kg','kg','m','m','m','m','m','m','m','bool','bool','bytes','bytes')
+        radial_sleep = @('ratio','m/s','rad/s','m','ratio')
+        batch_lifecycle = @('count','count','bool','ratio','bytes','bytes','bytes','bytes','count','bytes','count','bytes','bytes','bytes')
+        upstream_replay = @('bool','bool','bool','bytes','bool','bytes','bytes')
+    }
     $expectedCapabilityFixtureHashes = @{
         ccd_dynamic_dynamic = @('1431096453509785832','5466060815846980033','8526278817898170285','2675255426310783444','10494942409035688541','7390650343477109358','14725012844580521641','14001126938762718496','2400058324701230849','10732887959698602526','5915366692680379584','14334879908416984375','6577404406665493359','16513243213841685896','9721495563768596328','13937513265211812359','9628435969084559192','18192646134465658732','18426867884952182109','11807578939564631579')
         shape_cast_overlap = @('8388802905423810155')
@@ -695,6 +742,16 @@ function Assert-NinhoSpikeEvidenceDocument {
             if ($valueNameDifference.Count -ne 0 -or
                     @($valueNames | Sort-Object -Unique).Count -ne $valueNames.Count) {
                 throw "Spike evidence capability value set mismatch for $capability"
+            }
+            for ($valueIndex = 0; $valueIndex -lt $expectedCapabilityValueNames[$capability].Count; ++$valueIndex) {
+                $valueName = $expectedCapabilityValueNames[$capability][$valueIndex]
+                $valueEntry = @($row.values | Where-Object name -CEQ $valueName)[0]
+                $numericValue = [double]$valueEntry.value
+                if ($valueEntry.unit -cne $expectedCapabilityValueUnits[$capability][$valueIndex] -or
+                        [double]::IsNaN($numericValue) -or
+                        [double]::IsInfinity($numericValue)) {
+                    throw "Spike evidence capability value or unit mismatch for $capability/$valueName"
+                }
             }
             switch ($capability) {
                 'ccd_dynamic_dynamic' {
@@ -758,7 +815,9 @@ function Assert-NinhoSpikeEvidenceDocument {
                             [math]::Abs((Get-NinhoCapabilityValue $row 'bounds_upper_y') - 3.22) -gt $tolerance -or
                             [math]::Abs((Get-NinhoCapabilityValue $row 'bounds_upper_z') - 0.22) -gt $tolerance -or
                             (Get-NinhoCapabilityValue $row 'contacted') -ne 1 -or
-                            (Get-NinhoCapabilityValue $row 'state_valid') -ne 1) {
+                            (Get-NinhoCapabilityValue $row 'state_valid') -ne 1 -or
+                            (Get-NinhoCapabilityValue $row 'box3d_allocator_baseline_bytes') -ne 0 -or
+                            (Get-NinhoCapabilityValue $row 'box3d_allocator_final_bytes') -ne 0) {
                         throw 'Spike evidence hull capability proof mismatch'
                     }
                 }
@@ -772,8 +831,21 @@ function Assert-NinhoSpikeEvidenceDocument {
                     }
                 }
                 'batch_lifecycle' {
+                    $privateAvailable = Get-NinhoCapabilityValue $row 'private_commit_available'
+                    $privateGrowth = Get-NinhoCapabilityValue $row 'private_commit_growth'
+                    $privateBaseline = Get-NinhoCapabilityValue $row 'private_commit_baseline_bytes'
+                    $privateFinal = Get-NinhoCapabilityValue $row 'private_commit_final_bytes'
+                    $workingBaseline = Get-NinhoCapabilityValue $row 'working_set_baseline_bytes'
+                    $workingFinal = Get-NinhoCapabilityValue $row 'working_set_final_bytes'
+                    $derivedPrivateGrowth = if ($privateBaseline -gt 0) {
+                        [math]::Max(0.0, ($privateFinal - $privateBaseline) / $privateBaseline)
+                    } else { 0.0 }
                     if ((Get-NinhoCapabilityValue $row 'generation_cycles') -ne 10000 -or
                             (Get-NinhoCapabilityValue $row 'invalid_handles') -ne 0 -or
+                            $privateAvailable -ne 1 -or
+                            $privateBaseline -le 0 -or $privateFinal -le 0 -or
+                            [math]::Abs($privateGrowth - $derivedPrivateGrowth) -gt 1e-12 -or
+                            $workingBaseline -le 0 -or $workingFinal -le 0 -or
                             (Get-NinhoCapabilityValue $row 'crt_normal_count_delta') -ne 0 -or
                             (Get-NinhoCapabilityValue $row 'crt_normal_bytes_delta') -ne 0 -or
                             (Get-NinhoCapabilityValue $row 'crt_client_count_delta') -ne 0 -or

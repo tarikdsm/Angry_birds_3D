@@ -30,12 +30,14 @@ function Read-NinhoFreshSpikeReport {
     param(
         [Parameter(Mandatory)] [string]$Path,
         [Parameter(Mandatory)] [DateTime]$StartedUtc,
+        [Parameter(Mandatory)] [string]$AllowedRoot,
         [Parameter(Mandatory)]
         [ValidateSet('Debug', 'Release')]
         [string]$ExpectedBuildType
     )
 
     $target = [System.IO.Path]::GetFullPath($Path)
+    Assert-NinhoNoReparseAncestors -Path $target -AllowedRoot $AllowedRoot | Out-Null
     if (-not (Test-Path -LiteralPath $target -PathType Leaf)) {
         throw "Successful spike executable did not create a report: $target"
     }

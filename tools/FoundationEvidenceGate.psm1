@@ -18,6 +18,54 @@ function Get-NinhoSingleReportToken {
     return $matches[0].Groups[1].Value
 }
 
+function Assert-NinhoGeneratedFoundationReport {
+    param(
+        [Parameter(Mandatory)] [string]$Root,
+        [Parameter(Mandatory)] [string]$ReportPath
+    )
+
+    $generator = Join-Path $PSScriptRoot 'generate_foundation_report.py'
+    if (-not (Test-Path -LiteralPath $generator -PathType Leaf)) {
+        throw "Foundation report generator is missing: $generator"
+    }
+    $python = Get-Command python -CommandType Application -ErrorAction Stop |
+        Select-Object -First 1
+    Assert-NinhoNoReparseAncestors -Path $generator -AllowedRoot $PSScriptRoot | Out-Null
+    Assert-NinhoNoReparseAncestors -Path $ReportPath -AllowedRoot $Root | Out-Null
+    foreach ($relative in @(
+            'docs\physics\evidence\foundation-report-debug.json',
+            'docs\physics\evidence\foundation-report-release.json')) {
+        Assert-NinhoNoReparseAncestors `
+            -Path (Join-Path $Root $relative) `
+            -AllowedRoot $Root | Out-Null
+    }
+    $previousErrorActionPreference = $ErrorActionPreference
+    $generatorOutput = @()
+    $generatorExitCode = 1
+    try {
+        $ErrorActionPreference = 'Continue'
+        $generatorOutput = @(& $python.Source $generator `
+            --root $Root --check --report-path $ReportPath 2>&1)
+        $generatorExitCode = $LASTEXITCODE
+    } finally {
+        $ErrorActionPreference = $previousErrorActionPreference
+    }
+    # Revalidate after the external generator as well: success must not hide
+    # a path swap performed while the process was running.
+    Assert-NinhoNoReparseAncestors -Path $ReportPath -AllowedRoot $Root | Out-Null
+    foreach ($relative in @(
+            'docs\physics\evidence\foundation-report-debug.json',
+            'docs\physics\evidence\foundation-report-release.json')) {
+        Assert-NinhoNoReparseAncestors `
+            -Path (Join-Path $Root $relative) `
+            -AllowedRoot $Root | Out-Null
+    }
+    if ($generatorExitCode -ne 0) {
+        $detail = ($generatorOutput | ForEach-Object { [string]$_ }) -join ' '
+        throw "Foundation generated report is out of date: $detail"
+    }
+}
+
 function Assert-NinhoFoundationEvidence {
     [CmdletBinding()]
     param(
@@ -75,6 +123,9 @@ function Assert-NinhoFoundationEvidence {
         if ($gitExitCode -ne 0) {
             throw "Foundation evidence is not tracked by git: $relative"
         }
+        # git is external and can run hooks/configured helpers. Revalidate the
+        # evidence path again immediately before hashing and reading it.
+        Assert-NinhoNoReparseAncestors -Path $path -AllowedRoot $rootPath | Out-Null
         if (-not (Test-Path -LiteralPath $path -PathType Leaf)) {
             throw "Foundation evidence file missing: $relative"
         }
@@ -146,6 +197,7 @@ function Assert-NinhoFoundationEvidence {
             throw "Foundation radial_fall topology mismatch for $configuration"
         }
     }
+    Assert-NinhoGeneratedFoundationReport -Root $rootPath -ReportPath $resolvedReportPath
 }
 
 Export-ModuleMember -Function Assert-NinhoFoundationEvidence

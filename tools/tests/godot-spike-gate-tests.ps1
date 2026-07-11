@@ -4,8 +4,11 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
-Import-Module (Join-Path $PSScriptRoot '..\GodotSpikeGate.psm1') -Force
 Import-Module (Join-Path $PSScriptRoot '..\SafePath.psm1') -Force
+Import-Module (Join-Path $PSScriptRoot '..\GodotSpikeGate.psm1') -Force
+if ($null -eq (Get-Command 'Assert-NinhoNoReparseAncestors' -ErrorAction SilentlyContinue)) {
+    throw 'Importing GodotSpikeGate must not remove the caller SafePath commands'
+}
 
 function Assert-Throws {
     param(
@@ -78,6 +81,110 @@ foreach ($caseMutation in @(
 }
 
 Assert-NinhoSpikeViewContract -Path (Join-Path $Root 'game\scripts\physics_spike_view.gd')
+$viewText = [System.IO.File]::ReadAllText(
+    (Join-Path $Root 'game\scripts\physics_spike_view.gd'))
+foreach ($captureArgumentContract in @(
+        'const MOVIE_CAPTURE_ARGUMENT := "--ninho-capture-300"',
+        'const MOVIE_CAPTURE_INITIAL_FRAME_COUNT := 1',
+        'OS.get_cmdline_user_args().has(MOVIE_CAPTURE_ARGUMENT)'
+    )) {
+    if (-not $viewText.Contains($captureArgumentContract)) {
+        throw "Spike view is missing explicit capture argument contract: $captureArgumentContract"
+    }
+}
+if (-not [regex]::IsMatch(
+        $viewText,
+        '(?m)^\s*if _movie_capture and frames == MOVIE_CAPTURE_FRAME_LIMIT - MOVIE_CAPTURE_INITIAL_FRAME_COUNT:$')) {
+    throw 'Spike view must account for the Movie Maker initial frame before quitting'
+}
+if ($viewText.Contains('OS.get_cmdline_args().has("--write-movie")')) {
+    throw 'Spike view must not infer capture mode from an engine-consumed argument'
+}
+
+$moviePath = Join-Path $temporaryDirectory 'capture.avi'
+Assert-NinhoNoReparseAncestors -Path $moviePath -AllowedRoot $temporaryDirectory | Out-Null
+[System.IO.File]::WriteAllBytes($moviePath, [byte[]](1, 2, 3, 4))
+$movieTimestamp = [DateTime]::UtcNow
+(Get-Item -LiteralPath $moviePath).LastWriteTimeUtc = $movieTimestamp
+
+$fakeFfprobe = Join-Path $temporaryDirectory 'ffprobe.cmd'
+function Set-FakeFfprobeResult {
+    param(
+        [Parameter(Mandatory)] [string]$Json,
+        [int]$ExitCode = 0
+    )
+
+    $script = "@echo off`r`necho $Json`r`nexit /b $ExitCode`r`n"
+    [System.IO.File]::WriteAllText(
+        $fakeFfprobe,
+        $script,
+        [System.Text.Encoding]::ASCII)
+}
+
+$validProbeJson = '{"streams":[{"codec_name":"mjpeg","width":1280,"height":720,"duration":"5.000000","nb_read_frames":"300"}]}'
+Set-FakeFfprobeResult -Json $validProbeJson
+$movieMetadata = Assert-NinhoGodotMovieCapture `
+    -Path $moviePath `
+    -AllowedRoot $temporaryDirectory `
+    -StartedUtc ($movieTimestamp.AddSeconds(-1)) `
+    -FfprobePath $fakeFfprobe
+if ($movieMetadata.Codec -cne 'mjpeg' -or
+        $movieMetadata.Width -ne 1280 -or
+        $movieMetadata.Height -ne 720 -or
+        $movieMetadata.FrameCount -ne 300 -or
+        $movieMetadata.DurationSeconds -ne 5.0) {
+    throw 'Movie validation did not return the expected normalized metadata'
+}
+
+Assert-Throws -Pattern 'not fresh' -Action {
+    Assert-NinhoGodotMovieCapture `
+        -Path $moviePath `
+        -AllowedRoot $temporaryDirectory `
+        -StartedUtc ([DateTime]::UtcNow.AddMinutes(1)) `
+        -FfprobePath $fakeFfprobe
+}
+
+foreach ($invalidProbe in @(
+        @{
+            Name = 'codec'
+            Json = $validProbeJson.Replace('"mjpeg"', '"h264"')
+            Pattern = 'codec'
+        },
+        @{
+            Name = 'resolution'
+            Json = $validProbeJson.Replace('"width":1280', '"width":1920')
+            Pattern = 'resolution'
+        },
+        @{
+            Name = 'frames'
+            Json = $validProbeJson.Replace('"300"', '"299"')
+            Pattern = 'frame count'
+        },
+        @{
+            Name = 'duration'
+            Json = $validProbeJson.Replace('"5.000000"', '"4.983333"')
+            Pattern = 'duration'
+        }
+    )) {
+    Set-FakeFfprobeResult -Json $invalidProbe.Json
+    Assert-Throws -Pattern $invalidProbe.Pattern -Action {
+        Assert-NinhoGodotMovieCapture `
+            -Path $moviePath `
+            -AllowedRoot $temporaryDirectory `
+            -StartedUtc ($movieTimestamp.AddSeconds(-1)) `
+            -FfprobePath $fakeFfprobe
+    }
+}
+Set-FakeFfprobeResult -Json $validProbeJson -ExitCode 7
+Assert-Throws -Pattern 'ffprobe failed' -Action {
+    Assert-NinhoGodotMovieCapture `
+        -Path $moviePath `
+        -AllowedRoot $temporaryDirectory `
+        -StartedUtc ($movieTimestamp.AddSeconds(-1)) `
+        -FfprobePath $fakeFfprobe
+}
+$global:LASTEXITCODE = 0
+Set-FakeFfprobeResult -Json $validProbeJson
 
 $manifestDirectory = Join-Path $temporaryDirectory 'release-manifest'
 $manifest = New-NinhoTestGDExtensionManifest `
@@ -132,11 +239,39 @@ foreach ($runnerContract in @(
         'return [int]$process.ExitCode',
         'exit $godotExitCode',
         'Remove-Item -LiteralPath $expectedMovieFullPath -Force',
-        'did not create a non-empty movie'
+        'Assert-NinhoGodotMovieCapture',
+        'NINHO_VISUAL_CAPTURE_COMPLETE frame=300',
+        '-RequiredCompletionMarker $visualCompletionMarker',
+        "'--fixed-fps', '60'",
+        "'--', '--ninho-capture-300'"
     )) {
     if (-not $runnerText.Contains($runnerContract)) {
         throw "tools/test.ps1 is missing runner contract: $runnerContract"
     }
+}
+if ($runnerText.Contains("'--quit-after'")) {
+    throw 'tools/test.ps1 must let the visual scene finish frame 300 itself'
+}
+if ([regex]::Matches(
+        $runnerText,
+        [regex]::Escape('-RequiredCompletionMarker $visualCompletionMarker')).Count -ne 2) {
+    throw 'Both Vulkan and OpenGL movie gates must require the frame-300 marker'
+}
+if ([regex]::Matches($runnerText, [regex]::Escape("'--fixed-fps', '60'")).Count -ne 2) {
+    throw 'Both Vulkan and OpenGL movie gates must capture at a fixed 60 FPS'
+}
+if ([regex]::Matches(
+        $runnerText,
+        [regex]::Escape("'--', '--ninho-capture-300'")).Count -ne 2) {
+    throw 'Both movie gates must activate the explicit GDScript capture argument'
+}
+
+$gateModuleText = [System.IO.File]::ReadAllText((Join-Path $Root 'tools\GodotSpikeGate.psm1'))
+$movieGuardIndex = $gateModuleText.IndexOf(
+    'Assert-NinhoNoReparseAncestors -Path $Path -AllowedRoot $AllowedRoot')
+$movieReadIndex = $gateModuleText.IndexOf('Get-Item -LiteralPath $fullPath')
+if ($movieGuardIndex -lt 0 -or $movieReadIndex -lt 0 -or $movieGuardIndex -gt $movieReadIndex) {
+    throw 'Movie validation must apply the SafePath ancestor guard before reading the movie'
 }
 
 Assert-NinhoNoReparseAncestors -Path $temporaryDirectory -AllowedRoot $artifactRoot | Out-Null

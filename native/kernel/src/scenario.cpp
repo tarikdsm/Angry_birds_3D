@@ -1676,6 +1676,8 @@ struct CrtStressProbeResult {
     result.private_commit_final_central_max_bytes = private_assessment.final_central_max_bytes;
     result.private_commit_final_full_max_bytes = private_assessment.final_full_max_bytes;
     result.private_commit_growth_ratio = private_assessment.growth_ratio;
+    result.private_commit_instant_growth_ratio =
+        private_assessment.instant_growth_ratio;
     result.private_commit_warmup_trimmed_span_ratio = private_assessment.warmup_trimmed_span_ratio;
     result.private_commit_warmup_full_span_ratio = private_assessment.warmup_full_span_ratio;
     result.private_commit_measured_trimmed_span_ratio = private_assessment.measured_trimmed_span_ratio;
@@ -1753,11 +1755,8 @@ struct CrtStressProbeResult {
     }
     if (working_set_summary.available) {
         result.working_set_growth_ratio = working_set_summary.growth_ratio;
-        result.working_set_instant_growth_ratio = std::max(
-            0.0,
-            (static_cast<double>(result.working_set_final_bytes)
-             - static_cast<double>(result.working_set_baseline_bytes))
-                / static_cast<double>(result.working_set_baseline_bytes));
+        result.working_set_instant_growth_ratio =
+            working_set_summary.instant_growth_ratio;
     }
 
     result.metrics = {
@@ -1772,6 +1771,9 @@ struct CrtStressProbeResult {
          static_cast<double>(result.private_commit_final_median_bytes),
          "bytes"},
         {"private_commit_growth_ratio", result.private_commit_growth_ratio, "ratio"},
+        {"private_commit_instant_growth_ratio",
+         result.private_commit_instant_growth_ratio,
+         "ratio"},
         {"private_commit_warmup_trimmed_span_ratio",
          result.private_commit_warmup_trimmed_span_ratio,
          "ratio"},
@@ -2992,6 +2994,7 @@ void append_memory_observation(
     private_integer("final_full_max_bytes", memory.private_commit_final_full_max_bytes);
     private_integer("peak_bytes", memory.private_commit_peak_bytes);
     private_number("growth_ratio", memory.private_commit_growth_ratio);
+    private_number("instant_growth_ratio", memory.private_commit_instant_growth_ratio);
     private_number(
         "warmup_trimmed_span_ratio",
         memory.private_commit_warmup_trimmed_span_ratio);
@@ -3536,6 +3539,11 @@ PrivateCommitAssessment assess_private_commit(
         (static_cast<double>(result.final_median_bytes)
          - static_cast<double>(result.baseline_median_bytes))
             / static_cast<double>(result.baseline_median_bytes));
+    result.instant_growth_ratio = std::max(
+        0.0,
+        (static_cast<double>(measured_samples.back())
+         - static_cast<double>(warmup_samples.back()))
+            / static_cast<double>(warmup_samples.back()));
     result.warmup_trimmed_span_ratio = static_cast<double>(
         result.baseline_central_max_bytes - result.baseline_central_min_bytes)
         / static_cast<double>(result.baseline_median_bytes);
@@ -3631,6 +3639,8 @@ RepeatObservation make_repeat_observation(
             .private_commit_final_full_max_bytes = result.private_commit_final_full_max_bytes,
             .private_commit_peak_bytes = result.private_commit_peak_bytes,
             .private_commit_growth_ratio = result.private_commit_growth_ratio,
+            .private_commit_instant_growth_ratio =
+                result.private_commit_instant_growth_ratio,
             .private_commit_warmup_trimmed_span_ratio = result.private_commit_warmup_trimmed_span_ratio,
             .private_commit_warmup_full_span_ratio = result.private_commit_warmup_full_span_ratio,
             .private_commit_measured_trimmed_span_ratio = result.private_commit_measured_trimmed_span_ratio,

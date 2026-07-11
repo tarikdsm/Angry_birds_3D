@@ -6,6 +6,10 @@ const STEP_SAMPLE_LIMIT := 120
 const EXPECTED_BODY_COUNT := 122
 const EXPECTED_VISUAL_BODY_COUNT := 121
 const FIRST_SNAPSHOT_FRAME_LIMIT := 10
+const MOVIE_CAPTURE_FRAME_LIMIT := 300
+const MOVIE_CAPTURE_ARGUMENT := "--ninho-capture-300"
+const MOVIE_CAPTURE_INITIAL_FRAME_COUNT := 1
+const VISUAL_CAPTURE_COMPLETE_MARKER := "NINHO_VISUAL_CAPTURE_COMPLETE frame=300"
 const BOX_COLORS := [Color("e4a15f"), Color("c87345"), Color("f0bf75")]
 
 @onready var physics: Box3DWorldNode = $Box3DWorldNode
@@ -28,7 +32,7 @@ var _failed := false
 func _ready() -> void:
 	process_physics_priority = 100
 	physics.set_physics_process(true)
-	_movie_capture = OS.get_cmdline_args().has("--write-movie")
+	_movie_capture = OS.get_cmdline_user_args().has(MOVIE_CAPTURE_ARGUMENT)
 	physics.physics_fault.connect(_on_physics_fault)
 	_prepare_materials()
 	if not physics.configure_planet(10.0, 9.0):
@@ -107,7 +111,8 @@ func _physics_process(_delta: float) -> void:
 	phase_label.text = _phase_text(projectile_x)
 
 	frames += 1
-	if _movie_capture and frames == 300:
+	if _movie_capture and frames == MOVIE_CAPTURE_FRAME_LIMIT - MOVIE_CAPTURE_INITIAL_FRAME_COUNT:
+		print(VISUAL_CAPTURE_COMPLETE_MARKER)
 		get_tree().quit(0)
 
 

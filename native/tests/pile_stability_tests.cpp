@@ -77,6 +77,10 @@ void require_private_memory_contract(const ScenarioResult& result)
         result.private_commit_final_full_max_bytes == expected.final_full_max_bytes);
     NINHO_REQUIRE_NEAR(result.private_commit_growth_ratio, expected.growth_ratio, 1e-12);
     NINHO_REQUIRE_NEAR(
+        result.private_commit_instant_growth_ratio,
+        expected.instant_growth_ratio,
+        1e-12);
+    NINHO_REQUIRE_NEAR(
         result.private_commit_warmup_trimmed_span_ratio,
         expected.warmup_trimmed_span_ratio,
         1e-12);
@@ -132,6 +136,10 @@ void require_working_set_contract(const ScenarioResult& result)
         result.working_set_final_central_high_bytes == expected.final_central_max_bytes);
     NINHO_REQUIRE(result.working_set_final_max_bytes == expected.final_full_max_bytes);
     NINHO_REQUIRE_NEAR(result.working_set_growth_ratio, expected.growth_ratio, 1e-12);
+    NINHO_REQUIRE_NEAR(
+        result.working_set_instant_growth_ratio,
+        expected.instant_growth_ratio,
+        1e-12);
     NINHO_REQUIRE_NEAR(
         result.working_set_warmup_trimmed_span_ratio,
         expected.warmup_trimmed_span_ratio,
@@ -201,6 +209,14 @@ NINHO_TEST("private commit assessment uses trimmed central tail protocol")
     NINHO_REQUIRE(empirical_result.status == PrivateCommitStatus::Pass);
     NINHO_REQUIRE(empirical_result.measured_trimmed_span_ratio <= 0.05);
     NINHO_REQUIRE(empirical_result.measured_full_span_ratio > 0.05);
+    NINHO_REQUIRE_NEAR(
+        empirical_result.instant_growth_ratio,
+        std::max(
+            0.0,
+            (static_cast<double>(empirical.back())
+             - static_cast<double>(empirical_baseline.back()))
+                / static_cast<double>(empirical_baseline.back())),
+        1e-12);
 
     const std::array<std::size_t, 10> single_high{
         1, 1, 1, 1, 1, 100, 100, 100, 100, 140};

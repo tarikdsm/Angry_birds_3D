@@ -124,7 +124,7 @@ def validate_stress_observation(observation: dict, release_build: bool) -> None:
         raise AssertionError("unexpected future private budget scope")
     if private["available"]:
         private_assessment = validate_available_counter(
-            private, "private", include_instant=False
+            private, "private", include_instant=True
         )
     else:
         validate_unavailable_counter(private, "private")
@@ -168,6 +168,7 @@ def validate_unavailable_memory_contract() -> None:
         "final_full_max_bytes": 0,
         "peak_bytes": 0,
         "growth_ratio": 0.0,
+        "instant_growth_ratio": 0.0,
         "warmup_trimmed_span_ratio": 0.0,
         "warmup_full_span_ratio": 0.0,
         "measured_trimmed_span_ratio": 0.0,

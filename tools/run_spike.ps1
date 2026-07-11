@@ -37,6 +37,7 @@ try {
     $document = Read-NinhoFreshSpikeReport `
         -Path $report `
         -StartedUtc $startedUtc `
+        -AllowedRoot $artifactDirectory `
         -ExpectedBuildType $Configuration
 } catch {
     [Console]::Error.WriteLine($_.Exception.Message)

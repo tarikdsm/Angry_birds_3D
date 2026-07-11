@@ -1092,7 +1092,10 @@ set_target_properties(ninho_physics_extension PROPERTIES
   RUNTIME_OUTPUT_DIRECTORY "$<1:${PROJECT_SOURCE_DIR}/game/bin>")
 ```
 
-Keep exceptions disabled to match godot-cpp; kernel code must not throw across the boundary.
+Use MSVC `/EHsc` consistently and build godot-cpp with exceptions enabled, as
+approved by the foundation architecture. Exceptions remain an internal C++
+mechanism: the GDExtension boundary catches and translates every failure to
+`physics_fault` plus a safe 0/false/empty return value.
 
 - [ ] **Step 3: Implement `Box3DWorldNode` and registration**
 

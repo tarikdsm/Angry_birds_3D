@@ -39,25 +39,25 @@ Set-Content -LiteralPath $target -Value '{"stale":true}' -Encoding utf8
 $started = Start-NinhoSpikeReportCapture -Path $target -AllowedRoot $sandbox
 Assert-True (-not (Test-Path -LiteralPath $target)) 'capture did not remove stale report'
 Assert-Throws {
-    Read-NinhoFreshSpikeReport -Path $target -StartedUtc $started -ExpectedBuildType Debug
+    Read-NinhoFreshSpikeReport -Path $target -StartedUtc $started -AllowedRoot $sandbox -ExpectedBuildType Debug
 } 'did not create a report'
 
 Set-Content -LiteralPath $target -Value '{"ok":true}' -Encoding utf8
 (Get-Item -LiteralPath $target).LastWriteTimeUtc = $started.AddMinutes(-1)
 Assert-Throws {
-    Read-NinhoFreshSpikeReport -Path $target -StartedUtc $started -ExpectedBuildType Debug
+    Read-NinhoFreshSpikeReport -Path $target -StartedUtc $started -AllowedRoot $sandbox -ExpectedBuildType Debug
 } 'predates this execution'
 
 Copy-Item -LiteralPath (Join-Path $Root 'docs\physics\evidence\foundation-report-debug.json') `
     -Destination $target -Force
 (Get-Item -LiteralPath $target).LastWriteTimeUtc = [DateTime]::UtcNow
 $document = Read-NinhoFreshSpikeReport `
-    -Path $target -StartedUtc $started -ExpectedBuildType Debug
+    -Path $target -StartedUtc $started -AllowedRoot $sandbox -ExpectedBuildType Debug
 Assert-True ($document.schema -eq 'ninho.physics.scenario.v1') 'fresh report did not validate'
 
 Set-Content -LiteralPath $target -Value '{"ok":true}' -Encoding utf8
 Assert-Throws {
-    Read-NinhoFreshSpikeReport -Path $target -StartedUtc $started -ExpectedBuildType Debug
+    Read-NinhoFreshSpikeReport -Path $target -StartedUtc $started -AllowedRoot $sandbox -ExpectedBuildType Debug
 } 'missing schema'
 
 Assert-Throws {
