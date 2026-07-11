@@ -218,6 +218,8 @@ class SimulationSession {
 public:
     static Result<std::unique_ptr<SimulationSession>> create(
         const MaterialCatalog&, const ArchetypeCatalog&, const LevelManifest&);
+    Status reconfigure(
+        const MaterialCatalog&, const ArchetypeCatalog&, const LevelManifest&);
     Status enqueue(PlayerCommand);
     Status tick();
     std::span<const EntitySnapshot> snapshots() const;
@@ -231,6 +233,10 @@ public:
 Comandos entram no próximo tick; a fila tem 128 entradas. Mira múltipla no mesmo tick é coalescida pela maior sequência. Snapshots ordenam `(EntityId, PartId)`; eventos ordenam `(tick,event_id)`. `events()` contém somente eventos do último tick e é sobrescrito no próximo; o adaptador os copia após cada tick. Falha de `tick()` é latched em `Faulted`, preserva código/mensagem no frame e rejeita ticks posteriores até restart/configuração.
 
 Como `PhysicsWorld` cria corpos/joints por comandos diferidos, a Tarefa 3 adiciona `commit_pending_initial_state()`: permitido somente antes do primeiro step, aplica criação canônica sem integrar física, não avança tick e não publica contatos. Chamadas posteriores falham. Assim o snapshot tick zero existe sem gravidade ou eventos ocultos.
+
+`reconfigure()` constrói uma sessão candidata completa, incluindo commit inicial e snapshots; somente depois de sucesso troca o estado ativo. Qualquer erro preserva bytes canônicos, eventos, sequências e handles da sessão anterior.
+
+Os joints estruturais são welds. Como o schema declara endpoints e poses, mas não frames manuais, o builder calcula um frame mundial compartilhado no midpoint dos centros iniciais, com orientação mundial identidade, e o converte para os dois espaços locais. Isso preserva a pose relativa do manifesto sem snap no primeiro solver step; teste exige drift inicial `≤1e-5 m/rad`.
 
 Ordem do tick:
 

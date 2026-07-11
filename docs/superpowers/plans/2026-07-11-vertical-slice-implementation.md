@@ -140,10 +140,10 @@ python -c "import json; json.load(open('third_party/sbom.spdx.json', encoding='u
 
 1. Testar `SimulationSession::create()` com os arquivos reais e snapshots ordenados por `(EntityId, PartId)`.
 2. Testar contagem inicial de corpos/juntas, massa do Âncora, materiais das peças, planeta analítico e ausência de handles físicos no snapshot.
-3. Testar falha atômica: uma reconfiguração inválida preserva a sessão anterior byte a byte.
+3. Implementar/testar `reconfigure(materials, archetypes, level)` por construção-e-swap; falha inválida preserva sessão anterior byte a byte, incluindo hash, eventos e sequências.
 4. Adicionar `PhysicsWorld::commit_pending_initial_state()`, permitido somente antes do primeiro step; testar que aplica criações sem integrar, avançar tick ou emitir contatos, e rejeita uso posterior.
 5. Implementar registros internos de entidade/parte/junta e criação canônica por ID crescente, usando o commit inicial controlado para produzir snapshot tick zero.
-6. Criar shapes Box3D e joints somente através de `PhysicsWorld`; cenário permanente usa `PhysicsSurfaceDefinition` e fica fora dos materiais destrutíveis.
+6. Criar shapes Box3D e weld joints somente através de `PhysicsWorld`; frames locais derivam de um frame mundial compartilhado no midpoint inicial e preservam poses com drift `<=1e-5 m/rad`. Cenário permanente usa `PhysicsSurfaceDefinition` e fica fora dos materiais destrutíveis.
 7. Implementar `restart()` reconstruindo do manifesto imutável; limpar comandos/eventos e reiniciar sequências.
 8. Implementar `canonical_state_v1`: campos fixos, inteiros little-endian, floats a `1e-5`, zero normalizado, strings UTF-8 length-prefixed; excluir timings, endereços, handles e métricas. Repetir 20 reinícios e comparar bodies, joints, snapshot/hash; obter bytes do alocador somente por façade interna ligada ao target de testes.
 9. Verificar:
