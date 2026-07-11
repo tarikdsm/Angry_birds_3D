@@ -35,6 +35,13 @@ O jogador recebe três Virelas. A solução ensinada é passar pela estrutura e 
 2. **Estrutural:** impacto em vidro/pinho, ruptura de suportes e segundo lançamento reposicionando destroços.
 3. **Derrota:** três lançamentos frontais ou sem energia suficiente, com alvo ainda ativo.
 
+Tupla pública congelada: a rota gravitacional usa theta `{-2°,0°,0°}` e a
+estrutural repete `theta=0°`; ambas usam `phase=0°`, velocidade `8 m/s` e no
+máximo três lançamentos. A rota gravitacional ativa Virela `40 ticks` após cada
+lançamento; a rota estrutural não ativa a habilidade. A derrota usa três tangentes que erram o
+objetivo. Os testes exigem causalidade de habilidade na primeira rota e o par
+exato sobrecarga→ruptura e gatilho→fratura na segunda.
+
 Não deve existir uma solução confiável baseada em três impactos frontais diretos.
 
 ### 2.3 Ritmo
@@ -51,7 +58,7 @@ Referencial local no polo: normal `+Y`, tangentes `+X/+Z`.
 
 - planeta: raio `10 m`, `g_surface=9 m/s²`;
 - plataforma permanente: aproximadamente `6,4 × 0,30 × 3,6 m`;
-- fortificação: até `4,6 × 2,9 × 2,4 m`;
+- fortificação congelada: `4,44 × 3,19 × 3,20 m`, com cada eixo até `4,5 m`;
 - 8 peças de pinho, 3 painéis de vidro e 9 tijolos;
 - Âncora: `480 kg`, silhueta aproximada `1,30 × 0,85 × 1,00 m`;
 - máximo inicial: 25 corpos de gameplay e 18 juntas;
@@ -140,7 +147,7 @@ Eventos: `BirdLaunched`, `AbilityStarted`, `AbilityAffectedBody`, `AbilityPulse`
 |---:|---|---|---:|---:|---:|---:|
 | 1 | `pine` | fibrosa | 520 | 0,55 | 0,18 | 0,55 |
 | 5 | `brick` | alvenaria | 1800 | 0,72 | 0,08 | 0,52 |
-| 9 | `glass` | frágil | 2450 | 0,42 | 0,10 | 0,16 |
+| 9 | `glass` | frágil | 2450 | 0,42 | 0,10 | 0,01 |
 
 - pinho acumula dano durante a fase e rompe juntas/segmentos críticos;
 - tijolo acumula dano nas juntas de argamassa, mas o bloco não fragmenta;
@@ -155,7 +162,7 @@ D = E / (massa_alvo * 250 J/kg * tenacidade)
 
 Juntas rompem se o maior de força/limite e torque/limite for `≥1` por dois ticks ou `≥1,5` num tick. A remoção ocorre no início do tick seguinte.
 
-Cada joint estrutural declara obrigatoriamente `force_limit_n > 0` e `torque_limit_nm > 0`, finitos. Valores iniciais: encaixe de pinho `6500 N / 1000 N·m`, grampo de vidro `3000 N / 500 N·m`, argamassa `4000 N / 700 N·m`. Zero, ausência, não finito ou unidade implícita são inválidos.
+Cada joint estrutural declara obrigatoriamente `force_limit_n > 0` e `torque_limit_nm > 0`, finitos. Valores congelados: encaixe de pinho `7000 N / 1200 N·m`, grampo de vidro `3000 N / 500 N·m`, sete argamassas de suporte `1400 N / 160 N·m` e uma argamassa sacrificial `950 N / 160 N·m`. Zero, ausência, não finito ou unidade implícita são inválidos.
 
 ## 7. Javali-Âncora
 
@@ -171,7 +178,7 @@ Calibração inicial:
 
 ```text
 integrity_damage = min(55,
-  100 * E / (480 kg * 80 J/kg) * vulnerability)
+  100 * E / (480 kg * 2,5 J/kg) * vulnerability)
 ```
 
 A convenção da normal de contato é testada explicitamente. O alvo neutraliza uma única vez por integridade zero ou transição para ejetado.

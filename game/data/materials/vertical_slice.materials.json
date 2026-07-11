@@ -3,7 +3,7 @@
   "materials": [
     {"id": 1, "key": "pine", "response": "fibrous", "density_kg_m3": 520.0, "friction": 0.55, "restitution": 0.18, "toughness": 0.55},
     {"id": 5, "key": "brick", "response": "masonry", "density_kg_m3": 1800.0, "friction": 0.72, "restitution": 0.08, "toughness": 0.52},
-    {"id": 9, "key": "glass", "response": "brittle", "density_kg_m3": 2450.0, "friction": 0.42, "restitution": 0.10, "toughness": 0.16}
+    {"id": 9, "key": "glass", "response": "brittle", "density_kg_m3": 2450.0, "friction": 0.42, "restitution": 0.10, "toughness": 0.01}
   ],
   "surfaces": [
     {"id": 1001, "key": "planet_soil", "density_kg_m3": 1250.0, "friction": 0.82, "restitution": 0.05},

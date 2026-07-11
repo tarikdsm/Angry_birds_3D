@@ -65,6 +65,7 @@ NINHO_SIM_TEST("content parses the production catalogs and validates the complet
     NINHO_SIM_REQUIRE(materials.value.materials.at(1).response == MaterialResponse::Masonry);
     NINHO_SIM_REQUIRE(materials.value.materials.at(2).id == MaterialId{9});
     NINHO_SIM_REQUIRE(materials.value.materials.at(2).response == MaterialResponse::Brittle);
+    NINHO_SIM_REQUIRE(std::abs(materials.value.materials.at(2).toughness - 0.01) < 1e-9);
     NINHO_SIM_REQUIRE(materials.value.surfaces.size() == 4U);
     NINHO_SIM_REQUIRE(materials.value.surfaces.front().id == SurfaceId{1001});
     NINHO_SIM_REQUIRE(materials.value.surfaces.back().id == SurfaceId{1004});
@@ -78,6 +79,8 @@ NINHO_SIM_TEST("content parses the production catalogs and validates the complet
     NINHO_SIM_REQUIRE(std::abs(bird.density_kg_m3 - 366.76) < 1e-9);
     NINHO_SIM_REQUIRE(std::abs(bird.friction - 0.35) < 1e-9);
     NINHO_SIM_REQUIRE(std::abs(bird.restitution - 0.25) < 1e-9);
+    NINHO_SIM_REQUIRE(std::abs(
+        archetypes.value.enemies.front().damage_energy_j_per_kg - 2.5) < 1e-9);
 
     NINHO_SIM_REQUIRE(level.value.schema_version == 1U);
     NINHO_SIM_REQUIRE(level.value.bird_roster.size() == 1U);
@@ -106,11 +109,11 @@ NINHO_SIM_TEST("content parses the production catalogs and validates the complet
             * body.shape.half_extents_m[2];
         NINHO_SIM_REQUIRE(mass <= 150.0);
         if (body.material_id == MaterialId{5}) {
-            const std::array<double, 3> expected_half_extents{0.23, 0.15, 0.16};
-            const std::array<double, 3> expected_bounds{0.46, 0.30, 0.32};
+            const std::array<double, 3> expected_half_extents{0.15, 0.40, 0.16};
+            const std::array<double, 3> expected_bounds{0.30, 0.80, 0.32};
             NINHO_SIM_REQUIRE(body.shape.half_extents_m == expected_half_extents);
             NINHO_SIM_REQUIRE(body.visual.bounds_m == expected_bounds);
-            NINHO_SIM_REQUIRE(std::abs(mass - 79.488) < 1e-9);
+            NINHO_SIM_REQUIRE(std::abs(mass - 138.24) < 1e-9);
         } else {
             const std::array<double, 3> expected_half_extents{0.02, 0.35, 0.45};
             const std::array<double, 3> expected_bounds{0.04, 0.70, 0.90};
@@ -125,9 +128,51 @@ NINHO_SIM_TEST("content parses the production catalogs and validates the complet
                 && joint.torque_limit_nm == torque;
         });
     };
-    NINHO_SIM_REQUIRE(kind_count(JointKind::PineFit, 6500.0, 1000.0) == 7);
+    NINHO_SIM_REQUIRE(kind_count(JointKind::PineFit, 7000.0, 1200.0) == 7);
     NINHO_SIM_REQUIRE(kind_count(JointKind::GlassClamp, 3000.0, 500.0) == 3);
-    NINHO_SIM_REQUIRE(kind_count(JointKind::Mortar, 4000.0, 700.0) == 8);
+    NINHO_SIM_REQUIRE(kind_count(JointKind::Mortar, 1400.0, 160.0) == 7);
+    NINHO_SIM_REQUIRE(kind_count(JointKind::Mortar, 950.0, 160.0) == 1);
+    struct ExpectedPose {
+        std::uint32_t body_id;
+        std::array<double, 3> position;
+        std::array<double, 4> rotation;
+    };
+    const std::array<double, 4> identity_rotation{0.0, 0.0, 0.0, 1.0};
+    const std::array<double, 4> quarter_turn_rotation{
+        0.0, 0.0, 0.7071067811865476, 0.7071067811865476};
+    const std::array<ExpectedPose, 21> expected_poses{{
+        {2, {-1.7, 11.5, -0.9}, identity_rotation},
+        {3, {1.7, 11.5, -0.9}, identity_rotation},
+        {4, {-1.7, 11.5, 1.8}, identity_rotation},
+        {5, {1.7, 11.5, 1.8}, identity_rotation},
+        {6, {0.0, 12.45, 0.30}, identity_rotation},
+        {7, {0.0, 12.45, 1.20}, identity_rotation},
+        {8, {-2.0, 11.2, 0.0}, identity_rotation},
+        {9, {2.0, 11.2, 0.0}, identity_rotation},
+        {10, {-2.22, 11.90, -0.65}, identity_rotation},
+        {11, {0.0, 12.67, 0.75}, quarter_turn_rotation},
+        {12, {0.30, 12.67, 0.75}, quarter_turn_rotation},
+        {13, {-0.30, 13.09, 0.43}, identity_rotation},
+        {14, {0.0, 13.09, 0.43}, identity_rotation},
+        {15, {0.30, 13.09, 0.43}, identity_rotation},
+        {16, {-0.30, 13.09, 0.75}, identity_rotation},
+        {17, {0.0, 13.09, 0.75}, identity_rotation},
+        {18, {0.299, 13.09, 0.75}, identity_rotation},
+        {19, {-0.30, 13.09, 1.07}, identity_rotation},
+        {20, {0.0, 13.09, 1.07}, identity_rotation},
+        {21, {0.30, 13.09, 1.07}, identity_rotation},
+        {22, {-0.28, 10.95, 0.75}, quarter_turn_rotation},
+    }};
+    for (const ExpectedPose& expected : expected_poses) {
+        const auto& body = level.value.bodies.at(expected.body_id - 1U);
+        NINHO_SIM_REQUIRE(body.body_id == expected.body_id);
+        NINHO_SIM_REQUIRE(body.transform.position_m == expected.position);
+        NINHO_SIM_REQUIRE(body.transform.rotation_xyzw == expected.rotation);
+    }
+    const auto& sacrificial_joint = level.value.joints.at(17);
+    NINHO_SIM_REQUIRE(sacrificial_joint.id == JointId{18});
+    NINHO_SIM_REQUIRE(sacrificial_joint.force_limit_n == 950.0);
+    NINHO_SIM_REQUIRE(sacrificial_joint.torque_limit_nm == 160.0);
     NINHO_SIM_REQUIRE(!level.value.bodies.at(0).assembly_id.has_value());
     for (std::size_t i = 1; i <= 11; ++i) {
         NINHO_SIM_REQUIRE(level.value.bodies.at(i).assembly_id == 1U);
@@ -190,9 +235,12 @@ NINHO_SIM_TEST("content fortification destructible AABB stays inside the design 
         }
     }
     NINHO_SIM_REQUIRE(destructible_count == 20U);
-    NINHO_SIM_REQUIRE(maximum[0] - minimum[0] <= 4.6 + 1e-9);
-    NINHO_SIM_REQUIRE(maximum[1] - minimum[1] <= 2.9 + 1e-9);
-    NINHO_SIM_REQUIRE(maximum[2] - minimum[2] <= 2.4 + 1e-9);
+    NINHO_SIM_REQUIRE(maximum[0] - minimum[0] <= 4.5 + 1e-9);
+    NINHO_SIM_REQUIRE(maximum[1] - minimum[1] <= 4.5 + 1e-9);
+    NINHO_SIM_REQUIRE(maximum[2] - minimum[2] <= 4.5 + 1e-9);
+    NINHO_SIM_REQUIRE(std::abs(maximum[0] - minimum[0] - 4.44) < 1e-9);
+    NINHO_SIM_REQUIRE(std::abs(maximum[1] - minimum[1] - 3.19) < 1e-9);
+    NINHO_SIM_REQUIRE(std::abs(maximum[2] - minimum[2] - 3.20) < 1e-9);
 }
 
 NINHO_SIM_TEST("content canonical round trip preserves all three typed documents")
@@ -372,7 +420,7 @@ NINHO_SIM_TEST("content rejects orphan joints and invalid joint limits")
 
     files = RealContent{};
     auto non_finite_limit = files.level.dump();
-    const auto marker = non_finite_limit.find("6500.0");
+    const auto marker = non_finite_limit.find("7000.0");
     NINHO_SIM_REQUIRE(marker != std::string::npos);
     non_finite_limit.replace(marker, 6U, "1e400");
     const auto non_finite_result = parse_level_manifest(non_finite_limit);

@@ -46,7 +46,7 @@
       "surface_id": 1004,
       "mass_kg": 480.0,
       "integrity": 100.0,
-      "damage_energy_j_per_kg": 80.0,
+      "damage_energy_j_per_kg": 2.5,
       "max_damage": 55.0
     }
   ]

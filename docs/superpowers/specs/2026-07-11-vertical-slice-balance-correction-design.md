@@ -61,7 +61,12 @@ Os valores finais são escolhidos por busca limitada, reprodutível e lexicográ
 
 ## 5. Eventos e causalidade
 
-`JointOverloaded` representa a causa mecânica autoritativa da ruptura, mesmo sem dano anterior. `JointBroken` e `PieceFractured` apontam por `cause_event_id` para exatamente um `JointOverloaded` anterior no stream agregado. Hooks não fabricam `DamageApplied`.
+`JointOverloaded` representa a causa mecânica autoritativa da ruptura de junta,
+mesmo sem dano anterior, e `JointBroken` aponta por `cause_event_id` para
+exatamente um overload anterior. A fratura material é independente:
+`PieceFractureTriggered` nasce de um pico de `DamageApplied` e
+`PieceFractured` aponta para exatamente esse gatilho anterior. Hooks não
+fabricam `DamageApplied`.
 
 Cada neutralização continua emitindo causa tipada, posição, normal e energia. Playthroughs não podem chamar `neutralize_entity`, `request_fracture`, `finish_projectile` nem mutar objetivo/outcome.
 
@@ -71,7 +76,7 @@ A correção é aceita quando:
 
 - as duas vitórias e a derrota usam somente comandos públicos e ticks físicos;
 - a rota Virela contém todos os quatro eventos da habilidade e ao menos um corpo afetado real;
-- a rota estrutural contém a cadeia overload → break → fracture com IDs resolvíveis;
+- a rota estrutural contém os pares overload → break e gatilho → fracture com IDs resolvíveis;
 - a neutralização é produzida pelo sistema de dano/ejeção, e vitória ocorre apenas em `Evaluation`;
 - o stream canônico é idêntico em dez repetições e entre Debug/Release;
 - conteúdo/parsers, Task 5, Task 6 e a suíte completa permanecem verdes;
@@ -90,11 +95,16 @@ O fallback aprovado substitui a pilha genérica por um **pórtico de contrapesos
 - os nove tijolos tornam-se contrapesos de `138–145 kg` cada, ainda elegíveis para Virela;
 - eles formam três colunas acima e no flanco exposto do Âncora, com queda radial útil de `1,5–2,5 m` e envelope local máximo de `4,5 m`;
 - três painéis de vidro funcionam como pinos de liberação; `glass.toughness = 0,01`, mantendo resposta frágil por pico único;
-- joints de argamassa do contrapeso usam `950 N / 160 N·m`; pine fits e glass clamps mantêm seus valores salvo incoerência geométrica demonstrada por teste;
+- a junta de argamassa sacrificial (ID 18) usa `950 N / 160 N·m`; a incoerência geométrica demonstrada pelo repouso autorizou reforço mínimo das sete juntas de suporte (IDs 11–17) para `1400 N / 160 N·m`, dos pine fits (IDs 1–7) para `7000 N / 1200 N·m`, mantendo glass clamps (IDs 8–10) em `3000 N / 500 N·m`;
 - o Âncora começa a correção em `damage_energy_j_per_kg = 40`, preservando massa 480 kg, integridade 100, teto 55, cone 45° e multiplicadores 0,25/1,0;
 - o pórtico é orientado para que a linha estrutural atinja um pino e a linha Virela atravesse o volume dos contrapesos antes do pulso.
 
-Esses valores formam o primeiro orçamento fechado. Até 500 simulações adicionais escolhem transforms e comandos públicos dentro do arco/velocidade existentes.
+Esses valores formam o primeiro orçamento fechado. Até 500 simulações adicionais
+escolhem transforms e comandos públicos dentro do arco/velocidade existentes.
+Depois que o teste de 120 ticks demonstrou colapso espontâneo, a autorização de
+incoerência geométrica permitiu somente reforçar os suportes até o primeiro
+tuple sem drift, ejeção ou ruptura; ao menos uma junta de argamassa permanece
+sacrificial em `950/160`.
 
 A investigação do fallback provou que nenhuma trajetória pública com velocidade `≥12 m/s` cruza o raio útil `10,8–12,5 m`; os impactos de 8 m/s fecham fratura, mas o melhor dano observado é `6,54748/100` com `40 J/kg`. Portanto o último eixo data-driven é autorizado como resgate discreto: testar `damage_energy_j_per_kg ∈ {40, 20, 10, 5, 2,5}` e congelar o **maior** valor que faz ambas as rotas vencerem. Nenhum valor intermediário ou menor que `2,5` é permitido. Integridade, teto e multiplicadores continuam imutáveis, preservando dois ou mais contatos quando o teto de 55 se aplica.
 

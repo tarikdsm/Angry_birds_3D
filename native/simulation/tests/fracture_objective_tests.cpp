@@ -121,7 +121,7 @@ NINHO_SIM_TEST("fracture objective consecutive overload publishes cause on secon
 NINHO_SIM_TEST("fracture objective material threshold publishes typed trigger")
 {
     auto session = create_session();
-    constexpr EntityId target_entity{111};
+    constexpr EntityId target_entity{110};
     constexpr PartId target_part{1};
     const auto target = std::ranges::find_if(session->snapshots(), [](const auto& snapshot) {
         return snapshot.entity_id == target_entity && snapshot.part_id == target_part;

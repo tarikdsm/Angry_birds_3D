@@ -71,11 +71,18 @@ que participam do campo gravitacional para o limite de `150 kg`:
 
 | Material | Dimensões completas (m) | Densidade (kg/m³) | Massa (kg) |
 |---|---:|---:|---:|
-| Tijolo | `0.46 × 0.30 × 0.32` | `1800` | `79.488` |
+| Tijolo | `0.30 × 0.80 × 0.32` | `1800` | `138.240` |
 | Vidro | `0.04 × 0.70 × 0.90` | `2450` | `61.740` |
 
-Os tijolos formam uma grade com centros `X={-0.48,0,0.48}` e
-`Y={10.47,10.78,11.09}`, em `Z=0.65`. O AABB destrutível completo permanece
-`[-2.30,10.30,-1.15] → [2.30,12.95,1.15] m`, dentro do envelope de design
-`4.6 × 2.9 × 2.4 m`. Os `visual.bounds_m` continuam exatamente iguais ao
+Os tijolos formam uma grade no plano tangencial, com centros
+`X={-0.30,0,0.30}` (o corpo 18 usa `X=0.299`), `Y=13.09` e
+`Z={0.43,0.75,1.07}`. O AABB destrutível completo permanece dentro de
+`4.44 × 3.19 × 3.20 m`, portanto nenhum eixo ultrapassa o envelope de design
+de `4.5 m`. O Javali-Âncora repousa em `[-0.28,10.95,0.75]`, rotacionado em
+`90°` ao redor de `+Z`. Os `visual.bounds_m` continuam exatamente iguais ao
 tamanho completo dos respectivos proxies.
+
+A calibração de produção usa tenacidade `0.01` para o vidro, limiar de dano
+`2.5 J/kg` para o Âncora e juntas `pine_fit=7000 N/1200 N·m`,
+`glass_clamp=3000 N/500 N·m`, sete argamassas de suporte em
+`1400 N/160 N·m` e uma junta de argamassa sacrificial em `950 N/160 N·m`.
