@@ -119,6 +119,7 @@ public:
         double speed) noexcept;
     [[nodiscard]] bool queue_launch() noexcept;
     [[nodiscard]] bool queue_activate_ability() noexcept;
+    [[nodiscard]] bool queue_cancel_aim() noexcept;
     [[nodiscard]] bool restart() noexcept;
     [[nodiscard]] bool advance(double delta) noexcept;
     [[nodiscard]] SessionFrameData consume_frame() noexcept;
@@ -166,6 +167,7 @@ public:
         double speed) noexcept;
     bool queue_launch() noexcept;
     bool queue_activate_ability() noexcept;
+    bool queue_cancel_aim() noexcept;
     bool restart_level() noexcept;
     godot::Dictionary consume_frame() noexcept;
     void _physics_process(double delta) noexcept override;

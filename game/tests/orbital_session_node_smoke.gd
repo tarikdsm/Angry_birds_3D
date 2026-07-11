@@ -33,7 +33,7 @@ func _initialize() -> void:
 
 	for method_name: String in [
 		"configure_session", "queue_begin_aim", "queue_aim", "queue_launch",
-		"queue_activate_ability", "restart_level", "consume_frame"
+		"queue_activate_ability", "queue_cancel_aim", "restart_level", "consume_frame"
 	]:
 		if not _session.has_method(method_name):
 			_fail("missing binding: %s" % method_name)

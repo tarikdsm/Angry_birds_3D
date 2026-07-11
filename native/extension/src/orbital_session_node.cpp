@@ -378,6 +378,11 @@ bool OrbitalSessionAdapter::queue_activate_ability() noexcept
     return enqueue(simulation::ActivateAbilityCommand{});
 }
 
+bool OrbitalSessionAdapter::queue_cancel_aim() noexcept
+{
+    return enqueue(simulation::CancelAimCommand{});
+}
+
 bool OrbitalSessionAdapter::restart() noexcept
 {
     if (!session_) {
@@ -711,6 +716,8 @@ void OrbitalSessionNode::_bind_methods()
         godot::D_METHOD("queue_activate_ability"),
         &OrbitalSessionNode::queue_activate_ability);
     godot::ClassDB::bind_method(
+        godot::D_METHOD("queue_cancel_aim"), &OrbitalSessionNode::queue_cancel_aim);
+    godot::ClassDB::bind_method(
         godot::D_METHOD("restart_level"), &OrbitalSessionNode::restart_level);
     godot::ClassDB::bind_method(
         godot::D_METHOD("consume_frame"), &OrbitalSessionNode::consume_frame);
@@ -803,6 +810,13 @@ bool OrbitalSessionNode::queue_launch() noexcept
 bool OrbitalSessionNode::queue_activate_ability() noexcept
 {
     const bool result = adapter_.queue_activate_ability();
+    emit_pending_fault();
+    return result;
+}
+
+bool OrbitalSessionNode::queue_cancel_aim() noexcept
+{
+    const bool result = adapter_.queue_cancel_aim();
     emit_pending_fault();
     return result;
 }

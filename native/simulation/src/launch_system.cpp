@@ -407,6 +407,14 @@ SessionStatus SimulationSession::Impl::process_commands()
                 publish_event(DomainEventKind::CommandRejected, {}, {},
                     CommandRejectionReason::InvalidPhase);
             }
+        } else if (std::holds_alternative<CancelAimCommand>(queued.command)) {
+            if (session_state.phase == SessionPhase::Aim) {
+                session_state.phase = SessionPhase::Inspection;
+                session_state.aim.reset();
+            } else {
+                publish_event(DomainEventKind::CommandRejected, {}, {},
+                    CommandRejectionReason::InvalidPhase);
+            }
         } else if (std::holds_alternative<LaunchCommand>(queued.command)) {
             if (session_state.phase == SessionPhase::Aim) {
                 const auto status = create_projectile();

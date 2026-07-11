@@ -223,6 +223,20 @@ NINHO_SIM_TEST("launch fsm consumes begin aim and set aim in sequence in one tic
     NINHO_SIM_REQUIRE(std::abs(session->state().aim->speed_m_s - 12.35) < 1.0e-9);
 }
 
+NINHO_SIM_TEST("launch fsm cancels aim without consuming the next bird")
+{
+    auto session = create_session();
+    enter_aim(*session);
+    NINHO_SIM_REQUIRE(session->enqueue(SetAimCommand{default_aim(8.0)}).ok());
+    NINHO_SIM_REQUIRE(session->enqueue(CancelAimCommand{}).ok());
+    NINHO_SIM_REQUIRE(session->tick().ok());
+    NINHO_SIM_REQUIRE(session->state().phase == SessionPhase::Inspection);
+    NINHO_SIM_REQUIRE(session->state().outcome == Outcome::None);
+    NINHO_SIM_REQUIRE(!session->state().aim.has_value());
+    NINHO_SIM_REQUIRE(session->birds_remaining() == 3U);
+    NINHO_SIM_REQUIRE(session->events().empty());
+}
+
 NINHO_SIM_TEST("launch fsm enforces shell arc tangency and global speed boundaries")
 {
     auto session = create_session();
@@ -423,6 +437,11 @@ NINHO_SIM_TEST("launch fsm preserves a decided result after a watchdog evaluatio
     NINHO_SIM_REQUIRE(victory->tick().ok());
     NINHO_SIM_REQUIRE(victory->state().phase == SessionPhase::Result);
     NINHO_SIM_REQUIRE(victory->state().outcome == Outcome::Victory);
+    for (int tick = 0; tick < 3; ++tick) {
+        NINHO_SIM_REQUIRE(victory->tick().ok());
+        NINHO_SIM_REQUIRE(victory->state().phase == SessionPhase::Result);
+        NINHO_SIM_REQUIRE(victory->state().outcome == Outcome::Victory);
+    }
 
     auto defeat = create_session();
     for (int shot = 0; shot < 3; ++shot) {
@@ -440,6 +459,11 @@ NINHO_SIM_TEST("launch fsm preserves a decided result after a watchdog evaluatio
     }
     NINHO_SIM_REQUIRE(defeat->state().phase == SessionPhase::Result);
     NINHO_SIM_REQUIRE(defeat->state().outcome == Outcome::Defeat);
+    for (int tick = 0; tick < 3; ++tick) {
+        NINHO_SIM_REQUIRE(defeat->tick().ok());
+        NINHO_SIM_REQUIRE(defeat->state().phase == SessionPhase::Result);
+        NINHO_SIM_REQUIRE(defeat->state().outcome == Outcome::Defeat);
+    }
 }
 
 NINHO_SIM_TEST("launch fsm activation arms exactly at launch tick plus nine")

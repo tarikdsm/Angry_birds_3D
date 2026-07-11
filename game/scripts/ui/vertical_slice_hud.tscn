@@ -1,0 +1,88 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/ui/vertical_slice_hud.gd" id="1_hud"]
+
+[node name="VerticalSliceHUD" type="CanvasLayer"]
+script = ExtResource("1_hud")
+
+[node name="Root" type="Control" parent="."]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+
+[node name="TopBar" type="PanelContainer" parent="Root"]
+offset_left = 24.0
+offset_top = 20.0
+offset_right = 496.0
+offset_bottom = 132.0
+
+[node name="Margin" type="MarginContainer" parent="Root/TopBar"]
+theme_override_constants/margin_left = 18
+theme_override_constants/margin_top = 12
+theme_override_constants/margin_right = 18
+theme_override_constants/margin_bottom = 12
+
+[node name="Readout" type="VBoxContainer" parent="Root/TopBar/Margin"]
+theme_override_constants/separation = 3
+
+[node name="PhaseLabel" type="Label" parent="Root/TopBar/Margin/Readout"]
+unique_name_in_owner = true
+theme_override_colors/font_color = Color(0.745, 0.976, 0.91, 1)
+theme_override_font_sizes/font_size = 20
+text = "FASE  CARREGANDO"
+
+[node name="BirdsLabel" type="Label" parent="Root/TopBar/Margin/Readout"]
+unique_name_in_owner = true
+text = "VIRELAS  3"
+
+[node name="IntegrityLabel" type="Label" parent="Root/TopBar/Margin/Readout"]
+unique_name_in_owner = true
+text = "INTEGRIDADE DA ÂNCORA  100%"
+
+[node name="ControlsLabel" type="Label" parent="Root"]
+unique_name_in_owner = true
+anchors_preset = 12
+anchor_top = 1.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 28.0
+offset_top = -56.0
+offset_right = -28.0
+offset_bottom = -22.0
+grow_horizontal = 2
+grow_vertical = 0
+theme_override_colors/font_color = Color(0.82, 0.86, 0.72, 1)
+text = "CLIQUE  MIRAR    RMB  ÓRBITA    F  RECENTRAR"
+horizontal_alignment = 1
+
+[node name="ResultLabel" type="Label" parent="Root"]
+unique_name_in_owner = true
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -300.0
+offset_top = -36.0
+offset_right = 300.0
+offset_bottom = 36.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_colors/font_color = Color(1, 0.941, 0.651, 1)
+theme_override_font_sizes/font_size = 36
+horizontal_alignment = 1
+
+[node name="FaultLabel" type="Label" parent="Root"]
+unique_name_in_owner = true
+anchors_preset = 10
+anchor_right = 1.0
+offset_left = 24.0
+offset_top = 144.0
+offset_right = -24.0
+offset_bottom = 176.0
+grow_horizontal = 2
+theme_override_colors/font_color = Color(1, 0.32, 0.28, 1)

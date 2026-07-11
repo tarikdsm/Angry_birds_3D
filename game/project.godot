@@ -6,7 +6,7 @@ config_version=5
 [application]
 
 config/name="Ninho Orbital Physics Spike"
-run/main_scene="res://scenes/physics_spike.tscn"
+run/main_scene="res://scenes/vertical_slice.tscn"
 config/features=PackedStringArray("4.5", "Mobile")
 
 [display]
@@ -16,6 +16,41 @@ window/size/viewport_height=720
 window/size/window_width_override=1280
 window/size/window_height_override=720
 window/stretch/mode="canvas_items"
+
+[input]
+
+launch_or_ability={
+"deadzone": 0.5,
+"events": [Object(InputEventKey,"physical_keycode":32,"unicode":32)]
+}
+cancel_or_pause={
+"deadzone": 0.5,
+"events": [Object(InputEventKey,"physical_keycode":4194305)]
+}
+recenter_camera={
+"deadzone": 0.5,
+"events": [Object(InputEventKey,"physical_keycode":70,"unicode":102)]
+}
+restart_level={
+"deadzone": 0.5,
+"events": [Object(InputEventKey,"physical_keycode":82,"unicode":114)]
+}
+aim_left={
+"deadzone": 0.5,
+"events": [Object(InputEventKey,"physical_keycode":81,"unicode":113)]
+}
+aim_right={
+"deadzone": 0.5,
+"events": [Object(InputEventKey,"physical_keycode":69,"unicode":101)]
+}
+aim_power_down={
+"deadzone": 0.5,
+"events": [Object(InputEventKey,"physical_keycode":65,"unicode":97)]
+}
+aim_power_up={
+"deadzone": 0.5,
+"events": [Object(InputEventKey,"physical_keycode":68,"unicode":100)]
+}
 
 [physics]
 

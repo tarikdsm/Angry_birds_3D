@@ -258,6 +258,7 @@ if ($null -eq $ffprobeCommand) {
 }
 $ffprobe = $ffprobeCommand.Source
 $visualCompletionMarker = 'NINHO_VISUAL_CAPTURE_COMPLETE frame=300'
+$verticalSliceCompletionMarker = 'VERTICAL_SLICE_CAPTURE_COMPLETE frame=300'
 
 function Assert-GodotLogIsClean {
     param(
@@ -385,10 +386,46 @@ function Invoke-GodotSmoke {
     return 0
 }
 
+$godotExitCode = Invoke-GodotSmoke -Name 'foundation-scene-load' -GodotArguments @(
+    '--headless',
+    '--path', 'game', '--editor', '--quit', 'res://scenes/physics_spike.tscn'
+)
+if ($godotExitCode -ne 0) {
+    exit $godotExitCode
+}
+
 $godotExitCode = Invoke-GodotSmoke -Name 'godot-smoke' -GodotArguments @(
     '--headless',
     '--path', 'game',
     '--script', 'res://scripts/physics_spike_smoke.gd'
+)
+if ($godotExitCode -ne 0) {
+    exit $godotExitCode
+}
+
+$godotExitCode = Invoke-GodotSmoke -Name 'orbital-session-smoke' -GodotArguments @(
+    '--headless',
+    '--path', 'game',
+    '--script', 'res://tests/orbital_session_node_smoke.gd'
+)
+if ($godotExitCode -ne 0) {
+    exit $godotExitCode
+}
+
+$godotExitCode = Invoke-GodotSmoke -Name 'vertical-slice-smoke' -GodotArguments @(
+    '--headless',
+    '--path', 'game',
+    '--fixed-fps', '60',
+    '--script', 'res://tests/vertical_slice_smoke.gd'
+)
+if ($godotExitCode -ne 0) {
+    exit $godotExitCode
+}
+
+$godotExitCode = Invoke-GodotSmoke -Name 'forbid-godot-physics' -GodotArguments @(
+    '--headless',
+    '--path', 'game',
+    '--script', 'res://tests/forbid_godot_physics.gd'
 )
 if ($godotExitCode -ne 0) {
     exit $godotExitCode
@@ -404,6 +441,7 @@ $godotExitCode = Invoke-GodotSmoke `
     '--path', 'game',
     '--write-movie', "../artifacts/physics/godot-scene-$preset.avi",
     '--fixed-fps', '60',
+    'res://scenes/physics_spike.tscn',
     '--', '--ninho-capture-300'
 )
 if ($godotExitCode -ne 0) {
@@ -421,7 +459,43 @@ $godotExitCode = Invoke-GodotSmoke `
     '--path', 'game',
     '--write-movie', "../artifacts/physics/godot-scene-gl-$preset.avi",
     '--fixed-fps', '60',
+    'res://scenes/physics_spike.tscn',
     '--', '--ninho-capture-300'
+)
+if ($godotExitCode -ne 0) {
+    exit $godotExitCode
+}
+
+$verticalSliceMobileMoviePath = Join-Path $artifactDirectory "vertical-slice-$preset.avi"
+$godotExitCode = Invoke-GodotSmoke `
+    -Name 'vertical-slice' `
+    -RequiredLogText 'Forward Mobile' `
+    -RequiredCompletionMarker $verticalSliceCompletionMarker `
+    -ExpectedMoviePath $verticalSliceMobileMoviePath `
+    -GodotArguments @(
+    '--path', 'game',
+    '--write-movie', "../artifacts/physics/vertical-slice-$preset.avi",
+    '--fixed-fps', '60',
+    'res://scenes/vertical_slice.tscn',
+    '--', '--vertical-slice-capture'
+)
+if ($godotExitCode -ne 0) {
+    exit $godotExitCode
+}
+
+$verticalSliceCompatibilityMoviePath = Join-Path $artifactDirectory "vertical-slice-gl-$preset.avi"
+$godotExitCode = Invoke-GodotSmoke `
+    -Name 'vertical-slice-gl' `
+    -RequiredLogText 'Compatibility' `
+    -RequiredCompletionMarker $verticalSliceCompletionMarker `
+    -ExpectedMoviePath $verticalSliceCompatibilityMoviePath `
+    -GodotArguments @(
+    '--rendering-method', 'gl_compatibility',
+    '--path', 'game',
+    '--write-movie', "../artifacts/physics/vertical-slice-gl-$preset.avi",
+    '--fixed-fps', '60',
+    'res://scenes/vertical_slice.tscn',
+    '--', '--vertical-slice-capture'
 )
 if ($godotExitCode -ne 0) {
     exit $godotExitCode

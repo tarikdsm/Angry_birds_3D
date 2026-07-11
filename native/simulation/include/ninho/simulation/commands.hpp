@@ -31,7 +31,11 @@ struct ActivateAbilityCommand {
     bool operator==(const ActivateAbilityCommand&) const = default;
 };
 
+struct CancelAimCommand {
+    bool operator==(const CancelAimCommand&) const = default;
+};
+
 using PlayerCommand = std::variant<
-    BeginAimCommand, SetAimCommand, LaunchCommand, ActivateAbilityCommand>;
+    BeginAimCommand, SetAimCommand, LaunchCommand, ActivateAbilityCommand, CancelAimCommand>;
 
 }

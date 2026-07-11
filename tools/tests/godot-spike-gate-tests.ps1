@@ -243,7 +243,12 @@ foreach ($runnerContract in @(
         'NINHO_VISUAL_CAPTURE_COMPLETE frame=300',
         '-RequiredCompletionMarker $visualCompletionMarker',
         "'--fixed-fps', '60'",
-        "'--', '--ninho-capture-300'"
+        "'--', '--ninho-capture-300'",
+        "'--path', 'game', '--editor', '--quit', 'res://scenes/physics_spike.tscn'",
+        "'--script', 'res://tests/vertical_slice_smoke.gd'",
+        "'--script', 'res://tests/forbid_godot_physics.gd'",
+        "'res://scenes/vertical_slice.tscn'",
+        "'--', '--vertical-slice-capture'"
     )) {
     if (-not $runnerText.Contains($runnerContract)) {
         throw "tools/test.ps1 is missing runner contract: $runnerContract"
@@ -257,13 +262,47 @@ if ([regex]::Matches(
         [regex]::Escape('-RequiredCompletionMarker $visualCompletionMarker')).Count -ne 2) {
     throw 'Both Vulkan and OpenGL movie gates must require the frame-300 marker'
 }
-if ([regex]::Matches($runnerText, [regex]::Escape("'--fixed-fps', '60'")).Count -ne 2) {
-    throw 'Both Vulkan and OpenGL movie gates must capture at a fixed 60 FPS'
+if ([regex]::Matches($runnerText, [regex]::Escape("'--fixed-fps', '60'")).Count -ne 5) {
+    throw 'Logical smoke plus foundation and playable captures must use fixed 60 FPS'
 }
 if ([regex]::Matches(
         $runnerText,
         [regex]::Escape("'--', '--ninho-capture-300'")).Count -ne 2) {
     throw 'Both movie gates must activate the explicit GDScript capture argument'
+}
+if ([regex]::Matches(
+        $runnerText,
+        [regex]::Escape("'--', '--vertical-slice-capture'")).Count -ne 2) {
+    throw 'Both renderers must capture the playable vertical slice explicitly'
+}
+
+$controllerPath = Join-Path $Root 'game\scripts\game\vertical_slice_controller.gd'
+if (-not (Test-Path -LiteralPath $controllerPath -PathType Leaf)) {
+    throw 'vertical slice controller is missing'
+}
+$controllerText = [System.IO.File]::ReadAllText($controllerPath)
+if ([regex]::Matches($controllerText, 'session\.consume_frame\(\)').Count -ne 1) {
+    throw 'vertical slice controller must call consume_frame exactly once in source'
+}
+if (-not [regex]::IsMatch(
+        $controllerText,
+        '(?s)func _physics_process\([^)]*\).*?session\.consume_frame\(\)')) {
+    throw 'vertical slice controller must consume the frame from _physics_process'
+}
+
+$cameraText = [System.IO.File]::ReadAllText(
+    (Join-Path $Root 'game\scripts\camera\orbital_camera.gd'))
+foreach ($cameraContract in @(
+        'const BASE_FOV := 48.0',
+        'const MIN_DISTANCE := 14.0',
+        'const MAX_DISTANCE := 24.0',
+        'const MIN_INCLINATION := 15.0',
+        'const MAX_INCLINATION := 70.0',
+        'const LOOK_AHEAD_METERS := 2.0'
+    )) {
+    if (-not $cameraText.Contains($cameraContract)) {
+        throw "orbital camera is missing contract: $cameraContract"
+    }
 }
 
 $gateModuleText = [System.IO.File]::ReadAllText((Join-Path $Root 'tools\GodotSpikeGate.psm1'))
