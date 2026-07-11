@@ -156,6 +156,12 @@ NINHO_TEST("radial fall settles inside every fixed limit")
 {
     const auto result = ScenarioRunner{}.run(ScenarioKind::RadialFall, 1, 4);
     NINHO_REQUIRE(result.ticks == 600);
+    NINHO_REQUIRE(result.dynamic_body_count == 1);
+    NINHO_REQUIRE(result.shape_count == 2);
+    NINHO_REQUIRE(result.joint_count == 0);
+    NINHO_REQUIRE(result.peak_body_count == 2);
+    NINHO_REQUIRE(result.peak_shape_count == 2);
+    NINHO_REQUIRE(result.peak_joint_count == 0);
     NINHO_REQUIRE(result.surface_separation >= -0.02);
     NINHO_REQUIRE(result.surface_separation <= 0.03);
     NINHO_REQUIRE(result.final_linear_speed < 0.05);
@@ -362,6 +368,11 @@ NINHO_TEST("radial pile meets predetermined sleep limits")
     const auto result = ScenarioRunner{}.run(ScenarioKind::RadialPile, 7, 4);
     NINHO_REQUIRE(result.ticks == 1800);
     NINHO_REQUIRE(result.dynamic_body_count == 80);
+    NINHO_REQUIRE(result.shape_count == 81);
+    NINHO_REQUIRE(result.joint_count == 0);
+    NINHO_REQUIRE(result.peak_body_count == 81);
+    NINHO_REQUIRE(result.peak_shape_count == 81);
+    NINHO_REQUIRE(result.peak_joint_count == 0);
     NINHO_REQUIRE(result.p95_linear_speed < 0.05);
     NINHO_REQUIRE(result.p95_angular_speed < 0.10);
     NINHO_REQUIRE(result.sleep_ratio >= 0.90);
@@ -383,6 +394,12 @@ NINHO_TEST("radial pile meets predetermined sleep limits")
 NINHO_TEST("mass ratio pile keeps the fixed density range stable")
 {
     const auto result = ScenarioRunner{}.run(ScenarioKind::MassRatio, 42, 4);
+    NINHO_REQUIRE(result.dynamic_body_count == 80);
+    NINHO_REQUIRE(result.shape_count == 81);
+    NINHO_REQUIRE(result.joint_count == 0);
+    NINHO_REQUIRE(result.peak_body_count == 81);
+    NINHO_REQUIRE(result.peak_shape_count == 81);
+    NINHO_REQUIRE(result.peak_joint_count == 0);
     NINHO_REQUIRE(result.minimum_density == 85.0);
     NINHO_REQUIRE(result.maximum_density == 3400.0);
     NINHO_REQUIRE(result.p95_linear_speed < 0.10);
@@ -398,6 +415,9 @@ NINHO_TEST("stress uses the full fixed topology after allocator warmup")
     NINHO_REQUIRE(result.dynamic_body_count == 500);
     NINHO_REQUIRE(result.shape_count == 800);
     NINHO_REQUIRE(result.joint_count == 250);
+    NINHO_REQUIRE(result.peak_body_count == 500);
+    NINHO_REQUIRE(result.peak_shape_count == 800);
+    NINHO_REQUIRE(result.peak_joint_count == 250);
     NINHO_REQUIRE(result.warmup_ticks == 300);
     NINHO_REQUIRE(result.measurement_ticks == 1200);
     NINHO_REQUIRE(result.allocator_warmup_cycles == 10);

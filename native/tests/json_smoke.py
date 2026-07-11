@@ -348,9 +348,31 @@ def main() -> int:
             raise AssertionError("unexpected limits recommendation")
         if len(document["scenarios"]) != 6:
             raise AssertionError("expected all six scenarios")
+        expected_topology = {
+            "radial_fall": ((1, 2, 0), (2, 2, 0)),
+            "projectile_pile": ((121, 123, 0), (123, 123, 0)),
+            "radial_pile": ((80, 81, 0), (81, 81, 0)),
+            "mass_ratio": ((80, 81, 0), (81, 81, 0)),
+            "stress": ((500, 800, 250), (500, 800, 250)),
+            "capability_matrix": ((0, 0, 0), (81, 81, 0)),
+        }
         for scenario in document["scenarios"]:
             if len(scenario["hashes"]) != 2 or len(set(scenario["hashes"])) != 1:
                 raise AssertionError(f"non-deterministic hashes: {scenario['name']}")
+            fixture = (
+                scenario["dynamic_body_count"],
+                scenario["shape_count"],
+                scenario["joint_count"],
+            )
+            peak = (
+                scenario["peak_body_count"],
+                scenario["peak_shape_count"],
+                scenario["peak_joint_count"],
+            )
+            if (fixture, peak) != expected_topology[scenario["name"]]:
+                raise AssertionError(
+                    f"topology mismatch for {scenario['name']}: {fixture}/{peak}"
+                )
         hashes = {scenario["name"]: scenario["hashes"][0] for scenario in document["scenarios"]}
         if hashes["capability_matrix"] == hashes["radial_pile"]:
             raise AssertionError("capability matrix reused the radial pile hash")

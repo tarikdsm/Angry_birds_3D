@@ -61,6 +61,9 @@ NINHO_TEST("capability matrix reports every mandatory row without blocked status
     const auto radial = ScenarioRunner{}.run(ScenarioKind::RadialPile, 5, 4);
     NINHO_REQUIRE(result.final_hash == repeated.final_hash);
     NINHO_REQUIRE(result.final_hash != radial.final_hash);
+    NINHO_REQUIRE(result.peak_body_count == 81);
+    NINHO_REQUIRE(result.peak_shape_count == 81);
+    NINHO_REQUIRE(result.peak_joint_count == 0);
 }
 
 NINHO_TEST("capability row hash covers every canonical field and ignores value order")

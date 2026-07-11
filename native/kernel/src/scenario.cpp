@@ -306,6 +306,9 @@ void sample_world_metrics(
     ScenarioResult& result, const WorldMetrics& metrics, std::vector<double>& timings)
 {
     timings.push_back(metrics.step_ms);
+    result.peak_body_count = std::max(result.peak_body_count, metrics.body_count);
+    result.peak_shape_count = std::max(result.peak_shape_count, metrics.shape_count);
+    result.peak_joint_count = std::max(result.peak_joint_count, metrics.joint_count);
     result.peak_awake_count = std::max(result.peak_awake_count, metrics.awake_count);
     result.peak_contact_count = std::max(result.peak_contact_count, metrics.contact_count);
 }
@@ -346,6 +349,8 @@ void finish_timings(ScenarioResult& result, std::vector<double> timings)
 {
     ScenarioResult result = make_result(ScenarioKind::RadialFall, seed, substeps);
     result.ticks = 600;
+    result.dynamic_body_count = 1;
+    result.shape_count = 2;
     result.limits = {
         {"surface_separation_min", ">=", -0.02, "m"},
         {"surface_separation_max", "<=", 0.03, "m"},
@@ -522,6 +527,9 @@ struct ProjectileOutcome {
     double step_max_ms{};
     int peak_awake_count{};
     int peak_contact_count{};
+    int peak_body_count{};
+    int peak_shape_count{};
+    int peak_joint_count{};
     std::uint64_t final_hash{};
     std::optional<StateScanFailure> state_failure;
 };
@@ -591,6 +599,9 @@ struct ProjectileOutcome {
         outcome.ticks = tick;
         const WorldMetrics metrics = world.metrics();
         timings.push_back(metrics.step_ms);
+        outcome.peak_body_count = std::max(outcome.peak_body_count, metrics.body_count);
+        outcome.peak_shape_count = std::max(outcome.peak_shape_count, metrics.shape_count);
+        outcome.peak_joint_count = std::max(outcome.peak_joint_count, metrics.joint_count);
         outcome.peak_awake_count = std::max(outcome.peak_awake_count, metrics.awake_count);
         outcome.peak_contact_count = std::max(outcome.peak_contact_count, metrics.contact_count);
 
@@ -709,6 +720,9 @@ struct ProjectileGate {
     result.step_p50_ms = outcome.step_p50_ms;
     result.step_p95_ms = outcome.step_p95_ms;
     result.step_max_ms = outcome.step_max_ms;
+    result.peak_body_count = outcome.peak_body_count;
+    result.peak_shape_count = outcome.peak_shape_count;
+    result.peak_joint_count = outcome.peak_joint_count;
     result.peak_awake_count = outcome.peak_awake_count;
     result.peak_contact_count = outcome.peak_contact_count;
     result.metrics = {
@@ -1204,6 +1218,9 @@ struct StressCycleResult {
     std::vector<double> timings;
     int peak_awake_count{};
     int peak_contact_count{};
+    int peak_body_count{};
+    int peak_shape_count{};
+    int peak_joint_count{};
     int executed_substeps{};
 };
 
@@ -1279,6 +1296,9 @@ struct StressCycleResult {
     for (int tick = 1; tick <= total_ticks; ++tick) {
         watched_step(world, tick);
         const WorldMetrics metrics = world.metrics();
+        cycle.peak_body_count = std::max(cycle.peak_body_count, metrics.body_count);
+        cycle.peak_shape_count = std::max(cycle.peak_shape_count, metrics.shape_count);
+        cycle.peak_joint_count = std::max(cycle.peak_joint_count, metrics.joint_count);
         cycle.peak_awake_count = std::max(cycle.peak_awake_count, metrics.awake_count);
         cycle.peak_contact_count = std::max(cycle.peak_contact_count, metrics.contact_count);
         if (tick == 1
@@ -1576,6 +1596,12 @@ struct CrtStressProbeResult {
         result.ticks += result.warmup_ticks + result.measurement_ticks;
         watchdog_checkpoint(result.ticks);
         result.final_hash = cycle.final_hash;
+        result.peak_body_count =
+            std::max(result.peak_body_count, cycle.peak_body_count);
+        result.peak_shape_count =
+            std::max(result.peak_shape_count, cycle.peak_shape_count);
+        result.peak_joint_count =
+            std::max(result.peak_joint_count, cycle.peak_joint_count);
         result.peak_awake_count =
             std::max(result.peak_awake_count, cycle.peak_awake_count);
         result.peak_contact_count =
@@ -2483,6 +2509,9 @@ struct CrtStressProbeResult {
     result.step_p50_ms = sleep.step_p50_ms;
     result.step_p95_ms = sleep.step_p95_ms;
     result.step_max_ms = sleep.step_max_ms;
+    result.peak_body_count = sleep.peak_body_count;
+    result.peak_shape_count = sleep.peak_shape_count;
+    result.peak_joint_count = sleep.peak_joint_count;
     result.peak_awake_count = sleep.peak_awake_count;
     result.peak_contact_count = sleep.peak_contact_count;
     for (const CapabilityRow& row : result.matrix) {
@@ -3062,6 +3091,9 @@ void append_scenario_result(std::string& output, const ScenarioResult& result)
     integer_field("dynamic_body_count", result.dynamic_body_count);
     integer_field("shape_count", result.shape_count);
     integer_field("joint_count", result.joint_count);
+    integer_field("peak_body_count", result.peak_body_count);
+    integer_field("peak_shape_count", result.peak_shape_count);
+    integer_field("peak_joint_count", result.peak_joint_count);
     integer_field("peak_awake_count", result.peak_awake_count);
     integer_field("peak_contact_count", result.peak_contact_count);
     append_json_name(output, "step_ms", first);

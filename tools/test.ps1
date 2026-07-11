@@ -14,6 +14,11 @@ $godot = Join-Path $root '.tools\godot\Godot_v4.5.1-stable_win64.exe'
 $godotImportCache = Join-Path $root 'game\.godot'
 New-Item -ItemType Directory -Force -Path $artifactDirectory | Out-Null
 Import-Module (Join-Path $PSScriptRoot 'GodotSpikeGate.psm1') -Force
+Import-Module (Join-Path $PSScriptRoot 'UpstreamBox3DGate.psm1') -Force
+Import-Module (Join-Path $PSScriptRoot 'FoundationEvidenceGate.psm1') -Force
+& (Join-Path $PSScriptRoot 'tests\spike-report-gate-tests.ps1') -Root $root
+& (Join-Path $PSScriptRoot 'tests\upstream-box3d-gate-tests.ps1') -Root $root
+& (Join-Path $PSScriptRoot 'tests\foundation-evidence-gate-tests.ps1') -Root $root
 
 if (-not (Test-Path -LiteralPath $foundationReport -PathType Leaf)) {
     [Console]::Error.WriteLine('box3d-spike-report.md missing')
@@ -43,6 +48,7 @@ if (-not $recommendationMatch.Success) {
     [Console]::Error.WriteLine('box3d-spike-report.md has invalid recommendation')
     exit 1
 }
+Assert-NinhoFoundationEvidence -Root $root -ReportPath $foundationReport
 
 # Validate the shipped integration contract before creating the deterministic
 # runtime cache used by CI and by a developer before opening the editor.
@@ -131,7 +137,13 @@ if ($IncludeUpstream) {
         exit 1
     }
 
-    $upstreamBuild = Join-Path $root "build\upstream-box3d\$preset"
+    $upstreamRoot = [System.IO.Path]::GetFullPath(
+        (Join-Path $root 'build\upstream-box3d'))
+    $upstreamBuild = [System.IO.Path]::GetFullPath(
+        (Join-Path $upstreamRoot $preset))
+    Reset-NinhoUpstreamBuildDirectory `
+        -Path $upstreamBuild `
+        -AllowedRoot $upstreamRoot
     $ninja = Join-Path $root '.tools\ninja\ninja.exe'
     $upstreamTest = Join-Path $upstreamBuild 'bin\test.exe'
     $runtime = if ($Configuration -eq 'Debug') {
@@ -198,24 +210,9 @@ if ($IncludeUpstream) {
         }
     }
 
-    $compileDatabasePath = Join-Path $upstreamBuild 'compile_commands.json'
-    $compileDatabase = Get-Content -Raw -LiteralPath $compileDatabasePath |
-        ConvertFrom-Json
-    $upstreamTestCompile = $compileDatabase |
-        Where-Object { $_.file -match '[\\/]test_world\.c$' } |
-        Select-Object -First 1
-    if ($null -eq $upstreamTestCompile -or
-            $upstreamTestCompile.command -notmatch '(?i)cl\.exe') {
-        [Console]::Error.WriteLine('Box3D upstream test was not compiled with MSVC cl.exe')
-        exit 1
-    }
-    $expectedRuntimeFlag = if ($Configuration -eq 'Debug') { '-MTd' } else { '-MT' }
-    if ($upstreamTestCompile.command -notmatch
-            "(?i)(?:^|\s)$([regex]::Escape($expectedRuntimeFlag))(?:\s|$)") {
-        [Console]::Error.WriteLine(
-            "Box3D upstream test is missing actual CRT flag $expectedRuntimeFlag")
-        exit 1
-    }
+    Assert-NinhoUpstreamCompileDatabase `
+        -Path (Join-Path $upstreamBuild 'compile_commands.json') `
+        -Configuration $Configuration
     [Console]::Out.WriteLine(
         "Upstream Box3D $expectedBox3DCommit ($Configuration): 20/20 passed")
 }

@@ -110,6 +110,12 @@ NINHO_TEST("same scenario has exact canonical hash")
 NINHO_TEST("scenario JSON escapes controls while preserving UTF-8")
 {
     ScenarioResult result;
+    result.dynamic_body_count = 7;
+    result.shape_count = 9;
+    result.joint_count = 2;
+    result.peak_body_count = 11;
+    result.peak_shape_count = 13;
+    result.peak_joint_count = 3;
     result.name = "aspas\" barra\\ linha\n controle\x01 ação 🐦";
     result.violations.push_back({
         .scenario = result.name,
@@ -119,6 +125,12 @@ NINHO_TEST("scenario JSON escapes controls while preserving UTF-8")
     const std::string json = result.to_json();
     NINHO_REQUIRE(json.find("aspas\\\" barra\\\\ linha\\n controle\\u0001 ação 🐦") != std::string::npos);
     NINHO_REQUIRE(json.find("tab\\tretorno\\r") != std::string::npos);
+    NINHO_REQUIRE(json.find("\"dynamic_body_count\":7") != std::string::npos);
+    NINHO_REQUIRE(json.find("\"shape_count\":9") != std::string::npos);
+    NINHO_REQUIRE(json.find("\"joint_count\":2") != std::string::npos);
+    NINHO_REQUIRE(json.find("\"peak_body_count\":11") != std::string::npos);
+    NINHO_REQUIRE(json.find("\"peak_shape_count\":13") != std::string::npos);
+    NINHO_REQUIRE(json.find("\"peak_joint_count\":3") != std::string::npos);
     NINHO_REQUIRE(json.find("código") != std::string::npos);
 }
 

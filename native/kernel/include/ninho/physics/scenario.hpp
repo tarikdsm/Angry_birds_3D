@@ -222,6 +222,9 @@ struct ScenarioResult {
     int dynamic_body_count{};
     int shape_count{};
     int joint_count{};
+    int peak_body_count{};
+    int peak_shape_count{};
+    int peak_joint_count{};
     int peak_awake_count{};
     int peak_contact_count{};
 

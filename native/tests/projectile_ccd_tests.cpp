@@ -22,6 +22,10 @@ NINHO_TEST("projectile gate uses only the approved fixture and fallback")
     const auto result = ScenarioRunner{}.run(ScenarioKind::ProjectilePile, 1, 4);
     NINHO_REQUIRE(result.dynamic_body_count == 121);
     NINHO_REQUIRE(result.shape_count == 123);
+    NINHO_REQUIRE(result.joint_count == 0);
+    NINHO_REQUIRE(result.peak_body_count == 123);
+    NINHO_REQUIRE(result.peak_shape_count == 123);
+    NINHO_REQUIRE(result.peak_joint_count == 0);
     NINHO_REQUIRE(result.ccd_primary_pass_count >= 0);
     NINHO_REQUIRE(result.ccd_primary_pass_count <= 20);
     if (result.ccd_primary_pass_count == 20) {
