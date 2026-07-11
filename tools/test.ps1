@@ -1,17 +1,48 @@
 [CmdletBinding()]
 param(
     [ValidateSet('Debug', 'Release')]
-    [string]$Configuration = 'Debug'
+    [string]$Configuration = 'Debug',
+    [switch]$IncludeUpstream
 )
 
 $ErrorActionPreference = 'Stop'
 $root = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 $preset = $Configuration.ToLowerInvariant()
 $artifactDirectory = Join-Path $root 'artifacts\physics'
+$foundationReport = Join-Path $root 'docs\physics\box3d-spike-report.md'
 $godot = Join-Path $root '.tools\godot\Godot_v4.5.1-stable_win64.exe'
 $godotImportCache = Join-Path $root 'game\.godot'
 New-Item -ItemType Directory -Force -Path $artifactDirectory | Out-Null
 Import-Module (Join-Path $PSScriptRoot 'GodotSpikeGate.psm1') -Force
+
+if (-not (Test-Path -LiteralPath $foundationReport -PathType Leaf)) {
+    [Console]::Error.WriteLine('box3d-spike-report.md missing')
+    exit 1
+}
+
+$reportText = [System.IO.File]::ReadAllText($foundationReport)
+$requiredReportHeadings = @(
+    'Versions',
+    'Capability Matrix',
+    'Scenario Metrics',
+    'Godot Smoke',
+    'Known Limits',
+    'Recommendation'
+)
+foreach ($heading in $requiredReportHeadings) {
+    if ($reportText -notmatch "(?m)^## $([regex]::Escape($heading))\s*$") {
+        [Console]::Error.WriteLine("box3d-spike-report.md missing heading: $heading")
+        exit 1
+    }
+}
+
+$recommendationMatch = [regex]::Match(
+    $reportText,
+    '(?m)^Recommendation:\s*(prosseguir|prosseguir_com_limites|bloquear)\s*$')
+if (-not $recommendationMatch.Success) {
+    [Console]::Error.WriteLine('box3d-spike-report.md has invalid recommendation')
+    exit 1
+}
 
 # Validate the shipped integration contract before creating the deterministic
 # runtime cache used by CI and by a developer before opening the editor.
@@ -57,6 +88,136 @@ $ctestCommand = "ctest --preset $preset --output-on-failure"
 & (Join-Path $PSScriptRoot 'Invoke-Native.ps1') -Command $ctestCommand
 if ($LASTEXITCODE -ne 0) {
     exit $LASTEXITCODE
+}
+
+if ($IncludeUpstream) {
+    $expectedBox3DCommit = '8441b4a06d6d09dcfb0b0f704df4d847d1437b92'
+    $fetchContentRoot = Join-Path $root '.fetchcontent-cache'
+    $box3DSource = $null
+    $candidateCommits = [System.Collections.Generic.List[string]]::new()
+    foreach ($candidate in @(Get-ChildItem -LiteralPath $fetchContentRoot -Directory |
+            Where-Object Name -Like 'box3d-src*')) {
+        $candidatePath = $candidate.FullName.Replace('\', '/')
+        $commit = & git -c "safe.directory=$candidatePath" -C $candidate.FullName `
+            rev-parse HEAD 2>$null
+        if ($LASTEXITCODE -ne 0) {
+            continue
+        }
+        $commit = "$commit".Trim().ToLowerInvariant()
+        $candidateCommits.Add("$($candidate.FullName)=$commit")
+        if ($commit -eq $expectedBox3DCommit) {
+            if ($null -ne $box3DSource) {
+                [Console]::Error.WriteLine('Multiple exact Box3D source checkouts found')
+                exit 1
+            }
+            $box3DSource = $candidate.FullName
+        }
+    }
+    if ($null -eq $box3DSource) {
+        [Console]::Error.WriteLine(
+            "Exact Box3D source commit not found: $expectedBox3DCommit; candidates: " +
+            ($candidateCommits -join '; '))
+        exit 1
+    }
+
+    $box3DSafePath = $box3DSource.Replace('\', '/')
+    $box3DChanges = & git -c "safe.directory=$box3DSafePath" -C $box3DSource `
+        status --porcelain
+    if ($LASTEXITCODE -ne 0) {
+        exit $LASTEXITCODE
+    }
+    if (@($box3DChanges).Count -ne 0) {
+        [Console]::Error.WriteLine('Pinned Box3D source checkout is modified')
+        exit 1
+    }
+
+    $upstreamBuild = Join-Path $root "build\upstream-box3d\$preset"
+    $ninja = Join-Path $root '.tools\ninja\ninja.exe'
+    $upstreamTest = Join-Path $upstreamBuild 'bin\test.exe'
+    $runtime = if ($Configuration -eq 'Debug') {
+        'MultiThreadedDebug'
+    } else {
+        'MultiThreaded'
+    }
+    $upstreamCommand = @(
+        'ctest --build-and-test',
+        "'$($box3DSource.Replace('\', '/'))'",
+        "'$($upstreamBuild.Replace('\', '/'))'",
+        '--build-generator Ninja',
+        "--build-makeprogram '$($ninja.Replace('\', '/'))'",
+        "--build-config $Configuration",
+        '--build-options',
+        "'-DCMAKE_BUILD_TYPE=$Configuration'",
+        "'-DCMAKE_C_COMPILER=cl'",
+        "'-DCMAKE_CXX_COMPILER=cl'",
+        "'-DCMAKE_SYSTEM_VERSION=10.0.26100.0'",
+        "'-DCMAKE_MSVC_RUNTIME_LIBRARY=$runtime'",
+        "'-DBUILD_SHARED_LIBS=OFF'",
+        "'-DBOX3D_SAMPLES=OFF'",
+        "'-DBOX3D_BENCHMARKS=OFF'",
+        "'-DBOX3D_DOCS=OFF'",
+        "'-DBOX3D_UNIT_TESTS=ON'",
+        "'-DBOX3D_BUILD_SHADERS=OFF'",
+        '--build-target test',
+        "--test-command '$($upstreamTest.Replace('\', '/'))'"
+    ) -join ' '
+    $upstreamLog = Join-Path $artifactDirectory "upstream-box3d-$preset.log"
+    $upstreamOutput = & (Join-Path $PSScriptRoot 'Invoke-Native.ps1') `
+        -Command $upstreamCommand 2>&1
+    $upstreamExitCode = $LASTEXITCODE
+    $upstreamOutput | Tee-Object -FilePath $upstreamLog
+    if ($upstreamExitCode -ne 0) {
+        exit $upstreamExitCode
+    }
+
+    $upstreamText = $upstreamOutput -join "`n"
+    $upstreamPassed = [regex]::Matches($upstreamText, '(?m)^test passed:').Count
+    if ($upstreamPassed -ne 20 -or $upstreamText -match '(?m)^test failed:') {
+        [Console]::Error.WriteLine(
+            "Unexpected Box3D upstream test result: $upstreamPassed/20 passed")
+        exit 1
+    }
+
+    $cacheText = [System.IO.File]::ReadAllText((Join-Path $upstreamBuild 'CMakeCache.txt'))
+    $expectedCacheEntries = @(
+        "CMAKE_BUILD_TYPE:STRING=$Configuration",
+        'CMAKE_GENERATOR:INTERNAL=Ninja',
+        'CMAKE_SYSTEM_VERSION:UNINITIALIZED=10.0.26100.0',
+        'BUILD_SHARED_LIBS:UNINITIALIZED=OFF',
+        'BOX3D_SAMPLES:BOOL=OFF',
+        'BOX3D_BENCHMARKS:BOOL=OFF',
+        'BOX3D_DOCS:BOOL=OFF',
+        'BOX3D_UNIT_TESTS:BOOL=ON',
+        'BOX3D_BUILD_SHADERS:BOOL=OFF',
+        "CMAKE_MSVC_RUNTIME_LIBRARY:UNINITIALIZED=$runtime"
+    )
+    foreach ($entry in $expectedCacheEntries) {
+        if (-not $cacheText.Contains($entry)) {
+            [Console]::Error.WriteLine("Box3D upstream cache mismatch: $entry")
+            exit 1
+        }
+    }
+
+    $compileDatabasePath = Join-Path $upstreamBuild 'compile_commands.json'
+    $compileDatabase = Get-Content -Raw -LiteralPath $compileDatabasePath |
+        ConvertFrom-Json
+    $upstreamTestCompile = $compileDatabase |
+        Where-Object { $_.file -match '[\\/]test_world\.c$' } |
+        Select-Object -First 1
+    if ($null -eq $upstreamTestCompile -or
+            $upstreamTestCompile.command -notmatch '(?i)cl\.exe') {
+        [Console]::Error.WriteLine('Box3D upstream test was not compiled with MSVC cl.exe')
+        exit 1
+    }
+    $expectedRuntimeFlag = if ($Configuration -eq 'Debug') { '-MTd' } else { '-MT' }
+    if ($upstreamTestCompile.command -notmatch
+            "(?i)(?:^|\s)$([regex]::Escape($expectedRuntimeFlag))(?:\s|$)") {
+        [Console]::Error.WriteLine(
+            "Box3D upstream test is missing actual CRT flag $expectedRuntimeFlag")
+        exit 1
+    }
+    [Console]::Out.WriteLine(
+        "Upstream Box3D $expectedBox3DCommit ($Configuration): 20/20 passed")
 }
 
 if (-not (Test-Path -LiteralPath $godot -PathType Leaf)) {

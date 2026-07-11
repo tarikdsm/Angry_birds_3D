@@ -1,6 +1,6 @@
 # Third-party dependencies
 
-This foundation pins every native dependency to an immutable upstream commit. License texts are not copied here yet; distributable notices are produced in Task 8.
+This foundation pins every native dependency to an immutable upstream commit. Exact runtime license texts, the complete toolchain inventory, and the SPDX 2.3 SBOM are available in [`THIRD_PARTY_NOTICES.md`](../THIRD_PARTY_NOTICES.md) and this directory.
 
 | Dependency | Pinned version | Pinned commit | License | Upstream |
 | --- | --- | --- | --- | --- |
