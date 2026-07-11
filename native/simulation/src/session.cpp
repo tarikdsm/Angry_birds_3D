@@ -281,13 +281,13 @@ bool detail::SessionTestFacade::set_body_neutralized(SimulationSession& session,
 void detail::SessionTestFacade::override_joint_ratio_after_solver(
     SimulationSession& session, JointId joint, double ratio)
 {
-    session.impl_->joint_ratio_overrides_for_testing[joint.value()] = {ratio, true};
+    session.impl_->joint_ratio_overrides_for_testing[joint.value()] = {ratio};
 }
 
 void detail::SessionTestFacade::override_joint_ratio_without_new_cause_after_solver(
     SimulationSession& session, JointId joint, double ratio)
 {
-    session.impl_->joint_ratio_overrides_for_testing[joint.value()] = {ratio, false};
+    session.impl_->joint_ratio_overrides_for_testing[joint.value()] = {ratio};
 }
 
 void detail::SessionTestFacade::fracture_piece_after_solver(

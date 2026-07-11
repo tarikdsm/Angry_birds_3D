@@ -418,6 +418,7 @@ void SimulationSession::Impl::refresh_canonical_state()
         identifier(writer, event.cause_event_id);
         identifier(writer, event.joint_id);
         identifier(writer, event.material_id);
+        writer.quantized(event.joint_load_ratio);
     }
 
     writer.integer<std::uint32_t>(
@@ -507,7 +508,6 @@ void SimulationSession::Impl::refresh_canonical_state()
     for (const JointRecord& joint : joint_records) {
         identifier(writer, joint.snapshot.id);
         writer.integer(joint.consecutive_overload_ticks);
-        identifier(writer, joint.overload_cause_event_id);
     }
     std::vector<std::uint8_t> next_bytes = std::move(writer.bytes);
     const std::uint64_t next_hash = fnv1a64(next_bytes);

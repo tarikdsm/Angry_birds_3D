@@ -55,9 +55,11 @@ NINHO_SIM_TEST("fracture objective overload schedules after solver and applies n
     detail::SessionTestFacade::override_joint_ratio_after_solver(*session, joint, 1.5);
 
     NINHO_SIM_REQUIRE(session->tick().ok());
-    const DomainEvent* cause = find_event(*session, DomainEventKind::DamageApplied);
-    NINHO_SIM_REQUIRE(cause != nullptr);
-    const EventId cause_id = cause->id;
+    NINHO_SIM_REQUIRE(find_event(*session, DomainEventKind::DamageApplied) == nullptr);
+    const DomainEvent* overload = find_event(*session, DomainEventKind::JointOverloaded, joint);
+    NINHO_SIM_REQUIRE(overload != nullptr);
+    NINHO_SIM_REQUIRE(overload->joint_load_ratio == 1.5);
+    const EventId overload_id = overload->id;
     NINHO_SIM_REQUIRE(std::ranges::find(session->structural_joints(), joint,
         &StructuralJointSnapshot::id)->active);
     NINHO_SIM_REQUIRE(find_event(*session, DomainEventKind::JointBroken, joint) == nullptr);
@@ -68,7 +70,7 @@ NINHO_SIM_TEST("fracture objective overload schedules after solver and applies n
     NINHO_SIM_REQUIRE(broken != session->structural_joints().end() && !broken->active);
     const DomainEvent* event = find_event(*session, DomainEventKind::JointBroken, joint);
     NINHO_SIM_REQUIRE(event != nullptr);
-    NINHO_SIM_REQUIRE(event->cause_event_id == cause_id);
+    NINHO_SIM_REQUIRE(event->cause_event_id == overload_id);
 
     NINHO_SIM_REQUIRE(session->tick().ok());
     NINHO_SIM_REQUIRE(find_event(*session, DomainEventKind::JointBroken, joint) == nullptr);
@@ -99,18 +101,20 @@ NINHO_SIM_TEST("fracture objective consecutive overload preserves first tick cau
     constexpr JointId joint{3};
     detail::SessionTestFacade::override_joint_ratio_after_solver(*session, joint, 1.0);
     NINHO_SIM_REQUIRE(session->tick().ok());
-    const DomainEvent* cause = find_event(*session, DomainEventKind::DamageApplied);
-    NINHO_SIM_REQUIRE(cause != nullptr);
-    const EventId cause_id = cause->id;
+    NINHO_SIM_REQUIRE(find_event(*session, DomainEventKind::DamageApplied) == nullptr);
+    NINHO_SIM_REQUIRE(find_event(*session, DomainEventKind::JointOverloaded, joint) == nullptr);
 
     detail::SessionTestFacade::override_joint_ratio_without_new_cause_after_solver(
         *session, joint, 1.0);
     NINHO_SIM_REQUIRE(session->tick().ok());
     NINHO_SIM_REQUIRE(find_event(*session, DomainEventKind::DamageApplied) == nullptr);
+    const DomainEvent* overload = find_event(*session, DomainEventKind::JointOverloaded, joint);
+    NINHO_SIM_REQUIRE(overload != nullptr);
+    const EventId overload_id = overload->id;
     NINHO_SIM_REQUIRE(session->tick().ok());
     const DomainEvent* broken = find_event(*session, DomainEventKind::JointBroken, joint);
     NINHO_SIM_REQUIRE(broken != nullptr);
-    NINHO_SIM_REQUIRE(broken->cause_event_id == cause_id);
+    NINHO_SIM_REQUIRE(broken->cause_event_id == overload_id);
 }
 
 NINHO_SIM_TEST("fracture objective piece chooses nearest incident joint then JointId")
@@ -119,15 +123,17 @@ NINHO_SIM_TEST("fracture objective piece chooses nearest incident joint then Joi
     detail::SessionTestFacade::fracture_piece_at_incident_tie_after_solver(
         *session, EntityId{104}, PartId{1});
     NINHO_SIM_REQUIRE(session->tick().ok());
-    const DomainEvent* cause = find_event(*session, DomainEventKind::DamageApplied);
-    NINHO_SIM_REQUIRE(cause != nullptr);
-    const EventId cause_id = cause->id;
+    NINHO_SIM_REQUIRE(find_event(*session, DomainEventKind::DamageApplied) == nullptr);
+    const DomainEvent* overload = find_event(
+        *session, DomainEventKind::JointOverloaded, JointId{1});
+    NINHO_SIM_REQUIRE(overload != nullptr);
+    const EventId overload_id = overload->id;
     NINHO_SIM_REQUIRE(find_event(*session, DomainEventKind::PieceFractured) == nullptr);
     NINHO_SIM_REQUIRE(session->tick().ok());
     const DomainEvent* fractured = find_event(*session, DomainEventKind::PieceFractured);
     NINHO_SIM_REQUIRE(fractured != nullptr);
     NINHO_SIM_REQUIRE(fractured->affected_entity_id == EntityId{104});
-    NINHO_SIM_REQUIRE(fractured->cause_event_id == cause_id);
+    NINHO_SIM_REQUIRE(fractured->cause_event_id == overload_id);
     NINHO_SIM_REQUIRE(fractured->joint_id == JointId{1});
     const DomainEvent* broken = find_event(*session, DomainEventKind::JointBroken, JointId{1});
     NINHO_SIM_REQUIRE(broken != nullptr);

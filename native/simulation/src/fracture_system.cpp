@@ -155,8 +155,42 @@ void schedule_joint(Impl& session, JointId joint, EventId cause)
     session.pending_joint_breaks.push_back({joint, cause});
 }
 
+Impl::JointRecord* find_joint(Impl& session, JointId id)
+{
+    const auto found = std::ranges::find_if(session.joint_records,
+        [&](const Impl::JointRecord& joint) { return joint.snapshot.id == id; });
+    return found == session.joint_records.end() ? nullptr : &*found;
+}
+
+EventId pending_overload_event(const Impl& session, JointId id)
+{
+    const auto found = std::ranges::find_if(session.pending_joint_breaks,
+        [&](const Impl::PendingJointBreak& pending) { return pending.joint_id == id; });
+    return found == session.pending_joint_breaks.end() ? EventId{} : found->cause_event_id;
+}
+
+EventId publish_overload(Impl& session, Impl::JointRecord& joint,
+    ninho::physics::Vec3 position, double ratio, EventId prior_cause)
+{
+    const EventId overload_id{session.next_event_sequence++};
+    session.domain_events.push_back({
+        .id = overload_id,
+        .tick = session.session_state.tick,
+        .kind = DomainEventKind::JointOverloaded,
+        .affected_entity_id = joint.snapshot.a.entity_id,
+        .affected_part_id = joint.snapshot.a.part_id,
+        .position_m = position,
+        .cause_event_id = prior_cause,
+        .joint_id = joint.snapshot.id,
+        .joint_load_ratio = ratio,
+    });
+    schedule_joint(session, joint.snapshot.id, overload_id);
+    return overload_id;
+}
+
 void schedule_piece(Impl& session, EntityId entity, PartId part,
-    MaterialId material, ninho::physics::Vec3 position, EventId cause)
+    MaterialId material, JointId incident, ninho::physics::Vec3 position,
+    EventId overload_event)
 {
     if (std::ranges::find(session.fractured_pieces, std::pair{entity, part})
             != session.fractured_pieces.end()
@@ -166,13 +200,11 @@ void schedule_piece(Impl& session, EntityId entity, PartId part,
             })) {
         return;
     }
-    if (cause == EventId{}) {
+    if (overload_event == EventId{}) {
         return;
     }
-    const JointId incident = nearest_incident_joint(session, entity, part, position);
     session.pending_piece_fractures.push_back(
-        {entity, part, material, incident, cause, position});
-    schedule_joint(session, incident, cause);
+        {entity, part, material, incident, overload_event, position});
 }
 
 }
@@ -190,7 +222,6 @@ void SimulationSession::Impl::apply_pending_fractures_before_step()
         static_cast<void>(physics.destroy_joint(found->physics_handle));
         found->snapshot.active = false;
         found->consecutive_overload_ticks = 0U;
-        found->overload_cause_event_id = {};
         domain_events.push_back({
             .id = EventId{next_event_sequence++},
             .tick = session_state.tick,
@@ -232,25 +263,11 @@ void SimulationSession::Impl::evaluate_fractures_after_step()
             continue;
         }
         double ratio = 0.0;
-        EventId explicit_test_cause{};
 #if defined(NINHO_ENABLE_TEST_FACADES)
         const auto override = joint_ratio_overrides_for_testing.find(joint.snapshot.id.value());
         if (override != joint_ratio_overrides_for_testing.end()) {
             ratio = override->second.ratio;
-            const bool emit_cause = override->second.emit_cause;
             joint_ratio_overrides_for_testing.erase(override);
-            if (emit_cause) {
-                const ninho::physics::Vec3 position = joint_midpoint(*this, joint);
-                explicit_test_cause = EventId{next_event_sequence++};
-                domain_events.push_back({
-                    .id = explicit_test_cause,
-                    .tick = session_state.tick,
-                    .kind = DomainEventKind::DamageApplied,
-                    .affected_entity_id = joint.snapshot.a.entity_id,
-                    .affected_part_id = joint.snapshot.a.part_id,
-                    .position_m = position,
-                });
-            }
         } else
 #endif
         if (const auto reaction = physics.joint_reaction(joint.physics_handle)) {
@@ -262,36 +279,29 @@ void SimulationSession::Impl::evaluate_fractures_after_step()
         }
         if (ratio >= 1.5) {
             joint.consecutive_overload_ticks = 0U;
-            const EventId cause = explicit_test_cause != EventId{}
-                ? explicit_test_cause
-                : nearest_cause(*this, joint_midpoint(*this, joint));
-            if (cause != EventId{}) {
-                joint.overload_cause_event_id = cause;
-            }
-            schedule_joint(*this, joint.snapshot.id, joint.overload_cause_event_id);
+            const ninho::physics::Vec3 position = joint_midpoint(*this, joint);
+            static_cast<void>(publish_overload(
+                *this, joint, position, ratio, nearest_cause(*this, position)));
         } else if (ratio >= 1.0) {
-            const EventId cause = explicit_test_cause != EventId{}
-                ? explicit_test_cause
-                : nearest_cause(*this, joint_midpoint(*this, joint));
-            if (cause != EventId{}) {
-                joint.overload_cause_event_id = cause;
-            }
             ++joint.consecutive_overload_ticks;
             if (joint.consecutive_overload_ticks >= 2U) {
                 joint.consecutive_overload_ticks = 0U;
-                schedule_joint(
-                    *this, joint.snapshot.id, joint.overload_cause_event_id);
+                const ninho::physics::Vec3 position = joint_midpoint(*this, joint);
+                static_cast<void>(publish_overload(
+                    *this, joint, position, ratio, nearest_cause(*this, position)));
             }
         } else {
             joint.consecutive_overload_ticks = 0U;
-            joint.overload_cause_event_id = {};
         }
     }
 
+    std::vector<DomainEvent> damage_events;
     for (const DomainEvent& event : domain_events) {
-        if (event.kind != DomainEventKind::DamageApplied) {
-            continue;
+        if (event.kind == DomainEventKind::DamageApplied) {
+            damage_events.push_back(event);
         }
+    }
+    for (const DomainEvent& event : damage_events) {
         BodyRecord* body = find_body(
             body_records, event.affected_entity_id, event.affected_part_id);
         if (body == nullptr || !body->material_id) {
@@ -305,8 +315,19 @@ void SimulationSession::Impl::evaluate_fractures_after_step()
         }
         const double fracture_energy = state->mass * 250.0 * material->toughness;
         if (damage->material_damage_energy_j >= fracture_energy) {
+            const JointId incident = nearest_incident_joint(
+                *this, body->entity_id, body->part_id, event.position_m);
+            JointRecord* joint = find_joint(*this, incident);
+            if (joint == nullptr) {
+                continue;
+            }
+            EventId overload = pending_overload_event(*this, incident);
+            if (overload == EventId{}) {
+                overload = publish_overload(*this, *joint, event.position_m,
+                    damage->material_damage_energy_j / fracture_energy, event.id);
+            }
             schedule_piece(*this, body->entity_id, body->part_id,
-                *body->material_id, event.position_m, event.id);
+                *body->material_id, incident, event.position_m, overload);
         }
     }
 
@@ -316,18 +337,19 @@ void SimulationSession::Impl::evaluate_fractures_after_step()
         const ninho::physics::Vec3 position = request.tie_first_two_incident
             ? first_incident_tie_position(*this, request.entity_id, request.part_id)
             : request.position_m;
-        const EventId cause{next_event_sequence++};
-        domain_events.push_back({
-            .id = cause,
-            .tick = session_state.tick,
-            .kind = DomainEventKind::DamageApplied,
-            .affected_entity_id = request.entity_id,
-            .affected_part_id = request.part_id,
-            .position_m = position,
-        });
+        const JointId incident = nearest_incident_joint(
+            *this, request.entity_id, request.part_id, position);
+        JointRecord* joint = find_joint(*this, incident);
+        if (joint == nullptr) {
+            continue;
+        }
+        EventId overload = pending_overload_event(*this, incident);
+        if (overload == EventId{}) {
+            overload = publish_overload(*this, *joint, position, 1.5, {});
+        }
         schedule_piece(*this, request.entity_id, request.part_id,
             body != nullptr && body->material_id ? *body->material_id : MaterialId{},
-            position, cause);
+            incident, position, overload);
     }
     piece_fracture_requests_for_testing.clear();
 #endif

@@ -60,7 +60,6 @@ struct SimulationSession::Impl {
         StructuralJointSnapshot snapshot;
         ninho::physics::JointHandle physics_handle;
         std::uint8_t consecutive_overload_ticks{};
-        EventId overload_cause_event_id{};
     };
 
     struct PendingJointBreak {
@@ -134,7 +133,6 @@ struct SimulationSession::Impl {
 #if defined(NINHO_ENABLE_TEST_FACADES)
     struct JointRatioOverride {
         double ratio{};
-        bool emit_cause{};
     };
     std::unordered_map<std::uint32_t, JointRatioOverride>
         joint_ratio_overrides_for_testing;
