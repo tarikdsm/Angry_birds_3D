@@ -5,6 +5,7 @@ param(
 
 $ErrorActionPreference = 'Stop'
 Import-Module (Join-Path $PSScriptRoot '..\GodotSpikeGate.psm1') -Force
+Import-Module (Join-Path $PSScriptRoot '..\SafePath.psm1') -Force
 
 function Assert-Throws {
     param(
@@ -36,7 +37,11 @@ Assert-Throws -Pattern 'does not exist' -Action {
     Read-NinhoGDExtensionDescriptor -Path (Join-Path $Root 'game\bin\missing.gdextension')
 }
 
-$temporaryDirectory = Join-Path $Root 'artifacts\physics\descriptor-contract-tests'
+$artifactRoot = Join-Path $Root 'artifacts\physics'
+Assert-NinhoNoReparseAncestors -Path $artifactRoot -AllowedRoot $Root | Out-Null
+New-Item -ItemType Directory -Force -Path $artifactRoot | Out-Null
+$temporaryDirectory = Join-Path $artifactRoot "descriptor-contract-$([guid]::NewGuid().ToString('N'))"
+Assert-NinhoNoReparseAncestors -Path $temporaryDirectory -AllowedRoot $artifactRoot | Out-Null
 New-Item -ItemType Directory -Force -Path $temporaryDirectory | Out-Null
 $corruptDescriptor = Join-Path $temporaryDirectory 'corrupt.gdextension'
 $validText = [System.IO.File]::ReadAllText($descriptorPath)
@@ -134,4 +139,6 @@ foreach ($runnerContract in @(
     }
 }
 
+Assert-NinhoNoReparseAncestors -Path $temporaryDirectory -AllowedRoot $artifactRoot | Out-Null
+Remove-Item -LiteralPath $temporaryDirectory -Recurse -Force
 Write-Output 'godot-spike-gate-tests: PASS'

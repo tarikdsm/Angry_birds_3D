@@ -8,6 +8,7 @@ $ErrorActionPreference = 'Stop'
 $root = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 $build = Join-Path $PSScriptRoot 'build.ps1'
 Import-Module (Join-Path $PSScriptRoot 'SpikeReportGate.psm1') -Force
+Import-Module (Join-Path $PSScriptRoot 'SafePath.psm1') -Force
 & $build -Configuration $Configuration
 if ($LASTEXITCODE -ne 0) {
     exit $LASTEXITCODE
@@ -15,6 +16,7 @@ if ($LASTEXITCODE -ne 0) {
 
 $preset = $Configuration.ToLowerInvariant()
 $artifactDirectory = Join-Path $root 'artifacts\physics'
+Assert-NinhoNoReparseAncestors -Path $artifactDirectory -AllowedRoot $root | Out-Null
 New-Item -ItemType Directory -Force -Path $artifactDirectory | Out-Null
 $report = Join-Path $artifactDirectory "box3d-spike-$preset.json"
 $executable = Join-Path $root "build\$preset\native\spike\ninho_physics_spike.exe"

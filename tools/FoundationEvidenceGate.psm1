@@ -1,5 +1,6 @@
 Set-StrictMode -Version Latest
 Import-Module (Join-Path $PSScriptRoot 'SpikeEvidenceValidation.psm1') -Force
+Import-Module (Join-Path $PSScriptRoot 'SafePath.psm1') -Force
 
 function Get-NinhoSingleReportToken {
     param(
@@ -26,8 +27,9 @@ function Assert-NinhoFoundationEvidence {
 
     $rootPath = [System.IO.Path]::GetFullPath($Root).TrimEnd('\', '/')
     $rootPrefix = $rootPath + [System.IO.Path]::DirectorySeparatorChar
-    $report = [System.IO.File]::ReadAllText(
-        [System.IO.Path]::GetFullPath($ReportPath))
+    $resolvedReportPath = [System.IO.Path]::GetFullPath($ReportPath)
+    Assert-NinhoNoReparseAncestors -Path $resolvedReportPath -AllowedRoot $rootPath | Out-Null
+    $report = [System.IO.File]::ReadAllText($resolvedReportPath)
     $expectedScenarios = @(
         'radial_fall',
         'projectile_pile',
@@ -38,10 +40,14 @@ function Assert-NinhoFoundationEvidence {
     )
 
     foreach ($configuration in 'Debug', 'Release') {
+        $canonicalRelative = "docs/physics/evidence/foundation-report-$($configuration.ToLowerInvariant()).json"
         $relative = Get-NinhoSingleReportToken `
             -Report $report `
             -Name "Evidence-$configuration-Path" `
             -ValuePattern '\S+'
+        if ($relative -cne $canonicalRelative) {
+            throw "Foundation evidence path must be exactly $canonicalRelative"
+        }
         $expectedHash = (Get-NinhoSingleReportToken `
             -Report $report `
             -Name "Evidence-$configuration-SHA256" `
@@ -54,6 +60,20 @@ function Assert-NinhoFoundationEvidence {
                 $rootPrefix,
                 [System.StringComparison]::OrdinalIgnoreCase)) {
             throw "Foundation evidence escapes the repository: $relative"
+        }
+        Assert-NinhoNoReparseAncestors -Path $path -AllowedRoot $rootPath | Out-Null
+        $previousErrorActionPreference = $ErrorActionPreference
+        $gitExitCode = 1
+        try {
+            $ErrorActionPreference = 'Continue'
+            & git -c "safe.directory=$rootPath" -C $rootPath `
+                ls-files --error-unmatch -- $relative 2>$null | Out-Null
+            $gitExitCode = $LASTEXITCODE
+        } finally {
+            $ErrorActionPreference = $previousErrorActionPreference
+        }
+        if ($gitExitCode -ne 0) {
+            throw "Foundation evidence is not tracked by git: $relative"
         }
         if (-not (Test-Path -LiteralPath $path -PathType Leaf)) {
             throw "Foundation evidence file missing: $relative"
@@ -70,6 +90,28 @@ function Assert-NinhoFoundationEvidence {
         Assert-NinhoSpikeEvidenceDocument `
             -Document $document `
             -ExpectedBuildType $configuration
+        $matrixScenario = @($document.scenarios | Where-Object name -CEQ 'capability_matrix')
+        if ($matrixScenario.Count -ne 1) {
+            throw "Foundation evidence missing unique capability_matrix for $configuration"
+        }
+        $reportMatrixHash = Get-NinhoSingleReportToken `
+            -Report $report `
+            -Name "Matrix-$configuration-Hash" `
+            -ValuePattern '\d+'
+        $reportMatrixTopology = Get-NinhoSingleReportToken `
+            -Report $report `
+            -Name "Matrix-$configuration-Topology" `
+            -ValuePattern '\d+/\d+/\d+;\d+/\d+'
+        $reportRecommendation = Get-NinhoSingleReportToken `
+            -Report $report `
+            -Name "Recommendation-$configuration" `
+            -ValuePattern 'prosseguir_com_limites'
+        $expectedTopology = "$($matrixScenario[0].peak_body_count)/$($matrixScenario[0].peak_shape_count)/$($matrixScenario[0].peak_joint_count);$($matrixScenario[0].peak_awake_count)/$($matrixScenario[0].peak_contact_count)"
+        if ($reportMatrixHash -cne [string]$matrixScenario[0].final_hash -or
+                $reportMatrixTopology -cne $expectedTopology -or
+                $reportRecommendation -cne [string]$document.recommendation) {
+            throw "Foundation report machine-readable matrix contract mismatch for $configuration"
+        }
         if ($document.build_type -cne $configuration) {
             throw "Foundation evidence build_type mismatch for $configuration"
         }

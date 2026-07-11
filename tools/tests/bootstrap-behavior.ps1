@@ -1,6 +1,9 @@
 $ErrorActionPreference = 'Stop'
 $root = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
-$tempRoot = Join-Path ([IO.Path]::GetTempPath()) ('ninho-toolchain-tests-' + [Guid]::NewGuid().ToString('N'))
+Import-Module (Join-Path $root 'tools\SafePath.psm1') -Force
+$tempBase = [IO.Path]::GetTempPath().TrimEnd('\', '/')
+$tempRoot = Join-Path $tempBase ('ninho-toolchain-tests-' + [Guid]::NewGuid().ToString('N'))
+Assert-NinhoNoReparseAncestors -Path $tempRoot -AllowedRoot $tempBase | Out-Null
 
 try {
     $fixtureTools = Join-Path $tempRoot 'tools'
@@ -48,11 +51,13 @@ if (`$Json) { `$result | ConvertTo-Json -Depth 3 } else { `$result }
 }
 finally {
     if (Test-Path -LiteralPath $tempRoot) {
+        Assert-NinhoNoReparseAncestors -Path $tempRoot -AllowedRoot $tempBase | Out-Null
         Remove-Item -LiteralPath $tempRoot -Recurse -Force
     }
 }
 
-$tempRoot = Join-Path ([IO.Path]::GetTempPath()) ('ninho-toolchain-tests-' + [Guid]::NewGuid().ToString('N'))
+$tempRoot = Join-Path $tempBase ('ninho-toolchain-tests-' + [Guid]::NewGuid().ToString('N'))
+Assert-NinhoNoReparseAncestors -Path $tempRoot -AllowedRoot $tempBase | Out-Null
 
 try {
     $fixtureTools = Join-Path $tempRoot 'tools'
@@ -60,6 +65,7 @@ try {
     New-Item -ItemType Directory -Force -Path $fixtureTools, $downloads | Out-Null
     Copy-Item -LiteralPath (Join-Path $root 'tools\bootstrap.ps1') -Destination $fixtureTools
     Copy-Item -LiteralPath (Join-Path $root 'tools\toolchain.lock.json') -Destination $fixtureTools
+    Copy-Item -LiteralPath (Join-Path $root 'tools\SafePath.psm1') -Destination $fixtureTools
 
     $corruptedArchive = Join-Path $downloads 'cmake.zip'
     Set-Content -LiteralPath $corruptedArchive -Value 'corrupted archive' -Encoding ASCII
@@ -85,6 +91,7 @@ try {
 }
 finally {
     if (Test-Path -LiteralPath $tempRoot) {
+        Assert-NinhoNoReparseAncestors -Path $tempRoot -AllowedRoot $tempBase | Out-Null
         Remove-Item -LiteralPath $tempRoot -Recurse -Force
     }
 }

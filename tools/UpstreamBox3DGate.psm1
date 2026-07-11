@@ -21,8 +21,8 @@ function Reset-NinhoUpstreamBuildDirectory {
                 [System.StringComparison]::OrdinalIgnoreCase)) {
         throw "Upstream build path is outside the allowed root: $target"
     }
+    Assert-NinhoNoReparseAncestors -Path $target -AllowedRoot $root | Out-Null
     if (Test-Path -LiteralPath $target) {
-        Assert-NinhoNoReparseAncestors -Path $target -AllowedRoot $root | Out-Null
         Remove-Item -LiteralPath $target -Recurse -Force
     }
     if (Test-Path -LiteralPath $target) {

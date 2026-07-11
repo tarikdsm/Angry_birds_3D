@@ -13,6 +13,7 @@ $downloads = Join-Path $tools 'downloads'
 $lockPath = Join-Path $PSScriptRoot 'toolchain.lock.json'
 $lock = Get-Content -Raw -LiteralPath $lockPath | ConvertFrom-Json
 $errors = [System.Collections.Generic.List[string]]::new()
+Import-Module (Join-Path $PSScriptRoot 'SafePath.psm1') -Force
 
 function Test-HexSha([string]$value) { return $value -match '^[0-9a-f]{64}$' }
 foreach ($name in 'cmake','ninja','godot','visual_studio') {
@@ -25,9 +26,11 @@ foreach ($name in 'cmake','ninja','godot','visual_studio') {
 
 function Get-LockedArchive([string]$name) {
     $entry = $lock.$name
+    Assert-NinhoNoReparseAncestors -Path $downloads -AllowedRoot $root | Out-Null
     New-Item -ItemType Directory -Force $downloads | Out-Null
     $extension = [IO.Path]::GetExtension(([Uri]$entry.url).AbsolutePath)
     $target = Join-Path $downloads "$name$extension"
+    Assert-NinhoNoReparseAncestors -Path $target -AllowedRoot $downloads | Out-Null
     if (-not (Test-Path -LiteralPath $target)) {
         Invoke-WebRequest -UseBasicParsing -Uri $entry.url -OutFile $target
     }
@@ -43,6 +46,7 @@ function Install-Portable([string]$name) {
     $entry = $lock.$name
     $destination = Join-Path $tools $name
     $exe = Join-Path $destination $entry.exe
+    Assert-NinhoNoReparseAncestors -Path $destination -AllowedRoot $root | Out-Null
     if (-not (Test-Path -LiteralPath $exe)) {
         $archive = Get-LockedArchive $name
         New-Item -ItemType Directory -Force $destination | Out-Null

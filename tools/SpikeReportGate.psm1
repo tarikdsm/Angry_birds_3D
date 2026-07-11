@@ -15,11 +15,11 @@ function Start-NinhoSpikeReportCapture {
     if (-not $target.StartsWith($root, [System.StringComparison]::OrdinalIgnoreCase)) {
         throw "Spike report target is outside the allowed root: $target"
     }
+    Assert-NinhoNoReparseAncestors -Path $target -AllowedRoot $AllowedRoot | Out-Null
     if (Test-Path -LiteralPath $target -PathType Container) {
         throw "Spike report target is a directory: $target"
     }
     if (Test-Path -LiteralPath $target -PathType Leaf) {
-        Assert-NinhoNoReparseAncestors -Path $target -AllowedRoot $AllowedRoot | Out-Null
         Remove-Item -LiteralPath $target -Force
     }
     return [DateTime]::UtcNow

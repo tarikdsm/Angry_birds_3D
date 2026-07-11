@@ -12,11 +12,12 @@ $artifactDirectory = Join-Path $root 'artifacts\physics'
 $foundationReport = Join-Path $root 'docs\physics\box3d-spike-report.md'
 $godot = Join-Path $root '.tools\godot\Godot_v4.5.1-stable_win64.exe'
 $godotImportCache = Join-Path $root 'game\.godot'
+Import-Module (Join-Path $PSScriptRoot 'SafePath.psm1') -Force
+Assert-NinhoNoReparseAncestors -Path $artifactDirectory -AllowedRoot $root | Out-Null
 New-Item -ItemType Directory -Force -Path $artifactDirectory | Out-Null
 Import-Module (Join-Path $PSScriptRoot 'GodotSpikeGate.psm1') -Force
 Import-Module (Join-Path $PSScriptRoot 'UpstreamBox3DGate.psm1') -Force
 Import-Module (Join-Path $PSScriptRoot 'FoundationEvidenceGate.psm1') -Force
-Import-Module (Join-Path $PSScriptRoot 'SafePath.psm1') -Force
 & (Join-Path $PSScriptRoot 'tests\spike-report-gate-tests.ps1') -Root $root
 & (Join-Path $PSScriptRoot 'tests\upstream-box3d-gate-tests.ps1') -Root $root
 & (Join-Path $PSScriptRoot 'tests\foundation-evidence-gate-tests.ps1') -Root $root
@@ -58,6 +59,7 @@ $descriptorPath = Join-Path $root 'game\bin\ninho_physics.gdextension'
 $descriptor = Read-NinhoGDExtensionDescriptor -Path $descriptorPath
 
 Import-Module (Join-Path $PSScriptRoot 'SafePath.psm1') -Force
+Assert-NinhoNoReparseAncestors -Path $godotImportCache -AllowedRoot $root | Out-Null
 if (Test-Path -LiteralPath $godotImportCache) {
     Assert-NinhoNoReparseAncestors `
         -Path $godotImportCache `
@@ -146,6 +148,8 @@ if ($IncludeUpstream) {
         (Join-Path $root 'build\upstream-box3d'))
     $upstreamBuild = [System.IO.Path]::GetFullPath(
         (Join-Path $upstreamRoot $preset))
+    Assert-NinhoNoReparseAncestors -Path $upstreamRoot -AllowedRoot $root | Out-Null
+    Assert-NinhoNoReparseAncestors -Path $upstreamBuild -AllowedRoot $root | Out-Null
     Reset-NinhoUpstreamBuildDirectory `
         -Path $upstreamBuild `
         -AllowedRoot $upstreamRoot
@@ -269,6 +273,8 @@ function Invoke-GodotSmoke {
 
     $stdout = Join-Path $artifactDirectory "$Name-$preset.stdout.log"
     $stderr = Join-Path $artifactDirectory "$Name-$preset.stderr.log"
+    Assert-NinhoNoReparseAncestors -Path $stdout -AllowedRoot $artifactDirectory | Out-Null
+    Assert-NinhoNoReparseAncestors -Path $stderr -AllowedRoot $artifactDirectory | Out-Null
     if ($ExpectedMoviePath) {
         $expectedMovieFullPath = [System.IO.Path]::GetFullPath($ExpectedMoviePath)
         $artifactRoot = [System.IO.Path]::GetFullPath($artifactDirectory).TrimEnd('\', '/') +
@@ -278,6 +284,9 @@ function Invoke-GodotSmoke {
                 [System.StringComparison]::OrdinalIgnoreCase)) {
             throw "Refusing to manage movie outside the artifact directory: $expectedMovieFullPath"
         }
+        Assert-NinhoNoReparseAncestors `
+            -Path $expectedMovieFullPath `
+            -AllowedRoot $artifactDirectory | Out-Null
         if (Test-Path -LiteralPath $expectedMovieFullPath -PathType Leaf) {
             Remove-Item -LiteralPath $expectedMovieFullPath -Force
         }

@@ -5,6 +5,7 @@ param(
 
 $ErrorActionPreference = 'Stop'
 Import-Module (Join-Path $Root 'tools\UpstreamBox3DGate.psm1') -Force
+Import-Module (Join-Path $Root 'tools\SafePath.psm1') -Force
 
 function Assert-True {
     param([bool]$Condition, [string]$Message)
@@ -25,6 +26,7 @@ function Assert-Throws {
 $allowedRoot = [System.IO.Path]::GetFullPath(
     (Join-Path $Root 'build\upstream-box3d-gate-test'))
 $configurationPath = Join-Path $allowedRoot 'debug'
+Assert-NinhoNoReparseAncestors -Path $configurationPath -AllowedRoot $Root | Out-Null
 New-Item -ItemType Directory -Force -Path $configurationPath | Out-Null
 Set-Content -LiteralPath (Join-Path $configurationPath 'CMakeCache.txt') `
     -Value 'CONTAMINATED=ON' -Encoding ascii
@@ -40,6 +42,7 @@ Assert-Throws {
         -AllowedRoot $allowedRoot
 } 'outside the allowed root'
 
+Assert-NinhoNoReparseAncestors -Path $configurationPath -AllowedRoot $Root | Out-Null
 New-Item -ItemType Directory -Force -Path $configurationPath | Out-Null
 $compileDatabase = Join-Path $configurationPath 'compile_commands.json'
 $good = @(
@@ -127,7 +130,9 @@ Assert-Throws {
     Assert-NinhoUpstreamCompileDatabase -Path $compileDatabase -Configuration Release
 } 'Debug contamination'
 
-$junctionTestRoot = Join-Path ([System.IO.Path]::GetTempPath()) "ninho-upstream-reparse-$PID"
+$tempBase = [System.IO.Path]::GetTempPath().TrimEnd('\', '/')
+$junctionTestRoot = Join-Path $tempBase "ninho-upstream-reparse-$PID-$([guid]::NewGuid().ToString('N'))"
+Assert-NinhoNoReparseAncestors -Path $junctionTestRoot -AllowedRoot $tempBase | Out-Null
 $junctionAllowedRoot = Join-Path $junctionTestRoot 'build'
 $external = Join-Path $junctionTestRoot 'external'
 $junction = Join-Path $junctionAllowedRoot 'upstream-box3d'
@@ -143,11 +148,20 @@ Assert-Throws {
 } 'reparse point'
 Assert-True (Test-Path -LiteralPath (Join-Path $external 'marker.txt')) `
     'external junction target was modified'
+Assert-Throws {
+    Reset-NinhoUpstreamBuildDirectory `
+        -Path (Join-Path $junction 'absent') `
+        -AllowedRoot $junction
+} 'reparse point'
+Assert-True (-not (Test-Path -LiteralPath (Join-Path $external 'absent'))) `
+    'absent external target was created through a junction'
 [System.IO.Directory]::Delete($junction)
+Assert-NinhoNoReparseAncestors -Path $junctionTestRoot -AllowedRoot $tempBase | Out-Null
 Remove-Item -LiteralPath $junctionTestRoot -Recurse -Force
 
 Reset-NinhoUpstreamBuildDirectory `
     -Path $configurationPath `
     -AllowedRoot $allowedRoot
+Assert-NinhoNoReparseAncestors -Path $allowedRoot -AllowedRoot $Root | Out-Null
 Remove-Item -LiteralPath $allowedRoot -Force
 Write-Output 'upstream-box3d-gate-tests: PASS'

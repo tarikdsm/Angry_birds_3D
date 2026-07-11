@@ -18,6 +18,24 @@ function Assert-NinhoAllocator {
     }
 }
 
+function Assert-NinhoAllocatorSamples {
+    param([object]$Allocator, [bool]$StressProtocol, [string]$Context)
+    foreach ($name in 'warmup_post_teardown', 'measured_post_teardown') {
+        Assert-NinhoProperty $Allocator $name $Context
+    }
+    $warmup = @($Allocator.warmup_post_teardown)
+    $measured = @($Allocator.measured_post_teardown)
+    if ($StressProtocol) {
+        if ($warmup.Count -ne 10 -or $measured.Count -ne 10 -or
+                @($warmup | Where-Object { $_ -ne 0 }).Count -ne 0 -or
+                @($measured | Where-Object { $_ -ne 0 }).Count -ne 0) {
+            throw 'Spike evidence Stress allocator samples must be ten exact zeros'
+        }
+    } elseif ($warmup.Count -ne 0 -or $measured.Count -ne 0) {
+        throw "Spike evidence unexpected allocator samples for $Context"
+    }
+}
+
 function Get-NinhoCapabilityValue {
     param([object]$Row, [string]$Name)
     $matches = @($Row.values | Where-Object name -CEQ $Name)
@@ -34,6 +52,181 @@ function Get-NinhoScenarioMetric {
         throw "Spike evidence missing unique scenario metric $($Scenario.name)/$Name"
     }
     return [double]$matches[0].value
+}
+
+function Get-NinhoTailSummary {
+    param([object[]]$Samples, [string]$Context)
+    $values = @($Samples)
+    if ($values.Count -ne 10 -or @($values | Where-Object { [double]$_ -le 0 }).Count -ne 0) {
+        throw "Spike evidence $Context requires exactly ten warmup and measured samples with positive values"
+    }
+    $tail = @($values[5..9] | ForEach-Object { [double]$_ } | Sort-Object)
+    return [pscustomobject]@{
+        full_min = $tail[0]
+        central_min = $tail[1]
+        median = $tail[2]
+        central_max = $tail[3]
+        full_max = $tail[4]
+    }
+}
+
+function Assert-NinhoNear {
+    param([double]$Actual, [double]$Expected, [string]$Context)
+    if ([double]::IsNaN($Actual) -or [double]::IsInfinity($Actual) -or
+            [math]::Abs($Actual - $Expected) -gt 1e-12) {
+        throw "Spike evidence derived summary mismatch at $Context"
+    }
+}
+
+function Assert-NinhoMemoryCounter {
+    param(
+        [object]$Counter,
+        [string]$Context,
+        [switch]$IncludeInstant
+    )
+    foreach ($name in @(
+            'available','stable','terminal_growth','baseline_last_bytes',
+            'baseline_full_min_bytes','baseline_central_min_bytes',
+            'baseline_median_bytes','baseline_central_max_bytes',
+            'baseline_full_max_bytes','final_last_bytes','final_full_min_bytes',
+            'final_central_min_bytes','final_median_bytes','final_central_max_bytes',
+            'final_full_max_bytes','peak_bytes','growth_ratio',
+            'warmup_trimmed_span_ratio','warmup_full_span_ratio',
+            'measured_trimmed_span_ratio','measured_full_span_ratio',
+            'warmup_samples','measured_samples')) {
+        Assert-NinhoProperty $Counter $name $Context
+    }
+    if ($IncludeInstant) {
+        Assert-NinhoProperty $Counter 'instant_growth_ratio' $Context
+    }
+    $warmup = @($Counter.warmup_samples)
+    $measured = @($Counter.measured_samples)
+    if (-not $Counter.available) {
+        if ($warmup.Count -ne 0 -or $measured.Count -ne 0 -or
+                $Counter.stable -or $Counter.terminal_growth) {
+            throw "Spike evidence unavailable memory counter mismatch at $Context"
+        }
+        foreach ($property in $Counter.PSObject.Properties) {
+            if (($property.Name.EndsWith('_bytes') -or
+                    $property.Name.EndsWith('_ratio')) -and
+                    [double]$property.Value -ne 0) {
+                throw "Spike evidence unavailable memory counter mismatch at $Context"
+            }
+        }
+        return 'unavailable'
+    }
+    if ($warmup.Count -ne 10 -or $measured.Count -ne 10) {
+        throw "Spike evidence $Context requires exactly ten warmup and measured samples"
+    }
+    $baseline = Get-NinhoTailSummary $warmup "$Context/warmup"
+    $final = Get-NinhoTailSummary $measured "$Context/measured"
+    $expectedIntegers = @{
+        baseline_last_bytes = [double]$warmup[-1]
+        baseline_full_min_bytes = $baseline.full_min
+        baseline_central_min_bytes = $baseline.central_min
+        baseline_median_bytes = $baseline.median
+        baseline_central_max_bytes = $baseline.central_max
+        baseline_full_max_bytes = $baseline.full_max
+        final_last_bytes = [double]$measured[-1]
+        final_full_min_bytes = $final.full_min
+        final_central_min_bytes = $final.central_min
+        final_median_bytes = $final.median
+        final_central_max_bytes = $final.central_max
+        final_full_max_bytes = $final.full_max
+    }
+    foreach ($name in $expectedIntegers.Keys) {
+        if ([double]$Counter.$name -ne [double]$expectedIntegers[$name]) {
+            throw "Spike evidence derived summary mismatch at $Context/$name"
+        }
+    }
+    $growth = [math]::Max(0.0, ($final.median - $baseline.median) / $baseline.median)
+    $warmupTrimmed = ($baseline.central_max - $baseline.central_min) / $baseline.median
+    $warmupFull = ($baseline.full_max - $baseline.full_min) / $baseline.median
+    $measuredTrimmed = ($final.central_max - $final.central_min) / $final.median
+    $measuredFull = ($final.full_max - $final.full_min) / $final.median
+    Assert-NinhoNear $Counter.growth_ratio $growth "$Context/growth_ratio"
+    Assert-NinhoNear $Counter.warmup_trimmed_span_ratio $warmupTrimmed "$Context/warmup_trimmed_span_ratio"
+    Assert-NinhoNear $Counter.warmup_full_span_ratio $warmupFull "$Context/warmup_full_span_ratio"
+    Assert-NinhoNear $Counter.measured_trimmed_span_ratio $measuredTrimmed "$Context/measured_trimmed_span_ratio"
+    Assert-NinhoNear $Counter.measured_full_span_ratio $measuredFull "$Context/measured_full_span_ratio"
+    if ($IncludeInstant) {
+        $instant = [math]::Max(0.0, ([double]$measured[-1] - [double]$warmup[-1]) / [double]$warmup[-1])
+        Assert-NinhoNear $Counter.instant_growth_ratio $instant "$Context/instant_growth_ratio"
+    }
+    $terminalThreshold = 1.05 * $baseline.median
+    $terminalGrowth = [double]$measured[8] -gt $terminalThreshold -and
+        [double]$measured[9] -gt $terminalThreshold
+    $stable = $warmupTrimmed -le 0.05 -and $measuredTrimmed -le 0.05
+    $sampleMaximum = [double](($warmup + $measured | Measure-Object -Maximum).Maximum)
+    $peakMismatch = if ($IncludeInstant) {
+        [double]$Counter.peak_bytes -lt $sampleMaximum
+    } else {
+        [double]$Counter.peak_bytes -ne $sampleMaximum
+    }
+    if ($Counter.terminal_growth -ne $terminalGrowth -or $Counter.stable -ne $stable -or
+            $peakMismatch) {
+        throw "Spike evidence derived summary mismatch at $Context/flags"
+    }
+    if ($warmupTrimmed -gt 0.05) { return 'unstable' }
+    if ($growth -gt 0.05 -or $terminalGrowth) { return 'growth' }
+    if ($measuredTrimmed -gt 0.05) { return 'unstable' }
+    return 'pass'
+}
+
+function Assert-NinhoMemoryObservation {
+    param([object]$Memory, [string]$Context)
+    if ($null -eq $Memory) {
+        throw "Spike evidence memory observation missing at $Context"
+    }
+    foreach ($name in @(
+            'gate_scope','gate_status','assessment_status','gate_applied',
+            'budget_qualified','budget_scope','private_commit','working_set')) {
+        Assert-NinhoProperty $Memory $name $Context
+    }
+    if ($Memory.gate_scope -cne 'release_mt' -or
+            $Memory.gate_status -cne 'diagnostic' -or $Memory.gate_applied -or
+            $Memory.budget_qualified -or
+            $Memory.budget_scope -cne 'future_packaged_reference_hardware') {
+        throw "Spike evidence memory gate contract mismatch at $Context"
+    }
+    $privateAssessment = Assert-NinhoMemoryCounter `
+        -Counter $Memory.private_commit -Context "$Context/private_commit"
+    if ($Memory.assessment_status -cne $privateAssessment) {
+        throw "Spike evidence derived summary mismatch at $Context/private assessment"
+    }
+    $working = $Memory.working_set
+    foreach ($name in @(
+            'assessment_status','gate_status','gate_applied','budget_qualified','budget_scope')) {
+        Assert-NinhoProperty $working $name "$Context/working_set"
+    }
+    if ($working.gate_status -cne 'diagnostic' -or $working.gate_applied -or
+            $working.budget_qualified -or
+            $working.budget_scope -cne 'future_packaged_reference_hardware') {
+        throw "Spike evidence memory gate contract mismatch at $Context/working_set"
+    }
+    $workingAssessment = Assert-NinhoMemoryCounter `
+        -Counter $working -Context "$Context/working_set" -IncludeInstant
+    if ($working.assessment_status -cne $workingAssessment) {
+        throw "Spike evidence derived summary mismatch at $Context/working assessment"
+    }
+}
+
+function Assert-NinhoCrt {
+    param([object]$Crt, [bool]$ExpectedApplicable, [string]$Context)
+    foreach ($name in @(
+            'applicable','balanced','normal_block_count_delta','normal_block_bytes_delta',
+            'client_block_count_delta','client_block_bytes_delta')) {
+        Assert-NinhoProperty $Crt $name $Context
+    }
+    if ($Crt.applicable -ne $ExpectedApplicable) {
+        throw "Spike evidence CRT applicability mismatch at $Context"
+    }
+    if (-not $Crt.balanced -or $Crt.normal_block_count_delta -ne 0 -or
+            $Crt.normal_block_bytes_delta -ne 0 -or
+            $Crt.client_block_count_delta -ne 0 -or
+            $Crt.client_block_bytes_delta -ne 0) {
+        throw "Spike evidence CRT balance mismatch at $Context"
+    }
 }
 
 function Assert-NinhoSpikeEvidenceDocument {
@@ -85,10 +278,23 @@ function Assert-NinhoSpikeEvidenceDocument {
     }
     if ($Document.budget_qualification.status -cne 'deferred' -or
             $Document.budget_qualification.warning -cne 'private_commit_budget_unqualified' -or
-            -not (@($Document.warnings).code -ccontains 'private_commit_budget_unqualified')) {
+            [double]$Document.budget_qualification.target_growth_ratio -ne 0.05) {
         throw 'Spike evidence private commit budget is not explicitly deferred'
     }
+    $globalWarnings = @($Document.warnings)
+    if ($globalWarnings.Count -ne 1 -or
+            $globalWarnings[0].code -cne 'private_commit_budget_unqualified' -or
+            $globalWarnings[0].message -cne 'PrivateUsage budget is deferred to a packaged Release build on reference hardware') {
+        throw 'Spike evidence global warning contract mismatch'
+    }
+    $globalWarningDetails = @($globalWarnings[0].details)
+    if ($globalWarningDetails.Count -ne 1 -or
+            $globalWarningDetails[0].name -cne 'budget_scope' -or
+            $globalWarningDetails[0].value -cne 'future_packaged_reference_hardware') {
+        throw 'Spike evidence global warning contract mismatch'
+    }
     Assert-NinhoAllocator $Document.process_box3d_allocator 'process'
+    Assert-NinhoAllocatorSamples $Document.process_box3d_allocator $false 'process'
 
     $expectedTopologies = [ordered]@{
         radial_fall = @(2, 2, 0, 1, 1)
@@ -105,6 +311,22 @@ function Assert-NinhoSpikeEvidenceDocument {
         mass_ratio = @(80, 81, 0)
         stress = @(500, 800, 250)
         capability_matrix = @(0, 0, 0)
+    }
+    $expectedTicks = [ordered]@{
+        radial_fall = 600
+        projectile_pile = 11
+        radial_pile = 1800
+        mass_ratio = 1800
+        stress = 15000
+        capability_matrix = 21800
+    }
+    $expectedScenarioHashes = [ordered]@{
+        radial_fall = '12100112409900625846'
+        projectile_pile = '1431096453509785832'
+        radial_pile = '10363635776067367757'
+        mass_ratio = '17464060736204574665'
+        stress = '10292935394449293550'
+        capability_matrix = '17104053157009575930'
     }
     $expectedLimits = @{
         radial_fall = @(
@@ -158,6 +380,14 @@ function Assert-NinhoSpikeEvidenceDocument {
         $scenario = $matches[0]
         if (@($scenario.violations).Count -ne 0) {
             throw "Spike evidence scenario violation at $name"
+        }
+        if ($scenario.seed -ne 1 -or $scenario.substeps -ne 4 -or
+                $scenario.ticks -ne $expectedTicks[$name] -or
+                $scenario.fallback -cne '') {
+            throw "Spike evidence scenario execution identity mismatch for $name"
+        }
+        if ([string]$scenario.final_hash -cne $expectedScenarioHashes[$name]) {
+            throw "Spike evidence canonical scenario hash mismatch for $name"
         }
         $limits = @($scenario.limits)
         if ($limits.Count -ne $expectedLimits[$name].Count) {
@@ -322,21 +552,70 @@ function Assert-NinhoSpikeEvidenceDocument {
                     throw "Spike evidence repeat topology mismatch for $name/$peakName"
                 }
             }
+            if ($observation.PSObject.Properties.Name -notcontains 'memory' -or
+                    $null -eq $observation.memory) {
+                throw "Spike evidence memory observation missing at scenario/$name/repeat/$($index + 1)"
+            }
+            Assert-NinhoMemoryObservation `
+                -Memory $observation.memory `
+                -Context "scenario/$name/repeat/$($index + 1)/memory"
             Assert-NinhoAllocator $observation.box3d_allocator "scenario/$name/repeat/$($index + 1)"
-            if ($observation.crt.balanced -ne $true) {
-                throw "Spike evidence CRT imbalance for $name/repeat/$($index + 1)"
+            $expectedCrt = $ExpectedBuildType -eq 'Debug' -and $name -eq 'stress'
+            Assert-NinhoCrt $observation.crt $expectedCrt "scenario/$name/repeat/$($index + 1)/crt"
+            Assert-NinhoAllocatorSamples `
+                $observation.box3d_allocator ($name -eq 'stress') `
+                "scenario/$name/repeat/$($index + 1)"
+        }
+        if ((ConvertTo-Json $scenario.memory -Depth 100 -Compress) -cne
+                (ConvertTo-Json $observations[0].memory -Depth 100 -Compress)) {
+            throw "Spike evidence scenario memory differs from first repeat for $name"
+        }
+        $scenarioWarnings = @($scenario.warnings)
+        if ($name -eq 'stress') {
+            if ($scenarioWarnings.Count -ne 1 -or
+                    $scenarioWarnings[0].code -cne 'private_commit_budget_unqualified' -or
+                    $scenarioWarnings[0].message -cne 'PrivateUsage is diagnostic in the foundation; qualify the 5% budget in a packaged Release build on reference hardware') {
+                throw 'Spike evidence stress warning contract mismatch'
+            }
+            $assessmentDetail = @($scenarioWarnings[0].details | Where-Object name -CEQ 'assessment')
+            $scopeDetail = @($scenarioWarnings[0].details | Where-Object name -CEQ 'budget_scope')
+            if (@($scenarioWarnings[0].details).Count -ne 2 -or
+                    $assessmentDetail.Count -ne 1 -or
+                    $assessmentDetail[0].value -cne $observations[0].memory.assessment_status -or
+                    $scopeDetail.Count -ne 1 -or
+                    $scopeDetail[0].value -cne 'future_packaged_reference_hardware') {
+                throw 'Spike evidence stress warning contract mismatch'
+            }
+        } elseif ($scenarioWarnings.Count -ne 0) {
+            throw "Spike evidence unexpected scenario warning for $name"
+        }
+        if ($name -eq 'stress') {
+            $memory = $observations[0].memory
+            $metricMemoryMap = @{
+                private_commit_baseline_median_bytes = [double]$memory.private_commit.baseline_median_bytes
+                private_commit_final_median_bytes = [double]$memory.private_commit.final_median_bytes
+                private_commit_growth_ratio = [double]$memory.private_commit.growth_ratio
+                private_commit_warmup_trimmed_span_ratio = [double]$memory.private_commit.warmup_trimmed_span_ratio
+                private_commit_measured_trimmed_span_ratio = [double]$memory.private_commit.measured_trimmed_span_ratio
+                working_set_baseline_bytes = [double]$memory.working_set.baseline_last_bytes
+                working_set_baseline_low_bytes = [double]$memory.working_set.baseline_full_min_bytes
+                working_set_peak_bytes = [double]$memory.working_set.peak_bytes
+                working_set_final_bytes = [double]$memory.working_set.final_last_bytes
+                working_set_final_low_bytes = [double]$memory.working_set.final_full_min_bytes
+                working_set_growth_ratio = [double]$memory.working_set.growth_ratio
+                working_set_instant_growth_ratio = [double]$memory.working_set.instant_growth_ratio
+            }
+            foreach ($metricName in $metricMemoryMap.Keys) {
+                $actualMetric = Get-NinhoScenarioMetric $scenario $metricName
+                if ([math]::Abs($actualMetric - $metricMemoryMap[$metricName]) -gt 1e-12) {
+                    throw "Spike evidence stress metric/memory mismatch for $metricName"
+                }
             }
         }
         Assert-NinhoAllocator $scenario.box3d_allocator "scenario/$name"
-        if ($scenario.crt.balanced -ne $true) {
-            throw "Spike evidence CRT imbalance for $name"
-        }
-    }
-    $stress = ($scenarios | Where-Object name -CEQ 'stress')[0]
-    $expectedCrtApplicable = $ExpectedBuildType -eq 'Debug'
-    if ($stress.crt.applicable -ne $expectedCrtApplicable -or
-            @($stress.repeat_observations | ForEach-Object { $_.crt.applicable -eq $expectedCrtApplicable }) -contains $false) {
-        throw "Spike evidence CRT applicability mismatch for $ExpectedBuildType"
+        Assert-NinhoAllocatorSamples $scenario.box3d_allocator ($name -eq 'stress') "scenario/$name"
+        $expectedScenarioCrt = $ExpectedBuildType -eq 'Debug' -and $name -eq 'stress'
+        Assert-NinhoCrt $scenario.crt $expectedScenarioCrt "scenario/$name/crt"
     }
 
     $expectedCapabilities = @(
@@ -369,6 +648,16 @@ function Assert-NinhoSpikeEvidenceDocument {
         batch_lifecycle = @('generation_cycles','invalid_handles','private_commit_available','private_commit_growth','private_commit_baseline_bytes','private_commit_final_bytes','working_set_baseline_bytes','working_set_final_bytes','crt_normal_count_delta','crt_normal_bytes_delta','crt_client_count_delta','crt_client_bytes_delta','box3d_allocator_baseline_bytes','box3d_allocator_final_bytes')
         upstream_replay = @('saved','loaded','validated','recording_bytes','temporary_file_removed','box3d_allocator_baseline_bytes','box3d_allocator_final_bytes')
     }
+    $expectedCapabilityFixtureHashes = @{
+        ccd_dynamic_dynamic = @('1431096453509785832','5466060815846980033','8526278817898170285','2675255426310783444','10494942409035688541','7390650343477109358','14725012844580521641','14001126938762718496','2400058324701230849','10732887959698602526','5915366692680379584','14334879908416984375','6577404406665493359','16513243213841685896','9721495563768596328','13937513265211812359','9628435969084559192','18192646134465658732','18426867884952182109','11807578939564631579')
+        shape_cast_overlap = @('8388802905423810155')
+        contact_hit_events = @('10155543446163919611')
+        joint_force_torque = @('14239377403397705414')
+        hulls_compounds = @('7710058609812386530')
+        radial_sleep = @('10363635776067367757')
+        batch_lifecycle = @('43224550866945')
+        upstream_replay = @('13184605773762244167')
+    }
     foreach ($matrix in @(@($Document.matrix), @($capabilityScenario.matrix))) {
         if ($matrix.Count -ne 8) {
             throw 'Spike evidence capability matrix row count mismatch'
@@ -389,6 +678,14 @@ function Assert-NinhoSpikeEvidenceDocument {
             $row = $rows[0]
             if (@($row.fixture_hashes).Count -eq 0) {
                 throw "Spike evidence capability fixture hash missing for $capability"
+            }
+            $actualFixtureHashes = @($row.fixture_hashes | ForEach-Object { [string]$_ })
+            if ((ConvertTo-Json $actualFixtureHashes -Compress) -cne
+                    (ConvertTo-Json @($expectedCapabilityFixtureHashes[$capability]) -Compress)) {
+                throw "Spike evidence canonical fixture hashes mismatch for $capability"
+            }
+            if ($null -ne $row.fallback -or $null -ne $row.functional_fallback) {
+                throw "Spike evidence unexpected capability fallback for $capability"
             }
             $valueNames = @($row.values | ForEach-Object { $_.name })
             $valueNameDifference = @(Compare-Object `

@@ -5,6 +5,7 @@ param(
 
 $ErrorActionPreference = 'Stop'
 Import-Module (Join-Path $Root 'tools\SpikeReportGate.psm1') -Force
+Import-Module (Join-Path $Root 'tools\SafePath.psm1') -Force
 
 function Assert-True {
     param([bool]$Condition, [string]$Message)
@@ -26,7 +27,11 @@ function Assert-Throws {
     throw "Expected failure containing: $ExpectedMessage"
 }
 
-$sandbox = Join-Path $Root 'artifacts\physics\spike-report-gate-test'
+$artifactRoot = Join-Path $Root 'artifacts\physics'
+Assert-NinhoNoReparseAncestors -Path $artifactRoot -AllowedRoot $Root | Out-Null
+New-Item -ItemType Directory -Force -Path $artifactRoot | Out-Null
+$sandbox = Join-Path $artifactRoot "spike-report-gate-$([guid]::NewGuid().ToString('N'))"
+Assert-NinhoNoReparseAncestors -Path $sandbox -AllowedRoot $artifactRoot | Out-Null
 New-Item -ItemType Directory -Force -Path $sandbox | Out-Null
 $target = Join-Path $sandbox 'report.json'
 
@@ -61,13 +66,14 @@ Assert-Throws {
         -AllowedRoot $sandbox
 } 'outside the allowed root'
 
-$junctionTestRoot = Join-Path ([System.IO.Path]::GetTempPath()) "ninho-spike-reparse-$PID"
+$tempBase = [System.IO.Path]::GetTempPath().TrimEnd('\', '/')
+$junctionTestRoot = Join-Path $tempBase "ninho-spike-reparse-$PID-$([guid]::NewGuid().ToString('N'))"
+Assert-NinhoNoReparseAncestors -Path $junctionTestRoot -AllowedRoot $tempBase | Out-Null
 $junctionAllowedRoot = Join-Path $junctionTestRoot 'artifacts'
 $external = Join-Path $junctionTestRoot 'external'
 $junction = Join-Path $junctionAllowedRoot 'physics'
 New-Item -ItemType Directory -Force -Path $junctionAllowedRoot, $external | Out-Null
 Set-Content -LiteralPath (Join-Path $external 'marker.txt') -Value 'keep' -Encoding ascii
-Set-Content -LiteralPath (Join-Path $external 'report.json') -Value '{}' -Encoding ascii
 New-Item -ItemType Junction -Path $junction -Target $external | Out-Null
 Assert-Throws {
     Start-NinhoSpikeReportCapture `
@@ -77,7 +83,11 @@ Assert-Throws {
 Assert-True (Test-Path -LiteralPath (Join-Path $external 'marker.txt')) `
     'external junction target was modified'
 [System.IO.Directory]::Delete($junction)
+Assert-NinhoNoReparseAncestors -Path $junctionTestRoot -AllowedRoot $tempBase | Out-Null
 Remove-Item -LiteralPath $junctionTestRoot -Recurse -Force
 
+Assert-NinhoNoReparseAncestors -Path $target -AllowedRoot $sandbox | Out-Null
 Remove-Item -LiteralPath $target -Force
+Assert-NinhoNoReparseAncestors -Path $sandbox -AllowedRoot $artifactRoot | Out-Null
+Remove-Item -LiteralPath $sandbox -Recurse -Force
 Write-Output 'spike-report-gate-tests: PASS'
