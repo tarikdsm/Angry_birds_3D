@@ -5,6 +5,14 @@ var _faults: Array[String] = []
 
 
 func _initialize() -> void:
+	var fallback_enabled := bool(ProjectSettings.get_setting(
+		"rendering/rendering_device/fallback_to_opengl3",
+		false
+	))
+	if not fallback_enabled:
+		_fail("OpenGL fallback project setting is not enabled")
+		return
+
 	if not ClassDB.class_exists("Box3DWorldNode"):
 		_fail("Box3DWorldNode is not registered")
 		return

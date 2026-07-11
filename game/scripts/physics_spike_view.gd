@@ -3,6 +3,9 @@ extends Node3D
 const BOX_FULL_SIZE := Vector3(0.64, 0.50, 0.64)
 const PROJECTILE_RADIUS := 0.45
 const STEP_SAMPLE_LIMIT := 120
+const EXPECTED_BODY_COUNT := 122
+const EXPECTED_VISUAL_BODY_COUNT := 121
+const FIRST_SNAPSHOT_FRAME_LIMIT := 10
 const BOX_COLORS := [Color("e4a15f"), Color("c87345"), Color("f0bf75")]
 
 @onready var physics: Box3DWorldNode = $Box3DWorldNode
@@ -16,7 +19,10 @@ var frames := 0
 var _step_samples: Array[float] = []
 var _movie_capture := false
 var _materials: Array[StandardMaterial3D] = []
-var _received_snapshot := false
+var _expected_visual_handles: Dictionary = {}
+var _snapshot_wait_frames := 0
+var _validated_first_snapshot := false
+var _failed := false
 
 
 func _ready() -> void:
@@ -26,8 +32,7 @@ func _ready() -> void:
 	physics.physics_fault.connect(_on_physics_fault)
 	_prepare_materials()
 	if not physics.configure_planet(10.0, 9.0):
-		push_error("visual spike could not configure Box3D")
-		get_tree().quit(1)
+		_fail("could not configure Box3D")
 		return
 
 	for layer in range(10):
@@ -38,6 +43,8 @@ func _ready() -> void:
 				Transform3D(Basis.IDENTITY, position),
 				520.0
 			)
+			if not _register_visual_handle(handle, "box at layer %d, column %d" % [layer, column]):
+				return
 			_add_box_view(handle, BOX_FULL_SIZE, (layer + column) % BOX_COLORS.size())
 
 	var projectile: int = physics.spawn_projectile(
@@ -45,11 +52,26 @@ func _ready() -> void:
 		Transform3D(Basis.IDENTITY, Vector3(-8.0, 13.0, 0.0)),
 		Vector3(35.0, 0.0, 0.0)
 	)
+	if not _register_visual_handle(projectile, "projectile"):
+		return
 	_add_sphere_view(projectile, PROJECTILE_RADIUS)
+	if _expected_visual_handles.size() != EXPECTED_VISUAL_BODY_COUNT:
+		_fail("expected %d visual handles after spawning, got %d" % [
+			EXPECTED_VISUAL_BODY_COUNT,
+			_expected_visual_handles.size(),
+		])
 
 
 func _physics_process(_delta: float) -> void:
+	if _failed:
+		return
 	var states: Array = physics.get_body_states()
+	if states.is_empty() and not _validated_first_snapshot:
+		_snapshot_wait_frames += 1
+		if _snapshot_wait_frames >= FIRST_SNAPSHOT_FRAME_LIMIT:
+			_fail("timed out waiting for the first Box3D snapshot")
+		return
+
 	var alive := {}
 	var projectile_x := -8.0
 	for state: Dictionary in states:
@@ -63,14 +85,16 @@ func _physics_process(_delta: float) -> void:
 			if view.name == "Projectile":
 				projectile_x = float(state.position.x)
 
-	if not states.is_empty():
-		_received_snapshot = true
-	if _received_snapshot:
-		for handle: int in views.keys():
-			if not alive.has(handle):
-				var stale: MeshInstance3D = views[handle]
-				stale.queue_free()
-				views.erase(handle)
+	if not _validated_first_snapshot:
+		if not _validate_first_snapshot(states, alive):
+			return
+		_validated_first_snapshot = true
+
+	for handle: int in views.keys():
+		if not alive.has(handle):
+			var stale: MeshInstance3D = views[handle]
+			stale.queue_free()
+			views.erase(handle)
 
 	var metrics: Dictionary = physics.get_metrics()
 	_record_step_time(float(metrics.get("step_ms", 0.0)))
@@ -87,6 +111,41 @@ func _physics_process(_delta: float) -> void:
 		get_tree().quit(0)
 
 
+func _register_visual_handle(handle: int, label: String) -> bool:
+	if handle == 0:
+		_fail("Box3D returned an invalid handle for %s" % label)
+		return false
+	if _expected_visual_handles.has(handle):
+		_fail("Box3D returned duplicate handle %d for %s" % [handle, label])
+		return false
+	_expected_visual_handles[handle] = true
+	return true
+
+
+func _validate_first_snapshot(states: Array, alive: Dictionary) -> bool:
+	if states.size() != EXPECTED_BODY_COUNT:
+		_fail("first snapshot expected %d bodies, got %d" % [EXPECTED_BODY_COUNT, states.size()])
+		return false
+	if alive.size() != EXPECTED_BODY_COUNT:
+		_fail("first snapshot contains duplicate body handles")
+		return false
+
+	var alive_visual_count := 0
+	for handle: int in _expected_visual_handles.keys():
+		if alive.has(handle):
+			alive_visual_count += 1
+		else:
+			_fail("visual handle %d is absent from the first snapshot" % handle)
+			return false
+	if alive_visual_count != EXPECTED_VISUAL_BODY_COUNT:
+		_fail("first snapshot expected %d live visual handles, got %d" % [
+			EXPECTED_VISUAL_BODY_COUNT,
+			alive_visual_count,
+		])
+		return false
+	return true
+
+
 func _prepare_materials() -> void:
 	for color: Color in BOX_COLORS:
 		var material := StandardMaterial3D.new()
@@ -97,8 +156,6 @@ func _prepare_materials() -> void:
 
 
 func _add_box_view(handle: int, full_size: Vector3, palette_index: int) -> void:
-	if handle == 0:
-		return
 	var view := MeshInstance3D.new()
 	view.name = "Module_%d" % handle
 	var box := BoxMesh.new()
@@ -111,8 +168,6 @@ func _add_box_view(handle: int, full_size: Vector3, palette_index: int) -> void:
 
 
 func _add_sphere_view(handle: int, radius: float) -> void:
-	if handle == 0:
-		return
 	var material := StandardMaterial3D.new()
 	material.albedo_color = Color("57e0d0")
 	material.emission_enabled = true
@@ -161,5 +216,12 @@ func _phase_text(projectile_x: float) -> String:
 
 
 func _on_physics_fault(code: String, message: String) -> void:
-	push_error("Box3D fault [%s]: %s" % [code, message])
+	_fail("Box3D fault [%s]: %s" % [code, message])
+
+
+func _fail(message: String) -> void:
+	if _failed:
+		return
+	_failed = true
+	push_error("visual spike: %s" % message)
 	get_tree().quit(1)
