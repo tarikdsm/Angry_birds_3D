@@ -107,7 +107,7 @@ python -c "import json; json.load(open('third_party/sbom.spdx.json', encoding='u
 
 1. Escrever testes vermelhos para os três materiais, arquétipos data-driven, schema v1, IDs explícitos, referências e invariantes geométricos.
 2. Cobrir individualmente: chave desconhecida, campo ausente, enum inválido, ID duplicado, material/surface inexistente, número não finito/fora do intervalo, body dinâmico sem densidade, joint órfão, limite de joint ausente/zero/não finito, objetivo sem alvo, assembly vazio e visual inconsistente.
-3. Implementar `parse_material_catalog()` e `parse_level_manifest()` retornando resultado tipado sem lançar pela fronteira pública.
+3. Implementar `parse_material_catalog()`, `parse_archetype_catalog()` e `parse_level_manifest()` retornando resultados tipados; validar referências cruzadas no `ContentBundle`, sem lançar pela fronteira pública.
 4. Rejeitar recursivamente chaves desconhecidas por objeto; usar `at()` após validação de shape e tipo; não usar defaults silenciosos.
 5. Definir pinho `1`, tijolo `5`, vidro `9` e respostas `fibrous/masonry/brittle`; definir surfaces reservadas `1001..1004` para planeta, plataforma, Virela e armadura, sem contá-las nos materiais jogáveis.
 6. Definir `BirdArchetype`, `AbilityArchetype`, `EnemyArchetype`, `WeakpointProfile` e `MaterialDefinition`; Virela usa massa física `140 kg`, densidade `366,76 kg/m³`, atrito `0,35`, restituição `0,25`.
@@ -297,7 +297,7 @@ python -c "import json; json.load(open('third_party/sbom.spdx.json', encoding='u
 2. Extrair acumulador, batching e conversões para helpers C++ puros; testar comandos, rollback, falhas e captura antes da ABI sem instanciar `Variant/Object` fora do engine.
 3. Testar acumulador puro: `1/60`, até quatro ticks por frame, tempo descartado explicitamente medido.
 4. Testar batching puro: copiar `events()` de cada tick exatamente uma vez, preservar todos os eventos, somente snapshot/preview mais recentes e fault latched.
-5. Implementar `configure_session`, cinco comandos/restart e `consume_frame()` com o dicionário aprovado.
+5. Implementar `configure_session(materials_json, archetypes_json, level_json)`, cinco comandos/restart e `consume_frame()` com o dicionário aprovado.
 6. Garantir que `consume_frame()` limpa eventos pendentes mas preserva estado/snapshots; nenhum getter por corpo.
 7. Definir priority `-100` no node e `0` no controller. Testar bindings, sinal, prioridade e ordem node->controller dentro do Godot headless.
 8. Emitir `gameplay_fault(code,message)` sem deixar exceção atravessar GDExtension; bloquear frames seguintes até restart/configuração válida.

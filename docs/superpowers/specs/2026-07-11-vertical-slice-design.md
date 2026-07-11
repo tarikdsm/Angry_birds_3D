@@ -217,7 +217,7 @@ API essencial:
 class SimulationSession {
 public:
     static Result<std::unique_ptr<SimulationSession>> create(
-        const MaterialCatalog&, const LevelManifest&);
+        const MaterialCatalog&, const ArchetypeCatalog&, const LevelManifest&);
     Status enqueue(PlayerCommand);
     Status tick();
     std::span<const EntitySnapshot> snapshots() const;
@@ -248,7 +248,7 @@ Ordem do tick:
 
 Adicionar `nlohmann/json v3.11.3`, tag/commit `9cca280a4d0ccf0c08f47a99aa71d1b0e52f8d03`, MIT, header-only e pinado.
 
-O parser usa `json::parse` explícito, exige tipos/ranges e compara cada conjunto de chaves permitido. Chave desconhecida, ID duplicado, referência órfã, material ausente, número não finito, shape inválida ou objetivo sem alvo bloqueiam carga. A criação é atômica.
+O parser usa `json::parse` explícito, exige tipos/ranges e compara cada conjunto de chaves permitido. `parse_material_catalog()`, `parse_archetype_catalog()` e `parse_level_manifest()` têm resultados tipados independentes; o bundle só é aceito após referências cruzadas entre os três. Chave desconhecida, ID duplicado, referência órfã, material ausente, número não finito, shape inválida ou objetivo sem alvo bloqueiam carga. A criação é atômica.
 
 Os registros já são data-driven por `BirdArchetype`, `AbilityArchetype`, `EnemyArchetype`, `WeakpointProfile` e `MaterialDefinition`; neste marco somente Virela, Âncora e três materiais destrutíveis ficam habilitados. Um catálogo separado `PhysicsSurfaceDefinition` contém superfícies não destrutíveis reservadas (`planet_soil=1001`, `platform_mineral=1002`, `virela_body=1003`, `anchor_armor=1004`) com atrito/restituição/densidade quando aplicável; elas não contam para os 20 materiais jogáveis.
 
@@ -263,7 +263,7 @@ O nível declara `force_limit_n/torque_limit_nm` por joint, o arco numérico, ar
 `OrbitalSessionNode` expõe:
 
 ```text
-configure_session(materials_json, level_json)
+configure_session(materials_json, archetypes_json, level_json)
 queue_begin_aim()
 queue_aim(origin, tangent_direction, speed)
 queue_launch()
