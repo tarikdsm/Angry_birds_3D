@@ -472,6 +472,10 @@ void SimulationSession::Impl::update_fsm_before_step()
 
 void SimulationSession::Impl::update_fsm_after_step()
 {
+    if (session_state.phase == SessionPhase::Result
+        || session_state.phase == SessionPhase::Faulted) {
+        return;
+    }
     if (!projectile) {
         return;
     }

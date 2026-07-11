@@ -411,6 +411,37 @@ NINHO_SIM_TEST("launch fsm waits for active ability then lifetime and watchdog g
     NINHO_SIM_REQUIRE(watchdog->state().phase == SessionPhase::Evaluation);
 }
 
+NINHO_SIM_TEST("launch fsm preserves a decided result after a watchdog evaluation")
+{
+    auto victory = create_session();
+    launch(*victory);
+    detail::SessionTestFacade::complete_objective(*victory);
+    detail::SessionTestFacade::set_ability_active(*victory, true);
+    detail::SessionTestFacade::age_projectile(*victory, 1799);
+    NINHO_SIM_REQUIRE(victory->tick().ok());
+    NINHO_SIM_REQUIRE(victory->state().phase == SessionPhase::Evaluation);
+    NINHO_SIM_REQUIRE(victory->tick().ok());
+    NINHO_SIM_REQUIRE(victory->state().phase == SessionPhase::Result);
+    NINHO_SIM_REQUIRE(victory->state().outcome == Outcome::Victory);
+
+    auto defeat = create_session();
+    for (int shot = 0; shot < 3; ++shot) {
+        launch(*defeat);
+        if (shot < 2) {
+            settle_to_evaluation(*defeat);
+            NINHO_SIM_REQUIRE(defeat->tick().ok());
+            continue;
+        }
+        detail::SessionTestFacade::set_ability_active(*defeat, true);
+        detail::SessionTestFacade::age_projectile(*defeat, 1799);
+        NINHO_SIM_REQUIRE(defeat->tick().ok());
+        NINHO_SIM_REQUIRE(defeat->state().phase == SessionPhase::Evaluation);
+        NINHO_SIM_REQUIRE(defeat->tick().ok());
+    }
+    NINHO_SIM_REQUIRE(defeat->state().phase == SessionPhase::Result);
+    NINHO_SIM_REQUIRE(defeat->state().outcome == Outcome::Defeat);
+}
+
 NINHO_SIM_TEST("launch fsm activation arms exactly at launch tick plus nine")
 {
     auto session = create_session();
