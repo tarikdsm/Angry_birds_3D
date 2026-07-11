@@ -199,6 +199,9 @@ if ($IncludeUpstream) {
     $upstreamOutput = & (Join-Path $PSScriptRoot 'Invoke-Native.ps1') `
         -Command $upstreamCommand 2>&1
     $upstreamExitCode = $LASTEXITCODE
+    Assert-NinhoNoReparseAncestors `
+        -Path $upstreamLog `
+        -AllowedRoot $artifactDirectory | Out-Null
     $upstreamOutput | Tee-Object -FilePath $upstreamLog
     if ($upstreamExitCode -ne 0) {
         exit $upstreamExitCode

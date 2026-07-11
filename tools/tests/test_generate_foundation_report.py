@@ -1,5 +1,6 @@
 import importlib.util
 import json
+import os
 import shutil
 import subprocess
 import sys
@@ -73,12 +74,12 @@ class FoundationReportGeneratorTests(unittest.TestCase):
         )
 
     def test_generate_is_deterministic_and_check_detects_markdown_drift(self):
-        first = self.run_script()
+        first = self.run_script("--write")
         self.assertEqual(first.returncode, 0, first.stderr)
         report_path = self.root / REPORT_RELATIVE
         first_bytes = report_path.read_bytes()
 
-        second = self.run_script()
+        second = self.run_script("--write")
         self.assertEqual(second.returncode, 0, second.stderr)
         self.assertEqual(report_path.read_bytes(), first_bytes)
         self.assertEqual(self.run_script("--check").returncode, 0)
@@ -89,7 +90,7 @@ class FoundationReportGeneratorTests(unittest.TestCase):
         self.assertIn("out of date", drift.stderr)
 
     def test_report_covers_required_sections_pins_results_and_every_scenario_leaf(self):
-        generated = self.run_script()
+        generated = self.run_script("--write")
         self.assertEqual(generated.returncode, 0, generated.stderr)
         report = (self.root / REPORT_RELATIVE).read_text(encoding="utf-8")
 
@@ -128,6 +129,24 @@ class FoundationReportGeneratorTests(unittest.TestCase):
             "artifacts/physics/godot-smoke-release.stdout.log",
         ):
             self.assertIn(persisted_result, report)
+        movie_paths = (
+            "artifacts/physics/godot-scene-debug.avi",
+            "artifacts/physics/godot-scene-gl-debug.avi",
+            "artifacts/physics/godot-scene-release.avi",
+            "artifacts/physics/godot-scene-gl-release.avi",
+        )
+        for movie_path in movie_paths:
+            self.assertEqual(report.count(movie_path), 1)
+            movie_line = next(line for line in report.splitlines() if movie_path in line)
+            for contract_fact in (
+                "MJPEG",
+                "1280x720",
+                "300 frames",
+                "5 s",
+                "freshness verified",
+                "frame-300 marker verified",
+            ):
+                self.assertIn(contract_fact, movie_line)
         for wallclock_duration in ("206.67 s", "15.34 s", "9.70 s", "0.92 s"):
             self.assertNotIn(wallclock_duration, report)
 
@@ -188,12 +207,12 @@ class FoundationReportGeneratorTests(unittest.TestCase):
         del stress["repeat_observations"][0]["memory"]["private_commit"]["instant_growth_ratio"]
         debug_path.write_text(json.dumps(document), encoding="utf-8")
 
-        result = self.run_script()
+        result = self.run_script("--write")
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("private_commit.instant_growth_ratio", result.stderr)
 
     def test_check_can_compare_an_explicit_gate_report_path(self):
-        generated = self.run_script()
+        generated = self.run_script("--write")
         self.assertEqual(generated.returncode, 0, generated.stderr)
         alternate = self.root / "audit" / "foundation.md"
         alternate.parent.mkdir(parents=True)
@@ -226,6 +245,30 @@ class FoundationReportGeneratorTests(unittest.TestCase):
             accessed,
             [(self.root / DEBUG_RELATIVE).resolve(), (self.root / RELEASE_RELATIVE).resolve()],
         )
+
+    @unittest.skipUnless(os.name == "nt", "junction contract is Windows-specific")
+    def test_write_rejects_absent_report_below_junction_parent(self):
+        external = self.root / "external-physics"
+        external.mkdir()
+        source_physics = self.root / "docs" / "physics"
+        shutil.copytree(source_physics / "evidence", external / "evidence")
+        shutil.rmtree(source_physics)
+        junction = self.root / "docs" / "physics"
+        created = subprocess.run(
+            ["cmd", "/c", "mklink", "/J", str(junction), str(external)],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+        )
+        self.assertEqual(created.returncode, 0, created.stderr)
+
+        try:
+            result = self.run_script("--write")
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("reparse point", result.stderr.lower())
+            self.assertFalse((external / "box3d-spike-report.md").exists())
+        finally:
+            os.rmdir(junction)
 
 
 if __name__ == "__main__":

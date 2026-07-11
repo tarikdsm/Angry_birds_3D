@@ -55,7 +55,7 @@ function Write-EvidenceReport {
     try {
         $ErrorActionPreference = 'Continue'
         & python (Join-Path $repositoryRoot 'tools\generate_foundation_report.py') `
-            --root $gateRoot 2>&1 | Out-Null
+            --root $gateRoot --write 2>&1 | Out-Null
         $generatorExitCode = $LASTEXITCODE
     } finally {
         $ErrorActionPreference = $previousErrorActionPreference

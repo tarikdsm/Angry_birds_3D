@@ -8,6 +8,16 @@ Import-Module (Join-Path $Root 'tools\UpstreamBox3DGate.psm1') -Force
 Import-Module (Join-Path $Root 'tools\SafePath.psm1') -Force
 $PSDefaultParameterValues['Assert-NinhoUpstreamCompileDatabase:AllowedRoot'] = $Root
 
+$runnerText = [System.IO.File]::ReadAllText((Join-Path $Root 'tools\test.ps1'))
+$upstreamLogGuardPattern = @(
+    'Assert-NinhoNoReparseAncestors\s+`\s*-Path \$upstreamLog\s+`\s*',
+    '-AllowedRoot \$artifactDirectory \| Out-Null\s+',
+    '\$upstreamOutput \| Tee-Object -FilePath \$upstreamLog'
+) -join ''
+if (-not [regex]::IsMatch($runnerText, $upstreamLogGuardPattern)) {
+    throw 'Upstream log must be SafePath-validated immediately before Tee-Object'
+}
+
 function Assert-True {
     param([bool]$Condition, [string]$Message)
     if (-not $Condition) { throw $Message }
@@ -173,6 +183,13 @@ Assert-Throws {
 } 'reparse point'
 Assert-True (-not (Test-Path -LiteralPath (Join-Path $external 'absent'))) `
     'absent external target was created through a junction'
+Assert-Throws {
+    Assert-NinhoNoReparseAncestors `
+        -Path (Join-Path $junction 'upstream-box3d-debug.log') `
+        -AllowedRoot $junctionAllowedRoot | Out-Null
+} 'reparse point'
+Assert-True (-not (Test-Path -LiteralPath (Join-Path $external 'upstream-box3d-debug.log'))) `
+    'absent upstream log was created through a junction'
 [System.IO.Directory]::Delete($junction)
 Assert-NinhoNoReparseAncestors -Path $junctionTestRoot -AllowedRoot $tempBase | Out-Null
 Remove-Item -LiteralPath $junctionTestRoot -Recurse -Force

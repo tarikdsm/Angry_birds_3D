@@ -6,6 +6,8 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
+import stat
 import sys
 from dataclasses import dataclass
 from pathlib import Path
@@ -302,6 +304,15 @@ def _append_persisted_results(lines: list[str]) -> None:
             "| Godot headless API | `1/1`, exit `0` | `1/1`, exit `0` | `artifacts/physics/godot-smoke-debug.stdout.log`, `artifacts/physics/godot-smoke-debug.stderr.log`; `artifacts/physics/godot-smoke-release.stdout.log`, `artifacts/physics/godot-smoke-release.stderr.log` |",
             "| Godot renderers | `2/2` (Vulkan/OpenGL) | `2/2` (Vulkan/OpenGL) | `artifacts/physics/godot-scene-debug.stdout.log`, `artifacts/physics/godot-scene-debug.stderr.log`, `artifacts/physics/godot-scene-gl-debug.stdout.log`, `artifacts/physics/godot-scene-gl-debug.stderr.log`; `artifacts/physics/godot-scene-release.stdout.log`, `artifacts/physics/godot-scene-release.stderr.log`, `artifacts/physics/godot-scene-gl-release.stdout.log`, `artifacts/physics/godot-scene-gl-release.stderr.log` |",
             "",
+            "The following rows are the persisted graphical gate contract, not metadata derived from volatile AVI files. Every gate run removes the prior target, requires a fresh frame-300 marker, and verifies the resulting movie with `ffprobe`.",
+            "",
+            "| Build | Renderer | Contract movie path | Gate contract (verified every run) |",
+            "| --- | --- | --- | --- |",
+            "| Debug | Vulkan Forward Mobile | `artifacts/physics/godot-scene-debug.avi` | `MJPEG; 1280x720; 300 frames; 5 s; freshness verified; frame-300 marker verified` |",
+            "| Debug | OpenGL Compatibility | `artifacts/physics/godot-scene-gl-debug.avi` | `MJPEG; 1280x720; 300 frames; 5 s; freshness verified; frame-300 marker verified` |",
+            "| Release | Vulkan Forward Mobile | `artifacts/physics/godot-scene-release.avi` | `MJPEG; 1280x720; 300 frames; 5 s; freshness verified; frame-300 marker verified` |",
+            "| Release | OpenGL Compatibility | `artifacts/physics/godot-scene-gl-release.avi` | `MJPEG; 1280x720; 300 frames; 5 s; freshness verified; frame-300 marker verified` |",
+            "",
         )
     )
 
@@ -372,7 +383,9 @@ def _arguments(argv: list[str] | None) -> argparse.Namespace:
         default=Path(__file__).resolve().parents[1],
         help="repository root; input and output relative paths remain fixed",
     )
-    parser.add_argument("--check", action="store_true", help="fail if the tracked Markdown differs")
+    mode = parser.add_mutually_exclusive_group(required=True)
+    mode.add_argument("--check", action="store_true", help="fail if the tracked Markdown differs")
+    mode.add_argument("--write", action="store_true", help="safely replace the canonical Markdown report")
     parser.add_argument(
         "--report-path",
         type=Path,
@@ -381,14 +394,39 @@ def _arguments(argv: list[str] | None) -> argparse.Namespace:
     return parser.parse_args(argv)
 
 
+def _assert_safe_write_path(path: Path, root: Path) -> Path:
+    """Reject non-canonical writes and every existing reparse ancestor."""
+    allowed_root = Path(os.path.abspath(root))
+    target = Path(os.path.abspath(path))
+    canonical = allowed_root / REPORT_RELATIVE
+    if target != canonical:
+        raise ValueError(f"write target must be canonical: {canonical.as_posix()}")
+    try:
+        relative = target.relative_to(allowed_root)
+    except ValueError as error:
+        raise ValueError(f"write target escapes repository root: {target.as_posix()}") from error
+
+    current = allowed_root
+    candidates = [current]
+    for part in relative.parts:
+        current = current / part
+        candidates.append(current)
+    for candidate in candidates:
+        try:
+            metadata = candidate.lstat()
+        except FileNotFoundError:
+            break
+        attributes = getattr(metadata, "st_file_attributes", 0)
+        if stat.S_ISLNK(metadata.st_mode) or (
+            attributes & getattr(stat, "FILE_ATTRIBUTE_REPARSE_POINT", 0)
+        ):
+            raise ValueError(f"write path contains reparse point: {candidate.as_posix()}")
+    return target
+
+
 def main(argv: list[str] | None = None) -> int:
     arguments = _arguments(argv)
-    root = arguments.root.resolve()
-    try:
-        expected = render_report(load_evidence(root)).encode("utf-8")
-    except (OSError, ValueError, KeyError, TypeError) as error:
-        print(f"foundation report generation failed: {error}", file=sys.stderr)
-        return 2
+    root = Path(os.path.abspath(arguments.root))
     report_path = (
         arguments.report_path.resolve()
         if arguments.report_path is not None
@@ -396,6 +434,17 @@ def main(argv: list[str] | None = None) -> int:
     )
     if arguments.report_path is not None and not arguments.check:
         print("--report-path is only valid with --check", file=sys.stderr)
+        return 2
+    if arguments.write:
+        try:
+            report_path = _assert_safe_write_path(report_path, root)
+        except ValueError as error:
+            print(f"foundation report generation failed: {error}", file=sys.stderr)
+            return 2
+    try:
+        expected = render_report(load_evidence(root)).encode("utf-8")
+    except (OSError, ValueError, KeyError, TypeError) as error:
+        print(f"foundation report generation failed: {error}", file=sys.stderr)
         return 2
     if arguments.check:
         try:
@@ -405,12 +454,17 @@ def main(argv: list[str] | None = None) -> int:
             return 1
         if actual != expected:
             print(
-                "foundation report is out of date; run python tools/generate_foundation_report.py",
+                "foundation report is out of date; run python tools/generate_foundation_report.py --write",
                 file=sys.stderr,
             )
             return 1
         return 0
     report_path.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        _assert_safe_write_path(report_path, root)
+    except ValueError as error:
+        print(f"foundation report generation failed: {error}", file=sys.stderr)
+        return 2
     report_path.write_bytes(expected)
     return 0
 
