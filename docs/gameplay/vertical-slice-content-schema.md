@@ -26,6 +26,8 @@ Referências internas (ave→habilidade e inimigo→weakpoint) são verificadas 
 
 ## Manifesto de nível
 
+`EntityId` de conteúdo ocupa somente `1..0x7fffffff`. O bit alto (`0x80000000`) é reservado ao namespace determinístico de entidades criadas em runtime, como projéteis, e é rejeitado no planeta, corpos e objetivos do manifesto.
+
 Raiz: `schema_version`, `id`, `planet`, `launch_ring`, `bird_roster`, `free_body_ids`, `bodies`, `joints`, `assemblies`, `objectives`.
 
 - Cada body declara IDs de body/entity/part, tipo, `material_id` e `surface_id` (exatamente um não nulo), `enemy_archetype_id`, densidade, transform, shape e visual.

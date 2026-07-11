@@ -3,6 +3,7 @@ add_library(ninho_simulation_kernel STATIC
   src/canonical_state.cpp
   src/session.cpp
   src/session_builder.cpp
+  src/launch_system.cpp
 )
 add_library(ninho::simulation ALIAS ninho_simulation_kernel)
 
@@ -30,6 +31,7 @@ if(BUILD_TESTING)
     tests/kernel_contract_tests.cpp
     tests/content_tests.cpp
     tests/session_tests.cpp
+    tests/launch_fsm_tests.cpp
   )
 
   target_include_directories(ninho_simulation_tests PRIVATE
@@ -53,6 +55,10 @@ if(BUILD_TESTING)
     )
   endif()
 
+  add_test(
+    NAME launch_fsm
+    COMMAND ninho_simulation_tests --filter "launch fsm"
+  )
   add_test(
     NAME simulation_contracts
     COMMAND ninho_simulation_tests --filter "simulation contracts"

@@ -26,6 +26,7 @@ using json = nlohmann::json;
 constexpr std::size_t kCatalogMaxBytes = 256U * 1024U;
 constexpr std::size_t kLevelMaxBytes = 1024U * 1024U;
 constexpr std::size_t kMaxNesting = 16U;
+constexpr std::uint32_t kRuntimeEntityBit = 0x80000000U;
 
 struct ParseFailure final : std::exception {
     ContentError error;
@@ -35,6 +36,14 @@ struct ParseFailure final : std::exception {
 [[noreturn]] void fail(ContentErrorCode code, std::string pointer, std::string message)
 {
     throw ParseFailure{{code, std::move(pointer), std::move(message)}};
+}
+
+void require_content_entity_id(EntityId id, std::string pointer)
+{
+    if ((id.value() & kRuntimeEntityBit) != 0U) {
+        fail(ContentErrorCode::OutOfRange, std::move(pointer),
+            "entity id uses the runtime-reserved high-bit namespace");
+    }
 }
 
 std::string child(const std::string& pointer, std::string_view token)
@@ -576,6 +585,7 @@ LevelManifest parse_level_manifest_impl(std::string_view text)
     const auto& planet = member(root, "planet", "");
     require_keys(planet, "/planet", {"entity_id", "radius_m", "surface_gravity_m_s2", "surface_id", "visual_id"});
     result.planet.entity_id = read_id<EntityId>(planet, "entity_id", "/planet");
+    require_content_entity_id(result.planet.entity_id, "/planet/entity_id");
     result.planet.radius_m = read_number(planet, "radius_m", "/planet", 0.0, 100000.0, false);
     result.planet.surface_gravity_m_s2 = read_number(planet, "surface_gravity_m_s2", "/planet", 0.0, 1000.0, false);
     result.planet.surface_id = read_id<SurfaceId>(planet, "surface_id", "/planet");
@@ -637,6 +647,7 @@ LevelManifest parse_level_manifest_impl(std::string_view text)
             fail(ContentErrorCode::DuplicateId, child(pointer, "body_id"), "duplicate body id");
         }
         value.entity_id = read_id<EntityId>(item, "entity_id", pointer);
+        require_content_entity_id(value.entity_id, child(pointer, "entity_id"));
         value.part_id = read_id<PartId>(item, "part_id", pointer);
         const auto entity_part_key = (static_cast<std::uint64_t>(value.entity_id.value()) << 32U)
             | value.part_id.value();
@@ -774,6 +785,7 @@ LevelManifest parse_level_manifest_impl(std::string_view text)
         if (!objective_ids.insert(value.id).second) fail(ContentErrorCode::DuplicateId, child(pointer, "id"), "duplicate objective id");
         value.kind = parse_objective_kind(read_string(item, "kind", pointer), child(pointer, "kind"));
         value.target_entity_id = read_id<EntityId>(item, "target_entity_id", pointer);
+        require_content_entity_id(value.target_entity_id, child(pointer, "target_entity_id"));
         result.objectives.push_back(value);
     }
     return result;
@@ -871,6 +883,15 @@ ContentResult<ContentBundle> make_content_bundle(const MaterialCatalog& material
         const auto has_material = [&](MaterialId id) {
             return material_index.contains(id.value());
         };
+        require_content_entity_id(level.planet.entity_id, "/planet/entity_id");
+        for (std::size_t i = 0; i < level.bodies.size(); ++i) {
+            require_content_entity_id(
+                level.bodies[i].entity_id, indexed("/bodies", i) + "/entity_id");
+        }
+        for (std::size_t i = 0; i < level.objectives.size(); ++i) {
+            require_content_entity_id(level.objectives[i].target_entity_id,
+                indexed("/objectives", i) + "/target_entity_id");
+        }
         if (!has_surface(level.planet.surface_id)) {
             fail(ContentErrorCode::MissingReference, "/planet/surface_id", "surface reference not found");
         }

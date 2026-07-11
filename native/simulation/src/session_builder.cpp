@@ -137,6 +137,8 @@ SessionStatus SimulationSession::Impl::build() noexcept
 {
     try {
         remaining_birds = 0;
+        roster_remaining = bundle.level.bird_roster;
+        std::ranges::sort(roster_remaining, {}, &BirdRosterEntry::bird_archetype_id);
         for (const BirdRosterEntry& entry : bundle.level.bird_roster) {
             remaining_birds += entry.count;
         }

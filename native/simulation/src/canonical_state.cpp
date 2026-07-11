@@ -399,6 +399,62 @@ void SimulationSession::Impl::refresh_canonical_state()
     for (const DomainEvent& event : domain_events) {
         identifier(writer, event.tick);
         identifier(writer, event.id);
+        writer.integer(static_cast<std::uint8_t>(event.kind));
+        identifier(writer, event.entity_id);
+        identifier(writer, event.bird_archetype_id);
+        writer.integer(static_cast<std::uint8_t>(event.rejection_reason));
+    }
+
+    writer.boolean(session_state.aim.has_value());
+    if (session_state.aim) {
+        writer.vector(session_state.aim->origin_m);
+        writer.vector(session_state.aim->tangent_direction);
+        writer.quantized(session_state.aim->speed_m_s);
+    }
+    writer.boolean(session_state.last_impact_m.has_value());
+    if (session_state.last_impact_m) {
+        writer.vector(*session_state.last_impact_m);
+    }
+    writer.integer(last_processed_command_sequence);
+    writer.integer(launch_count);
+    writer.integer(resolution_rest_ticks);
+    writer.boolean(objective_complete);
+    writer.integer<std::uint32_t>(static_cast<std::uint32_t>(roster_remaining.size()));
+    for (const BirdRosterEntry& entry : roster_remaining) {
+        identifier(writer, entry.bird_archetype_id);
+        writer.integer(entry.count);
+    }
+    writer.integer<std::uint32_t>(static_cast<std::uint32_t>(command_queue.size()));
+    for (const QueuedCommand& queued : command_queue) {
+        writer.integer(queued.sequence);
+        writer.integer<std::uint8_t>(static_cast<std::uint8_t>(queued.command.index()));
+        if (const auto* update = std::get_if<SetAimCommand>(&queued.command)) {
+            writer.vector(update->aim.origin_m);
+            writer.vector(update->aim.tangent_direction);
+            writer.quantized(update->aim.speed_m_s);
+        }
+    }
+    writer.boolean(projectile.has_value());
+    if (projectile) {
+        identifier(writer, projectile->entity_id);
+        identifier(writer, projectile->archetype_id);
+        identifier(writer, projectile->ability_id);
+        writer.boolean(projectile->bullet);
+        identifier(writer, projectile->launch_tick);
+        writer.boolean(projectile->ability_start_tick.has_value());
+        if (projectile->ability_start_tick) {
+            identifier(writer, *projectile->ability_start_tick);
+        }
+        writer.boolean(projectile->ability_end_tick.has_value());
+        if (projectile->ability_end_tick) {
+            identifier(writer, *projectile->ability_end_tick);
+        }
+        writer.integer(projectile->age_ticks);
+        writer.integer(projectile->rest_ticks);
+        writer.boolean(projectile->finished);
+        writer.boolean(projectile->pending_destroy);
+        writer.boolean(projectile->ability_requested);
+        writer.boolean(projectile->ability_active);
     }
     std::vector<std::uint8_t> next_bytes = std::move(writer.bytes);
     const std::uint64_t next_hash = fnv1a64(next_bytes);

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "ninho/simulation/content.hpp"
+#include "ninho/simulation/commands.hpp"
 #include "ninho/simulation/events.hpp"
 
 #include <ninho/physics/physics_types.hpp>
@@ -41,6 +42,8 @@ struct SessionState {
     TickIndex tick{};
     SessionPhase phase{SessionPhase::Inspection};
     Outcome outcome{Outcome::None};
+    std::optional<AimState> aim;
+    std::optional<ninho::physics::Vec3> last_impact_m;
 };
 
 struct SessionStatus {
@@ -92,6 +95,21 @@ struct StructuralJointSnapshot {
     bool operator==(const StructuralJointSnapshot&) const = default;
 };
 
+struct TrajectoryHit {
+    EntityId entity_id{};
+    PartId part_id{};
+    ninho::physics::Vec3 point_m{};
+    ninho::physics::Vec3 normal{};
+};
+
+struct TrajectoryPreview {
+    SessionStatus status;
+    AimState quantized_aim;
+    std::vector<ninho::physics::Vec3> samples;
+    std::optional<TrajectoryHit> first_hit;
+    std::uint64_t canonical_hash{};
+};
+
 class SimulationSession {
 public:
     // Mutating operations may allocate while producing status diagnostics. The
@@ -108,7 +126,10 @@ public:
     [[nodiscard]] SessionStatus reconfigure(
         const MaterialCatalog&, const ArchetypeCatalog&, const LevelManifest&);
     [[nodiscard]] SessionStatus restart();
+    [[nodiscard]] SessionStatus enqueue(PlayerCommand);
     [[nodiscard]] SessionStatus tick();
+    [[nodiscard]] ContentResult<AimState> quantize_aim(const AimState&) const;
+    [[nodiscard]] TrajectoryPreview preview(const AimState&) const;
 
     [[nodiscard]] std::span<const EntitySnapshot> snapshots() const noexcept;
     [[nodiscard]] std::span<const StructuralJointSnapshot> structural_joints() const noexcept;
