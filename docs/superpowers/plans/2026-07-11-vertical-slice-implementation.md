@@ -84,7 +84,7 @@ O runner específico será criado na Tarefa 10:
 ```powershell
 .\tools\bootstrap.ps1 -CheckOnly
 .\tools\build.ps1 -Configuration Debug
-.\tools\Invoke-Native.ps1 -Command 'ctest --preset debug -R "simulation_contracts|radial|world" --output-on-failure'
+.\tools\Invoke-Native.ps1 -Command "ctest --preset debug -R 'simulation_contracts|radial|world' --output-on-failure"
 python -c "import json; json.load(open('third_party/sbom.spdx.json', encoding='utf-8')); print('SPDX JSON OK')"
 ```
 

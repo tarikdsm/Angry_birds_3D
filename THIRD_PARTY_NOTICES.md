@@ -13,6 +13,16 @@ This inventory covers the pinned physics foundation and its reproducible Windows
 
 Box3D is fetched from the immutable commit above and linked statically. The source checkout is not modified.
 
+### nlohmann/json v3.11.3
+
+- Upstream: https://github.com/nlohmann/json
+- Source commit: `9cca280a4d0ccf0c08f47a99aa71d1b0e52f8d03`
+- Source archive SHA-256: `0dbc5e40a01ff142e7e68c03e85247a4dcede2f592d12d3677dee3664d17975a`
+- License: MIT
+- Exact pinned license: [`third_party/nlohmann-json.LICENSE.txt`](third_party/nlohmann-json.LICENSE.txt)
+
+nlohmann/json is fetched from the immutable commit archive above and used as a header-only dependency. The source is not modified.
+
 ### Godot Engine 4.5.1-stable
 
 - Upstream: https://github.com/godotengine/godot

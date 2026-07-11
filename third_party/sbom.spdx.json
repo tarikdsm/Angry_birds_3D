@@ -2,10 +2,10 @@
   "spdxVersion": "SPDX-2.3",
   "dataLicense": "CC0-1.0",
   "SPDXID": "SPDXRef-DOCUMENT",
-  "name": "Ninho Orbital Box3D Foundation SBOM",
-  "documentNamespace": "https://spdx.org/spdxdocs/ninho-orbital-foundation-0.1.0-8441b4a06d6d09dcfb0b0f704df4d847d1437b92",
+  "name": "Ninho Orbital Vertical Slice Simulation Foundation SBOM",
+  "documentNamespace": "https://spdx.org/spdxdocs/ninho-orbital-vertical-slice-simulation-0.1.0-a68c2e6a-2908-41d7-ab80-d613098629f6",
   "creationInfo": {
-    "created": "2026-07-11T01:27:53Z",
+    "created": "2026-07-11T07:06:26Z",
     "creators": [
       "Tool: Codex"
     ]
@@ -51,6 +51,23 @@
       "licenseDeclared": "MIT",
       "copyrightText": "Copyright (c) 2014-present Godot Engine contributors; Copyright (c) 2007-2014 Juan Linietsky, Ariel Manzur",
       "sourceInfo": "Official Windows x86_64 release corresponding to source commit f62fdbde15035c5576dad93e586201f4d41ef0cb; bundled third-party notices remain part of the upstream distribution."
+    },
+    {
+      "name": "nlohmann/json",
+      "SPDXID": "SPDXRef-Package-nlohmann-json",
+      "versionInfo": "3.11.3",
+      "downloadLocation": "https://codeload.github.com/nlohmann/json/tar.gz/9cca280a4d0ccf0c08f47a99aa71d1b0e52f8d03",
+      "filesAnalyzed": false,
+      "checksums": [
+        {
+          "algorithm": "SHA256",
+          "checksumValue": "0dbc5e40a01ff142e7e68c03e85247a4dcede2f592d12d3677dee3664d17975a"
+        }
+      ],
+      "licenseConcluded": "MIT",
+      "licenseDeclared": "MIT",
+      "copyrightText": "Copyright (c) 2013-2022 Niels Lohmann",
+      "sourceInfo": "Unmodified header-only source pinned at commit 9cca280a4d0ccf0c08f47a99aa71d1b0e52f8d03."
     },
     {
       "name": "godot-cpp",
@@ -127,6 +144,11 @@
       "spdxElementId": "SPDXRef-Package-Ninho-Orbital",
       "relationshipType": "DEPENDS_ON",
       "relatedSpdxElement": "SPDXRef-Package-Godot"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-Ninho-Orbital",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-nlohmann-json"
     },
     {
       "spdxElementId": "SPDXRef-Package-Ninho-Orbital",

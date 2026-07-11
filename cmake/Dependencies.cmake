@@ -40,6 +40,18 @@ FetchContent_Declare(box3d
 FetchContent_MakeAvailable(box3d)
 message(STATUS "Box3D 0.1.0 pinned at 8441b4a06d6d09dcfb0b0f704df4d847d1437b92")
 
+set(JSON_BuildTests OFF CACHE BOOL "Build nlohmann/json tests" FORCE)
+set(JSON_Install OFF CACHE BOOL "Install nlohmann/json" FORCE)
+FetchContent_Declare(nlohmann_json
+  URL https://codeload.github.com/nlohmann/json/tar.gz/9cca280a4d0ccf0c08f47a99aa71d1b0e52f8d03
+  URL_HASH SHA256=0dbc5e40a01ff142e7e68c03e85247a4dcede2f592d12d3677dee3664d17975a
+  DOWNLOAD_EXTRACT_TIMESTAMP FALSE
+  BINARY_DIR "${CMAKE_BINARY_DIR}/_deps/nlohmann-json-build"
+)
+FetchContent_MakeAvailable(nlohmann_json)
+message(STATUS
+  "nlohmann/json v3.11.3 pinned at 9cca280a4d0ccf0c08f47a99aa71d1b0e52f8d03")
+
 if(NINHO_BUILD_GDEXTENSION)
   # The adapter catches kernel construction/step failures at the Godot ABI.
   # Keep MSVC's STL and compiler exception modes coherent for both godot-cpp
