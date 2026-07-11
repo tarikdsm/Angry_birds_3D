@@ -1,0 +1,10 @@
+[gd_resource type="ShaderMaterial" load_steps=2 format=3]
+
+[ext_resource type="Shader" path="res://shaders/stylized_glass.gdshader" id="1_glass"]
+
+[resource]
+render_priority = 0
+shader = ExtResource("1_glass")
+shader_parameter/glass_tint = Color(0.2, 0.72, 0.78, 0.56)
+shader_parameter/rim_tint = Color(0.57, 0.882, 0.918, 1)
+shader_parameter/rim_power = 3.2

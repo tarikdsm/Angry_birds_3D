@@ -13,7 +13,7 @@ const RING_INNER_RADIUS := 0.15
 const RING_OUTER_RADIUS := 1.25
 
 @onready var _camera: Camera3D = get_node("../OrbitalCamera")
-@onready var _ring: Node3D = get_node("../ImpulseRingPlaceholder")
+@onready var _ring: Node3D = get_node("../ImpulseRingVisual")
 
 var _session: Node
 var _frame: Dictionary = {}
@@ -45,7 +45,7 @@ func can_begin_aim_at(screen_position: Vector2) -> bool:
 		return false
 	var ray_origin := _camera.project_ray_origin(screen_position)
 	var ray_direction := _camera.project_ray_normal(screen_position).normalized()
-	var ring_normal := _ring.global_transform.basis.y.normalized()
+	var ring_normal := _ring.global_transform.basis.z.normalized()
 	var denominator := ray_direction.dot(ring_normal)
 	if absf(denominator) <= 0.00001:
 		return false

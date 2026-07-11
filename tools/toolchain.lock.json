@@ -20,6 +20,13 @@
     "exe_sha256": "a829242096d640007de9fa93ea923d0f666d13d6a3b472a0231c820be6dc7627",
     "exe": "Godot_v4.5.1-stable_win64.exe"
   },
+  "blender": {
+    "version": "5.1.2",
+    "url": "https://download.blender.org/release/Blender5.1/blender-5.1.2-windows-x64.zip",
+    "sha256": "345bedea7b0acf7cc9666423d8553f9129622aea34ded65c23e8cb70f83f14ff",
+    "exe_sha256": "1e6624af112b3c936f4b038b025ebd2bf00ae72c4b62881a6787166d71c58fa5",
+    "exe": "blender-5.1.2-windows-x64/blender.exe"
+  },
   "python": {
     "minimum_version": "3.11.0",
     "command": "python"

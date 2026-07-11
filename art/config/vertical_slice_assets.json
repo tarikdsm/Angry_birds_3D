@@ -1,0 +1,138 @@
+{
+  "schema_version": 1,
+  "seed": 510201,
+  "author": "Ninho Orbital",
+  "license": "proprietary-original",
+  "coordinate_system": {
+    "unit": "meter",
+    "unit_scale": 1.0,
+    "up_axis": "+Z",
+    "forward_axis": "-Y",
+    "pivot": "CENTER_OF_MASS"
+  },
+  "palette": {
+    "aster_soil": [0.105, 0.185, 0.145, 1.0],
+    "aster_moss": [0.36, 0.55, 0.29, 1.0],
+    "garden_gold": [0.72, 0.43, 0.13, 1.0],
+    "virela_teal": [0.12, 0.72, 0.65, 1.0],
+    "anchor_plum": [0.31, 0.13, 0.27, 1.0],
+    "pine": [0.58, 0.31, 0.13, 1.0],
+    "brick": [0.55, 0.20, 0.12, 1.0],
+    "glass": [0.20, 0.72, 0.78, 0.56],
+    "ink": [0.025, 0.035, 0.048, 1.0],
+    "cream": [0.95, 0.82, 0.53, 1.0]
+  },
+  "assets": [
+    {
+      "id": "AST_AsterPlanet",
+      "folder": "aster",
+      "geometry": "aster_planet",
+      "bounds_m": [20.0, 20.0, 20.0],
+      "materials": ["MAT_AsterSoil", "MAT_AsterMoss"],
+      "triangle_budget": 4200,
+      "material_budget": 2,
+      "lod_segments": [32, 16],
+      "roles": ["VIS", "COL", "SOCKET"]
+    },
+    {
+      "id": "AST_Platform",
+      "folder": "aster",
+      "geometry": "aster_platform",
+      "bounds_m": [6.4, 0.3, 3.6],
+      "materials": ["MAT_AsterMoss", "MAT_GardenGold"],
+      "triangle_budget": 600,
+      "material_budget": 2,
+      "lod_segments": [16, 8],
+      "roles": ["VIS", "COL", "SOCKET"]
+    },
+    {
+      "id": "CHR_Virela",
+      "folder": "characters",
+      "geometry": "virela",
+      "bounds_m": [0.9, 1.2, 0.9],
+      "materials": ["MAT_VirelaTeal", "MAT_Cream", "MAT_Ink"],
+      "triangle_budget": 1800,
+      "material_budget": 3,
+      "lod_segments": [24, 12],
+      "roles": ["VIS", "COL", "SOCKET", "RIG"]
+    },
+    {
+      "id": "ENM_Anchor",
+      "folder": "enemies",
+      "geometry": "anchor",
+      "bounds_m": [1.3, 0.85, 1.0],
+      "materials": ["MAT_AnchorPlum", "MAT_Cream", "MAT_Ink"],
+      "triangle_budget": 1800,
+      "material_budget": 3,
+      "lod_segments": [24, 12],
+      "roles": ["VIS", "COL", "FRAG", "SOCKET"]
+    },
+    {
+      "id": "DEV_ImpulseRing",
+      "folder": "devices",
+      "geometry": "impulse_ring",
+      "bounds_m": [2.5, 2.5, 0.3],
+      "materials": ["MAT_ImpulseTeal", "MAT_GardenGold"],
+      "triangle_budget": 1400,
+      "material_budget": 2,
+      "lod_segments": [32, 16],
+      "interaction": {"inner_radius_m": 0.15, "outer_radius_m": 1.25},
+      "roles": ["VIS", "COL", "SOCKET"]
+    },
+    {
+      "id": "KIT_PineBeam_A",
+      "folder": "kit",
+      "geometry": "pine_beam",
+      "bounds_m": [0.5, 2.4, 0.5],
+      "materials": ["MAT_Pine"],
+      "triangle_budget": 220,
+      "material_budget": 1,
+      "lod_segments": [1, 1],
+      "roles": ["VIS", "COL", "FRAG", "SOCKET"]
+    },
+    {
+      "id": "KIT_PineLintel_A",
+      "folder": "kit",
+      "geometry": "pine_lintel",
+      "bounds_m": [4.1, 0.4, 0.5],
+      "materials": ["MAT_Pine"],
+      "triangle_budget": 220,
+      "material_budget": 1,
+      "lod_segments": [1, 1],
+      "roles": ["VIS", "COL", "FRAG", "SOCKET"]
+    },
+    {
+      "id": "KIT_PineBrace_A",
+      "folder": "kit",
+      "geometry": "pine_brace",
+      "bounds_m": [0.4, 0.4, 2.3],
+      "materials": ["MAT_Pine"],
+      "triangle_budget": 220,
+      "material_budget": 1,
+      "lod_segments": [1, 1],
+      "roles": ["VIS", "COL", "FRAG", "SOCKET"]
+    },
+    {
+      "id": "KIT_GlassPanel_A",
+      "folder": "kit",
+      "geometry": "glass_panel",
+      "bounds_m": [0.04, 0.7, 0.9],
+      "materials": ["MAT_Glass"],
+      "triangle_budget": 220,
+      "material_budget": 1,
+      "lod_segments": [1, 1],
+      "roles": ["VIS", "COL", "FRAG", "SOCKET"]
+    },
+    {
+      "id": "KIT_Brick_A",
+      "folder": "kit",
+      "geometry": "brick",
+      "bounds_m": [0.3, 0.8, 0.32],
+      "materials": ["MAT_Brick"],
+      "triangle_budget": 220,
+      "material_budget": 1,
+      "lod_segments": [1, 1],
+      "roles": ["VIS", "COL", "FRAG", "SOCKET"]
+    }
+  ]
+}

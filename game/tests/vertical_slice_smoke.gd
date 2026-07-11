@@ -47,6 +47,13 @@ func _run() -> void:
 
 	await physics_frame
 	await physics_frame
+	var body_views := _scene.get_node_or_null("BodyViews")
+	if body_views == null or not body_views.has_method("missing_asset_ids"):
+		_fail("body views must expose missing authored asset diagnostics")
+		return
+	if not body_views.missing_asset_ids().is_empty():
+		_fail("authored visuals missing: %s" % body_views.missing_asset_ids())
+		return
 	if not _controller.session_configured:
 		_fail("session did not configure from the shipped catalogs")
 		return
@@ -74,7 +81,7 @@ func _run() -> void:
 			or controls.get_global_rect().size.y > 64.0:
 		_fail("HUD controls are outside the visible viewport")
 		return
-	var ring: Node3D = _scene.get_node("ImpulseRingPlaceholder")
+	var ring: Node3D = _scene.get_node("ImpulseRingVisual")
 	if not _launch.has_method("can_begin_aim_at"):
 		_fail("launch input must expose its presentation-only ring hit test")
 		return

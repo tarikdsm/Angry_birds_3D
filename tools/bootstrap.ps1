@@ -17,7 +17,7 @@ Assert-NinhoNoReparseAncestors -Path $lockPath -AllowedRoot $PSScriptRoot | Out-
 $lock = Get-Content -Raw -LiteralPath $lockPath | ConvertFrom-Json
 
 function Test-HexSha([string]$value) { return $value -match '^[0-9a-f]{64}$' }
-foreach ($name in 'cmake','ninja','godot','visual_studio') {
+foreach ($name in 'cmake','ninja','godot','blender','visual_studio') {
     $entry = $lock.$name
     if (-not $entry.version) { $errors.Add("$name.version missing") }
     if ($entry.url -notmatch '^https://') { $errors.Add("$name.url must use https") }
@@ -65,6 +65,9 @@ function Install-Portable([string]$name) {
 $cmake = Join-Path $tools ('cmake\' + $lock.cmake.exe)
 $ninja = Join-Path $tools ('ninja\' + $lock.ninja.exe)
 $godot = Join-Path $tools ('godot\' + $lock.godot.exe)
+$portableBlender = Join-Path $tools ('blender\' + $lock.blender.exe)
+$installedBlender = Join-Path $env:ProgramFiles 'Blender Foundation\Blender 5.1\blender.exe'
+$blender = if (Test-Path -LiteralPath $portableBlender) { $portableBlender } else { $installedBlender }
 $vswhere = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio\Installer\vswhere.exe'
 $vsInstall = $null
 function Get-LockedVisualStudio {
@@ -84,6 +87,7 @@ if ($InstallPortable -and $errors.Count -eq 0) {
     $cmake = Install-Portable 'cmake'
     $ninja = Install-Portable 'ninja'
     $godot = Install-Portable 'godot'
+    $blender = Install-Portable 'blender'
 }
 if ($InstallVisualStudio -and $errors.Count -eq 0) {
     if (-not $vsInstall) {
@@ -97,8 +101,10 @@ if ($InstallVisualStudio -and $errors.Count -eq 0) {
 }
 
 if ($CheckOnly -or $InstallPortable) {
-    foreach ($pair in @(@('cmake',$cmake),@('ninja',$ninja),@('godot',$godot))) {
-        Assert-NinhoNoReparseAncestors -Path $pair[1] -AllowedRoot $root | Out-Null
+    foreach ($pair in @(@('cmake',$cmake),@('ninja',$ninja),@('godot',$godot),@('blender',$blender))) {
+        if ($pair[0] -ne 'blender' -or $pair[1].StartsWith($root, [StringComparison]::OrdinalIgnoreCase)) {
+            Assert-NinhoNoReparseAncestors -Path $pair[1] -AllowedRoot $root | Out-Null
+        }
         if (-not (Test-Path -LiteralPath $pair[1])) {
             $errors.Add("$($pair[0]) missing: $($pair[1])")
             continue
@@ -124,6 +130,11 @@ if ($CheckOnly -or $InstallPortable) {
                     $errors.Add('Godot executable version mismatch')
                 }
             }
+            'blender' {
+                if ((& $pair[1] --version | Select-Object -First 1) -notmatch '^Blender 5\.1\.2$') {
+                    $errors.Add('Blender executable version mismatch')
+                }
+            }
         }
     }
     $pythonVersion = $null
@@ -145,6 +156,7 @@ $result = [ordered]@{
     cmake = @{ version=$lock.cmake.version; path=$cmake }
     ninja = @{ version=$lock.ninja.version; path=$ninja }
     godot = @{ version=$lock.godot.version; path=$godot }
+    blender = @{ version=$lock.blender.version; path=$blender; executable_sha256=$lock.blender.exe_sha256 }
     python = @{ minimum_version=$lock.python.minimum_version; detected_version=$pythonVersion }
     visual_studio = @{ version=$lock.visual_studio.version; path=$vsInstall }
     errors = @($errors)
