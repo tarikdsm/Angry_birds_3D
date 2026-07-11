@@ -13,6 +13,8 @@ enum class DomainEventKind : std::uint8_t {
     AbilityAffectedBody,
     AbilityPulse,
     AbilityEnded,
+    DamageApplied,
+    EntityNeutralized,
 };
 
 enum class CommandRejectionReason : std::uint8_t {
@@ -36,6 +38,11 @@ struct DomainEvent {
     double weight{};
     ninho::physics::Vec3 force_n{};
     ninho::physics::Vec3 impulse_n_s{};
+    PartId part_id{};
+    ninho::physics::Vec3 position_m{};
+    ninho::physics::Vec3 normal{};
+    double energy_j{};
+    double damage{};
 
     bool operator==(const DomainEvent&) const = default;
 };

@@ -1,0 +1,286 @@
+#include "damage_system.hpp"
+#include "session_internal.hpp"
+
+#include <algorithm>
+#include <cmath>
+#include <numbers>
+#include <ranges>
+#include <utility>
+
+namespace ninho::simulation {
+namespace detail {
+namespace {
+
+const MaterialDefinition* find_material(const MaterialCatalog& catalog, MaterialId id)
+{
+    const auto found = std::ranges::find(catalog.materials, id, &MaterialDefinition::id);
+    return found == catalog.materials.end() ? nullptr : &*found;
+}
+
+const EnemyArchetype* find_enemy(const ArchetypeCatalog& catalog, EnemyArchetypeId id)
+{
+    const auto found = std::ranges::find(catalog.enemies, id, &EnemyArchetype::id);
+    return found == catalog.enemies.end() ? nullptr : &*found;
+}
+
+const WeakpointProfile* find_weakpoint(const ArchetypeCatalog& catalog, WeakpointId id)
+{
+    const auto found = std::ranges::find(catalog.weakpoints, id, &WeakpointProfile::id);
+    return found == catalog.weakpoints.end() ? nullptr : &*found;
+}
+
+ninho::physics::Vec3 rotate(
+    ninho::physics::Quat rotation, ninho::physics::Vec3 value) noexcept
+{
+    const ninho::physics::Vec3 q{rotation.x, rotation.y, rotation.z};
+    const ninho::physics::Vec3 twice_cross = 2.0f * ninho::physics::cross(q, value);
+    return value + rotation.w * twice_cross + ninho::physics::cross(q, twice_cross);
+}
+
+const DamageBody* find_body(
+    std::span<const DamageBody> bodies, EntityId entity, PartId part)
+{
+    const auto found = std::ranges::find_if(bodies, [&](const DamageBody& body) {
+        return body.entity_id == entity && body.part_id == part;
+    });
+    return found == bodies.end() ? nullptr : &*found;
+}
+
+DamageState* find_enemy_state(std::vector<DamageState>& states, EntityId entity)
+{
+    const auto found = std::ranges::find_if(states, [&](const DamageState& current) {
+        return current.entity_id == entity && current.enemy_archetype_id.has_value();
+    });
+    return found == states.end() ? nullptr : &*found;
+}
+
+void ensure_enemy_states(std::vector<DamageState>& states,
+    const ArchetypeCatalog& archetypes, std::span<const DamageBody> bodies)
+{
+    for (const DamageBody& body : bodies) {
+        if (!body.enemy_archetype_id || find_enemy_state(states, body.entity_id) != nullptr) {
+            continue;
+        }
+        const EnemyArchetype* enemy = find_enemy(archetypes, *body.enemy_archetype_id);
+        if (enemy != nullptr) {
+            states.push_back({body.entity_id, body.part_id, std::nullopt,
+                body.enemy_archetype_id, 0.0, enemy->integrity});
+        }
+    }
+}
+
+void apply_material_damage(std::vector<DamageState>& states,
+    std::vector<DamageOutcome>& outcomes, const MaterialCatalog& materials,
+    const DamageBody& target, EntityId cause_entity, PartId cause_part,
+    ninho::physics::Vec3 position, ninho::physics::Vec3 cause_to_target, double energy)
+{
+    if (!target.material_id || energy <= 0.0) {
+        return;
+    }
+    const MaterialDefinition* definition = find_material(materials, *target.material_id);
+    if (definition == nullptr) {
+        return;
+    }
+    auto found = std::ranges::find_if(states, [&](const DamageState& current) {
+        return current.entity_id == target.entity_id && current.part_id == target.part_id;
+    });
+    if (found == states.end()) {
+        states.push_back({target.entity_id, target.part_id, target.material_id});
+        found = std::prev(states.end());
+    }
+    const double before = found->material_damage_energy_j;
+    found->material_damage_energy_j = definition->response == MaterialResponse::Brittle
+        ? std::max(before, energy) : before + energy;
+    const double applied = found->material_damage_energy_j - before;
+    if (applied > 0.0) {
+        outcomes.push_back({DamageOutcomeKind::DamageApplied,
+            cause_entity, cause_part, target.entity_id, target.part_id,
+            position, cause_to_target, energy, applied});
+    }
+}
+
+double directional_multiplier(const WeakpointProfile& weakpoint,
+    const DamageBody& target, ninho::physics::Vec3 cause_to_target)
+{
+    const ninho::physics::Vec3 local_front{
+        static_cast<float>(weakpoint.protected_direction[0]),
+        static_cast<float>(weakpoint.protected_direction[1]),
+        static_cast<float>(weakpoint.protected_direction[2])};
+    const auto world_front = ninho::physics::normalized_or_zero(
+        rotate(target.transform.rotation, local_front));
+    const auto target_to_source = ninho::physics::normalized_or_zero(-cause_to_target);
+    const double cone_cosine = std::cos(
+        weakpoint.protected_cone_deg * std::numbers::pi / 180.0);
+    const bool protected_hit = static_cast<double>(
+        ninho::physics::dot(world_front, target_to_source)) >= cone_cosine;
+    return protected_hit ? weakpoint.protected_multiplier : weakpoint.exposed_multiplier;
+}
+
+void apply_enemy_damage(std::vector<DamageState>& states,
+    std::vector<DamageOutcome>& outcomes, const ArchetypeCatalog& archetypes,
+    const DamageBody& target, EntityId cause_entity, PartId cause_part,
+    ninho::physics::Vec3 position, ninho::physics::Vec3 cause_to_target, double energy)
+{
+    if (!target.enemy_archetype_id || energy <= 0.0) {
+        return;
+    }
+    const EnemyArchetype* enemy = find_enemy(archetypes, *target.enemy_archetype_id);
+    const WeakpointProfile* weakpoint = enemy == nullptr
+        ? nullptr : find_weakpoint(archetypes, enemy->weakpoint_id);
+    DamageState* state = find_enemy_state(states, target.entity_id);
+    if (enemy == nullptr || weakpoint == nullptr || state == nullptr || state->neutralized) {
+        return;
+    }
+    const double denominator = enemy->mass_kg * enemy->damage_energy_j_per_kg;
+    const double uncapped = enemy->integrity * energy / denominator;
+    const double damage = std::min(enemy->max_damage, uncapped)
+        * directional_multiplier(*weakpoint, target, cause_to_target);
+    const double applied = std::min(state->remaining_integrity, damage);
+    if (applied <= 0.0) {
+        return;
+    }
+    state->remaining_integrity -= applied;
+    outcomes.push_back({DamageOutcomeKind::DamageApplied,
+        cause_entity, cause_part, target.entity_id, target.part_id,
+        position, cause_to_target, energy, applied});
+    if (state->remaining_integrity <= 0.0) {
+        state->remaining_integrity = 0.0;
+        state->neutralized = true;
+        outcomes.push_back({DamageOutcomeKind::EntityNeutralized,
+            cause_entity, cause_part, target.entity_id, target.part_id,
+            position, cause_to_target, energy, applied});
+    }
+}
+
+void apply_ejection_transitions(std::vector<DamageState>& states,
+    std::vector<DamageOutcome>& outcomes, std::span<const DamageBody> bodies)
+{
+    for (const DamageBody& body : bodies) {
+        DamageState* state = body.enemy_archetype_id
+            ? find_enemy_state(states, body.entity_id) : nullptr;
+        if (state == nullptr) {
+            continue;
+        }
+        if (body.ejected && !state->was_ejected && !state->neutralized) {
+            state->remaining_integrity = 0.0;
+            state->neutralized = true;
+            outcomes.push_back({DamageOutcomeKind::EntityNeutralized,
+                {}, {}, body.entity_id, body.part_id, body.transform.position,
+                {}, 0.0, 0.0});
+        }
+        state->was_ejected = body.ejected;
+    }
+}
+
+}
+
+}
+
+void SimulationSession::Impl::process_damage_after_step()
+{
+    std::vector<detail::DamageBody> bodies;
+    bodies.reserve(body_records.size());
+    for (const BodyRecord& record : body_records) {
+        const auto state = physics.state(record.physics_handle);
+        if (!state) {
+            continue;
+        }
+        bodies.push_back({record.entity_id, record.part_id, record.material_id,
+            record.enemy_archetype_id, state->transform, state->ejected});
+    }
+
+    std::vector<detail::DamageContact> contacts;
+    contacts.reserve(physics.contact_hits().size());
+    for (const ninho::physics::ContactHit& hit : physics.contact_hits()) {
+        const auto a = std::ranges::find(body_records, hit.a, &BodyRecord::physics_handle);
+        const auto b = std::ranges::find(body_records, hit.b, &BodyRecord::physics_handle);
+        if (a == body_records.end() || b == body_records.end()) {
+            continue;
+        }
+        contacts.push_back({a->entity_id, a->part_id, b->entity_id, b->part_id,
+            hit.point, hit.normal, hit.derived_energy});
+    }
+
+    const auto outcomes = damage_system.process(
+        bundle.materials, bundle.archetypes, bodies, contacts);
+    publish_damage_outcomes(outcomes);
+}
+
+void SimulationSession::Impl::publish_damage_outcomes(
+    std::span<const detail::DamageOutcome> outcomes)
+{
+    for (const detail::DamageOutcome& outcome : outcomes) {
+        const DomainEventKind kind = outcome.kind == detail::DamageOutcomeKind::DamageApplied
+            ? DomainEventKind::DamageApplied : DomainEventKind::EntityNeutralized;
+        DomainEvent event{
+            .id = EventId{next_event_sequence++},
+            .tick = session_state.tick,
+            .kind = kind,
+            .entity_id = outcome.cause_entity_id,
+            .affected_entity_id = outcome.target_entity_id,
+            .affected_part_id = outcome.target_part_id,
+            .part_id = outcome.cause_part_id,
+            .position_m = outcome.position_m,
+            .normal = outcome.normal_cause_to_target,
+            .energy_j = outcome.energy_j,
+            .damage = outcome.damage,
+        };
+        domain_events.push_back(event);
+        if (kind == DomainEventKind::EntityNeutralized) {
+            for (BodyRecord& record : body_records) {
+                if (record.entity_id == outcome.target_entity_id) {
+                    record.neutralized = true;
+                }
+            }
+        }
+    }
+}
+
+namespace detail {
+
+std::optional<DamageState> DamageSystem::state(EntityId entity, PartId part) const
+{
+    const auto found = std::ranges::find_if(states_, [&](const DamageState& current) {
+        return current.entity_id == entity && current.part_id == part;
+    });
+    return found == states_.end() ? std::nullopt : std::optional{*found};
+}
+
+std::vector<DamageOutcome> DamageSystem::process(
+    const MaterialCatalog& materials,
+    const ArchetypeCatalog& archetypes,
+    std::span<const DamageBody> bodies,
+    std::span<const DamageContact> contacts)
+{
+    std::vector<DamageOutcome> outcomes;
+    ensure_enemy_states(states_, archetypes, bodies);
+
+    for (const DamageContact& contact : contacts) {
+        const DamageBody* a = find_body(bodies, contact.a_entity_id, contact.a_part_id);
+        const DamageBody* b = find_body(bodies, contact.b_entity_id, contact.b_part_id);
+        if (a == nullptr || b == nullptr) {
+            continue;
+        }
+        apply_material_damage(states_, outcomes, materials,
+            *a, b->entity_id, b->part_id, contact.position_m,
+            -contact.normal_a_to_b, contact.energy_j);
+        apply_enemy_damage(states_, outcomes, archetypes,
+            *a, b->entity_id, b->part_id, contact.position_m,
+            -contact.normal_a_to_b, contact.energy_j);
+        apply_material_damage(states_, outcomes, materials,
+            *b, a->entity_id, a->part_id, contact.position_m,
+            contact.normal_a_to_b, contact.energy_j);
+        apply_enemy_damage(states_, outcomes, archetypes,
+            *b, a->entity_id, a->part_id, contact.position_m,
+            contact.normal_a_to_b, contact.energy_j);
+    }
+    apply_ejection_transitions(states_, outcomes, bodies);
+    std::ranges::sort(states_, [](const DamageState& lhs, const DamageState& rhs) {
+        return std::pair{lhs.entity_id, lhs.part_id} < std::pair{rhs.entity_id, rhs.part_id};
+    });
+    return outcomes;
+}
+
+}
+
+}

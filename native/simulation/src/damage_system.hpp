@@ -1,0 +1,68 @@
+#pragma once
+
+#include "ninho/simulation/content.hpp"
+
+#include <ninho/physics/physics_types.hpp>
+
+#include <optional>
+#include <span>
+#include <vector>
+
+namespace ninho::simulation::detail {
+
+struct DamageBody {
+    EntityId entity_id{};
+    PartId part_id{};
+    std::optional<MaterialId> material_id;
+    std::optional<EnemyArchetypeId> enemy_archetype_id;
+    ninho::physics::Transform transform;
+    bool ejected{};
+};
+
+struct DamageContact {
+    EntityId a_entity_id{};
+    PartId a_part_id{};
+    EntityId b_entity_id{};
+    PartId b_part_id{};
+    ninho::physics::Vec3 position_m{};
+    ninho::physics::Vec3 normal_a_to_b{};
+    double energy_j{};
+};
+
+enum class DamageOutcomeKind : std::uint8_t { DamageApplied, EntityNeutralized };
+
+struct DamageOutcome {
+    DamageOutcomeKind kind{};
+    EntityId cause_entity_id{};
+    PartId cause_part_id{};
+    EntityId target_entity_id{};
+    PartId target_part_id{};
+    ninho::physics::Vec3 position_m{};
+    ninho::physics::Vec3 normal_cause_to_target{};
+    double energy_j{};
+    double damage{};
+};
+
+struct DamageState {
+    EntityId entity_id{};
+    PartId part_id{};
+    std::optional<MaterialId> material_id;
+    std::optional<EnemyArchetypeId> enemy_archetype_id;
+    double material_damage_energy_j{};
+    double remaining_integrity{};
+    bool was_ejected{};
+    bool neutralized{};
+};
+
+class DamageSystem {
+public:
+    std::vector<DamageOutcome> process(const MaterialCatalog&, const ArchetypeCatalog&,
+        std::span<const DamageBody>, std::span<const DamageContact>);
+    [[nodiscard]] std::optional<DamageState> state(EntityId, PartId) const;
+    [[nodiscard]] std::span<const DamageState> states() const noexcept { return states_; }
+
+private:
+    std::vector<DamageState> states_;
+};
+
+}

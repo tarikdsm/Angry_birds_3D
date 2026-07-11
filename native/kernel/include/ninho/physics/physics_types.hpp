@@ -6,6 +6,11 @@
 
 namespace ninho::physics {
 
+enum class ContactNormalConvention : std::uint8_t { AToB };
+
+inline constexpr ContactNormalConvention contact_normal_convention =
+    ContactNormalConvention::AToB;
+
 struct Vec3 {
     float x{};
     float y{};

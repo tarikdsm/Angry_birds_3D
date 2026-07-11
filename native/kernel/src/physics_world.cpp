@@ -1064,9 +1064,8 @@ struct PhysicsWorld::Impl {
             } else {
                 hit.effective_mass = std::max(mass_a, mass_b);
             }
-            const float damaging_speed = std::max(0.0f, hit.approach_speed - 1.0f);
-            hit.derived_energy =
-                0.5f * hit.effective_mass * damaging_speed * damaging_speed;
+            hit.derived_energy = derived_contact_energy(
+                hit.effective_mass, hit.approach_speed);
             if (!is_finite(hit.point) || !is_finite(hit.normal)
                 || !positive_finite(hit.approach_speed)
                 || !positive_finite(hit.effective_mass)
@@ -1082,7 +1081,7 @@ struct PhysicsWorld::Impl {
                 });
             if (duplicate == contact_storage.end()) {
                 contact_storage.push_back(hit);
-            } else if (hit.approach_speed > duplicate->approach_speed) {
+            } else if (stronger_contact_for_pair(hit, *duplicate)) {
                 *duplicate = hit;
             }
         }

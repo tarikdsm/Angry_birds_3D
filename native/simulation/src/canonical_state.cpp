@@ -409,6 +409,24 @@ void SimulationSession::Impl::refresh_canonical_state()
         writer.quantized(event.weight);
         writer.vector(event.force_n);
         writer.vector(event.impulse_n_s);
+        identifier(writer, event.part_id);
+        writer.vector(event.position_m);
+        writer.vector(event.normal);
+        writer.quantized(event.energy_j);
+        writer.quantized(event.damage);
+    }
+
+    writer.integer<std::uint32_t>(
+        static_cast<std::uint32_t>(damage_system.states().size()));
+    for (const detail::DamageState& damage : damage_system.states()) {
+        identifier(writer, damage.entity_id);
+        identifier(writer, damage.part_id);
+        optional_identifier(writer, damage.material_id);
+        optional_identifier(writer, damage.enemy_archetype_id);
+        writer.quantized(damage.material_damage_energy_j);
+        writer.quantized(damage.remaining_integrity);
+        writer.boolean(damage.was_ejected);
+        writer.boolean(damage.neutralized);
     }
 
     writer.boolean(session_state.aim.has_value());

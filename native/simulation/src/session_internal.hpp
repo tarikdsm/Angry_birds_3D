@@ -1,6 +1,7 @@
 #pragma once
 
 #include "ninho/simulation/session.hpp"
+#include "damage_system.hpp"
 
 #include <ninho/physics/physics_world.hpp>
 
@@ -68,6 +69,8 @@ struct SimulationSession::Impl {
     void update_fsm_after_step();
     [[nodiscard]] SessionStatus apply_gravity_field_before_step();
     void finish_gravity_field_after_step();
+    void process_damage_after_step();
+    void publish_damage_outcomes(std::span<const detail::DamageOutcome>);
     void remove_confirmed_runtime_body_records();
     void publish_event(DomainEventKind, EntityId = {}, BirdArchetypeId = {},
         CommandRejectionReason = CommandRejectionReason::None);
@@ -83,6 +86,7 @@ struct SimulationSession::Impl {
 
     ContentBundle bundle;
     ninho::physics::PhysicsWorld physics;
+    detail::DamageSystem damage_system;
     SessionState session_state;
     std::optional<SessionStatus> latched_fault;
     std::optional<SessionStatus> emergency_fault{

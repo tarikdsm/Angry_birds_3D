@@ -63,6 +63,7 @@ SessionStatus SimulationSession::tick()
             return ability_status;
         }
         impl_->physics.step();
+        impl_->process_damage_after_step();
         impl_->finish_gravity_field_after_step();
         impl_->rebuild_snapshots();
         impl_->remove_confirmed_runtime_body_records();

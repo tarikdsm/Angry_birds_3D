@@ -2,6 +2,7 @@
 
 #include <ninho/physics/physics_types.hpp>
 
+#include <algorithm>
 #include <cstddef>
 #include <cstdint>
 #include <memory>
@@ -155,6 +156,20 @@ struct ContactHit {
     std::uint64_t material_a{};
     std::uint64_t material_b{};
 };
+
+[[nodiscard]] inline float derived_contact_energy(
+    float effective_mass, float approach_speed) noexcept
+{
+    const float damaging_speed = std::max(0.0f, approach_speed - 1.0f);
+    return 0.5f * effective_mass * damaging_speed * damaging_speed;
+}
+
+[[nodiscard]] inline bool stronger_contact_for_pair(
+    const ContactHit& candidate, const ContactHit& current) noexcept
+{
+    return candidate.a == current.a && candidate.b == current.b
+        && candidate.approach_speed > current.approach_speed;
+}
 
 struct JointReaction {
     JointHandle joint{};

@@ -5,6 +5,7 @@ add_library(ninho_simulation_kernel STATIC
   src/session_builder.cpp
   src/launch_system.cpp
   src/gravity_field_ability_system.cpp
+  src/damage_system.cpp
 )
 add_library(ninho::simulation ALIAS ninho_simulation_kernel)
 
@@ -34,6 +35,7 @@ if(BUILD_TESTING)
     tests/session_tests.cpp
     tests/launch_fsm_tests.cpp
     tests/gravity_field_ability_tests.cpp
+    tests/damage_anchor_tests.cpp
   )
 
   target_include_directories(ninho_simulation_tests PRIVATE
@@ -64,6 +66,10 @@ if(BUILD_TESTING)
   add_test(
     NAME gravity_field_ability
     COMMAND ninho_simulation_tests --filter "gravity field ability"
+  )
+  add_test(
+    NAME damage_anchor
+    COMMAND ninho_simulation_tests --filter "damage anchor"
   )
   add_test(
     NAME simulation_contracts
