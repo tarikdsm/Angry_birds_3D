@@ -9,7 +9,8 @@ const MAX_THETA_DEGREES := 50.0
 const MIN_SPEED := 8.0
 const MAX_SPEED := 16.0
 const RESTART_HOLD_SECONDS := 0.5
-const RING_PICK_RADIUS := 1.5
+const RING_INNER_RADIUS := 0.15
+const RING_OUTER_RADIUS := 1.25
 
 @onready var _camera: Camera3D = get_node("../OrbitalCamera")
 @onready var _ring: Node3D = get_node("../ImpulseRingPlaceholder")
@@ -43,12 +44,17 @@ func can_begin_aim_at(screen_position: Vector2) -> bool:
 	if _camera.is_position_behind(_ring.global_position):
 		return false
 	var ray_origin := _camera.project_ray_origin(screen_position)
-	var ray_direction := _camera.project_ray_normal(screen_position)
-	var along_ray := (_ring.global_position - ray_origin).dot(ray_direction)
+	var ray_direction := _camera.project_ray_normal(screen_position).normalized()
+	var ring_normal := _ring.global_transform.basis.y.normalized()
+	var denominator := ray_direction.dot(ring_normal)
+	if absf(denominator) <= 0.00001:
+		return false
+	var along_ray := (_ring.global_position - ray_origin).dot(ring_normal) / denominator
 	if along_ray <= 0.0:
 		return false
-	var nearest_point := ray_origin + ray_direction * along_ray
-	return nearest_point.distance_to(_ring.global_position) <= RING_PICK_RADIUS
+	var plane_point := ray_origin + ray_direction * along_ray
+	var radial_distance := plane_point.distance_to(_ring.global_position)
+	return radial_distance >= RING_INNER_RADIUS and radial_distance <= RING_OUTER_RADIUS
 
 
 func try_begin_aim_at(screen_position: Vector2) -> bool:

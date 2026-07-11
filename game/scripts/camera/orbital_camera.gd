@@ -177,8 +177,12 @@ func _segment_intersects_planet(origin: Vector3, target: Vector3) -> bool:
 
 
 func _safe_camera_position(candidate: Vector3, focus: Vector3, distance: float) -> Vector3:
+	var maximum_distance := clampf(distance, MIN_DISTANCE, MAX_DISTANCE)
 	if not _segment_intersects_planet(candidate, focus):
-		return candidate
+		var clear_offset := candidate - focus
+		if clear_offset.length() <= maximum_distance:
+			return candidate
+		return focus + clear_offset.normalized() * maximum_distance
 	var radial := focus.normalized()
 	if radial.is_zero_approx():
 		radial = Vector3.UP
@@ -188,8 +192,9 @@ func _safe_camera_position(candidate: Vector3, focus: Vector3, distance: float) 
 		tangent = radial.cross(Vector3.UP)
 	if tangent.is_zero_approx():
 		tangent = radial.cross(Vector3.RIGHT)
-	return focus + radial * maxf(3.0, distance * 0.55) \
-		+ tangent.normalized() * distance * 0.85
+	var safe_offset := radial * maxf(3.0, maximum_distance * 0.55) \
+		+ tangent.normalized() * maximum_distance * 0.85
+	return focus + safe_offset.normalized() * minf(safe_offset.length(), maximum_distance)
 
 
 func _update_composition() -> void:

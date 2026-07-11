@@ -17,9 +17,13 @@ func apply_frame(frame: Dictionary) -> void:
 		_anchor_integrity = 100.0
 	_last_tick = tick
 	for event: Dictionary in frame.get("events", []):
-		if str(event.get("kind", "")) == "damage_applied" \
-				and int(event.get("entity_id", 0)) == 200:
+		var kind := str(event.get("kind", ""))
+		if kind == "damage_applied" \
+				and int(event.get("affected_entity_id", 0)) == 200:
 			_anchor_integrity = maxf(0.0, _anchor_integrity - float(event.get("damage", 0.0)))
+		elif kind == "entity_neutralized" \
+				and int(event.get("affected_entity_id", 0)) == 200:
+			_anchor_integrity = 0.0
 	var phase := str(frame.get("phase", "loading"))
 	phase_label.text = "FASE  %s" % phase.to_upper().replace("_", " ")
 	birds_label.text = "VIRELAS  %d" % int(frame.get("birds_remaining", 0))

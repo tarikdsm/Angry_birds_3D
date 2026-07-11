@@ -38,6 +38,12 @@ func _run() -> void:
 	if not camera.has_method("is_safe_framing"):
 		_fail("orbital camera must expose projected safe-margin framing")
 		return
+	var clamp_focus := Vector3(0.0, 10.15, 0.0)
+	var clamped_camera: Vector3 = camera._safe_camera_position(
+		Vector3(0.0, -30.0, 0.0), clamp_focus, 24.0)
+	if clamped_camera.distance_to(clamp_focus) > 24.001:
+		_fail("occlusion correction exceeded the 24 m camera limit")
+		return
 
 	await physics_frame
 	await physics_frame
@@ -54,6 +60,7 @@ func _run() -> void:
 		return
 	var controls := _scene.get_node_or_null("VerticalSliceHUD/Root/ControlsLabel") as Control
 	var hud_root := _scene.get_node_or_null("VerticalSliceHUD/Root") as Control
+	var integrity_label := _scene.get_node("VerticalSliceHUD/Root/TopBar/Margin/Readout/IntegrityLabel") as Label
 	if controls == null:
 		_fail("HUD controls must live under a viewport-sized Control root")
 		return
@@ -72,8 +79,13 @@ func _run() -> void:
 		_fail("launch input must expose its presentation-only ring hit test")
 		return
 	var ring_screen: Vector2 = camera.unproject_position(ring.global_position)
-	if not _launch.can_begin_aim_at(ring_screen):
-		_fail("projected impulse ring center must be clickable")
+	if _launch.can_begin_aim_at(ring_screen):
+		_fail("empty center of the impulse ring must not be clickable")
+		return
+	var ring_band_world := ring.global_transform * Vector3(0.7, 0.0, 0.0)
+	var ring_band_screen: Vector2 = camera.unproject_position(ring_band_world)
+	if not _launch.can_begin_aim_at(ring_band_screen):
+		_fail("visible annulus band of the impulse ring must be clickable")
 		return
 	if _launch.can_begin_aim_at(ring_screen + Vector2(500.0, 500.0)):
 		_fail("clicks outside the impulse ring must not begin aim")
@@ -110,6 +122,10 @@ func _run() -> void:
 		_fail("paused aim input must not enqueue commands: %s" % fault_label.text)
 		return
 
+	var saw_ability_started := false
+	var saw_anchor_damage_below_full := false
+	var saw_anchor_neutralized_at_zero := false
+	var expected_anchor_integrity := 100.0
 	for shot in range(ROUTE_THETA_DEGREES.size()):
 		root.size = ASPECT_VIEWPORTS[shot]
 		for settle_frame in range(20):
@@ -173,12 +189,39 @@ func _run() -> void:
 			if frame_index > 15 and not camera.is_safe_framing():
 				_fail("camera safe framing failed during shot %d frame %d" % [shot, frame_index])
 				return
+			if frame_index > 15 \
+					and camera.global_position.distance_to(camera.get("_focus")) > 24.001:
+				_fail("runtime camera exceeded 24 m during shot %d frame %d" % [shot, frame_index])
+				return
+			var anchor_damage_in_frame := false
+			var anchor_neutralized_in_frame := false
 			for event: Dictionary in frame.get("events", []):
 				var kind := str(event.get("kind", ""))
 				if kind in ["bird_launched", "ability_started", "ability_ended", "entity_neutralized", "command_rejected"]:
 					event_trace.append("%s@%d" % [kind, int(event.get("tick", 0))])
 				if kind == "bird_launched":
 					launch_tick = int(event.get("tick", frame.get("tick", 0)))
+				elif kind == "ability_started":
+					saw_ability_started = true
+				elif kind == "damage_applied" \
+						and int(event.get("affected_entity_id", 0)) == 200:
+					expected_anchor_integrity = maxf(
+						0.0, expected_anchor_integrity - float(event.get("damage", 0.0)))
+					anchor_damage_in_frame = true
+				elif kind == "entity_neutralized" \
+						and int(event.get("affected_entity_id", 0)) == 200:
+					expected_anchor_integrity = 0.0
+					anchor_neutralized_in_frame = true
+			if anchor_damage_in_frame or anchor_neutralized_in_frame:
+				var displayed_integrity := _hud_integrity_percent(integrity_label)
+				if displayed_integrity != roundi(expected_anchor_integrity):
+					_fail("Anchor HUD=%d differs from affected-target integrity=%d" % [
+						displayed_integrity, roundi(expected_anchor_integrity)])
+					return
+				if anchor_damage_in_frame and displayed_integrity < 100:
+					saw_anchor_damage_below_full = true
+				if anchor_neutralized_in_frame and displayed_integrity == 0:
+					saw_anchor_neutralized_at_zero = true
 			if not ability_requested and launch_tick >= 0 \
 					and int(frame.get("tick", 0)) >= launch_tick + 39:
 				if not _launch.launch_or_activate():
@@ -212,6 +255,15 @@ func _run() -> void:
 	if str(_controller.current_frame.get("outcome", "")) != "victory":
 		_fail("verified route did not produce victory")
 		return
+	if not saw_ability_started:
+		_fail("verified route did not publish ability_started")
+		return
+	if not saw_anchor_damage_below_full:
+		_fail("real Anchor damage did not reduce the HUD below 100%")
+		return
+	if not saw_anchor_neutralized_at_zero:
+		_fail("Anchor neutralization did not set the HUD to 0%")
+		return
 	if not _launch.restart_now():
 		_fail("restart was rejected after result")
 		return
@@ -223,6 +275,14 @@ func _run() -> void:
 
 	print(SUCCESS_MARKER)
 	_finish(0)
+
+
+func _hud_integrity_percent(label: Label) -> int:
+	var digits := ""
+	for character: String in label.text:
+		if character >= "0" and character <= "9":
+			digits += character
+	return int(digits)
 
 
 func _fail(message: String) -> void:
