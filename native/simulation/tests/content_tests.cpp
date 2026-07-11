@@ -12,6 +12,7 @@
 #include <sstream>
 #include <string>
 #include <string_view>
+#include <utility>
 
 namespace {
 
@@ -242,6 +243,36 @@ NINHO_SIM_TEST("content rejects duplicate ids")
     files.materials["materials"][1]["id"] = 1;
     require_error(parse_material_catalog(files.materials.dump()), ContentErrorCode::DuplicateId,
         "/materials/1/id");
+}
+
+NINHO_SIM_TEST("content rejects duplicate bird roster archetypes independent of count order")
+{
+    for (const auto counts : {std::pair{1U, 2U}, std::pair{2U, 1U}}) {
+        RealContent files;
+        files.level["bird_roster"][0]["count"] = counts.first;
+        auto duplicate = files.level["bird_roster"][0];
+        duplicate["count"] = counts.second;
+        files.level["bird_roster"].push_back(std::move(duplicate));
+        require_error(parse_level_manifest(files.level.dump()),
+            ContentErrorCode::DuplicateId, "/bird_roster/1/bird_archetype_id");
+    }
+}
+
+NINHO_SIM_TEST("content bundle rejects typed duplicate bird roster archetypes in either count order")
+{
+    const RealContent files;
+    const auto materials = parse_material_catalog(files.materials_text);
+    const auto archetypes = parse_archetype_catalog(files.archetypes_text);
+    const auto parsed_level = parse_level_manifest(files.level_text);
+    NINHO_SIM_REQUIRE(materials.ok() && archetypes.ok() && parsed_level.ok());
+    for (const auto counts : {std::pair{1U, 2U}, std::pair{2U, 1U}}) {
+        LevelManifest level = parsed_level.value;
+        level.bird_roster.front().count = counts.first;
+        level.bird_roster.push_back(
+            {level.bird_roster.front().bird_archetype_id, counts.second});
+        require_error(make_content_bundle(materials.value, archetypes.value, level),
+            ContentErrorCode::DuplicateId, "/bird_roster/1/bird_archetype_id");
+    }
 }
 
 NINHO_SIM_TEST("content rejects duplicate entity parts and objectives that are not unique enemies")

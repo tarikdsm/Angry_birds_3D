@@ -1,6 +1,9 @@
 #include <ninho/physics/physics_world.hpp>
 
 #include "box3d_conversions.hpp"
+#if defined(NINHO_ENABLE_TEST_FACADES)
+#include "physics_world_test_facade.hpp"
+#endif
 
 #include <ninho/physics/radial_gravity.hpp>
 
@@ -1428,6 +1431,12 @@ struct PhysicsWorld::Impl {
     std::vector<JointReaction> joint_reaction_storage;
     std::size_t reserved_body_count{};
     std::size_t reserved_joint_count{};
+    bool initial_state_committed{};
+    bool initialization_faulted{};
+    bool step_called{};
+#if defined(NINHO_ENABLE_TEST_FACADES)
+    std::optional<std::size_t> fail_initial_commit_after_for_testing;
+#endif
     double step_ms{};
     EjectionTracker ejection_tracker;
 };
@@ -1546,8 +1555,57 @@ Status PhysicsWorld::apply_impulse(BodyHandle body, Vec3 impulse, Vec3 point, bo
     return {};
 }
 
+Status PhysicsWorld::commit_pending_initial_state()
+{
+    if (impl_->initialization_faulted) {
+        return {StatusCode::Box3DFault,
+            "initialization previously failed after command application began"};
+    }
+    if (impl_->initial_state_committed || impl_->step_called) {
+        return invalid_argument_status(
+            "initial state can be committed exactly once before the first step");
+    }
+    const bool only_creations = std::ranges::all_of(impl_->commands, [](const auto& command) {
+        return std::holds_alternative<Impl::CreateCommand>(command)
+            || std::holds_alternative<Impl::CreateJointCommand>(command);
+    });
+    if (!only_creations) {
+        return invalid_argument_status(
+            "initial state accepts only pending body and joint creations");
+    }
+    try {
+        std::size_t applied_count = 0;
+        for (const Impl::Command& command : impl_->commands) {
+#if defined(NINHO_ENABLE_TEST_FACADES)
+            if (impl_->fail_initial_commit_after_for_testing == applied_count) {
+                throw std::runtime_error("injected initial commit failure");
+            }
+#endif
+            impl_->apply(command);
+            ++applied_count;
+        }
+        impl_->commands.clear();
+        impl_->rebuild_snapshots();
+    } catch (const std::exception& error) {
+        impl_->initialization_faulted = true;
+        return {StatusCode::Box3DFault, error.what()};
+    } catch (...) {
+        impl_->initialization_faulted = true;
+        return {StatusCode::Box3DFault, "unknown failure while committing initial state"};
+    }
+    impl_->contact_storage.clear();
+    impl_->joint_reaction_storage.clear();
+    impl_->initial_state_committed = true;
+    return {};
+}
+
 void PhysicsWorld::step()
 {
+    if (impl_->initialization_faulted) {
+        throw std::logic_error(
+            "cannot step a world whose initial commit partially failed");
+    }
+    impl_->step_called = true;
     const auto step_start = std::chrono::steady_clock::now();
     impl_->apply_queued_commands();
 
@@ -1719,5 +1777,13 @@ const WorldConfig& PhysicsWorld::config() const
 {
     return impl_->config;
 }
+
+#if defined(NINHO_ENABLE_TEST_FACADES)
+void detail::PhysicsWorldTestFacade::fail_initial_commit_after(
+    PhysicsWorld& world, std::size_t applied_command_count)
+{
+    world.impl_->fail_initial_commit_after_for_testing = applied_command_count;
+}
+#endif
 
 }

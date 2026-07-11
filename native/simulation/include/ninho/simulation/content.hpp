@@ -202,6 +202,8 @@ struct ShapeDefinition {
     ShapeType type{};
     std::array<double, 3> half_extents_m{};
     double radius_m{};
+
+    bool operator==(const ShapeDefinition&) const = default;
 };
 
 struct VisualDefinition {
@@ -252,6 +254,7 @@ struct LevelManifest {
     std::string id;
     PlanetDefinition planet;
     LaunchRingDefinition launch_ring;
+    // Set keyed by bird_archetype_id: one count entry per archetype.
     std::vector<BirdRosterEntry> bird_roster;
     std::vector<std::uint32_t> free_body_ids;
     std::vector<BodyDefinition> bodies;

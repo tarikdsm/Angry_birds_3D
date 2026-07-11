@@ -15,6 +15,9 @@ target_compile_features(ninho_physics_kernel PUBLIC cxx_std_20)
 target_compile_definitions(ninho_physics_kernel PRIVATE
   NINHO_BUILD_TYPE="${CMAKE_BUILD_TYPE}"
 )
+if(BUILD_TESTING)
+  target_compile_definitions(ninho_physics_kernel PRIVATE NINHO_ENABLE_TEST_FACADES=1)
+endif()
 
 if(WIN32)
   target_link_libraries(ninho_physics_kernel PRIVATE Psapi)

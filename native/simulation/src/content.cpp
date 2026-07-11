@@ -601,12 +601,17 @@ LevelManifest parse_level_manifest_impl(std::string_view text)
     const auto& roster = member(root, "bird_roster", "");
     require_collection(roster, "/bird_roster", 16U, true);
     result.bird_roster.reserve(roster.size());
+    std::unordered_set<std::uint32_t> roster_archetype_ids;
     for (std::size_t i = 0; i < roster.size(); ++i) {
         const auto pointer = indexed("/bird_roster", i);
         const auto& item = roster.at(i);
         require_keys(item, pointer, {"bird_archetype_id", "count"});
-        result.bird_roster.push_back({read_id<BirdArchetypeId>(item, "bird_archetype_id", pointer),
-            read_uint(item, "count", pointer, 1U, 100U)});
+        BirdRosterEntry entry{
+            read_id<BirdArchetypeId>(item, "bird_archetype_id", pointer),
+            read_uint(item, "count", pointer, 1U, 100U)};
+        reject_duplicate(roster_archetype_ids, entry.bird_archetype_id,
+            child(pointer, "bird_archetype_id"));
+        result.bird_roster.push_back(entry);
     }
     const auto& free_body_ids = member(root, "free_body_ids", "");
     require_collection(free_body_ids, "/free_body_ids", 500U);
@@ -900,8 +905,12 @@ ContentResult<ContentBundle> make_content_bundle(const MaterialCatalog& material
                 fail(ContentErrorCode::MissingReference, indexed("/enemies", i) + "/surface_id", "surface reference not found");
             }
         }
+        std::unordered_set<std::uint32_t> roster_archetype_ids;
+        roster_archetype_ids.reserve(level.bird_roster.size());
         for (std::size_t i = 0; i < level.bird_roster.size(); ++i) {
             const auto id = level.bird_roster[i].bird_archetype_id;
+            reject_duplicate(roster_archetype_ids, id,
+                indexed("/bird_roster", i) + "/bird_archetype_id");
             if (!bird_index.contains(id.value())) {
                 fail(ContentErrorCode::MissingReference, indexed("/bird_roster", i) + "/bird_archetype_id",
                     "bird archetype reference not found");

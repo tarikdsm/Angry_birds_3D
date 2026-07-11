@@ -1,6 +1,8 @@
 add_library(ninho_simulation_kernel STATIC
   src/content.cpp
+  src/canonical_state.cpp
   src/session.cpp
+  src/session_builder.cpp
 )
 add_library(ninho::simulation ALIAS ninho_simulation_kernel)
 
@@ -12,6 +14,9 @@ target_link_libraries(ninho_simulation_kernel
   PRIVATE nlohmann_json::nlohmann_json
 )
 target_compile_features(ninho_simulation_kernel PUBLIC cxx_std_20)
+if(BUILD_TESTING)
+  target_compile_definitions(ninho_simulation_kernel PRIVATE NINHO_ENABLE_TEST_FACADES=1)
+endif()
 
 if(MSVC)
   target_compile_options(ninho_simulation_kernel PRIVATE
@@ -24,10 +29,13 @@ if(BUILD_TESTING)
     tests/test_main.cpp
     tests/kernel_contract_tests.cpp
     tests/content_tests.cpp
+    tests/session_tests.cpp
   )
 
   target_include_directories(ninho_simulation_tests PRIVATE
     "${CMAKE_CURRENT_SOURCE_DIR}/tests"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src"
+    "${PROJECT_SOURCE_DIR}/native/kernel/src"
   )
   target_link_libraries(ninho_simulation_tests PRIVATE
     ninho::simulation
@@ -35,6 +43,7 @@ if(BUILD_TESTING)
   )
   target_compile_definitions(ninho_simulation_tests PRIVATE
     NINHO_SOURCE_DIR="${PROJECT_SOURCE_DIR}"
+    NINHO_ENABLE_TEST_FACADES=1
   )
   target_compile_features(ninho_simulation_tests PRIVATE cxx_std_20)
 
@@ -51,6 +60,18 @@ if(BUILD_TESTING)
   add_test(
     NAME content_manifest
     COMMAND ninho_simulation_tests --filter content
+  )
+  add_test(
+    NAME session_bootstrap
+    COMMAND ninho_simulation_tests --filter "session bootstrap"
+  )
+  add_test(
+    NAME session_restart
+    COMMAND ninho_simulation_tests --filter "session restart"
+  )
+  add_test(
+    NAME session_reconfigure
+    COMMAND ninho_simulation_tests --filter "session reconfigure"
   )
   add_test(
     NAME simulation_runner_rejects_no_match

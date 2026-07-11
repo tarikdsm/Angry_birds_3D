@@ -13,6 +13,12 @@
 
 namespace ninho::physics {
 
+namespace detail {
+#if defined(NINHO_ENABLE_TEST_FACADES)
+class PhysicsWorldTestFacade;
+#endif
+}
+
 enum class StatusCode { Ok, InvalidArgument, InvalidHandle, CapacityExceeded, Unsupported, Box3DFault };
 
 struct Status {
@@ -188,6 +194,7 @@ public:
     Status destroy_joint(JointHandle joint);
     Status apply_force(BodyHandle body, Vec3 force, Vec3 point, bool wake = true);
     Status apply_impulse(BodyHandle body, Vec3 impulse, Vec3 point, bool wake = true);
+    Status commit_pending_initial_state();
     void step();
     [[nodiscard]] std::optional<BodyState> state(BodyHandle body) const;
     [[nodiscard]] std::span<const BodyState> states() const;
@@ -206,6 +213,9 @@ public:
     [[nodiscard]] const WorldConfig& config() const;
 
 private:
+#if defined(NINHO_ENABLE_TEST_FACADES)
+    friend class detail::PhysicsWorldTestFacade;
+#endif
     struct Impl;
     std::unique_ptr<Impl> impl_;
 };
