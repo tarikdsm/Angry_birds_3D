@@ -1,0 +1,37 @@
+{
+  "cmake": {
+    "version": "4.3.3",
+    "url": "https://github.com/Kitware/CMake/releases/download/v4.3.3/cmake-4.3.3-windows-x86_64.zip",
+    "sha256": "935ade9e5e8723583c07f44c5592cea2a1c8f65c56ca7e07b34c025c880e0bd6",
+    "exe_sha256": "70fa92ce2ac9f54b0ae395b0b3790d9147ef2ebdbd7c4e0bb20852aac581baea",
+    "exe": "cmake-4.3.3-windows-x86_64/bin/cmake.exe"
+  },
+  "ninja": {
+    "version": "1.13.2",
+    "url": "https://github.com/ninja-build/ninja/releases/download/v1.13.2/ninja-win.zip",
+    "sha256": "07fc8261b42b20e71d1720b39068c2e14ffcee6396b76fb7a795fb460b78dc65",
+    "exe_sha256": "e52a7ad9538d9618c67a0bd777964e2eec8a30f68b810a2f6adce1f2daf847b8",
+    "exe": "ninja.exe"
+  },
+  "godot": {
+    "version": "4.5.1-stable",
+    "url": "https://github.com/godotengine/godot/releases/download/4.5.1-stable/Godot_v4.5.1-stable_win64.exe.zip",
+    "sha256": "defccc78669e644861b4247626b01ae362cd9f23975edf19c8bfd2eb1f6a1783",
+    "exe_sha256": "a829242096d640007de9fa93ea923d0f666d13d6a3b472a0231c820be6dc7627",
+    "exe": "Godot_v4.5.1-stable_win64.exe"
+  },
+  "python": {
+    "minimum_version": "3.11.0",
+    "command": "python"
+  },
+  "visual_studio": {
+    "version": "18.7.3",
+    "build": "11925.98",
+    "url": "https://download.visualstudio.microsoft.com/download/pr/4037ccca-d103-412b-a678-bc0aa164315e/07b09afd416dc05c781f171c881c23e42907eeb8d812fa1d2993dffb9323c869/vs_BuildTools.exe",
+    "sha256": "07b09afd416dc05c781f171c881c23e42907eeb8d812fa1d2993dffb9323c869",
+    "components": [
+      "Microsoft.VisualStudio.Component.VC.14.44.17.14.x86.x64",
+      "Microsoft.VisualStudio.Component.Windows11SDK.26100"
+    ]
+  }
+}

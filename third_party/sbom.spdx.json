@@ -1,0 +1,152 @@
+{
+  "spdxVersion": "SPDX-2.3",
+  "dataLicense": "CC0-1.0",
+  "SPDXID": "SPDXRef-DOCUMENT",
+  "name": "Ninho Orbital Box3D Foundation SBOM",
+  "documentNamespace": "https://spdx.org/spdxdocs/ninho-orbital-foundation-0.1.0-8441b4a06d6d09dcfb0b0f704df4d847d1437b92",
+  "creationInfo": {
+    "created": "2026-07-11T01:27:53Z",
+    "creators": [
+      "Tool: Codex"
+    ]
+  },
+  "documentDescribes": [
+    "SPDXRef-Package-Ninho-Orbital"
+  ],
+  "packages": [
+    {
+      "name": "Ninho Orbital: Mundos Partidos - Box3D Foundation",
+      "SPDXID": "SPDXRef-Package-Ninho-Orbital",
+      "versionInfo": "0.1.0",
+      "downloadLocation": "NOASSERTION",
+      "filesAnalyzed": false,
+      "licenseConcluded": "NOASSERTION",
+      "licenseDeclared": "NOASSERTION",
+      "copyrightText": "NOASSERTION"
+    },
+    {
+      "name": "Box3D 3D",
+      "SPDXID": "SPDXRef-Package-Box3D",
+      "versionInfo": "0.1.0",
+      "downloadLocation": "git+https://github.com/erincatto/box3d.git@8441b4a06d6d09dcfb0b0f704df4d847d1437b92",
+      "filesAnalyzed": false,
+      "licenseConcluded": "MIT",
+      "licenseDeclared": "MIT",
+      "copyrightText": "Copyright (c) 2026 Erin Catto",
+      "sourceInfo": "Unmodified source pinned at commit 8441b4a06d6d09dcfb0b0f704df4d847d1437b92."
+    },
+    {
+      "name": "Godot Engine",
+      "SPDXID": "SPDXRef-Package-Godot",
+      "versionInfo": "4.5.1-stable",
+      "downloadLocation": "https://github.com/godotengine/godot/releases/download/4.5.1-stable/Godot_v4.5.1-stable_win64.exe.zip",
+      "filesAnalyzed": false,
+      "checksums": [
+        {
+          "algorithm": "SHA256",
+          "checksumValue": "defccc78669e644861b4247626b01ae362cd9f23975edf19c8bfd2eb1f6a1783"
+        }
+      ],
+      "licenseConcluded": "NOASSERTION",
+      "licenseDeclared": "MIT",
+      "copyrightText": "Copyright (c) 2014-present Godot Engine contributors; Copyright (c) 2007-2014 Juan Linietsky, Ariel Manzur",
+      "sourceInfo": "Official Windows x86_64 release corresponding to source commit f62fdbde15035c5576dad93e586201f4d41ef0cb; bundled third-party notices remain part of the upstream distribution."
+    },
+    {
+      "name": "godot-cpp",
+      "SPDXID": "SPDXRef-Package-godot-cpp",
+      "versionInfo": "godot-4.5-stable",
+      "downloadLocation": "git+https://github.com/godotengine/godot-cpp.git@e83fd0904c13356ed1d4c3d09f8bb9132bdc6b77",
+      "filesAnalyzed": false,
+      "licenseConcluded": "MIT",
+      "licenseDeclared": "MIT",
+      "copyrightText": "Copyright (c) 2017-present Godot Engine contributors",
+      "sourceInfo": "Source pinned at commit e83fd0904c13356ed1d4c3d09f8bb9132bdc6b77."
+    },
+    {
+      "name": "CMake",
+      "SPDXID": "SPDXRef-Package-CMake",
+      "versionInfo": "4.3.3",
+      "downloadLocation": "https://github.com/Kitware/CMake/releases/download/v4.3.3/cmake-4.3.3-windows-x86_64.zip",
+      "filesAnalyzed": false,
+      "checksums": [
+        {
+          "algorithm": "SHA256",
+          "checksumValue": "935ade9e5e8723583c07f44c5592cea2a1c8f65c56ca7e07b34c025c880e0bd6"
+        }
+      ],
+      "licenseConcluded": "BSD-3-Clause",
+      "licenseDeclared": "BSD-3-Clause",
+      "copyrightText": "Copyright 2000-2026 Kitware, Inc. and Contributors"
+    },
+    {
+      "name": "Ninja",
+      "SPDXID": "SPDXRef-Package-Ninja",
+      "versionInfo": "1.13.2",
+      "downloadLocation": "https://github.com/ninja-build/ninja/releases/download/v1.13.2/ninja-win.zip",
+      "filesAnalyzed": false,
+      "checksums": [
+        {
+          "algorithm": "SHA256",
+          "checksumValue": "07fc8261b42b20e71d1720b39068c2e14ffcee6396b76fb7a795fb460b78dc65"
+        }
+      ],
+      "licenseConcluded": "Apache-2.0",
+      "licenseDeclared": "Apache-2.0",
+      "copyrightText": "NOASSERTION"
+    },
+    {
+      "name": "Microsoft Visual Studio Build Tools 2026",
+      "SPDXID": "SPDXRef-Package-Visual-Studio-Build-Tools",
+      "versionInfo": "18.7.3+11925.98",
+      "downloadLocation": "https://download.visualstudio.microsoft.com/download/pr/4037ccca-d103-412b-a678-bc0aa164315e/07b09afd416dc05c781f171c881c23e42907eeb8d812fa1d2993dffb9323c869/vs_BuildTools.exe",
+      "filesAnalyzed": false,
+      "checksums": [
+        {
+          "algorithm": "SHA256",
+          "checksumValue": "07b09afd416dc05c781f171c881c23e42907eeb8d812fa1d2993dffb9323c869"
+        }
+      ],
+      "licenseConcluded": "NOASSERTION",
+      "licenseDeclared": "NOASSERTION",
+      "copyrightText": "NOASSERTION"
+    }
+  ],
+  "relationships": [
+    {
+      "spdxElementId": "SPDXRef-DOCUMENT",
+      "relationshipType": "DESCRIBES",
+      "relatedSpdxElement": "SPDXRef-Package-Ninho-Orbital"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-Ninho-Orbital",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-Box3D"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-Ninho-Orbital",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-Godot"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-Ninho-Orbital",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-godot-cpp"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-Ninho-Orbital",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-CMake"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-Ninho-Orbital",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-Ninja"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-Ninho-Orbital",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-Visual-Studio-Build-Tools"
+    }
+  ]
+}

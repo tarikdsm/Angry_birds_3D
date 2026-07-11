@@ -1,1 +1,15 @@
 /.worktrees/
+/.superpowers/
+/.tools/
+/build/
+/.fetchcontent-cache/
+/artifacts/
+/.godot/
+/game/.godot/
+/game/bin/*.dll
+/game/bin/*.pdb
+/game/bin/*.ilk
+**/__pycache__/
+*.py[cod]
+*.user
+*.suo
