@@ -148,7 +148,8 @@ void apply_enemy_damage(std::vector<DamageState>& states,
         state->neutralized = true;
         outcomes.push_back({DamageOutcomeKind::EntityNeutralized,
             cause_entity, cause_part, target.entity_id, target.part_id,
-            position, cause_to_target, energy, applied});
+            position, cause_to_target, energy, applied,
+            NeutralizationCause::IntegrityDepleted});
     }
 }
 
@@ -162,11 +163,17 @@ void apply_ejection_transitions(std::vector<DamageState>& states,
             continue;
         }
         if (body.ejected && !state->was_ejected && !state->neutralized) {
+            const auto outward = ninho::physics::normalized_or_zero(
+                body.transform.position);
+            const float radial_speed = std::max(0.0f,
+                ninho::physics::dot(body.linear_velocity_m_s, outward));
+            const double radial_energy = 0.5 * body.mass_kg
+                * static_cast<double>(radial_speed) * radial_speed;
             state->remaining_integrity = 0.0;
             state->neutralized = true;
             outcomes.push_back({DamageOutcomeKind::EntityNeutralized,
                 {}, {}, body.entity_id, body.part_id, body.transform.position,
-                {}, 0.0, 0.0});
+                outward, radial_energy, 0.0, NeutralizationCause::Ejection});
         }
         state->was_ejected = body.ejected;
     }
@@ -186,7 +193,8 @@ void SimulationSession::Impl::process_damage_after_step()
             continue;
         }
         bodies.push_back({record.entity_id, record.part_id, record.material_id,
-            record.enemy_archetype_id, state->transform, state->ejected});
+            record.enemy_archetype_id, state->transform, state->mass,
+            state->linear_velocity, state->ejected});
     }
 
     std::vector<detail::DamageContact> contacts;
@@ -224,6 +232,7 @@ void SimulationSession::Impl::publish_damage_outcomes(
             .normal = outcome.normal_cause_to_target,
             .energy_j = outcome.energy_j,
             .damage = outcome.damage,
+            .neutralization_cause = outcome.neutralization_cause,
         };
         domain_events.push_back(event);
         if (kind == DomainEventKind::EntityNeutralized) {

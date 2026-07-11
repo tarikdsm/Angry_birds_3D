@@ -1,6 +1,7 @@
 #pragma once
 
 #include "ninho/simulation/content.hpp"
+#include "ninho/simulation/events.hpp"
 
 #include <ninho/physics/physics_types.hpp>
 
@@ -16,6 +17,8 @@ struct DamageBody {
     std::optional<MaterialId> material_id;
     std::optional<EnemyArchetypeId> enemy_archetype_id;
     ninho::physics::Transform transform;
+    double mass_kg{};
+    ninho::physics::Vec3 linear_velocity_m_s{};
     bool ejected{};
 };
 
@@ -41,6 +44,7 @@ struct DamageOutcome {
     ninho::physics::Vec3 normal_cause_to_target{};
     double energy_j{};
     double damage{};
+    NeutralizationCause neutralization_cause{NeutralizationCause::None};
 };
 
 struct DamageState {

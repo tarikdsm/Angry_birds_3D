@@ -414,6 +414,7 @@ void SimulationSession::Impl::refresh_canonical_state()
         writer.vector(event.normal);
         writer.quantized(event.energy_j);
         writer.quantized(event.damage);
+        writer.integer(static_cast<std::uint8_t>(event.neutralization_cause));
     }
 
     writer.integer<std::uint32_t>(

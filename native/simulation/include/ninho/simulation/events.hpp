@@ -25,6 +25,12 @@ enum class CommandRejectionReason : std::uint8_t {
     NoBirdAvailable,
 };
 
+enum class NeutralizationCause : std::uint8_t {
+    None,
+    IntegrityDepleted,
+    Ejection,
+};
+
 struct DomainEvent {
     EventId id{};
     TickIndex tick{};
@@ -43,6 +49,7 @@ struct DomainEvent {
     ninho::physics::Vec3 normal{};
     double energy_j{};
     double damage{};
+    NeutralizationCause neutralization_cause{NeutralizationCause::None};
 
     bool operator==(const DomainEvent&) const = default;
 };

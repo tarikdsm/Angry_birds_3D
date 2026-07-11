@@ -30,7 +30,7 @@ std::string read_text(const char* relative)
     return contents.str();
 }
 
-std::unique_ptr<ninho::simulation::SimulationSession> create_real_session()
+ninho::simulation::ContentBundle load_real_bundle()
 {
     using namespace ninho::simulation;
     const auto materials = parse_material_catalog(
@@ -40,7 +40,17 @@ std::unique_ptr<ninho::simulation::SimulationSession> create_real_session()
     const auto level = parse_level_manifest(
         read_text("/game/data/levels/first_orbit.level.json"));
     NINHO_SIM_REQUIRE(materials.ok() && archetypes.ok() && level.ok());
-    auto session = SimulationSession::create(materials.value, archetypes.value, level.value);
+    const auto bundle = make_content_bundle(materials.value, archetypes.value, level.value);
+    NINHO_SIM_REQUIRE(bundle.ok());
+    return bundle.value;
+}
+
+std::unique_ptr<ninho::simulation::SimulationSession> create_real_session()
+{
+    using namespace ninho::simulation;
+    const auto bundle = load_real_bundle();
+    auto session = SimulationSession::create(
+        bundle.materials, bundle.archetypes, bundle.level);
     NINHO_SIM_REQUIRE(session.ok());
     return std::move(session.value);
 }
@@ -146,8 +156,8 @@ NINHO_SIM_TEST("damage anchor uses data driven directional protection mass denom
             480.0, 100.0, 80.0, 55.0}}};
     const std::vector bodies{
         detail::DamageBody{EntityId{99}, PartId{1}},
-        detail::DamageBody{EntityId{300}, PartId{1}, std::nullopt,
-            EnemyArchetypeId{1}, {{}, {}}, false},
+        detail::DamageBody{.entity_id = EntityId{300}, .part_id = PartId{1},
+            .enemy_archetype_id = EnemyArchetypeId{1}, .transform = {}},
     };
     constexpr double half_denominator_energy = 480.0 * 80.0 * 0.5;
     const auto hit = [](ninho::physics::Vec3 normal, double energy) {
@@ -209,8 +219,10 @@ NINHO_SIM_TEST("damage anchor neutralizes once on integrity or first ejection tr
         .enemies = {{EnemyArchetypeId{1}, "enemy", WeakpointId{1}, SurfaceId{1004},
             480.0, 100.0, 80.0, 55.0}}};
     const detail::DamageBody cause{EntityId{99}, PartId{1}};
-    const detail::DamageBody anchor{EntityId{300}, PartId{1}, std::nullopt,
-        EnemyArchetypeId{1}, {{7.0f, 8.0f, 9.0f}, {}}, false};
+    const detail::DamageBody anchor{.entity_id = EntityId{300}, .part_id = PartId{1},
+        .enemy_archetype_id = EnemyArchetypeId{1},
+        .transform = {{0.0f, 0.0f, 50.0f}, {}}, .mass_kg = 480.0,
+        .linear_velocity_m_s = {3.0f, 4.0f, 12.0f}, .ejected = false};
     const detail::DamageContact hit{EntityId{99}, PartId{1}, EntityId{300}, PartId{1},
         {1.0f, 2.0f, 3.0f}, {1.0f, 0.0f, 0.0f}, 480.0 * 80.0 * 0.5};
 
@@ -223,6 +235,11 @@ NINHO_SIM_TEST("damage anchor neutralizes once on integrity or first ejection tr
         std::vector{hit});
     NINHO_SIM_REQUIRE(lethal.size() == 2U);
     NINHO_SIM_REQUIRE(lethal.back().kind == detail::DamageOutcomeKind::EntityNeutralized);
+    NINHO_SIM_REQUIRE(lethal.back().neutralization_cause
+        == NeutralizationCause::IntegrityDepleted);
+    NINHO_SIM_REQUIRE(lethal.back().position_m == hit.position_m);
+    NINHO_SIM_REQUIRE(lethal.back().normal_cause_to_target == hit.normal_a_to_b);
+    NINHO_SIM_REQUIRE(lethal.back().energy_j == hit.energy_j);
     const auto after_neutralized = integrity.process(
         materials, archetypes, stable_bodies, std::vector{hit});
     NINHO_SIM_REQUIRE(after_neutralized.empty());
@@ -234,12 +251,17 @@ NINHO_SIM_TEST("damage anchor neutralizes once on integrity or first ejection tr
     ejected_anchor.ejected = true;
     const std::vector ejected_bodies{cause, ejected_anchor};
     const auto first_ejection = ejection.process(materials, archetypes, ejected_bodies, {});
+    const ninho::physics::Vec3 expected_ejection_normal{0.0f, 0.0f, 1.0f};
     NINHO_SIM_REQUIRE(first_ejection.size() == 1U);
     NINHO_SIM_REQUIRE(first_ejection.front().kind
         == detail::DamageOutcomeKind::EntityNeutralized);
+    NINHO_SIM_REQUIRE(first_ejection.front().neutralization_cause
+        == NeutralizationCause::Ejection);
     NINHO_SIM_REQUIRE(first_ejection.front().position_m
         == ejected_anchor.transform.position);
-    NINHO_SIM_REQUIRE(first_ejection.front().energy_j == 0.0);
+    NINHO_SIM_REQUIRE(first_ejection.front().normal_cause_to_target
+        == expected_ejection_normal);
+    NINHO_SIM_REQUIRE(std::abs(first_ejection.front().energy_j - 34560.0) < 1.0e-9);
     const auto repeated_ejection = ejection.process(materials, archetypes, ejected_bodies, {});
     NINHO_SIM_REQUIRE(repeated_ejection.empty());
 
@@ -249,6 +271,67 @@ NINHO_SIM_TEST("damage anchor neutralizes once on integrity or first ejection tr
     const auto neutralized_count = std::ranges::count(simultaneous,
         detail::DamageOutcomeKind::EntityNeutralized, &detail::DamageOutcome::kind);
     NINHO_SIM_REQUIRE(neutralized_count == 1);
+}
+
+NINHO_SIM_TEST("damage anchor session preserves typed radial ejection causality")
+{
+    using namespace ninho::simulation;
+    auto bundle = load_real_bundle();
+    const auto enemy_body = std::ranges::find_if(bundle.level.bodies, [](const auto& body) {
+        return body.enemy_archetype_id == EnemyArchetypeId{1};
+    });
+    NINHO_SIM_REQUIRE(enemy_body != bundle.level.bodies.end());
+    enemy_body->transform.position_m = {0.0, 41.0, 0.0};
+    auto created = SimulationSession::create(
+        bundle.materials, bundle.archetypes, bundle.level);
+    NINHO_SIM_REQUIRE(created.ok());
+    auto session = std::move(created.value);
+    const auto initial = std::ranges::find_if(session->snapshots(), [](const auto& snapshot) {
+        return snapshot.enemy_archetype_id == EnemyArchetypeId{1};
+    });
+    NINHO_SIM_REQUIRE(initial != session->snapshots().end());
+    const EntityId target_entity = initial->entity_id;
+    const PartId target_part = initial->part_id;
+    const auto outward = ninho::physics::normalized_or_zero(initial->transform.position);
+    const auto impulse = outward * static_cast<float>(initial->mass_kg * 35.0);
+    NINHO_SIM_REQUIRE(detail::SessionTestFacade::impulse_entity(
+        *session, target_entity, impulse));
+
+    std::optional<DomainEvent> neutralized;
+    std::optional<EntitySnapshot> ejected_snapshot;
+    for (int tick = 0; tick < 180 && !neutralized; ++tick) {
+        NINHO_SIM_REQUIRE(session->tick().ok());
+        const auto event = std::ranges::find_if(session->events(), [&](const DomainEvent& value) {
+            return value.kind == DomainEventKind::EntityNeutralized
+                && value.affected_entity_id == target_entity;
+        });
+        if (event == session->events().end()) {
+            continue;
+        }
+        neutralized = *event;
+        const auto snapshot = std::ranges::find_if(session->snapshots(), [&](const auto& value) {
+            return value.entity_id == target_entity && value.part_id == target_part;
+        });
+        NINHO_SIM_REQUIRE(snapshot != session->snapshots().end());
+        ejected_snapshot = *snapshot;
+    }
+
+    NINHO_SIM_REQUIRE(neutralized.has_value() && ejected_snapshot.has_value());
+    const auto expected_normal = ninho::physics::normalized_or_zero(
+        ejected_snapshot->transform.position);
+    const float radial_speed = std::max(0.0f,
+        ninho::physics::dot(ejected_snapshot->linear_velocity_m_s, expected_normal));
+    const double expected_energy = 0.5 * ejected_snapshot->mass_kg
+        * static_cast<double>(radial_speed) * radial_speed;
+    NINHO_SIM_REQUIRE(neutralized->neutralization_cause == NeutralizationCause::Ejection);
+    NINHO_SIM_REQUIRE(neutralized->entity_id == EntityId{});
+    NINHO_SIM_REQUIRE(neutralized->part_id == PartId{});
+    NINHO_SIM_REQUIRE(ninho::physics::length(
+        neutralized->position_m - ejected_snapshot->transform.position) < 1.0e-4f);
+    NINHO_SIM_REQUIRE(ninho::physics::length(
+        neutralized->normal - expected_normal) < 1.0e-5f);
+    NINHO_SIM_REQUIRE(std::abs(neutralized->energy_j - expected_energy)
+        < expected_energy * 1.0e-5);
 }
 
 NINHO_SIM_TEST("damage anchor session processes post step contacts into canonical causal events")
