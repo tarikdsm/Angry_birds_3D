@@ -534,6 +534,24 @@ struct ProjectileOutcome {
     std::optional<StateScanFailure> state_failure;
 };
 
+void sample_capability_metrics(CapabilityRow& row, const WorldMetrics& metrics)
+{
+    row.peak_body_count = std::max(row.peak_body_count, metrics.body_count);
+    row.peak_shape_count = std::max(row.peak_shape_count, metrics.shape_count);
+    row.peak_joint_count = std::max(row.peak_joint_count, metrics.joint_count);
+    row.peak_awake_count = std::max(row.peak_awake_count, metrics.awake_count);
+    row.peak_contact_count = std::max(row.peak_contact_count, metrics.contact_count);
+}
+
+void merge_capability_metrics(CapabilityRow& row, const ProjectileOutcome& outcome)
+{
+    row.peak_body_count = std::max(row.peak_body_count, outcome.peak_body_count);
+    row.peak_shape_count = std::max(row.peak_shape_count, outcome.peak_shape_count);
+    row.peak_joint_count = std::max(row.peak_joint_count, outcome.peak_joint_count);
+    row.peak_awake_count = std::max(row.peak_awake_count, outcome.peak_awake_count);
+    row.peak_contact_count = std::max(row.peak_contact_count, outcome.peak_contact_count);
+}
+
 [[nodiscard]] ProjectileOutcome simulate_projectile(
     std::uint64_t seed, float speed, int substeps)
 {
@@ -1806,6 +1824,7 @@ struct CrtStressProbeResult {
     const auto& outcomes = gate.primary_pass_count == 20 ? gate.primary : gate.fallback;
     for (const ProjectileOutcome& outcome : outcomes) {
         row.fixture_hashes.push_back(outcome.final_hash);
+        merge_capability_metrics(row, outcome);
     }
     if (gate.primary_invalid_count != 0 || gate.fallback_invalid_count != 0) {
         row.status = CapabilityStatus::Blocked;
@@ -1844,6 +1863,7 @@ struct CrtStressProbeResult {
         return row;
     }
     watched_step(world, 1);
+    sample_capability_metrics(row, world.metrics());
     if (const auto failure = scan_body_states(world.states(), 10.0)) {
         row.status = CapabilityStatus::Blocked;
         row.detail = "shape-query fixture state failed: " + failure->invariant.field
@@ -1904,6 +1924,7 @@ struct CrtStressProbeResult {
         return row;
     }
     watched_step(world, 1);
+    sample_capability_metrics(row, world.metrics());
     if (const auto failure = scan_body_states(world.states(), 10.0)) {
         row.status = CapabilityStatus::Blocked;
         row.detail = "contact fixture state failed: " + failure->invariant.field
@@ -1914,6 +1935,7 @@ struct CrtStressProbeResult {
     const auto heavy_state = world.state(heavy.value);
     for (int tick = 0; tick < 30 && world.contact_hits().empty(); ++tick) {
         watched_step(world, tick + 2);
+        sample_capability_metrics(row, world.metrics());
         if (const auto failure = scan_body_states(world.states(), 10.0)) {
             row.status = CapabilityStatus::Blocked;
             row.detail = "contact fixture state failed: " + failure->invariant.field
@@ -2003,6 +2025,7 @@ struct CrtStressProbeResult {
         return row;
     }
     watched_step(world, 1);
+    sample_capability_metrics(row, world.metrics());
     if (const auto failure = scan_body_states(world.states(), 10.0)) {
         row.status = CapabilityStatus::Blocked;
         row.detail = "joint fixture state failed: " + failure->invariant.field
@@ -2026,6 +2049,7 @@ struct CrtStressProbeResult {
     for (int load = 1000; load <= 12000; load += 1000) {
         world.apply_force(loaded.value, {static_cast<float>(load), 0, 0}, {0, 1, 0});
         watched_step(world, load / 1000 + 1);
+        sample_capability_metrics(row, world.metrics());
         if (const auto failure = scan_body_states(world.states(), 10.0)) {
             row.status = CapabilityStatus::Blocked;
             row.detail = "joint fixture state failed: " + failure->invariant.field
@@ -2135,7 +2159,19 @@ struct CrtStressProbeResult {
             double mass{};
             Aabb bounds{};
             std::uint64_t fixture_hash{};
+            int peak_body_count{};
+            int peak_shape_count{};
+            int peak_joint_count{};
+            int peak_awake_count{};
+            int peak_contact_count{};
         } result;
+        const auto sample = [&](const WorldMetrics& metrics) {
+            result.peak_body_count = std::max(result.peak_body_count, metrics.body_count);
+            result.peak_shape_count = std::max(result.peak_shape_count, metrics.shape_count);
+            result.peak_joint_count = std::max(result.peak_joint_count, metrics.joint_count);
+            result.peak_awake_count = std::max(result.peak_awake_count, metrics.awake_count);
+            result.peak_contact_count = std::max(result.peak_contact_count, metrics.contact_count);
+        };
         constexpr double expected_mass = 42.666666666666664;
         constexpr double tolerance = 1.0e-4;
         constexpr Aabb expected_bounds{{-1.62f, 2.78f, -0.22f}, {1.62f, 3.22f, 0.22f}};
@@ -2148,6 +2184,7 @@ struct CrtStressProbeResult {
         }
         result.created = true;
         watched_step(world, 1);
+        sample(world.metrics());
         if (scan_body_states(world.states(), 10.0)) {
             result.state_valid = false;
             return result;
@@ -2168,6 +2205,7 @@ struct CrtStressProbeResult {
         for (int tick = 0; tick < 180 && world.contact_hits().empty(); ++tick) {
             world.apply_force(body.value, {0, -4000, 0}, {0, 3, 0});
             watched_step(world, tick + 2);
+            sample(world.metrics());
             if (scan_body_states(world.states(), 10.0)) {
                 result.state_valid = false;
                 return result;
@@ -2203,6 +2241,11 @@ struct CrtStressProbeResult {
         row.detail = "the primary compound was created but failed exact mass, bounds, state, or contact proof";
     }
     row.fixture_hashes.push_back(proof.fixture_hash);
+    row.peak_body_count = proof.peak_body_count;
+    row.peak_shape_count = proof.peak_shape_count;
+    row.peak_joint_count = proof.peak_joint_count;
+    row.peak_awake_count = proof.peak_awake_count;
+    row.peak_contact_count = proof.peak_contact_count;
     row.values = {
         {"hull_count", 8.0, "count"},
         {"expected_mass", 42.666666666666664, "kg"},
@@ -2252,6 +2295,7 @@ struct CrtStressProbeResult {
             return row;
         }
         watched_step(world, warmup * 2 + 1);
+        sample_capability_metrics(row, world.metrics());
         if (const auto failure = scan_body_states(world.states(), 10.0)) {
             row.status = CapabilityStatus::Blocked;
             row.detail = "lifecycle warmup state failed: " + failure->invariant.field
@@ -2260,6 +2304,7 @@ struct CrtStressProbeResult {
         }
         world.destroy_body(created.value);
         watched_step(world, warmup * 2 + 2);
+        sample_capability_metrics(row, world.metrics());
         previous = created.value;
     }
     const auto baseline = process_memory_sample();
@@ -2283,6 +2328,7 @@ struct CrtStressProbeResult {
             ++invalid_handles;
         }
         watched_step(world, cycle * 2 + 1);
+        sample_capability_metrics(row, world.metrics());
         if (const auto failure = scan_body_states(world.states(), 10.0)) {
             row.status = CapabilityStatus::Blocked;
             row.detail = "lifecycle state failed: " + failure->invariant.field
@@ -2303,6 +2349,7 @@ struct CrtStressProbeResult {
             ++invalid_handles;
         }
         watched_step(world, cycle * 2 + 2);
+        sample_capability_metrics(row, world.metrics());
         if (world.state(created.value)) {
             ++invalid_handles;
         }
@@ -2391,7 +2438,8 @@ struct CrtStressProbeResult {
     return row;
 }
 
-[[nodiscard]] std::optional<std::uint64_t> own_replay_hash(std::uint64_t seed)
+[[nodiscard]] std::optional<std::uint64_t> own_replay_hash(
+    std::uint64_t seed, CapabilityRow* metrics = nullptr)
 {
     XorShift64 random(seed);
     PhysicsWorld world(WorldConfig{.surface_gravity = 0, .max_bodies = 1});
@@ -2403,6 +2451,9 @@ struct CrtStressProbeResult {
     world.create_body(body);
     for (int tick = 0; tick < 60; ++tick) {
         watched_step(world, tick + 1);
+        if (metrics) {
+            sample_capability_metrics(*metrics, world.metrics());
+        }
         if (scan_body_states(world.states(), 10.0)) {
             return std::nullopt;
         }
@@ -2418,7 +2469,7 @@ struct CrtStressProbeResult {
         / ("ninho-box3d-replay-" + std::to_string(seed) + ".b3rec");
     const detail::ReplayConformanceResult proof =
         detail::validate_box3d_replay(path);
-    const auto own_first = own_replay_hash(seed);
+    const auto own_first = own_replay_hash(seed, &row);
     const auto own_second = own_replay_hash(seed);
     if (own_first) {
         row.fixture_hashes.push_back(*own_first);
@@ -2490,6 +2541,11 @@ struct CrtStressProbeResult {
         .detail = sleep.violations.empty()
             ? "the public radial-gravity pile satisfies every fixed sleep limit"
             : "the public radial-gravity pile violates at least one fixed sleep limit",
+        .peak_body_count = sleep.peak_body_count,
+        .peak_shape_count = sleep.peak_shape_count,
+        .peak_joint_count = sleep.peak_joint_count,
+        .peak_awake_count = sleep.peak_awake_count,
+        .peak_contact_count = sleep.peak_contact_count,
         .values = {
             {"sleep_ratio", sleep.sleep_ratio, "ratio"},
             {"p95_linear_speed", sleep.p95_linear_speed, "m/s"},
@@ -2509,12 +2565,12 @@ struct CrtStressProbeResult {
     result.step_p50_ms = sleep.step_p50_ms;
     result.step_p95_ms = sleep.step_p95_ms;
     result.step_max_ms = sleep.step_max_ms;
-    result.peak_body_count = sleep.peak_body_count;
-    result.peak_shape_count = sleep.peak_shape_count;
-    result.peak_joint_count = sleep.peak_joint_count;
-    result.peak_awake_count = sleep.peak_awake_count;
-    result.peak_contact_count = sleep.peak_contact_count;
     for (const CapabilityRow& row : result.matrix) {
+        result.peak_body_count = std::max(result.peak_body_count, row.peak_body_count);
+        result.peak_shape_count = std::max(result.peak_shape_count, row.peak_shape_count);
+        result.peak_joint_count = std::max(result.peak_joint_count, row.peak_joint_count);
+        result.peak_awake_count = std::max(result.peak_awake_count, row.peak_awake_count);
+        result.peak_contact_count = std::max(result.peak_contact_count, row.peak_contact_count);
         if (row.status == CapabilityStatus::Blocked) {
             add_violation(
                 result,
@@ -2800,6 +2856,16 @@ void append_capability_row(std::string& output, const CapabilityRow& row)
     }
     append_json_name(output, "detail", first);
     append_json_string(output, row.detail);
+    append_json_name(output, "peak_body_count", first);
+    append_json_integer(output, row.peak_body_count);
+    append_json_name(output, "peak_shape_count", first);
+    append_json_integer(output, row.peak_shape_count);
+    append_json_name(output, "peak_joint_count", first);
+    append_json_integer(output, row.peak_joint_count);
+    append_json_name(output, "peak_awake_count", first);
+    append_json_integer(output, row.peak_awake_count);
+    append_json_name(output, "peak_contact_count", first);
+    append_json_integer(output, row.peak_contact_count);
     append_json_name(output, "values", first);
     append_values(output, row.values);
     append_json_name(output, "fixture_hashes", first);
@@ -3062,6 +3128,16 @@ void append_scenario_result(std::string& output, const ScenarioResult& result)
         append_json_integer(output, observation.repeat_index);
         append_json_name(output, "hash", observation_first);
         append_json_integer(output, observation.hash);
+        append_json_name(output, "peak_body_count", observation_first);
+        append_json_integer(output, observation.peak_body_count);
+        append_json_name(output, "peak_shape_count", observation_first);
+        append_json_integer(output, observation.peak_shape_count);
+        append_json_name(output, "peak_joint_count", observation_first);
+        append_json_integer(output, observation.peak_joint_count);
+        append_json_name(output, "peak_awake_count", observation_first);
+        append_json_integer(output, observation.peak_awake_count);
+        append_json_name(output, "peak_contact_count", observation_first);
+        append_json_integer(output, observation.peak_contact_count);
         append_json_name(output, "memory", observation_first);
         append_memory_observation(output, observation.memory);
         append_json_name(output, "box3d_allocator", observation_first);
@@ -3526,6 +3602,11 @@ RepeatObservation make_repeat_observation(
     return {
         .repeat_index = repeat_index,
         .hash = result.final_hash,
+        .peak_body_count = result.peak_body_count,
+        .peak_shape_count = result.peak_shape_count,
+        .peak_joint_count = result.peak_joint_count,
+        .peak_awake_count = result.peak_awake_count,
+        .peak_contact_count = result.peak_contact_count,
         .memory = {
             .gate_scope = result.private_commit_gate_scope,
             .gate_status = result.private_commit_gate_status,
@@ -3597,6 +3678,48 @@ RepeatObservation make_repeat_observation(
         .box3d_allocator = result.box3d_allocator,
         .crt = result.crt,
     };
+}
+
+bool repeat_topology_matches(
+    const RepeatObservation& expected, const RepeatObservation& actual) noexcept
+{
+    return expected.peak_body_count == actual.peak_body_count
+        && expected.peak_shape_count == actual.peak_shape_count
+        && expected.peak_joint_count == actual.peak_joint_count
+        && expected.peak_awake_count == actual.peak_awake_count
+        && expected.peak_contact_count == actual.peak_contact_count;
+}
+
+bool record_repeat_topology_mismatch(
+    ScenarioResult& result,
+    const RepeatObservation& expected,
+    const RepeatObservation& actual)
+{
+    if (repeat_topology_matches(expected, actual)) {
+        return false;
+    }
+    result.violations.push_back({
+        .scenario = result.name,
+        .code = "determinism_topology_mismatch",
+        .message = "topology peaks differ inside the same executable and configuration",
+        .tick = result.ticks,
+        .values = {{"repeat", static_cast<double>(actual.repeat_index), "count"}},
+        .details = {
+            {"expected_body_shape_joint_awake_contact",
+             std::to_string(expected.peak_body_count) + '/'
+                 + std::to_string(expected.peak_shape_count) + '/'
+                 + std::to_string(expected.peak_joint_count) + '/'
+                 + std::to_string(expected.peak_awake_count) + '/'
+                 + std::to_string(expected.peak_contact_count)},
+            {"actual_body_shape_joint_awake_contact",
+             std::to_string(actual.peak_body_count) + '/'
+                 + std::to_string(actual.peak_shape_count) + '/'
+                 + std::to_string(actual.peak_joint_count) + '/'
+                 + std::to_string(actual.peak_awake_count) + '/'
+                 + std::to_string(actual.peak_contact_count)},
+        },
+    });
+    return true;
 }
 
 bool has_two_consecutive_samples(
@@ -3673,6 +3796,11 @@ std::uint64_t hash_capability_rows(std::span<const CapabilityRow> rows)
         mix_string(row->capability);
         mix_u64(static_cast<std::uint64_t>(row->functional_status));
         mix_string(row->functional_fallback);
+        mix_u64(static_cast<std::uint64_t>(row->peak_body_count));
+        mix_u64(static_cast<std::uint64_t>(row->peak_shape_count));
+        mix_u64(static_cast<std::uint64_t>(row->peak_joint_count));
+        mix_u64(static_cast<std::uint64_t>(row->peak_awake_count));
+        mix_u64(static_cast<std::uint64_t>(row->peak_contact_count));
         std::vector<const ScenarioValue*> ordered_values;
         for (const ScenarioValue& value : row->values) {
             const bool nonfunctional_value =

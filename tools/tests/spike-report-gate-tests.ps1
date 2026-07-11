@@ -34,24 +34,50 @@ Set-Content -LiteralPath $target -Value '{"stale":true}' -Encoding utf8
 $started = Start-NinhoSpikeReportCapture -Path $target -AllowedRoot $sandbox
 Assert-True (-not (Test-Path -LiteralPath $target)) 'capture did not remove stale report'
 Assert-Throws {
-    Read-NinhoFreshSpikeReport -Path $target -StartedUtc $started
+    Read-NinhoFreshSpikeReport -Path $target -StartedUtc $started -ExpectedBuildType Debug
 } 'did not create a report'
 
 Set-Content -LiteralPath $target -Value '{"ok":true}' -Encoding utf8
 (Get-Item -LiteralPath $target).LastWriteTimeUtc = $started.AddMinutes(-1)
 Assert-Throws {
-    Read-NinhoFreshSpikeReport -Path $target -StartedUtc $started
+    Read-NinhoFreshSpikeReport -Path $target -StartedUtc $started -ExpectedBuildType Debug
 } 'predates this execution'
 
+Copy-Item -LiteralPath (Join-Path $Root 'docs\physics\evidence\foundation-report-debug.json') `
+    -Destination $target -Force
+(Get-Item -LiteralPath $target).LastWriteTimeUtc = [DateTime]::UtcNow
+$document = Read-NinhoFreshSpikeReport `
+    -Path $target -StartedUtc $started -ExpectedBuildType Debug
+Assert-True ($document.schema -eq 'ninho.physics.scenario.v1') 'fresh report did not validate'
+
 Set-Content -LiteralPath $target -Value '{"ok":true}' -Encoding utf8
-$document = Read-NinhoFreshSpikeReport -Path $target -StartedUtc $started
-Assert-True ($document.ok -eq $true) 'fresh report did not parse'
+Assert-Throws {
+    Read-NinhoFreshSpikeReport -Path $target -StartedUtc $started -ExpectedBuildType Debug
+} 'missing schema'
 
 Assert-Throws {
     Start-NinhoSpikeReportCapture `
         -Path (Join-Path (Split-Path $sandbox -Parent) 'outside.json') `
         -AllowedRoot $sandbox
 } 'outside the allowed root'
+
+$junctionTestRoot = Join-Path ([System.IO.Path]::GetTempPath()) "ninho-spike-reparse-$PID"
+$junctionAllowedRoot = Join-Path $junctionTestRoot 'artifacts'
+$external = Join-Path $junctionTestRoot 'external'
+$junction = Join-Path $junctionAllowedRoot 'physics'
+New-Item -ItemType Directory -Force -Path $junctionAllowedRoot, $external | Out-Null
+Set-Content -LiteralPath (Join-Path $external 'marker.txt') -Value 'keep' -Encoding ascii
+Set-Content -LiteralPath (Join-Path $external 'report.json') -Value '{}' -Encoding ascii
+New-Item -ItemType Junction -Path $junction -Target $external | Out-Null
+Assert-Throws {
+    Start-NinhoSpikeReportCapture `
+        -Path (Join-Path $junction 'report.json') `
+        -AllowedRoot $junctionAllowedRoot
+} 'reparse point'
+Assert-True (Test-Path -LiteralPath (Join-Path $external 'marker.txt')) `
+    'external junction target was modified'
+[System.IO.Directory]::Delete($junction)
+Remove-Item -LiteralPath $junctionTestRoot -Recurse -Force
 
 Remove-Item -LiteralPath $target -Force
 Write-Output 'spike-report-gate-tests: PASS'

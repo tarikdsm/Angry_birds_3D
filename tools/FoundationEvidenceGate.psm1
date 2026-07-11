@@ -1,4 +1,5 @@
 Set-StrictMode -Version Latest
+Import-Module (Join-Path $PSScriptRoot 'SpikeEvidenceValidation.psm1') -Force
 
 function Get-NinhoSingleReportToken {
     param(
@@ -66,6 +67,9 @@ function Assert-NinhoFoundationEvidence {
         } catch {
             throw "Foundation evidence is not valid JSON for ${configuration}: $($_.Exception.Message)"
         }
+        Assert-NinhoSpikeEvidenceDocument `
+            -Document $document `
+            -ExpectedBuildType $configuration
         if ($document.build_type -cne $configuration) {
             throw "Foundation evidence build_type mismatch for $configuration"
         }

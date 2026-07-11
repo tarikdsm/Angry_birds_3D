@@ -219,6 +219,17 @@ def validate_repeat_observations(document: dict) -> None:
                 raise AssertionError("repeat observation index mismatch")
             if observation["hash"] != scenario["hashes"][index - 1]:
                 raise AssertionError("repeat observation hash mismatch")
+            for peak_name in (
+                "peak_body_count",
+                "peak_shape_count",
+                "peak_joint_count",
+                "peak_awake_count",
+                "peak_contact_count",
+            ):
+                if observation[peak_name] != scenario[peak_name]:
+                    raise AssertionError(
+                        f"repeat topology mismatch: {scenario['name']}/{peak_name}"
+                    )
             allocator = observation["box3d_allocator"]
             if (
                 allocator["baseline_bytes"] != 0
@@ -349,12 +360,12 @@ def main() -> int:
         if len(document["scenarios"]) != 6:
             raise AssertionError("expected all six scenarios")
         expected_topology = {
-            "radial_fall": ((1, 2, 0), (2, 2, 0)),
-            "projectile_pile": ((121, 123, 0), (123, 123, 0)),
-            "radial_pile": ((80, 81, 0), (81, 81, 0)),
-            "mass_ratio": ((80, 81, 0), (81, 81, 0)),
-            "stress": ((500, 800, 250), (500, 800, 250)),
-            "capability_matrix": ((0, 0, 0), (81, 81, 0)),
+            "radial_fall": ((1, 2, 0), (2, 2, 0, 1, 1)),
+            "projectile_pile": ((121, 123, 0), (123, 123, 0, 121, 221)),
+            "radial_pile": ((80, 81, 0), (81, 81, 0, 80, 204)),
+            "mass_ratio": ((80, 81, 0), (81, 81, 0, 80, 227)),
+            "stress": ((500, 800, 250), (500, 800, 250, 500, 0)),
+            "capability_matrix": ((0, 0, 0), (123, 123, 1, 121, 221)),
         }
         for scenario in document["scenarios"]:
             if len(scenario["hashes"]) != 2 or len(set(scenario["hashes"])) != 1:
@@ -368,6 +379,8 @@ def main() -> int:
                 scenario["peak_body_count"],
                 scenario["peak_shape_count"],
                 scenario["peak_joint_count"],
+                scenario["peak_awake_count"],
+                scenario["peak_contact_count"],
             )
             if (fixture, peak) != expected_topology[scenario["name"]]:
                 raise AssertionError(
@@ -380,6 +393,22 @@ def main() -> int:
             raise AssertionError("expected all eight capability rows")
         if any(row["status"] == "blocked" for row in document["matrix"]):
             raise AssertionError("capability matrix contains a blocked row")
+        capability_scenario = next(
+            scenario
+            for scenario in document["scenarios"]
+            if scenario["name"] == "capability_matrix"
+        )
+        for peak_name in (
+            "peak_body_count",
+            "peak_shape_count",
+            "peak_joint_count",
+            "peak_awake_count",
+            "peak_contact_count",
+        ):
+            if any(peak_name not in row for row in document["matrix"]):
+                raise AssertionError(f"capability row is missing {peak_name}")
+            if max(row[peak_name] for row in document["matrix"]) != capability_scenario[peak_name]:
+                raise AssertionError(f"capability aggregate mismatch: {peak_name}")
         for row in document["matrix"]:
             if row["functional_status"] not in {"pass", "fallback", "blocked"}:
                 raise AssertionError("invalid functional capability status")

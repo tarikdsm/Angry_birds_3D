@@ -1,11 +1,11 @@
 # Box3D Foundation Spike Report
 
-Este documento descreve um snapshot auditado e imutável, não o último JSON volátil de `artifacts/physics/`. Os dois snapshots rastreados foram gerados após a inclusão explícita dos picos de bodies, shapes e joints. O gate lê os quatro tokens abaixo, valida JSON/contratos e recalcula SHA-256 antes de compilar.
+Este documento descreve um snapshot auditado e imutável, não o último JSON volátil de `artifacts/physics/`. Os dois snapshots rastreados registram picos de bodies, shapes, joints, bodies acordados e contatos por capacidade e por repetição. O gate lê os quatro tokens abaixo, valida integralmente o contrato semântico e recalcula SHA-256 antes de compilar.
 
 Evidence-Debug-Path: docs/physics/evidence/foundation-report-debug.json
-Evidence-Debug-SHA256: 7B70EFD0CA5D53C1513728D5B50AB794AFF6C390FA7BEB813ECE6CDC4D939275
+Evidence-Debug-SHA256: FD87A8BE9B882CD7BB0F58BE2311196456C8C76943C1B347D1B0F534A35385C0
 Evidence-Release-Path: docs/physics/evidence/foundation-report-release.json
-Evidence-Release-SHA256: 9D57D1ABBB07C45C44B93866A2DFD11766D9ABE4D7D35A6349656F5401110BA8
+Evidence-Release-SHA256: BB517B2550E4A53EAF68723D4E78D4A15BB7FF231F1206C9F72E6358AA9BF5B2
 
 Ambos contêm seis cenários, dois repeats por cenário, hashes repetidos, oito capabilities aprovadas, zero violação normativa, warning `private_commit_budget_unqualified` e recommendation `prosseguir_com_limites`.
 
@@ -98,12 +98,12 @@ Todos os repeats têm warning `private_commit_budget_unqualified`, `gate_status=
 
 | Verificação posterior ao snapshot | Debug | Release |
 | --- | --- | --- |
-| Projeto | 24/24, 0 falhas, `203.56 s` | 24/24, 0 falhas, `15.40 s` |
-| Upstream limpo | 20/20, `9.81 s` | 20/20, `0.92 s` |
+| Projeto | 24/24, 0 falhas, `206.40 s` | 24/24, 0 falhas, `15.44 s` |
+| Upstream limpo | 20/20, `9.74 s` | 20/20, `0.90 s` |
 | Headless API | exit 0, log limpo | exit 0, log limpo |
 | Renderers | Vulkan Forward Mobile + OpenGL Compatibility, filmes novos | Vulkan Forward Mobile + OpenGL Compatibility, filmes novos |
 
-A verificação completa foi executada depois da criação do snapshot e está em `artifacts/physics/review-final2-{debug,release}-gate.log`. Esses logs confirmam o código e o vínculo, mas não alteram os snapshots ou seus hashes.
+Os gates C++ e upstream executados depois da criação do snapshot estão em `artifacts/physics/review-final2-debug-gate.log` e `artifacts/physics/review-final2-release-gate.log`. A fumaça headless do Godot está registrada separadamente em `artifacts/physics/godot-smoke-debug.stdout.log`, `artifacts/physics/godot-smoke-debug.stderr.log`, `artifacts/physics/godot-smoke-release.stdout.log` e `artifacts/physics/godot-smoke-release.stderr.log`. As capturas dos renderers estão em `artifacts/physics/godot-scene-debug.stdout.log`, `artifacts/physics/godot-scene-debug.stderr.log`, `artifacts/physics/godot-scene-release.stdout.log`, `artifacts/physics/godot-scene-release.stderr.log`, `artifacts/physics/godot-scene-gl-debug.stdout.log`, `artifacts/physics/godot-scene-gl-debug.stderr.log`, `artifacts/physics/godot-scene-gl-release.stdout.log` e `artifacts/physics/godot-scene-gl-release.stderr.log`. Essas evidências não alteram os snapshots nem seus hashes.
 
 Evidência visual auditada: `artifacts/physics/foundation-release-300.avi`, 300 frames/5 s, SHA-256 `DB4FB24628447CA0096A7E0C3C8EB17F943AFCC5AD7BCF257A5B1634A826BDBB`. Frames inspecionados: launch 2 `841538...`, impact 22 com `-vsync 0` `BCF084...`, settled 280 `E1E46D...`. A cena usa somente presentation nodes; gameplay transforms vêm de Box3D.
 

@@ -172,6 +172,11 @@ NINHO_TEST("scenario JSON preserves memory telemetry for every repeat")
     ScenarioResult result;
     result.name = "repeat_memory";
     result.final_hash = 11;
+    result.peak_body_count = 12;
+    result.peak_shape_count = 13;
+    result.peak_joint_count = 2;
+    result.peak_awake_count = 9;
+    result.peak_contact_count = 17;
     result.private_commit_available = true;
     result.private_commit_stable = true;
     result.private_commit_baseline_median_bytes = 100;
@@ -194,6 +199,8 @@ NINHO_TEST("scenario JSON preserves memory telemetry for every repeat")
     NINHO_REQUIRE(json.find("\"repeat_observations\":[{\"repeat\":1,\"hash\":11")
         != std::string::npos);
     NINHO_REQUIRE(json.find("{\"repeat\":2,\"hash\":22") != std::string::npos);
+    NINHO_REQUIRE(json.find("\"peak_body_count\":12,\"peak_shape_count\":13,\"peak_joint_count\":2,\"peak_awake_count\":9,\"peak_contact_count\":17")
+        != std::string::npos);
     NINHO_REQUIRE(json.find("\"private_commit\":{\"available\":true")
         != std::string::npos);
     NINHO_REQUIRE(json.find("\"working_set\":{\"available\":true")
@@ -201,6 +208,30 @@ NINHO_TEST("scenario JSON preserves memory telemetry for every repeat")
     NINHO_REQUIRE(json.find("\"assessment_status\":\"growth\"")
         != std::string::npos);
     NINHO_REQUIRE(json.find("\"gate_applied\":false") != std::string::npos);
+}
+
+NINHO_TEST("repeat topology comparison rejects equal hashes with divergent peaks")
+{
+    RepeatObservation expected{
+        .repeat_index = 1,
+        .hash = 42,
+        .peak_body_count = 10,
+        .peak_shape_count = 11,
+        .peak_joint_count = 1,
+        .peak_awake_count = 8,
+        .peak_contact_count = 7,
+    };
+    RepeatObservation actual = expected;
+    actual.repeat_index = 2;
+    NINHO_REQUIRE(repeat_topology_matches(expected, actual));
+    actual.peak_contact_count += 1;
+    NINHO_REQUIRE(!repeat_topology_matches(expected, actual));
+    ScenarioResult result;
+    result.name = "same_hash_divergent_topology";
+    NINHO_REQUIRE(record_repeat_topology_mismatch(result, expected, actual));
+    NINHO_REQUIRE(result.violations.size() == 1);
+    NINHO_REQUIRE(result.violations.front().code == "determinism_topology_mismatch");
+    NINHO_REQUIRE(scenario_exit_code(std::array{result}, false) == 1);
 }
 
 NINHO_TEST("scenario JSON rejects malformed UTF-8")

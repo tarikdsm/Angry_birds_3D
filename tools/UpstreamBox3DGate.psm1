@@ -1,4 +1,5 @@
 Set-StrictMode -Version Latest
+Import-Module (Join-Path $PSScriptRoot 'SafePath.psm1') -Force
 
 function Reset-NinhoUpstreamBuildDirectory {
     [CmdletBinding()]
@@ -21,17 +22,7 @@ function Reset-NinhoUpstreamBuildDirectory {
         throw "Upstream build path is outside the allowed root: $target"
     }
     if (Test-Path -LiteralPath $target) {
-        $item = Get-Item -Force -LiteralPath $target
-        if (($item.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -ne 0) {
-            throw "Refusing to remove an upstream reparse point: $target"
-        }
-        $resolved = (Resolve-Path -LiteralPath $target).Path.TrimEnd('\', '/')
-        if (-not [string]::Equals(
-                $resolved,
-                $target,
-                [System.StringComparison]::OrdinalIgnoreCase)) {
-            throw "Resolved upstream path differs from the verified target: $resolved"
-        }
+        Assert-NinhoNoReparseAncestors -Path $target -AllowedRoot $root | Out-Null
         Remove-Item -LiteralPath $target -Recurse -Force
     }
     if (Test-Path -LiteralPath $target) {
@@ -53,14 +44,18 @@ function Assert-NinhoUpstreamCompileDatabase {
     }
     $parsedDatabase = [System.IO.File]::ReadAllText($Path) | ConvertFrom-Json
     $entries = @($parsedDatabase)
-    $relevant = @($entries | Where-Object {
-        $_.file -match '[\\/](src|shared|test)[\\/].+\.(c|cc|cpp|cxx)$'
-    })
-    if ($relevant.Count -eq 0) {
+    if ($entries.Count -eq 0) {
         throw 'Upstream compile database has no Box3D/test objects'
     }
-    $libraryEntries = @($relevant | Where-Object { $_.file -match '[\\/]src[\\/]' })
-    $testEntries = @($relevant | Where-Object { $_.file -match '[\\/]test[\\/]' })
+    foreach ($entry in $entries) {
+        if ($entry.PSObject.Properties.Name -notcontains 'file' -or
+                $entry.file -notmatch '(?i)[\\/]box3d(?:-src)?[\\/](src|shared|test)[\\/].+\.(c|cc|cpp|cxx)$') {
+            throw "Upstream compile database contains an unexpected source entry: $($entry.file)"
+        }
+    }
+    $relevant = $entries
+    $libraryEntries = @($entries | Where-Object { $_.file -match '[\\/]src[\\/]' })
+    $testEntries = @($entries | Where-Object { $_.file -match '[\\/]test[\\/]' })
     if ($libraryEntries.Count -eq 0 -or $testEntries.Count -eq 0) {
         throw 'Upstream compile database does not cover both Box3D and test objects'
     }
@@ -82,22 +77,36 @@ function Assert-NinhoUpstreamCompileDatabase {
         if ($command -match '(?i)(?:^|\s)[/-]MDd?(?:\s|$)') {
             throw "Upstream object has forbidden dynamic CRT: $($entry.file)"
         }
-        if ($command -notmatch
-                "(?i)(?:^|\s)[/-]$expectedRuntime(?:\s|$)") {
-            throw "Upstream object is missing /${expectedRuntime}: $($entry.file)"
+        $runtimeFlags = [regex]::Matches(
+            $command, '(?i)(?:^|\s)[/-](MTd|MT|MDd|MD)(?=\s|$)')
+        if ($runtimeFlags.Count -ne 1 -or
+                $runtimeFlags[0].Groups[1].Value -ine $expectedRuntime) {
+            throw "Upstream object must have exactly one /${expectedRuntime} CRT flag: $($entry.file)"
         }
         if ($command -match '(?i)(?:^|\s)(?:[/-]fp:fast|-ffast-math)(?:\s|$)') {
             throw "Upstream object has forbidden floating-point flag: $($entry.file)"
         }
         if ($Configuration -eq 'Debug') {
-            if ($command -match '(?i)(?:^|\s)[/-](?:O2|GL|DNDEBUG)(?:\s|$)') {
+            $optimizationFlags = [regex]::Matches(
+                $command, '(?i)(?:^|\s)[/-](Od|O1|O2|Ox)(?=\s|$)')
+            if ($optimizationFlags.Count -ne 1 -or
+                    $optimizationFlags[0].Groups[1].Value -ine 'Od') {
+                throw "Debug upstream object has conflicting optimization flags: $($entry.file)"
+            }
+            if ($command -match '(?i)(?:^|\s)[/-](?:GL|DNDEBUG)(?:\s|$)') {
                 throw "Debug upstream object has Release contamination: $($entry.file)"
             }
         } else {
-            if ($command -notmatch '(?i)(?:^|\s)[/-]O2(?:\s|$)') {
-                throw "Release upstream object is missing /O2: $($entry.file)"
+            $optimizationFlags = [regex]::Matches(
+                $command, '(?i)(?:^|\s)[/-](Od|O1|O2|Ox)(?=\s|$)')
+            if ($optimizationFlags.Count -ne 1 -or
+                    $optimizationFlags[0].Groups[1].Value -ine 'O2') {
+                throw "Release upstream object has conflicting optimization flags: $($entry.file)"
             }
-            if ($command -match '(?i)(?:^|\s)[/-](?:MTd|RTC1|Od|ZI)(?:\s|$)') {
+            if ($command -notmatch '(?i)(?:^|\s)[/-]DNDEBUG(?:\s|$)') {
+                throw "Release upstream object is missing /DNDEBUG: $($entry.file)"
+            }
+            if ($command -match '(?i)(?:^|\s)[/-](?:MTd|RTC\w*|Od|ZI)(?:\s|$)') {
                 throw "Release upstream object has Debug contamination: $($entry.file)"
             }
         }

@@ -16,6 +16,7 @@ New-Item -ItemType Directory -Force -Path $artifactDirectory | Out-Null
 Import-Module (Join-Path $PSScriptRoot 'GodotSpikeGate.psm1') -Force
 Import-Module (Join-Path $PSScriptRoot 'UpstreamBox3DGate.psm1') -Force
 Import-Module (Join-Path $PSScriptRoot 'FoundationEvidenceGate.psm1') -Force
+Import-Module (Join-Path $PSScriptRoot 'SafePath.psm1') -Force
 & (Join-Path $PSScriptRoot 'tests\spike-report-gate-tests.ps1') -Root $root
 & (Join-Path $PSScriptRoot 'tests\upstream-box3d-gate-tests.ps1') -Root $root
 & (Join-Path $PSScriptRoot 'tests\foundation-evidence-gate-tests.ps1') -Root $root
@@ -56,7 +57,11 @@ Assert-NinhoFoundationEvidence -Root $root -ReportPath $foundationReport
 $descriptorPath = Join-Path $root 'game\bin\ninho_physics.gdextension'
 $descriptor = Read-NinhoGDExtensionDescriptor -Path $descriptorPath
 
+Import-Module (Join-Path $PSScriptRoot 'SafePath.psm1') -Force
 if (Test-Path -LiteralPath $godotImportCache) {
+    Assert-NinhoNoReparseAncestors `
+        -Path $godotImportCache `
+        -AllowedRoot $root | Out-Null
     $resolvedCache = (Resolve-Path -LiteralPath $godotImportCache).Path
     $expectedCache = [System.IO.Path]::GetFullPath($godotImportCache)
     if (-not [string]::Equals(

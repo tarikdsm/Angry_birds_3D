@@ -318,6 +318,12 @@ int main(int argc, char** argv)
                         hashes.front(),
                         current.final_hash);
                 }
+                if (record_repeat_topology_mismatch(
+                        *first_result,
+                        first_result->repeat_observations.front(),
+                        first_result->repeat_observations.back())) {
+                    hash_mismatch = true;
+                }
             }
         }
         first_result->repeat_hashes = std::move(hashes);

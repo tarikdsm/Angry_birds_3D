@@ -32,7 +32,10 @@ if ($spikeExitCode -ne 0) {
 
 $document = $null
 try {
-    $document = Read-NinhoFreshSpikeReport -Path $report -StartedUtc $startedUtc
+    $document = Read-NinhoFreshSpikeReport `
+        -Path $report `
+        -StartedUtc $startedUtc `
+        -ExpectedBuildType $Configuration
 } catch {
     [Console]::Error.WriteLine($_.Exception.Message)
     exit 1

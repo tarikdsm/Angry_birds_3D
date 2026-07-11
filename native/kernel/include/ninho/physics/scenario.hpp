@@ -70,6 +70,11 @@ struct CapabilityRow {
     CapabilityStatus functional_status{CapabilityStatus::Blocked};
     std::string functional_fallback;
     std::string detail;
+    int peak_body_count{};
+    int peak_shape_count{};
+    int peak_joint_count{};
+    int peak_awake_count{};
+    int peak_contact_count{};
     std::vector<ScenarioValue> values;
     std::vector<std::uint64_t> fixture_hashes;
 };
@@ -186,6 +191,11 @@ struct MemoryObservation {
 struct RepeatObservation {
     int repeat_index{};
     std::uint64_t hash{};
+    int peak_body_count{};
+    int peak_shape_count{};
+    int peak_joint_count{};
+    int peak_awake_count{};
+    int peak_contact_count{};
     MemoryObservation memory;
     Box3dAllocatorObservation box3d_allocator;
     CrtMemoryObservation crt;
@@ -329,6 +339,12 @@ struct ScenarioReport {
     bool intentional_allocation);
 [[nodiscard]] RepeatObservation make_repeat_observation(
     int repeat_index, const ScenarioResult& result);
+[[nodiscard]] bool repeat_topology_matches(
+    const RepeatObservation& expected, const RepeatObservation& actual) noexcept;
+[[nodiscard]] bool record_repeat_topology_mismatch(
+    ScenarioResult& result,
+    const RepeatObservation& expected,
+    const RepeatObservation& actual);
 [[nodiscard]] std::uint64_t hash_capability_rows(std::span<const CapabilityRow> rows);
 [[nodiscard]] bool has_two_consecutive_samples(
     std::span<const double> samples, double threshold);

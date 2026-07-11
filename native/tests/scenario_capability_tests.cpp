@@ -61,9 +61,22 @@ NINHO_TEST("capability matrix reports every mandatory row without blocked status
     const auto radial = ScenarioRunner{}.run(ScenarioKind::RadialPile, 5, 4);
     NINHO_REQUIRE(result.final_hash == repeated.final_hash);
     NINHO_REQUIRE(result.final_hash != radial.final_hash);
-    NINHO_REQUIRE(result.peak_body_count == 81);
-    NINHO_REQUIRE(result.peak_shape_count == 81);
-    NINHO_REQUIRE(result.peak_joint_count == 0);
+    NINHO_REQUIRE(result.peak_body_count == 123);
+    NINHO_REQUIRE(result.peak_shape_count == 123);
+    NINHO_REQUIRE(result.peak_joint_count == 1);
+    NINHO_REQUIRE(result.peak_awake_count == 121);
+    NINHO_REQUIRE(result.peak_contact_count == 221);
+
+    const auto& ccd = row(result, "ccd_dynamic_dynamic");
+    NINHO_REQUIRE(ccd.peak_body_count == 123);
+    NINHO_REQUIRE(ccd.peak_shape_count == 123);
+    NINHO_REQUIRE(ccd.peak_joint_count == 0);
+    NINHO_REQUIRE(ccd.peak_awake_count == 121);
+    NINHO_REQUIRE(ccd.peak_contact_count == 221);
+    NINHO_REQUIRE(row(result, "joint_force_torque").peak_joint_count == 1);
+    const auto& radial_row = row(result, "radial_sleep");
+    NINHO_REQUIRE(radial_row.peak_body_count == 81);
+    NINHO_REQUIRE(radial_row.peak_shape_count == 81);
 }
 
 NINHO_TEST("capability row hash covers every canonical field and ignores value order")
@@ -110,6 +123,9 @@ NINHO_TEST("capability row hash covers every canonical field and ignores value o
     NINHO_REQUIRE(hash_capability_rows(changed) != baseline);
     changed = rows;
     changed[0].fixture_hashes[0] += 1;
+    NINHO_REQUIRE(hash_capability_rows(changed) != baseline);
+    changed = rows;
+    changed[0].peak_body_count += 1;
     NINHO_REQUIRE(hash_capability_rows(changed) != baseline);
 }
 

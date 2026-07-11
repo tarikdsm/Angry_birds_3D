@@ -1,4 +1,6 @@
 Set-StrictMode -Version Latest
+Import-Module (Join-Path $PSScriptRoot 'SpikeEvidenceValidation.psm1') -Force
+Import-Module (Join-Path $PSScriptRoot 'SafePath.psm1') -Force
 
 function Start-NinhoSpikeReportCapture {
     [CmdletBinding()]
@@ -17,6 +19,7 @@ function Start-NinhoSpikeReportCapture {
         throw "Spike report target is a directory: $target"
     }
     if (Test-Path -LiteralPath $target -PathType Leaf) {
+        Assert-NinhoNoReparseAncestors -Path $target -AllowedRoot $AllowedRoot | Out-Null
         Remove-Item -LiteralPath $target -Force
     }
     return [DateTime]::UtcNow
@@ -26,7 +29,10 @@ function Read-NinhoFreshSpikeReport {
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)] [string]$Path,
-        [Parameter(Mandatory)] [DateTime]$StartedUtc
+        [Parameter(Mandatory)] [DateTime]$StartedUtc,
+        [Parameter(Mandatory)]
+        [ValidateSet('Debug', 'Release')]
+        [string]$ExpectedBuildType
     )
 
     $target = [System.IO.Path]::GetFullPath($Path)
@@ -41,7 +47,11 @@ function Read-NinhoFreshSpikeReport {
         throw "Spike report predates this execution: $target"
     }
     try {
-        return [System.IO.File]::ReadAllText($target) | ConvertFrom-Json
+        $document = [System.IO.File]::ReadAllText($target) | ConvertFrom-Json
+        Assert-NinhoSpikeEvidenceDocument `
+            -Document $document `
+            -ExpectedBuildType $ExpectedBuildType
+        return $document
     } catch {
         throw "Spike report is not valid JSON: $target; $($_.Exception.Message)"
     }
