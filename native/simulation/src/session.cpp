@@ -55,7 +55,15 @@ SessionStatus SimulationSession::tick()
             return command_status;
         }
         impl_->update_fsm_before_step();
+        const SessionStatus ability_status = impl_->apply_gravity_field_before_step();
+        if (!ability_status.ok()) {
+            impl_->session_state.phase = SessionPhase::Faulted;
+            impl_->session_state.outcome = Outcome::None;
+            impl_->latched_fault = ability_status;
+            return ability_status;
+        }
         impl_->physics.step();
+        impl_->finish_gravity_field_after_step();
         impl_->rebuild_snapshots();
         impl_->remove_confirmed_runtime_body_records();
         impl_->update_fsm_after_step();
@@ -216,6 +224,42 @@ bool detail::SessionTestFacade::add_static_sphere(SimulationSession& session,
         std::nullopt, SurfaceId{1002}, std::nullopt,
         {.type = ShapeType::Sphere, .radius_m = radius_m},
         "TEST_StaticPreviewTarget", created.value});
+    return true;
+}
+
+bool detail::SessionTestFacade::add_dynamic_sphere(SimulationSession& session,
+    EntityId entity, PartId part, ninho::physics::Vec3 position, double mass_kg,
+    ninho::physics::Vec3 linear_velocity, double radius_m)
+{
+    const double sphere_volume_m3 = 4.0 / 3.0 * 3.14159265358979323846
+        * radius_m * radius_m * radius_m;
+    auto description = ninho::physics::BodyDesc::dynamic_sphere(
+        static_cast<float>(radius_m), {position, {}},
+        static_cast<float>(mass_kg / sphere_volume_m3));
+    description.linear_velocity = linear_velocity;
+    description.name = "TEST_AbilityCandidate";
+    const auto created = session.impl_->physics.create_body(description);
+    if (!created) {
+        return false;
+    }
+    session.impl_->body_records.push_back({0U, entity, part, BodyType::Dynamic,
+        std::nullopt, std::nullopt, std::nullopt,
+        {.type = ShapeType::Sphere, .radius_m = radius_m},
+        "TEST_AbilityCandidate", created.value});
+    return true;
+}
+
+bool detail::SessionTestFacade::set_body_neutralized(SimulationSession& session,
+    EntityId entity, PartId part, bool neutralized)
+{
+    const auto record = std::ranges::find_if(session.impl_->body_records,
+        [&](const auto& value) {
+            return value.entity_id == entity && value.part_id == part;
+        });
+    if (record == session.impl_->body_records.end()) {
+        return false;
+    }
+    record->neutralized = neutralized;
     return true;
 }
 

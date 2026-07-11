@@ -432,7 +432,8 @@ NINHO_SIM_TEST("launch fsm activation arms exactly at launch tick plus nine")
     NINHO_SIM_REQUIRE(session->tick().ok());
     NINHO_SIM_REQUIRE(session->state().tick == TickIndex{launch_tick.value() + 9U});
     NINHO_SIM_REQUIRE(detail::SessionTestFacade::ability_requested(*session));
-    NINHO_SIM_REQUIRE(!detail::SessionTestFacade::ability_active(*session));
+    NINHO_SIM_REQUIRE(detail::SessionTestFacade::ability_active(*session));
+    NINHO_SIM_REQUIRE(session->events().front().kind == DomainEventKind::AbilityStarted);
     NINHO_SIM_REQUIRE(detail::SessionTestFacade::ability_end_tick(*session)
         == TickIndex{launch_tick.value() + 83U});
 }

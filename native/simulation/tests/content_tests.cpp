@@ -96,6 +96,29 @@ NINHO_SIM_TEST("content parses the production catalogs and validates the complet
     NINHO_SIM_REQUIRE(material_body_count(MaterialId{1}) == 8);
     NINHO_SIM_REQUIRE(material_body_count(MaterialId{9}) == 3);
     NINHO_SIM_REQUIRE(material_body_count(MaterialId{5}) == 9);
+    for (const auto& body : level.value.bodies) {
+        if (body.material_id != MaterialId{5} && body.material_id != MaterialId{9}) {
+            continue;
+        }
+        const double mass = body.density_kg_m3 * 8.0
+            * body.shape.half_extents_m[0]
+            * body.shape.half_extents_m[1]
+            * body.shape.half_extents_m[2];
+        NINHO_SIM_REQUIRE(mass <= 150.0);
+        if (body.material_id == MaterialId{5}) {
+            const std::array<double, 3> expected_half_extents{0.23, 0.15, 0.16};
+            const std::array<double, 3> expected_bounds{0.46, 0.30, 0.32};
+            NINHO_SIM_REQUIRE(body.shape.half_extents_m == expected_half_extents);
+            NINHO_SIM_REQUIRE(body.visual.bounds_m == expected_bounds);
+            NINHO_SIM_REQUIRE(std::abs(mass - 79.488) < 1e-9);
+        } else {
+            const std::array<double, 3> expected_half_extents{0.02, 0.35, 0.45};
+            const std::array<double, 3> expected_bounds{0.04, 0.70, 0.90};
+            NINHO_SIM_REQUIRE(body.shape.half_extents_m == expected_half_extents);
+            NINHO_SIM_REQUIRE(body.visual.bounds_m == expected_bounds);
+            NINHO_SIM_REQUIRE(std::abs(mass - 61.74) < 1e-9);
+        }
+    }
     const auto kind_count = [&](JointKind kind, double force, double torque) {
         return std::ranges::count_if(level.value.joints, [&](const JointDefinition& joint) {
             return joint.kind == kind && joint.force_limit_n == force

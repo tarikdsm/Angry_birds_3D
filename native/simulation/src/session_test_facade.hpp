@@ -32,6 +32,11 @@ public:
     static bool impulse_entity(SimulationSession&, EntityId, ninho::physics::Vec3);
     static bool add_static_sphere(
         SimulationSession&, EntityId, ninho::physics::Vec3, double radius_m);
+    static bool add_dynamic_sphere(SimulationSession&, EntityId, PartId,
+        ninho::physics::Vec3, double mass_kg,
+        ninho::physics::Vec3 linear_velocity = {}, double radius_m = 0.1);
+    static bool set_body_neutralized(
+        SimulationSession&, EntityId, PartId, bool neutralized);
     static TickIndex projectile_launch_tick(const SimulationSession&);
     static TickIndex ability_end_tick(const SimulationSession&);
     static BirdArchetypeId next_bird_archetype_id(const SimulationSession&);

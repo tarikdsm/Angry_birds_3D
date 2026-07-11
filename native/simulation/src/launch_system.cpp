@@ -424,13 +424,13 @@ SessionStatus SimulationSession::Impl::process_commands()
             if (session_state.phase == SessionPhase::FlightAbility && projectile && ability
                 && session_state.tick.value()
                     >= projectile->launch_tick.value() + ability->arm_ticks
-                && !projectile->ability_requested) {
+                && !projectile->ability_requested && !projectile->finished) {
                 projectile->ability_requested = true;
+                projectile->ability_active = true;
                 projectile->ability_start_tick = session_state.tick;
                 projectile->ability_end_tick = TickIndex{session_state.tick.value()
                     + static_cast<std::uint64_t>(ability->duration_ticks) - 1U};
-                publish_event(DomainEventKind::AbilityActivationRequested,
-                    projectile->entity_id, projectile->archetype_id);
+                publish_ability_event(DomainEventKind::AbilityStarted);
             } else {
                 const auto reason = session_state.phase != SessionPhase::FlightAbility
                     || !projectile

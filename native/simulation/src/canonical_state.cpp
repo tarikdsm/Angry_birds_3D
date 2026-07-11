@@ -403,6 +403,12 @@ void SimulationSession::Impl::refresh_canonical_state()
         identifier(writer, event.entity_id);
         identifier(writer, event.bird_archetype_id);
         writer.integer(static_cast<std::uint8_t>(event.rejection_reason));
+        identifier(writer, event.ability_id);
+        identifier(writer, event.affected_entity_id);
+        identifier(writer, event.affected_part_id);
+        writer.quantized(event.weight);
+        writer.vector(event.force_n);
+        writer.vector(event.impulse_n_s);
     }
 
     writer.boolean(session_state.aim.has_value());

@@ -63,3 +63,19 @@ O tamanho em bytes é verificado antes do parse. Coleções reservam sua capacid
 - birds repetem density/friction/restitution da surface com tolerância `1e-9`;
 - massa de bird é `4/3·π·r³·density` com erro relativo máximo de `0,1%` sobre o valor calculado;
 - toda entity que contenha qualquer `enemy_archetype_id`, mesmo fora dos objetivos, contém somente parts inimigas de um único archetype; seus bodies são dinâmicos, usam somente a surface desse archetype e sua massa agregada é `volume·density`, com erro relativo máximo de `0,1%` sobre o valor calculado.
+
+## Proxies físicos de produção
+
+O manifesto `first_orbit` mantém as densidades autorais e dimensiona os proxies
+que participam do campo gravitacional para o limite de `150 kg`:
+
+| Material | Dimensões completas (m) | Densidade (kg/m³) | Massa (kg) |
+|---|---:|---:|---:|
+| Tijolo | `0.46 × 0.30 × 0.32` | `1800` | `79.488` |
+| Vidro | `0.04 × 0.70 × 0.90` | `2450` | `61.740` |
+
+Os tijolos formam uma grade com centros `X={-0.48,0,0.48}` e
+`Y={10.47,10.78,11.09}`, em `Z=0.65`. O AABB destrutível completo permanece
+`[-2.30,10.30,-1.15] → [2.30,12.95,1.15] m`, dentro do envelope de design
+`4.6 × 2.9 × 2.4 m`. Os `visual.bounds_m` continuam exatamente iguais ao
+tamanho completo dos respectivos proxies.

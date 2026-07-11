@@ -51,6 +51,7 @@ struct SimulationSession::Impl {
         ShapeDefinition shape;
         std::string visual_id;
         ninho::physics::BodyHandle physics_handle;
+        bool neutralized{};
     };
 
     struct JointRecord {
@@ -65,9 +66,14 @@ struct SimulationSession::Impl {
     [[nodiscard]] SessionStatus create_projectile();
     void update_fsm_before_step();
     void update_fsm_after_step();
+    [[nodiscard]] SessionStatus apply_gravity_field_before_step();
+    void finish_gravity_field_after_step();
     void remove_confirmed_runtime_body_records();
     void publish_event(DomainEventKind, EntityId = {}, BirdArchetypeId = {},
         CommandRejectionReason = CommandRejectionReason::None);
+    void publish_ability_event(DomainEventKind, const BodyRecord* = nullptr,
+        double weight = 0.0, ninho::physics::Vec3 force = {},
+        ninho::physics::Vec3 impulse = {});
     [[nodiscard]] const BirdArchetype* next_bird_archetype() const noexcept;
     [[nodiscard]] const AbilityArchetype* ability_archetype(AbilityId) const noexcept;
     [[nodiscard]] std::optional<JointEndpoint> domain_identity(
