@@ -91,9 +91,11 @@ O fallback aprovado substitui a pilha genérica por um **pórtico de contrapesos
 - eles formam três colunas acima e no flanco exposto do Âncora, com queda radial útil de `1,5–2,5 m` e envelope local máximo de `4,5 m`;
 - três painéis de vidro funcionam como pinos de liberação; `glass.toughness = 0,01`, mantendo resposta frágil por pico único;
 - joints de argamassa do contrapeso usam `950 N / 160 N·m`; pine fits e glass clamps mantêm seus valores salvo incoerência geométrica demonstrada por teste;
-- o Âncora usa `damage_energy_j_per_kg = 40`, preservando massa 480 kg, integridade 100, teto 55, cone 45° e multiplicadores 0,25/1,0;
+- o Âncora começa a correção em `damage_energy_j_per_kg = 40`, preservando massa 480 kg, integridade 100, teto 55, cone 45° e multiplicadores 0,25/1,0;
 - o pórtico é orientado para que a linha estrutural atinja um pino e a linha Virela atravesse o volume dos contrapesos antes do pulso.
 
-Esses valores são um orçamento fechado, não novos intervalos de busca. Até 500 simulações adicionais podem escolher somente transforms e comandos públicos dentro do arco/velocidade existentes. Se nenhuma rota vencer, a falha é arquitetural e exige nova revisão, não redução adicional silenciosa.
+Esses valores formam o primeiro orçamento fechado. Até 500 simulações adicionais escolhem transforms e comandos públicos dentro do arco/velocidade existentes.
+
+A investigação do fallback provou que nenhuma trajetória pública com velocidade `≥12 m/s` cruza o raio útil `10,8–12,5 m`; os impactos de 8 m/s fecham fratura, mas o melhor dano observado é `6,54748/100` com `40 J/kg`. Portanto o último eixo data-driven é autorizado como resgate discreto: testar `damage_energy_j_per_kg ∈ {40, 20, 10, 5, 2,5}` e congelar o **maior** valor que faz ambas as rotas vencerem. Nenhum valor intermediário ou menor que `2,5` é permitido. Integridade, teto e multiplicadores continuam imutáveis, preservando dois ou mais contatos quando o teto de 55 se aplica.
 
 O tuple final deve provar massa individual dos tijolos, envelope, estabilidade pré-lançamento, ausência de eventos de ruptura antes de input e as duas rotas físicas completas.

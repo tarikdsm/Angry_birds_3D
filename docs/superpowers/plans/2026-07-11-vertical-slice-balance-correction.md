@@ -115,7 +115,7 @@ Antes de uma simulação completa, usar `trajectory_preview()` para rejeitar com
 
 Quando um tuple fizer ambas as rotas vencerem, remover o loop de busca e gravar os valores explicitamente nos JSONs e na especificação. Manter um teste de contrato com o tuple exato e um limite de três aves. O relatório scratch registra candidatos executados, métricas e o primeiro tuple aprovado.
 
-Se os intervalos iniciais terminarem sem passe, aplicar exatamente o fallback da seção 8 da emenda de design: tijolos `138–145 kg`, queda radial `1,5–2,5 m`, envelope `≤4,5 m`, vidro `0,01`, argamassa `950 N / 160 N·m` e Âncora `40 J/kg`. Nesse fallback, executar no máximo 500 simulações adicionais e variar somente transforms e comandos públicos; não reduzir novamente nenhum parâmetro.
+Se os intervalos iniciais terminarem sem passe, aplicar o fallback da seção 8 da emenda: tijolos `138–145 kg`, queda radial `1,5–2,5 m`, envelope `≤4,5 m`, vidro `0,01` e argamassa `950 N / 160 N·m`. Começar o Âncora em `40 J/kg`. Depois de provar que nenhuma trajetória `≥12 m/s` cruza o raio útil, testar `40, 20, 10, 5, 2,5 J/kg` nessa ordem e congelar o maior valor que faz ambas as rotas vencerem. O fallback inteiro usa no máximo 500 simulações adicionais; nenhum valor intermediário ou menor que `2,5` é permitido.
 
 - [ ] **Step 4: Prove route semantics**
 
