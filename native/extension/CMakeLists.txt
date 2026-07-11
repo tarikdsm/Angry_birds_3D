@@ -1,10 +1,11 @@
 add_library(ninho_physics_extension SHARED
   src/adapter_helpers.cpp
   src/box3d_world_node.cpp
+  src/orbital_session_node.cpp
   src/register_types.cpp
 )
 target_include_directories(ninho_physics_extension PRIVATE include)
-target_link_libraries(ninho_physics_extension PRIVATE ninho::physics godot::cpp)
+target_link_libraries(ninho_physics_extension PRIVATE ninho::physics ninho::simulation godot::cpp)
 target_compile_features(ninho_physics_extension PRIVATE cxx_std_20)
 
 get_target_property(GODOTCPP_SUFFIX godot-cpp GODOTCPP_SUFFIX)
@@ -43,14 +44,26 @@ if(BUILD_TESTING)
   add_executable(ninho_extension_adapter_tests
     "${PROJECT_SOURCE_DIR}/native/tests/test_main.cpp"
     src/adapter_helpers.cpp
+    src/orbital_session_node.cpp
     tests/adapter_helpers_tests.cpp
+    tests/orbital_session_adapter_tests.cpp
     tests/registration_contract_tests.cpp
+    tests/session_frame_batch_tests.cpp
   )
   target_include_directories(ninho_extension_adapter_tests PRIVATE
     include
     "${PROJECT_SOURCE_DIR}/native/tests"
+    "${PROJECT_SOURCE_DIR}/native/simulation/src"
   )
-  target_link_libraries(ninho_extension_adapter_tests PRIVATE ninho::physics godot::cpp)
+  target_link_libraries(ninho_extension_adapter_tests PRIVATE
+    ninho::physics
+    ninho::simulation
+    godot::cpp
+  )
+  target_compile_definitions(ninho_extension_adapter_tests PRIVATE
+    NINHO_SOURCE_DIR="${PROJECT_SOURCE_DIR}"
+    NINHO_ENABLE_TEST_FACADES=1
+  )
   target_compile_features(ninho_extension_adapter_tests PRIVATE cxx_std_20)
   if(MSVC)
     target_compile_options(ninho_extension_adapter_tests PRIVATE
@@ -58,4 +71,28 @@ if(BUILD_TESTING)
     )
   endif()
   add_test(NAME gdextension_adapter_helpers COMMAND ninho_extension_adapter_tests)
+
+  set(_ninho_godot_executable
+    "${PROJECT_SOURCE_DIR}/.tools/godot/Godot_v4.5.1-stable_win64.exe")
+  if(EXISTS "${_ninho_godot_executable}")
+    add_test(
+      NAME gdextension_project_import
+      COMMAND "${CMAKE_COMMAND}"
+        "-DCACHE_DIRECTORY=${PROJECT_SOURCE_DIR}/game/.godot"
+        -P "${PROJECT_SOURCE_DIR}/cmake/PrepareGDExtensionTest.cmake"
+    )
+    add_test(
+      NAME gdextension_vertical_slice
+      COMMAND "${_ninho_godot_executable}"
+        --headless
+        --path "${PROJECT_SOURCE_DIR}/game"
+        --script res://tests/orbital_session_node_smoke.gd
+    )
+    set_tests_properties(gdextension_project_import PROPERTIES
+      FIXTURES_SETUP ninho_gdextension_import)
+    set_tests_properties(gdextension_vertical_slice PROPERTIES
+      FIXTURES_REQUIRED ninho_gdextension_import
+      PASS_REGULAR_EXPRESSION "ORBITAL_SESSION_NODE_SMOKE_OK")
+  endif()
+  unset(_ninho_godot_executable)
 endif()
