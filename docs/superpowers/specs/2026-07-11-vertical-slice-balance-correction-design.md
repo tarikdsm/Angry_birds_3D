@@ -53,11 +53,22 @@ Permanecem imutáveis:
 Podem mudar, nesta ordem de preferência:
 
 1. transforms/orientações e dimensões de proxies do nível, preservando o envelope e as contagens;
-2. limites positivos das juntas, preservando a ordem de resistência `pine_fit > mortar > glass_clamp` quando aplicável à composição final;
+2. limites positivos das juntas; a ordem genérica `pine_fit > mortar > glass_clamp`
+   descrevia somente os valores iniciais, antes da especialização funcional do
+   pórtico;
 3. tenacidade do vidro, mantendo resposta `brittle` e exigindo um único pico;
 4. `damage_energy_j_per_kg` do Âncora, somente se as três categorias anteriores ainda deixarem três impactos laterais físicos abaixo de 100.
 
 Os valores finais são escolhidos por busca limitada, reprodutível e lexicográfica: primeiro minimiza quantidade de campos alterados; depois minimiza a variação relativa total em relação à especificação anterior; por fim desempata pelo menor tuple JSON canônico. O relatório registra todos os candidatos testados e o primeiro tuple que passa. Não há busca ilimitada nem ajuste depois de observar Debug/Release divergentes.
+
+No tuple final, a hierarquia é intencionalmente definida por função e
+`JointId`, não por uma ordem global entre materiais: suportes de pinho IDs 1–7
+usam `7000 N / 1200 N·m`; clamps de vidro IDs 8–10 usam
+`3000 N / 500 N·m`; suportes de argamassa IDs 11–17 usam
+`1400 N / 160 N·m`; e a argamassa sacrificial ID 18 usa
+`950 N / 160 N·m`. A força maior do clamp de vidro não transforma o vidro em
+suporte estrutural: fratura material e ruptura de junta permanecem autoridades
+separadas.
 
 ## 5. Eventos e causalidade
 

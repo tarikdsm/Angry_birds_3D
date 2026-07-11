@@ -1,16 +1,18 @@
 #include "test_framework.hpp"
 
 #include "ninho/simulation/session.hpp"
-#include "session_test_facade.hpp"
 
 #include <array>
+#include <cmath>
 #include <cstdint>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
+#include <limits>
 #include <numbers>
 #include <ranges>
 #include <sstream>
+#include <stdexcept>
 #include <string_view>
 #include <vector>
 
@@ -225,6 +227,25 @@ void require_resolved_causes(const Trace& trace)
     }
 }
 
+std::int64_t local_canonical_quantize(double value)
+{
+    if (!std::isfinite(value)) {
+        throw std::invalid_argument("canonical numeric value must be finite");
+    }
+    constexpr long double scale = 100000.0L;
+    const long double scaled = static_cast<long double>(value) * scale;
+    if (!std::isfinite(scaled)) {
+        throw std::range_error("canonical numeric value exceeds fixed-point range");
+    }
+    const long double rounded = std::round(scaled);
+    const long double signed_limit = std::ldexp(1.0L, 63);
+    if (rounded < -signed_limit || rounded >= signed_limit) {
+        throw std::range_error("canonical numeric value exceeds fixed-point range");
+    }
+    const auto fixed = static_cast<std::int64_t>(rounded);
+    return fixed == 0 ? std::int64_t{0} : fixed;
+}
+
 std::uint64_t canonical_signature(const Trace& trace)
 {
     std::uint64_t hash = 14695981039346656037ULL;
@@ -238,8 +259,7 @@ std::uint64_t canonical_signature(const Trace& trace)
         }
     };
     const auto quantized = [&](double value) {
-        integer(static_cast<std::uint64_t>(
-            detail::SessionTestFacade::quantize_canonical(value)));
+        integer(static_cast<std::uint64_t>(local_canonical_quantize(value)));
     };
     const auto vector = [&](ninho::physics::Vec3 value) {
         quantized(value.x);
@@ -366,6 +386,32 @@ NINHO_SIM_TEST("playthrough production tuple remains intact for 120 idle ticks")
     NINHO_SIM_REQUIRE(!has_event(trace, DomainEventKind::PieceFractured));
     NINHO_SIM_REQUIRE(std::ranges::all_of(session->structural_joints(),
         &StructuralJointSnapshot::active));
+}
+
+NINHO_SIM_TEST("playthrough local canonical quantizer enforces fixed point boundaries")
+{
+    NINHO_SIM_REQUIRE(local_canonical_quantize(0.0) == 0);
+    NINHO_SIM_REQUIRE(local_canonical_quantize(-0.0) == 0);
+    const auto ordinary = local_canonical_quantize(12.34567);
+    NINHO_SIM_REQUIRE(local_canonical_quantize(12.34568) == ordinary + 1);
+    NINHO_SIM_REQUIRE(local_canonical_quantize(9.223372036854774e13) > 0);
+
+    const auto require_rejected = [](double value) {
+        bool rejected = false;
+        try {
+            static_cast<void>(local_canonical_quantize(value));
+        } catch (const std::range_error&) {
+            rejected = true;
+        } catch (const std::invalid_argument&) {
+            rejected = true;
+        }
+        NINHO_SIM_REQUIRE(rejected);
+    };
+    require_rejected(9.223372036854776e13);
+    require_rejected(-9.223372036854778e13);
+    require_rejected(std::numeric_limits<double>::infinity());
+    require_rejected(-std::numeric_limits<double>::infinity());
+    require_rejected(std::numeric_limits<double>::quiet_NaN());
 }
 
 NINHO_SIM_TEST("vertical slice determinism compares quantized canonical signatures ten times")

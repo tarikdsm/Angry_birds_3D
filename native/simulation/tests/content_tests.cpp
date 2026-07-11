@@ -122,16 +122,39 @@ NINHO_SIM_TEST("content parses the production catalogs and validates the complet
             NINHO_SIM_REQUIRE(std::abs(mass - 61.74) < 1e-9);
         }
     }
-    const auto kind_count = [&](JointKind kind, double force, double torque) {
-        return std::ranges::count_if(level.value.joints, [&](const JointDefinition& joint) {
-            return joint.kind == kind && joint.force_limit_n == force
-                && joint.torque_limit_nm == torque;
-        });
+    struct ExpectedJoint {
+        JointId id;
+        JointKind kind;
+        double force_limit_n;
+        double torque_limit_nm;
     };
-    NINHO_SIM_REQUIRE(kind_count(JointKind::PineFit, 7000.0, 1200.0) == 7);
-    NINHO_SIM_REQUIRE(kind_count(JointKind::GlassClamp, 3000.0, 500.0) == 3);
-    NINHO_SIM_REQUIRE(kind_count(JointKind::Mortar, 1400.0, 160.0) == 7);
-    NINHO_SIM_REQUIRE(kind_count(JointKind::Mortar, 950.0, 160.0) == 1);
+    const std::array<ExpectedJoint, 18> expected_joints{{
+        {JointId{1}, JointKind::PineFit, 7000.0, 1200.0},
+        {JointId{2}, JointKind::PineFit, 7000.0, 1200.0},
+        {JointId{3}, JointKind::PineFit, 7000.0, 1200.0},
+        {JointId{4}, JointKind::PineFit, 7000.0, 1200.0},
+        {JointId{5}, JointKind::PineFit, 7000.0, 1200.0},
+        {JointId{6}, JointKind::PineFit, 7000.0, 1200.0},
+        {JointId{7}, JointKind::PineFit, 7000.0, 1200.0},
+        {JointId{8}, JointKind::GlassClamp, 3000.0, 500.0},
+        {JointId{9}, JointKind::GlassClamp, 3000.0, 500.0},
+        {JointId{10}, JointKind::GlassClamp, 3000.0, 500.0},
+        {JointId{11}, JointKind::Mortar, 1400.0, 160.0},
+        {JointId{12}, JointKind::Mortar, 1400.0, 160.0},
+        {JointId{13}, JointKind::Mortar, 1400.0, 160.0},
+        {JointId{14}, JointKind::Mortar, 1400.0, 160.0},
+        {JointId{15}, JointKind::Mortar, 1400.0, 160.0},
+        {JointId{16}, JointKind::Mortar, 1400.0, 160.0},
+        {JointId{17}, JointKind::Mortar, 1400.0, 160.0},
+        {JointId{18}, JointKind::Mortar, 950.0, 160.0},
+    }};
+    for (const ExpectedJoint& expected : expected_joints) {
+        const auto& joint = level.value.joints.at(expected.id.value() - 1U);
+        NINHO_SIM_REQUIRE(joint.id == expected.id);
+        NINHO_SIM_REQUIRE(joint.kind == expected.kind);
+        NINHO_SIM_REQUIRE(joint.force_limit_n == expected.force_limit_n);
+        NINHO_SIM_REQUIRE(joint.torque_limit_nm == expected.torque_limit_nm);
+    }
     struct ExpectedPose {
         std::uint32_t body_id;
         std::array<double, 3> position;
@@ -169,10 +192,6 @@ NINHO_SIM_TEST("content parses the production catalogs and validates the complet
         NINHO_SIM_REQUIRE(body.transform.position_m == expected.position);
         NINHO_SIM_REQUIRE(body.transform.rotation_xyzw == expected.rotation);
     }
-    const auto& sacrificial_joint = level.value.joints.at(17);
-    NINHO_SIM_REQUIRE(sacrificial_joint.id == JointId{18});
-    NINHO_SIM_REQUIRE(sacrificial_joint.force_limit_n == 950.0);
-    NINHO_SIM_REQUIRE(sacrificial_joint.torque_limit_nm == 160.0);
     NINHO_SIM_REQUIRE(!level.value.bodies.at(0).assembly_id.has_value());
     for (std::size_t i = 1; i <= 11; ++i) {
         NINHO_SIM_REQUIRE(level.value.bodies.at(i).assembly_id == 1U);
