@@ -16,6 +16,7 @@ enum class DomainEventKind : std::uint8_t {
     DamageApplied,
     EntityNeutralized,
     JointOverloaded,
+    PieceFractureTriggered,
     JointBroken,
     PieceFractured,
 };
@@ -57,6 +58,7 @@ struct DomainEvent {
     JointId joint_id{};
     MaterialId material_id{};
     double joint_load_ratio{};
+    double fracture_ratio{};
 
     bool operator==(const DomainEvent&) const = default;
 };

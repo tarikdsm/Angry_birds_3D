@@ -419,6 +419,7 @@ void SimulationSession::Impl::refresh_canonical_state()
         identifier(writer, event.joint_id);
         identifier(writer, event.material_id);
         writer.quantized(event.joint_load_ratio);
+        writer.quantized(event.fracture_ratio);
     }
 
     writer.integer<std::uint32_t>(

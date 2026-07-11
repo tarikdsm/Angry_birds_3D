@@ -162,11 +162,14 @@ Impl::JointRecord* find_joint(Impl& session, JointId id)
     return found == session.joint_records.end() ? nullptr : &*found;
 }
 
-EventId pending_overload_event(const Impl& session, JointId id)
+bool piece_already_scheduled(const Impl& session, EntityId entity, PartId part)
 {
-    const auto found = std::ranges::find_if(session.pending_joint_breaks,
-        [&](const Impl::PendingJointBreak& pending) { return pending.joint_id == id; });
-    return found == session.pending_joint_breaks.end() ? EventId{} : found->cause_event_id;
+    return std::ranges::find(session.fractured_pieces, std::pair{entity, part})
+            != session.fractured_pieces.end()
+        || std::ranges::any_of(session.pending_piece_fractures,
+            [&](const Impl::PendingPieceFracture& pending) {
+                return pending.entity_id == entity && pending.part_id == part;
+            });
 }
 
 EventId publish_overload(Impl& session, Impl::JointRecord& joint,
@@ -188,23 +191,47 @@ EventId publish_overload(Impl& session, Impl::JointRecord& joint,
     return overload_id;
 }
 
+EventId publish_piece_fracture_trigger(Impl& session, const Impl::JointRecord& joint,
+    EntityId entity, PartId part, MaterialId material,
+    ninho::physics::Vec3 position, double fracture_ratio, EventId prior_cause)
+{
+    const EventId trigger_id{session.next_event_sequence++};
+    session.domain_events.push_back({
+        .id = trigger_id,
+        .tick = session.session_state.tick,
+        .kind = DomainEventKind::PieceFractureTriggered,
+        .affected_entity_id = entity,
+        .affected_part_id = part,
+        .position_m = position,
+        .cause_event_id = prior_cause,
+        .joint_id = joint.snapshot.id,
+        .material_id = material,
+        .fracture_ratio = fracture_ratio,
+    });
+    const auto pending = std::ranges::find_if(session.pending_joint_breaks,
+        [&](const Impl::PendingJointBreak& value) {
+            return value.joint_id == joint.snapshot.id;
+        });
+    if (pending == session.pending_joint_breaks.end()) {
+        session.pending_joint_breaks.push_back({joint.snapshot.id, trigger_id});
+    } else {
+        pending->cause_event_id = trigger_id;
+    }
+    return trigger_id;
+}
+
 void schedule_piece(Impl& session, EntityId entity, PartId part,
     MaterialId material, JointId incident, ninho::physics::Vec3 position,
-    EventId overload_event)
+    EventId cause_event)
 {
-    if (std::ranges::find(session.fractured_pieces, std::pair{entity, part})
-            != session.fractured_pieces.end()
-        || std::ranges::any_of(session.pending_piece_fractures,
-            [&](const Impl::PendingPieceFracture& pending) {
-                return pending.entity_id == entity && pending.part_id == part;
-            })) {
+    if (piece_already_scheduled(session, entity, part)) {
         return;
     }
-    if (overload_event == EventId{}) {
+    if (cause_event == EventId{}) {
         return;
     }
     session.pending_piece_fractures.push_back(
-        {entity, part, material, incident, overload_event, position});
+        {entity, part, material, incident, cause_event, position});
 }
 
 }
@@ -315,19 +342,22 @@ void SimulationSession::Impl::evaluate_fractures_after_step()
         }
         const double fracture_energy = state->mass * 250.0 * material->toughness;
         if (damage->material_damage_energy_j >= fracture_energy) {
+            if (piece_already_scheduled(*this, body->entity_id, body->part_id)) {
+                continue;
+            }
             const JointId incident = nearest_incident_joint(
                 *this, body->entity_id, body->part_id, event.position_m);
             JointRecord* joint = find_joint(*this, incident);
             if (joint == nullptr) {
                 continue;
             }
-            EventId overload = pending_overload_event(*this, incident);
-            if (overload == EventId{}) {
-                overload = publish_overload(*this, *joint, event.position_m,
-                    damage->material_damage_energy_j / fracture_energy, event.id);
-            }
+            const double fracture_ratio =
+                damage->material_damage_energy_j / fracture_energy;
+            const EventId trigger = publish_piece_fracture_trigger(*this, *joint,
+                body->entity_id, body->part_id, *body->material_id,
+                event.position_m, fracture_ratio, event.id);
             schedule_piece(*this, body->entity_id, body->part_id,
-                *body->material_id, incident, event.position_m, overload);
+                *body->material_id, incident, event.position_m, trigger);
         }
     }
 
@@ -340,16 +370,16 @@ void SimulationSession::Impl::evaluate_fractures_after_step()
         const JointId incident = nearest_incident_joint(
             *this, request.entity_id, request.part_id, position);
         JointRecord* joint = find_joint(*this, incident);
-        if (joint == nullptr) {
+        if (joint == nullptr
+            || piece_already_scheduled(*this, request.entity_id, request.part_id)) {
             continue;
         }
-        EventId overload = pending_overload_event(*this, incident);
-        if (overload == EventId{}) {
-            overload = publish_overload(*this, *joint, position, 1.5, {});
-        }
+        const MaterialId material = body != nullptr && body->material_id
+            ? *body->material_id : MaterialId{};
+        const EventId trigger = publish_piece_fracture_trigger(*this, *joint,
+            request.entity_id, request.part_id, material, position, 1.0, {});
         schedule_piece(*this, request.entity_id, request.part_id,
-            body != nullptr && body->material_id ? *body->material_id : MaterialId{},
-            incident, position, overload);
+            material, incident, position, trigger);
     }
     piece_fracture_requests_for_testing.clear();
 #endif
