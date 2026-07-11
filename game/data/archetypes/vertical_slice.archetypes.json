@@ -1,0 +1,53 @@
+{
+  "schema_version": 1,
+  "abilities": [
+    {
+      "id": 1,
+      "key": "gravity_field_v1",
+      "kind": "gravity_field",
+      "arm_ticks": 9,
+      "duration_ticks": 75,
+      "radius_m": 4.0,
+      "max_body_mass_kg": 150.0,
+      "max_bodies": 20,
+      "max_acceleration_m_s2": 12.0,
+      "pulse_speed_m_s": 4.0
+    }
+  ],
+  "birds": [
+    {
+      "id": 1,
+      "key": "virela",
+      "ability_id": 1,
+      "surface_id": 1003,
+      "mass_kg": 140.0,
+      "density_kg_m3": 366.76,
+      "radius_m": 0.45,
+      "friction": 0.35,
+      "restitution": 0.25,
+      "bullet": true
+    }
+  ],
+  "weakpoints": [
+    {
+      "id": 1,
+      "key": "anchor_directional_armor",
+      "protected_direction": [0.0, 0.0, -1.0],
+      "protected_cone_deg": 45.0,
+      "protected_multiplier": 0.25,
+      "exposed_multiplier": 1.0
+    }
+  ],
+  "enemies": [
+    {
+      "id": 1,
+      "key": "anchor",
+      "weakpoint_id": 1,
+      "surface_id": 1004,
+      "mass_kg": 480.0,
+      "integrity": 100.0,
+      "damage_energy_j_per_kg": 80.0,
+      "max_damage": 55.0
+    }
+  ]
+}

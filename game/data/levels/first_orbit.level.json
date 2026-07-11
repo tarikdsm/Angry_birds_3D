@@ -1,0 +1,68 @@
+{
+  "schema_version": 1,
+  "id": "first_orbit_counterweight_of_aster",
+  "planet": {"entity_id": 1, "radius_m": 10.0, "surface_gravity_m_s2": 9.0, "surface_id": 1001, "visual_id": "AST_AsterPlanet"},
+  "launch_ring": {
+    "id": "DEV_ImpulseRing",
+    "shell_offset_m": 3.0,
+    "theta_min_deg": -50.0,
+    "theta_max_deg": 50.0,
+    "phase_speed_min_m_s": 8.0,
+    "phase_speed_max_m_s": 16.0,
+    "default_speed_m_s": 10.5,
+    "radial_formula": "(-cos(theta),0,sin(theta))"
+  },
+  "bird_roster": [{"bird_archetype_id": 1, "count": 3}],
+  "free_body_ids": [1, 22],
+  "bodies": [
+    {"body_id": 1, "entity_id": 10, "part_id": 1, "body_type": "static", "material_id": null, "surface_id": 1002, "enemy_archetype_id": null, "density_kg_m3": 2700.0, "transform": {"position_m": [0.0, 10.15, 0.0], "rotation_xyzw": [0.0, 0.0, 0.0, 1.0]}, "shape": {"type": "box", "half_extents_m": [3.2, 0.15, 1.8]}, "visual": {"asset_id": "AST_Platform", "bounds_m": [6.4, 0.3, 3.6]}},
+    {"body_id": 2, "entity_id": 100, "part_id": 1, "body_type": "dynamic", "material_id": 1, "surface_id": null, "enemy_archetype_id": null, "density_kg_m3": 520.0, "transform": {"position_m": [-1.8, 11.5, -0.9], "rotation_xyzw": [0.0, 0.0, 0.0, 1.0]}, "shape": {"type": "box", "half_extents_m": [0.25, 1.2, 0.25]}, "visual": {"asset_id": "KIT_PineBeam_A", "bounds_m": [0.5, 2.4, 0.5]}},
+    {"body_id": 3, "entity_id": 101, "part_id": 1, "body_type": "dynamic", "material_id": 1, "surface_id": null, "enemy_archetype_id": null, "density_kg_m3": 520.0, "transform": {"position_m": [1.8, 11.5, -0.9], "rotation_xyzw": [0.0, 0.0, 0.0, 1.0]}, "shape": {"type": "box", "half_extents_m": [0.25, 1.2, 0.25]}, "visual": {"asset_id": "KIT_PineBeam_A", "bounds_m": [0.5, 2.4, 0.5]}},
+    {"body_id": 4, "entity_id": 102, "part_id": 1, "body_type": "dynamic", "material_id": 1, "surface_id": null, "enemy_archetype_id": null, "density_kg_m3": 520.0, "transform": {"position_m": [-1.8, 11.5, 0.9], "rotation_xyzw": [0.0, 0.0, 0.0, 1.0]}, "shape": {"type": "box", "half_extents_m": [0.25, 1.2, 0.25]}, "visual": {"asset_id": "KIT_PineBeam_A", "bounds_m": [0.5, 2.4, 0.5]}},
+    {"body_id": 5, "entity_id": 103, "part_id": 1, "body_type": "dynamic", "material_id": 1, "surface_id": null, "enemy_archetype_id": null, "density_kg_m3": 520.0, "transform": {"position_m": [1.8, 11.5, 0.9], "rotation_xyzw": [0.0, 0.0, 0.0, 1.0]}, "shape": {"type": "box", "half_extents_m": [0.25, 1.2, 0.25]}, "visual": {"asset_id": "KIT_PineBeam_A", "bounds_m": [0.5, 2.4, 0.5]}},
+    {"body_id": 6, "entity_id": 104, "part_id": 1, "body_type": "dynamic", "material_id": 1, "surface_id": null, "enemy_archetype_id": null, "density_kg_m3": 520.0, "transform": {"position_m": [0.0, 12.75, -0.9], "rotation_xyzw": [0.0, 0.0, 0.0, 1.0]}, "shape": {"type": "box", "half_extents_m": [2.05, 0.20, 0.25]}, "visual": {"asset_id": "KIT_PineLintel_A", "bounds_m": [4.1, 0.4, 0.5]}},
+    {"body_id": 7, "entity_id": 105, "part_id": 1, "body_type": "dynamic", "material_id": 1, "surface_id": null, "enemy_archetype_id": null, "density_kg_m3": 520.0, "transform": {"position_m": [0.0, 12.75, 0.9], "rotation_xyzw": [0.0, 0.0, 0.0, 1.0]}, "shape": {"type": "box", "half_extents_m": [2.05, 0.20, 0.25]}, "visual": {"asset_id": "KIT_PineLintel_A", "bounds_m": [4.1, 0.4, 0.5]}},
+    {"body_id": 8, "entity_id": 106, "part_id": 1, "body_type": "dynamic", "material_id": 1, "surface_id": null, "enemy_archetype_id": null, "density_kg_m3": 520.0, "transform": {"position_m": [-2.1, 11.2, 0.0], "rotation_xyzw": [0.0, 0.0, 0.0, 1.0]}, "shape": {"type": "box", "half_extents_m": [0.20, 0.20, 1.15]}, "visual": {"asset_id": "KIT_PineBrace_A", "bounds_m": [0.4, 0.4, 2.3]}},
+    {"body_id": 9, "entity_id": 107, "part_id": 1, "body_type": "dynamic", "material_id": 1, "surface_id": null, "enemy_archetype_id": null, "density_kg_m3": 520.0, "transform": {"position_m": [2.1, 11.2, 0.0], "rotation_xyzw": [0.0, 0.0, 0.0, 1.0]}, "shape": {"type": "box", "half_extents_m": [0.20, 0.20, 1.15]}, "visual": {"asset_id": "KIT_PineBrace_A", "bounds_m": [0.4, 0.4, 2.3]}},
+    {"body_id": 10, "entity_id": 110, "part_id": 1, "body_type": "dynamic", "material_id": 9, "surface_id": null, "enemy_archetype_id": null, "density_kg_m3": 2450.0, "transform": {"position_m": [-1.15, 11.3, -0.45], "rotation_xyzw": [0.0, 0.0, 0.0, 1.0]}, "shape": {"type": "box", "half_extents_m": [0.08, 0.80, 0.70]}, "visual": {"asset_id": "KIT_GlassPanel_A", "bounds_m": [0.16, 1.6, 1.4]}},
+    {"body_id": 11, "entity_id": 111, "part_id": 1, "body_type": "dynamic", "material_id": 9, "surface_id": null, "enemy_archetype_id": null, "density_kg_m3": 2450.0, "transform": {"position_m": [0.0, 11.3, -0.45], "rotation_xyzw": [0.0, 0.0, 0.0, 1.0]}, "shape": {"type": "box", "half_extents_m": [0.08, 0.80, 0.70]}, "visual": {"asset_id": "KIT_GlassPanel_A", "bounds_m": [0.16, 1.6, 1.4]}},
+    {"body_id": 12, "entity_id": 112, "part_id": 1, "body_type": "dynamic", "material_id": 9, "surface_id": null, "enemy_archetype_id": null, "density_kg_m3": 2450.0, "transform": {"position_m": [1.15, 11.3, -0.45], "rotation_xyzw": [0.0, 0.0, 0.0, 1.0]}, "shape": {"type": "box", "half_extents_m": [0.08, 0.80, 0.70]}, "visual": {"asset_id": "KIT_GlassPanel_A", "bounds_m": [0.16, 1.6, 1.4]}},
+    {"body_id": 13, "entity_id": 120, "part_id": 1, "body_type": "dynamic", "material_id": 5, "surface_id": null, "enemy_archetype_id": null, "density_kg_m3": 1800.0, "transform": {"position_m": [-0.8, 10.55, 0.65], "rotation_xyzw": [0.0, 0.0, 0.0, 1.0]}, "shape": {"type": "box", "half_extents_m": [0.35, 0.20, 0.50]}, "visual": {"asset_id": "KIT_Brick_A", "bounds_m": [0.7, 0.4, 1.0]}},
+    {"body_id": 14, "entity_id": 121, "part_id": 1, "body_type": "dynamic", "material_id": 5, "surface_id": null, "enemy_archetype_id": null, "density_kg_m3": 1800.0, "transform": {"position_m": [0.0, 10.55, 0.65], "rotation_xyzw": [0.0, 0.0, 0.0, 1.0]}, "shape": {"type": "box", "half_extents_m": [0.35, 0.20, 0.50]}, "visual": {"asset_id": "KIT_Brick_A", "bounds_m": [0.7, 0.4, 1.0]}},
+    {"body_id": 15, "entity_id": 122, "part_id": 1, "body_type": "dynamic", "material_id": 5, "surface_id": null, "enemy_archetype_id": null, "density_kg_m3": 1800.0, "transform": {"position_m": [0.8, 10.55, 0.65], "rotation_xyzw": [0.0, 0.0, 0.0, 1.0]}, "shape": {"type": "box", "half_extents_m": [0.35, 0.20, 0.50]}, "visual": {"asset_id": "KIT_Brick_A", "bounds_m": [0.7, 0.4, 1.0]}},
+    {"body_id": 16, "entity_id": 123, "part_id": 1, "body_type": "dynamic", "material_id": 5, "surface_id": null, "enemy_archetype_id": null, "density_kg_m3": 1800.0, "transform": {"position_m": [-0.8, 10.98, 0.65], "rotation_xyzw": [0.0, 0.0, 0.0, 1.0]}, "shape": {"type": "box", "half_extents_m": [0.35, 0.20, 0.50]}, "visual": {"asset_id": "KIT_Brick_A", "bounds_m": [0.7, 0.4, 1.0]}},
+    {"body_id": 17, "entity_id": 124, "part_id": 1, "body_type": "dynamic", "material_id": 5, "surface_id": null, "enemy_archetype_id": null, "density_kg_m3": 1800.0, "transform": {"position_m": [0.0, 10.98, 0.65], "rotation_xyzw": [0.0, 0.0, 0.0, 1.0]}, "shape": {"type": "box", "half_extents_m": [0.35, 0.20, 0.50]}, "visual": {"asset_id": "KIT_Brick_A", "bounds_m": [0.7, 0.4, 1.0]}},
+    {"body_id": 18, "entity_id": 125, "part_id": 1, "body_type": "dynamic", "material_id": 5, "surface_id": null, "enemy_archetype_id": null, "density_kg_m3": 1800.0, "transform": {"position_m": [0.8, 10.98, 0.65], "rotation_xyzw": [0.0, 0.0, 0.0, 1.0]}, "shape": {"type": "box", "half_extents_m": [0.35, 0.20, 0.50]}, "visual": {"asset_id": "KIT_Brick_A", "bounds_m": [0.7, 0.4, 1.0]}},
+    {"body_id": 19, "entity_id": 126, "part_id": 1, "body_type": "dynamic", "material_id": 5, "surface_id": null, "enemy_archetype_id": null, "density_kg_m3": 1800.0, "transform": {"position_m": [-0.8, 11.41, 0.65], "rotation_xyzw": [0.0, 0.0, 0.0, 1.0]}, "shape": {"type": "box", "half_extents_m": [0.35, 0.20, 0.50]}, "visual": {"asset_id": "KIT_Brick_A", "bounds_m": [0.7, 0.4, 1.0]}},
+    {"body_id": 20, "entity_id": 127, "part_id": 1, "body_type": "dynamic", "material_id": 5, "surface_id": null, "enemy_archetype_id": null, "density_kg_m3": 1800.0, "transform": {"position_m": [0.0, 11.41, 0.65], "rotation_xyzw": [0.0, 0.0, 0.0, 1.0]}, "shape": {"type": "box", "half_extents_m": [0.35, 0.20, 0.50]}, "visual": {"asset_id": "KIT_Brick_A", "bounds_m": [0.7, 0.4, 1.0]}},
+    {"body_id": 21, "entity_id": 128, "part_id": 1, "body_type": "dynamic", "material_id": 5, "surface_id": null, "enemy_archetype_id": null, "density_kg_m3": 1800.0, "transform": {"position_m": [0.8, 11.41, 0.65], "rotation_xyzw": [0.0, 0.0, 0.0, 1.0]}, "shape": {"type": "box", "half_extents_m": [0.35, 0.20, 0.50]}, "visual": {"asset_id": "KIT_Brick_A", "bounds_m": [0.7, 0.4, 1.0]}},
+    {"body_id": 22, "entity_id": 200, "part_id": 1, "body_type": "dynamic", "material_id": null, "surface_id": 1004, "enemy_archetype_id": 1, "density_kg_m3": 434.39, "transform": {"position_m": [0.0, 10.875, 0.0], "rotation_xyzw": [0.0, 0.0, 0.0, 1.0]}, "shape": {"type": "box", "half_extents_m": [0.65, 0.425, 0.50]}, "visual": {"asset_id": "ENM_Anchor", "bounds_m": [1.3, 0.85, 1.0]}}
+  ],
+  "joints": [
+    {"id": 1, "assembly_id": 1, "kind": "pine_fit", "body_a_id": 2, "body_b_id": 6, "force_limit_n": 6500.0, "torque_limit_nm": 1000.0},
+    {"id": 2, "assembly_id": 1, "kind": "pine_fit", "body_a_id": 3, "body_b_id": 6, "force_limit_n": 6500.0, "torque_limit_nm": 1000.0},
+    {"id": 3, "assembly_id": 1, "kind": "pine_fit", "body_a_id": 4, "body_b_id": 7, "force_limit_n": 6500.0, "torque_limit_nm": 1000.0},
+    {"id": 4, "assembly_id": 1, "kind": "pine_fit", "body_a_id": 5, "body_b_id": 7, "force_limit_n": 6500.0, "torque_limit_nm": 1000.0},
+    {"id": 5, "assembly_id": 1, "kind": "pine_fit", "body_a_id": 2, "body_b_id": 8, "force_limit_n": 6500.0, "torque_limit_nm": 1000.0},
+    {"id": 6, "assembly_id": 1, "kind": "pine_fit", "body_a_id": 3, "body_b_id": 9, "force_limit_n": 6500.0, "torque_limit_nm": 1000.0},
+    {"id": 7, "assembly_id": 1, "kind": "pine_fit", "body_a_id": 6, "body_b_id": 7, "force_limit_n": 6500.0, "torque_limit_nm": 1000.0},
+    {"id": 8, "assembly_id": 1, "kind": "glass_clamp", "body_a_id": 2, "body_b_id": 10, "force_limit_n": 3000.0, "torque_limit_nm": 500.0},
+    {"id": 9, "assembly_id": 1, "kind": "glass_clamp", "body_a_id": 6, "body_b_id": 11, "force_limit_n": 3000.0, "torque_limit_nm": 500.0},
+    {"id": 10, "assembly_id": 1, "kind": "glass_clamp", "body_a_id": 3, "body_b_id": 12, "force_limit_n": 3000.0, "torque_limit_nm": 500.0},
+    {"id": 11, "assembly_id": 2, "kind": "mortar", "body_a_id": 13, "body_b_id": 16, "force_limit_n": 4000.0, "torque_limit_nm": 700.0},
+    {"id": 12, "assembly_id": 2, "kind": "mortar", "body_a_id": 14, "body_b_id": 17, "force_limit_n": 4000.0, "torque_limit_nm": 700.0},
+    {"id": 13, "assembly_id": 2, "kind": "mortar", "body_a_id": 15, "body_b_id": 18, "force_limit_n": 4000.0, "torque_limit_nm": 700.0},
+    {"id": 14, "assembly_id": 2, "kind": "mortar", "body_a_id": 16, "body_b_id": 19, "force_limit_n": 4000.0, "torque_limit_nm": 700.0},
+    {"id": 15, "assembly_id": 2, "kind": "mortar", "body_a_id": 17, "body_b_id": 20, "force_limit_n": 4000.0, "torque_limit_nm": 700.0},
+    {"id": 16, "assembly_id": 2, "kind": "mortar", "body_a_id": 18, "body_b_id": 21, "force_limit_n": 4000.0, "torque_limit_nm": 700.0},
+    {"id": 17, "assembly_id": 2, "kind": "mortar", "body_a_id": 13, "body_b_id": 14, "force_limit_n": 4000.0, "torque_limit_nm": 700.0},
+    {"id": 18, "assembly_id": 2, "kind": "mortar", "body_a_id": 14, "body_b_id": 15, "force_limit_n": 4000.0, "torque_limit_nm": 700.0}
+  ],
+  "assemblies": [
+    {"id": 1, "key": "fortification_frame", "body_ids": [2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12], "joint_ids": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]},
+    {"id": 2, "key": "brick_counterweight", "body_ids": [13, 14, 15, 16, 17, 18, 19, 20, 21], "joint_ids": [11, 12, 13, 14, 15, 16, 17, 18]}
+  ],
+  "objectives": [
+    {"id": 1, "kind": "neutralize_entity", "target_entity_id": 200}
+  ]
+}

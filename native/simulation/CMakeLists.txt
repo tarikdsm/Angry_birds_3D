@@ -23,12 +23,19 @@ if(BUILD_TESTING)
   add_executable(ninho_simulation_tests
     tests/test_main.cpp
     tests/kernel_contract_tests.cpp
+    tests/content_tests.cpp
   )
 
   target_include_directories(ninho_simulation_tests PRIVATE
     "${CMAKE_CURRENT_SOURCE_DIR}/tests"
   )
-  target_link_libraries(ninho_simulation_tests PRIVATE ninho::simulation)
+  target_link_libraries(ninho_simulation_tests PRIVATE
+    ninho::simulation
+    nlohmann_json::nlohmann_json
+  )
+  target_compile_definitions(ninho_simulation_tests PRIVATE
+    NINHO_SOURCE_DIR="${PROJECT_SOURCE_DIR}"
+  )
   target_compile_features(ninho_simulation_tests PRIVATE cxx_std_20)
 
   if(MSVC)
@@ -40,6 +47,10 @@ if(BUILD_TESTING)
   add_test(
     NAME simulation_contracts
     COMMAND ninho_simulation_tests --filter "simulation contracts"
+  )
+  add_test(
+    NAME content_manifest
+    COMMAND ninho_simulation_tests --filter content
   )
   add_test(
     NAME simulation_runner_rejects_no_match
