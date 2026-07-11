@@ -115,6 +115,8 @@ Antes de uma simulação completa, usar `trajectory_preview()` para rejeitar com
 
 Quando um tuple fizer ambas as rotas vencerem, remover o loop de busca e gravar os valores explicitamente nos JSONs e na especificação. Manter um teste de contrato com o tuple exato e um limite de três aves. O relatório scratch registra candidatos executados, métricas e o primeiro tuple aprovado.
 
+Se os intervalos iniciais terminarem sem passe, aplicar exatamente o fallback da seção 8 da emenda de design: tijolos `138–145 kg`, queda radial `1,5–2,5 m`, envelope `≤4,5 m`, vidro `0,01`, argamassa `950 N / 160 N·m` e Âncora `40 J/kg`. Nesse fallback, executar no máximo 500 simulações adicionais e variar somente transforms e comandos públicos; não reduzir novamente nenhum parâmetro.
+
 - [ ] **Step 4: Prove route semantics**
 
 Rota Virela exige, no stream:

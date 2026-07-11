@@ -80,3 +80,20 @@ A correção é aceita quando:
 ## 7. Escopo posterior
 
 Esta correção não cria novos materiais, habilidades, inimigos, UI, VFX, assets ou regras de pontuação. Tasks 8–12 continuam inalteradas depois do gate da Task 7.
+
+## 8. Fallback autoral após a busca limitada
+
+A primeira busca foi encerrada após 464 simulações completas e nenhum tuple aprovado. O melhor caso entregou 160,817 J ao vidro contra 926,1 J mínimos e 1,82361/100 de dano acumulado ao Âncora. Isso prova que pequenas rotações, offsets e ajustes nos intervalos anteriores não fecham o orçamento de energia.
+
+O fallback aprovado substitui a pilha genérica por um **pórtico de contrapesos suspensos**, preservando IDs, contagens e materiais:
+
+- os nove tijolos tornam-se contrapesos de `138–145 kg` cada, ainda elegíveis para Virela;
+- eles formam três colunas acima e no flanco exposto do Âncora, com queda radial útil de `1,5–2,5 m` e envelope local máximo de `4,5 m`;
+- três painéis de vidro funcionam como pinos de liberação; `glass.toughness = 0,01`, mantendo resposta frágil por pico único;
+- joints de argamassa do contrapeso usam `950 N / 160 N·m`; pine fits e glass clamps mantêm seus valores salvo incoerência geométrica demonstrada por teste;
+- o Âncora usa `damage_energy_j_per_kg = 40`, preservando massa 480 kg, integridade 100, teto 55, cone 45° e multiplicadores 0,25/1,0;
+- o pórtico é orientado para que a linha estrutural atinja um pino e a linha Virela atravesse o volume dos contrapesos antes do pulso.
+
+Esses valores são um orçamento fechado, não novos intervalos de busca. Até 500 simulações adicionais podem escolher somente transforms e comandos públicos dentro do arco/velocidade existentes. Se nenhuma rota vencer, a falha é arquitetural e exige nova revisão, não redução adicional silenciosa.
+
+O tuple final deve provar massa individual dos tijolos, envelope, estabilidade pré-lançamento, ausência de eventos de ruptura antes de input e as duas rotas físicas completas.
