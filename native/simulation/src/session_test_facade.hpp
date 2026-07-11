@@ -37,6 +37,13 @@ public:
         ninho::physics::Vec3 linear_velocity = {}, double radius_m = 0.1);
     static bool set_body_neutralized(
         SimulationSession&, EntityId, PartId, bool neutralized);
+    static void override_joint_ratio_after_solver(SimulationSession&, JointId, double ratio);
+    static void override_joint_ratio_without_new_cause_after_solver(
+        SimulationSession&, JointId, double ratio);
+    static void fracture_piece_after_solver(
+        SimulationSession&, EntityId, PartId, ninho::physics::Vec3 position);
+    static void fracture_piece_at_incident_tie_after_solver(
+        SimulationSession&, EntityId, PartId);
     static TickIndex projectile_launch_tick(const SimulationSession&);
     static TickIndex ability_end_tick(const SimulationSession&);
     static BirdArchetypeId next_bird_archetype_id(const SimulationSession&);

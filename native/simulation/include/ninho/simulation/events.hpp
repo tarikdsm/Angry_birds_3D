@@ -15,6 +15,8 @@ enum class DomainEventKind : std::uint8_t {
     AbilityEnded,
     DamageApplied,
     EntityNeutralized,
+    JointBroken,
+    PieceFractured,
 };
 
 enum class CommandRejectionReason : std::uint8_t {
@@ -50,6 +52,9 @@ struct DomainEvent {
     double energy_j{};
     double damage{};
     NeutralizationCause neutralization_cause{NeutralizationCause::None};
+    EventId cause_event_id{};
+    JointId joint_id{};
+    MaterialId material_id{};
 
     bool operator==(const DomainEvent&) const = default;
 };

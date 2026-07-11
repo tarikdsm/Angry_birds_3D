@@ -17,6 +17,7 @@
 namespace ninho::simulation {
 
 namespace detail {
+struct FractureAccess;
 #if defined(NINHO_ENABLE_TEST_FACADES)
 class SessionTestFacade;
 #endif
@@ -136,11 +137,13 @@ public:
     [[nodiscard]] std::span<const DomainEvent> events() const noexcept;
     [[nodiscard]] const SessionState& state() const noexcept;
     [[nodiscard]] std::uint32_t birds_remaining() const noexcept;
+    [[nodiscard]] bool objectives_complete() const noexcept;
     [[nodiscard]] ninho::physics::WorldMetrics physics_metrics() const noexcept;
     [[nodiscard]] const std::vector<std::uint8_t>& canonical_state_v1() const noexcept;
     [[nodiscard]] std::uint64_t canonical_hash_v1() const noexcept;
 
 private:
+    friend struct detail::FractureAccess;
 #if defined(NINHO_ENABLE_TEST_FACADES)
     friend class detail::SessionTestFacade;
 #endif

@@ -10,6 +10,7 @@
 #include <optional>
 #include <string>
 #include <unordered_map>
+#include <utility>
 #include <vector>
 
 namespace ninho::simulation {
@@ -58,6 +59,22 @@ struct SimulationSession::Impl {
     struct JointRecord {
         StructuralJointSnapshot snapshot;
         ninho::physics::JointHandle physics_handle;
+        std::uint8_t consecutive_overload_ticks{};
+        EventId overload_cause_event_id{};
+    };
+
+    struct PendingJointBreak {
+        JointId joint_id;
+        EventId cause_event_id;
+    };
+
+    struct PendingPieceFracture {
+        EntityId entity_id;
+        PartId part_id;
+        MaterialId material_id;
+        JointId incident_joint_id;
+        EventId cause_event_id;
+        ninho::physics::Vec3 position_m;
     };
 
     explicit Impl(ContentBundle source);
@@ -71,6 +88,9 @@ struct SimulationSession::Impl {
     void finish_gravity_field_after_step();
     void process_damage_after_step();
     void publish_damage_outcomes(std::span<const detail::DamageOutcome>);
+    void apply_pending_fractures_before_step();
+    void evaluate_fractures_after_step();
+    void evaluate_objectives_after_step();
     void remove_confirmed_runtime_body_records();
     void publish_event(DomainEventKind, EntityId = {}, BirdArchetypeId = {},
         CommandRejectionReason = CommandRejectionReason::None);
@@ -108,6 +128,24 @@ struct SimulationSession::Impl {
     std::optional<ProjectileState> projectile;
     std::vector<BodyRecord> body_records;
     std::vector<JointRecord> joint_records;
+    std::vector<PendingJointBreak> pending_joint_breaks;
+    std::vector<PendingPieceFracture> pending_piece_fractures;
+    std::vector<std::pair<EntityId, PartId>> fractured_pieces;
+#if defined(NINHO_ENABLE_TEST_FACADES)
+    struct JointRatioOverride {
+        double ratio{};
+        bool emit_cause{};
+    };
+    std::unordered_map<std::uint32_t, JointRatioOverride>
+        joint_ratio_overrides_for_testing;
+    struct PieceFractureRequest {
+        EntityId entity_id;
+        PartId part_id;
+        ninho::physics::Vec3 position_m;
+        bool tie_first_two_incident{};
+    };
+    std::vector<PieceFractureRequest> piece_fracture_requests_for_testing;
+#endif
     std::vector<EntitySnapshot> entity_snapshots;
     std::vector<StructuralJointSnapshot> joint_snapshots;
     std::vector<DomainEvent> domain_events;

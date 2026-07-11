@@ -47,6 +47,7 @@ SessionStatus SimulationSession::tick()
     try {
         impl_->domain_events.clear();
         impl_->session_state.tick = TickIndex{impl_->session_state.tick.value() + 1U};
+        impl_->apply_pending_fractures_before_step();
         const SessionStatus command_status = impl_->process_commands();
         if (!command_status.ok()) {
             impl_->session_state.phase = SessionPhase::Faulted;
@@ -64,6 +65,8 @@ SessionStatus SimulationSession::tick()
         }
         impl_->physics.step();
         impl_->process_damage_after_step();
+        impl_->evaluate_fractures_after_step();
+        impl_->evaluate_objectives_after_step();
         impl_->finish_gravity_field_after_step();
         impl_->rebuild_snapshots();
         impl_->remove_confirmed_runtime_body_records();
@@ -121,6 +124,11 @@ std::uint32_t SimulationSession::birds_remaining() const noexcept
     return impl_->remaining_birds;
 }
 
+bool SimulationSession::objectives_complete() const noexcept
+{
+    return impl_->objective_complete;
+}
+
 ninho::physics::WorldMetrics SimulationSession::physics_metrics() const noexcept
 {
     return impl_->physics.metrics();
@@ -170,7 +178,13 @@ void detail::SessionTestFacade::finish_projectile(SimulationSession& session)
 
 void detail::SessionTestFacade::complete_objective(SimulationSession& session)
 {
-    session.impl_->objective_complete = true;
+    for (const ObjectiveDefinition& objective : session.impl_->bundle.level.objectives) {
+        for (SimulationSession::Impl::BodyRecord& record : session.impl_->body_records) {
+            if (record.entity_id == objective.target_entity_id) {
+                record.neutralized = true;
+            }
+        }
+    }
 }
 
 void detail::SessionTestFacade::set_ability_active(SimulationSession& session, bool active)
@@ -262,6 +276,33 @@ bool detail::SessionTestFacade::set_body_neutralized(SimulationSession& session,
     }
     record->neutralized = neutralized;
     return true;
+}
+
+void detail::SessionTestFacade::override_joint_ratio_after_solver(
+    SimulationSession& session, JointId joint, double ratio)
+{
+    session.impl_->joint_ratio_overrides_for_testing[joint.value()] = {ratio, true};
+}
+
+void detail::SessionTestFacade::override_joint_ratio_without_new_cause_after_solver(
+    SimulationSession& session, JointId joint, double ratio)
+{
+    session.impl_->joint_ratio_overrides_for_testing[joint.value()] = {ratio, false};
+}
+
+void detail::SessionTestFacade::fracture_piece_after_solver(
+    SimulationSession& session, EntityId entity, PartId part,
+    ninho::physics::Vec3 position)
+{
+    session.impl_->piece_fracture_requests_for_testing.push_back(
+        {entity, part, position, false});
+}
+
+void detail::SessionTestFacade::fracture_piece_at_incident_tie_after_solver(
+    SimulationSession& session, EntityId entity, PartId part)
+{
+    session.impl_->piece_fracture_requests_for_testing.push_back(
+        {entity, part, {}, true});
 }
 
 TickIndex detail::SessionTestFacade::projectile_launch_tick(const SimulationSession& session)

@@ -6,6 +6,8 @@ add_library(ninho_simulation_kernel STATIC
   src/launch_system.cpp
   src/gravity_field_ability_system.cpp
   src/damage_system.cpp
+  src/fracture_system.cpp
+  src/objective_system.cpp
 )
 add_library(ninho::simulation ALIAS ninho_simulation_kernel)
 
@@ -36,6 +38,8 @@ if(BUILD_TESTING)
     tests/launch_fsm_tests.cpp
     tests/gravity_field_ability_tests.cpp
     tests/damage_anchor_tests.cpp
+    tests/fracture_objective_tests.cpp
+    tests/playthrough_tests.cpp
   )
 
   target_include_directories(ninho_simulation_tests PRIVATE
@@ -70,6 +74,18 @@ if(BUILD_TESTING)
   add_test(
     NAME damage_anchor
     COMMAND ninho_simulation_tests --filter "damage anchor"
+  )
+  add_test(
+    NAME fracture_objective
+    COMMAND ninho_simulation_tests --filter "fracture objective"
+  )
+  add_test(
+    NAME vertical_slice_playthrough
+    COMMAND ninho_simulation_tests --filter "playthrough"
+  )
+  add_test(
+    NAME vertical_slice_determinism
+    COMMAND ninho_simulation_tests --filter "vertical slice determinism"
   )
   add_test(
     NAME simulation_contracts

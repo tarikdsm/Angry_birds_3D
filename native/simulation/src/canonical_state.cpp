@@ -415,6 +415,9 @@ void SimulationSession::Impl::refresh_canonical_state()
         writer.quantized(event.energy_j);
         writer.quantized(event.damage);
         writer.integer(static_cast<std::uint8_t>(event.neutralization_cause));
+        identifier(writer, event.cause_event_id);
+        identifier(writer, event.joint_id);
+        identifier(writer, event.material_id);
     }
 
     writer.integer<std::uint32_t>(
@@ -444,6 +447,25 @@ void SimulationSession::Impl::refresh_canonical_state()
     writer.integer(launch_count);
     writer.integer(resolution_rest_ticks);
     writer.boolean(objective_complete);
+    writer.integer<std::uint32_t>(static_cast<std::uint32_t>(fractured_pieces.size()));
+    for (const auto& [entity, part] : fractured_pieces) {
+        identifier(writer, entity);
+        identifier(writer, part);
+    }
+    writer.integer<std::uint32_t>(static_cast<std::uint32_t>(pending_joint_breaks.size()));
+    for (const PendingJointBreak& pending : pending_joint_breaks) {
+        identifier(writer, pending.joint_id);
+        identifier(writer, pending.cause_event_id);
+    }
+    writer.integer<std::uint32_t>(static_cast<std::uint32_t>(pending_piece_fractures.size()));
+    for (const PendingPieceFracture& pending : pending_piece_fractures) {
+        identifier(writer, pending.entity_id);
+        identifier(writer, pending.part_id);
+        identifier(writer, pending.material_id);
+        identifier(writer, pending.incident_joint_id);
+        identifier(writer, pending.cause_event_id);
+        writer.vector(pending.position_m);
+    }
     writer.integer<std::uint32_t>(static_cast<std::uint32_t>(roster_remaining.size()));
     for (const BirdRosterEntry& entry : roster_remaining) {
         identifier(writer, entry.bird_archetype_id);
@@ -480,6 +502,12 @@ void SimulationSession::Impl::refresh_canonical_state()
         writer.boolean(projectile->pending_destroy);
         writer.boolean(projectile->ability_requested);
         writer.boolean(projectile->ability_active);
+    }
+    writer.integer<std::uint32_t>(static_cast<std::uint32_t>(joint_records.size()));
+    for (const JointRecord& joint : joint_records) {
+        identifier(writer, joint.snapshot.id);
+        writer.integer(joint.consecutive_overload_ticks);
+        identifier(writer, joint.overload_cause_event_id);
     }
     std::vector<std::uint8_t> next_bytes = std::move(writer.bytes);
     const std::uint64_t next_hash = fnv1a64(next_bytes);

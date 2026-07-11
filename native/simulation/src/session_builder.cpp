@@ -273,11 +273,6 @@ SessionStatus SimulationSession::Impl::build() noexcept
             return build_failure(committed.message);
         }
         rebuild_snapshots();
-        joint_snapshots.clear();
-        joint_snapshots.reserve(joint_records.size());
-        for (const JointRecord& record : joint_records) {
-            joint_snapshots.push_back(record.snapshot);
-        }
         refresh_canonical_state();
         return {};
     } catch (const std::exception& error) {
@@ -314,6 +309,11 @@ void SimulationSession::Impl::rebuild_snapshots()
     std::ranges::sort(entity_snapshots, [](const auto& lhs, const auto& rhs) {
         return std::pair{lhs.entity_id, lhs.part_id} < std::pair{rhs.entity_id, rhs.part_id};
     });
+    joint_snapshots.clear();
+    joint_snapshots.reserve(joint_records.size());
+    for (const JointRecord& record : joint_records) {
+        joint_snapshots.push_back(record.snapshot);
+    }
 }
 
 ContentResult<std::unique_ptr<SimulationSession>> SimulationSession::create(
