@@ -173,6 +173,51 @@ function Get-NinhoTestedInputs {
     return [pscustomobject]@{ files=@($rows); sha256=$fingerprint }
 }
 
+function Assert-NinhoInputFeedbackMarkers {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)][object[]]$Markers,
+        [Parameter(Mandatory)][string]$Context
+    )
+    $items = @($Markers)
+    if ($items.Count -ne 3) {
+        throw "$Context must contain exactly three causal markers"
+    }
+    $expected = @(
+        @{ command_id='set_aim_center'; theta_degrees=0.0; phase_degrees=0.0; speed=10.5 },
+        @{ command_id='set_aim_right'; theta_degrees=2.0; phase_degrees=0.0; speed=8.0 },
+        @{ command_id='set_aim_left'; theta_degrees=-2.0; phase_degrees=0.0; speed=8.0 }
+    )
+    $commands = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
+    $hashes = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
+    for ($index = 0; $index -lt $items.Count; ++$index) {
+        $marker = $items[$index]
+        foreach ($property in 'sample_index','command_id','theta_degrees','phase_degrees','speed','observed_tick','preview_hash') {
+            $hasProperty = if ($marker -is [Collections.IDictionary]) {
+                $marker.Contains($property)
+            } else {
+                $marker.PSObject.Properties.Name -ccontains $property
+            }
+            if (-not $hasProperty) {
+                throw "$Context causal marker $index missing $property"
+            }
+        }
+        $previewHash = [string]$marker.preview_hash
+        if ([int]$marker.sample_index -ne $index -or
+                [string]$marker.command_id -cne [string]$expected[$index].command_id -or
+                [double]$marker.theta_degrees -ne [double]$expected[$index].theta_degrees -or
+                [double]$marker.phase_degrees -ne [double]$expected[$index].phase_degrees -or
+                [double]$marker.speed -ne [double]$expected[$index].speed -or
+                [int64]$marker.observed_tick -lt 0 -or
+                $previewHash -notmatch '^-?[0-9]+$' -or $previewHash -ceq '0') {
+            throw "$Context causal marker $index does not match its input command"
+        }
+        if (-not $commands.Add([string]$marker.command_id) -or -not $hashes.Add($previewHash)) {
+            throw "$Context has duplicated causal command or preview hash"
+        }
+    }
+}
+
 function Resolve-NinhoPackageManifestOutput {
     [CmdletBinding()]
     param(
@@ -301,12 +346,14 @@ function Assert-NinhoVerticalSliceEvidence {
                 throw "renderer performance threshold failed: $rendererName/$scale"
             }
             if ([int]$sample[0].frames_measured -lt 300 -or
-                    [int]$sample[0].input_feedback_samples -lt 3 -or
+                    [int]$sample[0].input_feedback_samples -ne 3 -or
                     [int]$sample[0].post_vfx_frames -lt 30 -or
                     $sample[0].rupture_observed -cne $true -or
                     $sample[0].vfx_observed -cne $true) {
                 throw "renderer performance evidence lacks rupture/VFX/input samples: $rendererName/$scale"
             }
+            Assert-NinhoInputFeedbackMarkers -Markers @($sample[0].input_feedback_markers) `
+                -Context "$rendererName/$scale"
         }
         if ($renderer[0].capture.frames -ne 300 -or
                 $renderer[0].capture.width -ne 1920 -or
@@ -551,6 +598,13 @@ function Assert-NinhoVerticalSliceEvidence {
             if ($metricsHash -cne [string]$scale.metrics_sha256) { throw "runtime metrics SHA-256 mismatch: $($scale.metrics_path)" }
             $metrics = Get-Content -Raw -LiteralPath $metricsPath | ConvertFrom-Json
             if ($metrics.schema -cne 'ninho.vertical-slice.runtime-metrics.v1') { throw 'runtime metrics schema mismatch' }
+            Assert-NinhoInputFeedbackMarkers -Markers @($metrics.input_feedback_markers) `
+                -Context "runtime metrics $($renderer.name)/$($scale.ui_scale)"
+            $claimedMarkers = @($scale.input_feedback_markers) | ConvertTo-Json -Depth 10 -Compress
+            $metricMarkers = @($metrics.input_feedback_markers) | ConvertTo-Json -Depth 10 -Compress
+            if ($claimedMarkers -cne $metricMarkers) {
+                throw "runtime input marker claim mismatch: $($renderer.name)/$($scale.ui_scale)"
+            }
             foreach ($pair in @(
                 @('frame_p95_ms','frame_p95_ms'), @('frame_p99_ms','frame_p99_ms'),
                 @('max_hitch_ms','max_hitch_ms'), @('input_feedback_p95_ms','input_feedback_p95_ms'),
@@ -742,4 +796,4 @@ function Invoke-NinhoLimitedRetry {
     throw "$Name failed after $MaximumAttempts attempts (exit codes: $codes)"
 }
 
-Export-ModuleMember -Function Assert-NinhoVerticalSliceEvidence,Assert-NinhoRelativeArtifactPath,Get-NinhoRouteEvidenceFromLog,Invoke-NinhoLimitedRetry,Get-NinhoTestedInputPaths,Get-NinhoTestedInputs,Get-NinhoCausalFrameIndex,Set-NinhoRequiredDownsampleFrame,Invoke-NinhoTimedProcess,Resolve-NinhoPackageManifestOutput
+Export-ModuleMember -Function Assert-NinhoVerticalSliceEvidence,Assert-NinhoRelativeArtifactPath,Get-NinhoRouteEvidenceFromLog,Invoke-NinhoLimitedRetry,Get-NinhoTestedInputPaths,Get-NinhoTestedInputs,Get-NinhoCausalFrameIndex,Set-NinhoRequiredDownsampleFrame,Invoke-NinhoTimedProcess,Resolve-NinhoPackageManifestOutput,Assert-NinhoInputFeedbackMarkers

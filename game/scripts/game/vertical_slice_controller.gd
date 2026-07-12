@@ -7,6 +7,12 @@ const CAPTURE_ARGUMENT := "--vertical-slice-capture"
 const CAPTURE_FRAME_LIMIT := 300
 const CAPTURE_MARKER := "VERTICAL_SLICE_CAPTURE_COMPLETE frame=300"
 const SOURCE_CAPTURE_MARKER := "VERTICAL_SLICE_SOURCE_CAPTURE_COMPLETE"
+const PERFORMANCE_INPUT_SAMPLES := [
+	{"command_id": "set_aim_center", "theta_degrees": 0.0, "phase_degrees": 0.0, "speed": 10.5},
+	{"command_id": "set_aim_right", "theta_degrees": 2.0, "phase_degrees": 0.0, "speed": 8.0},
+	{"command_id": "set_aim_left", "theta_degrees": -2.0, "phase_degrees": 0.0, "speed": 8.0},
+]
+const INPUT_AIM_EPSILON := 0.002
 
 @onready var session: Node = get_node("../OrbitalSession")
 @onready var launch_controller: Node = get_node("../LaunchController")
@@ -37,6 +43,11 @@ var _frame_times_ms: Array[float] = []
 var _step_times_ms: Array[float] = []
 var _input_started_usec := -1
 var _input_feedback_ms: Array[float] = []
+var _input_feedback_markers: Array[Dictionary] = []
+var _input_preview_hashes := {}
+var _input_pending_sample := {}
+var _input_next_sample := 0
+var _input_aim_started := false
 
 
 func _ready() -> void:
@@ -74,9 +85,7 @@ func _physics_process(_delta: float) -> void:
 		_observe_performance_events()
 	if current_frame.has("metrics"):
 		_step_times_ms.append(float(current_frame.metrics.get("step_ms", 0.0)))
-	if _input_started_usec >= 0 and str(current_frame.get("phase", "")) == "aim":
-		_input_feedback_ms.append(float(Time.get_ticks_usec() - _input_started_usec) / 1000.0)
-		_input_started_usec = -1
+	_observe_input_feedback()
 	if _capture_enabled:
 		_drive_capture()
 
@@ -100,7 +109,8 @@ func _process(delta: float) -> void:
 		and _performance_rupture_seen and _performance_vfx_seen \
 		and _performance_event_render_frame >= 0 \
 		and _capture_render_frames - _performance_event_render_frame >= 30 \
-		and _input_feedback_ms.size() >= 3
+		and _input_feedback_ms.size() == PERFORMANCE_INPUT_SAMPLES.size() \
+		and _input_feedback_markers.size() == PERFORMANCE_INPUT_SAMPLES.size()
 	if not movie_capture and performance_complete and _capture_shutdown_render_frame < 0:
 		_shutdown_capture_feedback()
 		_capture_shutdown_render_frame = _capture_render_frames
@@ -132,16 +142,10 @@ func _shutdown_capture_feedback() -> void:
 
 
 func _drive_capture() -> void:
-	if consume_calls == 3:
-		_input_started_usec = Time.get_ticks_usec()
-		launch_controller.begin_aim()
-	elif consume_calls == 5:
-		_input_started_usec = Time.get_ticks_usec()
-		launch_controller.set_aim_degrees(-2.0, 0.0, 8.0)
-	elif consume_calls == 10:
-		_input_started_usec = Time.get_ticks_usec()
-		launch_controller.set_aim_degrees(-2.0, 0.0, 8.0)
-	elif consume_calls == 55:
+	_drive_causal_input_samples()
+	if consume_calls >= 55 and _capture_shot_count == 0 \
+			and _input_next_sample == PERFORMANCE_INPUT_SAMPLES.size() \
+			and _input_pending_sample.is_empty():
 		launch_controller.launch_or_activate()
 	for event: Dictionary in current_frame.get("events", []):
 		if str(event.get("kind", "")) == "bird_launched":
@@ -155,7 +159,6 @@ func _drive_capture() -> void:
 	if _capture_shot_count > 0 and _capture_shot_count < 3:
 		var phase := str(current_frame.get("phase", ""))
 		if phase == "inspection" and _capture_next_shot_stage == 0:
-			_input_started_usec = Time.get_ticks_usec()
 			if launch_controller.begin_aim():
 				_capture_next_shot_stage = 1
 		elif phase == "aim" and _capture_next_shot_stage == 1:
@@ -164,6 +167,90 @@ func _drive_capture() -> void:
 		elif phase == "aim" and _capture_next_shot_stage == 2:
 			if launch_controller.launch_or_activate():
 				_capture_next_shot_stage = 0
+
+
+func _drive_causal_input_samples() -> void:
+	if consume_calls < 3 or not _input_pending_sample.is_empty() \
+			or _input_next_sample >= PERFORMANCE_INPUT_SAMPLES.size():
+		return
+	var phase := str(current_frame.get("phase", ""))
+	if not _input_aim_started:
+		if phase == "inspection" and launch_controller.begin_aim():
+			_input_aim_started = true
+		return
+	if phase != "aim":
+		return
+	var sample: Dictionary = PERFORMANCE_INPUT_SAMPLES[_input_next_sample]
+	var accepted := false
+	match str(sample.command_id):
+		"set_aim_center":
+			accepted = launch_controller.set_aim_degrees(0.0, 0.0, 10.5)
+		"set_aim_left":
+			accepted = launch_controller.set_aim_degrees(-2.0, 0.0, 8.0)
+		"set_aim_right":
+			accepted = launch_controller.set_aim_degrees(2.0, 0.0, 8.0)
+	if not accepted:
+		return
+	_input_pending_sample = sample.duplicate(true)
+	_input_started_usec = Time.get_ticks_usec()
+	_input_next_sample += 1
+
+
+func _expected_aim_for_input_sample(sample: Dictionary) -> Dictionary:
+	var theta := deg_to_rad(float(sample.theta_degrees))
+	var phase := deg_to_rad(float(sample.phase_degrees))
+	var origin := Vector3(-13.0 * cos(theta), 0.0, 13.0 * sin(theta))
+	var azimuth := Vector3(sin(theta), 0.0, cos(theta))
+	return {
+		"origin": origin,
+		"tangent_direction": (Vector3.UP * cos(phase) + azimuth * sin(phase)).normalized(),
+		"speed": float(sample.speed),
+	}
+
+
+func _preview_matches_input_sample(preview: Dictionary, sample: Dictionary) -> bool:
+	if int(preview.get("canonical_hash", 0)) == 0:
+		return false
+	var aim_value: Variant = preview.get("aim")
+	if aim_value == null or not aim_value is Dictionary:
+		return false
+	var aim := aim_value as Dictionary
+	var expected := _expected_aim_for_input_sample(sample)
+	return (aim.get("origin", Vector3.ZERO) as Vector3).distance_to(expected.origin) \
+			<= INPUT_AIM_EPSILON \
+		and (aim.get("tangent_direction", Vector3.ZERO) as Vector3).distance_to(
+			expected.tangent_direction) <= INPUT_AIM_EPSILON \
+		and absf(float(aim.get("speed", 0.0)) - float(expected.speed)) \
+			<= INPUT_AIM_EPSILON
+
+
+func _observe_input_feedback() -> void:
+	if _input_started_usec < 0 or _input_pending_sample.is_empty():
+		return
+	var preview_value: Variant = current_frame.get("trajectory_preview")
+	if preview_value == null or not preview_value is Dictionary:
+		return
+	var preview := preview_value as Dictionary
+	if not _preview_matches_input_sample(preview, _input_pending_sample):
+		return
+	var preview_hash := str(int(preview.canonical_hash))
+	if _input_preview_hashes.has(preview_hash):
+		push_error("Causal input samples produced a duplicated preview hash: %s" % preview_hash)
+		get_tree().quit(1)
+		return
+	_input_preview_hashes[preview_hash] = true
+	_input_feedback_ms.append(float(Time.get_ticks_usec() - _input_started_usec) / 1000.0)
+	_input_feedback_markers.append({
+		"sample_index": _input_feedback_markers.size(),
+		"command_id": str(_input_pending_sample.command_id),
+		"theta_degrees": float(_input_pending_sample.theta_degrees),
+		"phase_degrees": float(_input_pending_sample.phase_degrees),
+		"speed": float(_input_pending_sample.speed),
+		"observed_tick": int(current_frame.get("tick", -1)),
+		"preview_hash": preview_hash,
+	})
+	_input_pending_sample.clear()
+	_input_started_usec = -1
 
 
 func _log_capture_state() -> void:
@@ -227,6 +314,7 @@ func _write_metrics() -> void:
 		"max_hitch_ms": _percentile(_frame_times_ms, 1.0),
 		"input_feedback_p95_ms": _percentile(_input_feedback_ms, 0.95),
 		"input_feedback_samples": _input_feedback_ms.size(),
+		"input_feedback_markers": _input_feedback_markers,
 		"physics_step_p95_ms": _percentile(_step_times_ms, 0.95),
 		"rupture_observed": _performance_rupture_seen,
 		"vfx_observed": _performance_vfx_seen,

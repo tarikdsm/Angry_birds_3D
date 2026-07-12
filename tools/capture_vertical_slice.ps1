@@ -192,6 +192,7 @@ foreach ($renderer in 'Vulkan','OpenGL') {
             max_hitch_ms = [double]$document.max_hitch_ms
             input_feedback_p95_ms = [double]$document.input_feedback_p95_ms
             input_feedback_samples = [int]$document.input_feedback_samples
+            input_feedback_markers = @($document.input_feedback_markers)
             physics_step_p95_ms = [double]$document.physics_step_p95_ms
             frames_measured = [int]$document.frames_measured
             rupture_observed = [bool]$document.rupture_observed

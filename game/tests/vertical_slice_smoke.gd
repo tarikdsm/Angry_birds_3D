@@ -88,6 +88,61 @@ func _run() -> void:
 	if str(_controller.current_frame.get("phase", "")) != "inspection":
 		_fail("configured scene did not enter inspection")
 		return
+	if not _launch.begin_aim():
+		_fail("causal input probe could not begin aim")
+		return
+	await physics_frame
+	var causal_samples: Array[Dictionary] = [
+		{"command_id": "set_aim_center", "theta_degrees": 0.0,
+			"phase_degrees": 0.0, "speed": 10.5},
+		{"command_id": "set_aim_right", "theta_degrees": 2.0,
+			"phase_degrees": 0.0, "speed": 8.0},
+		{"command_id": "set_aim_left", "theta_degrees": -2.0,
+			"phase_degrees": 0.0, "speed": 8.0},
+	]
+	var causal_hashes := {}
+	for sample: Dictionary in causal_samples:
+		if not _launch.set_aim_degrees(
+				float(sample.theta_degrees), float(sample.phase_degrees), float(sample.speed)):
+			_fail("causal input probe rejected %s" % sample.command_id)
+			return
+		await physics_frame
+		var observed_preview: Variant = _controller.current_frame.get("trajectory_preview")
+		if observed_preview == null or not observed_preview is Dictionary \
+				or not _controller._preview_matches_input_sample(observed_preview, sample):
+			_fail("causal input preview mismatch command=%s observed=%s expected=%s" % [
+				sample.command_id,
+				observed_preview,
+				_controller._expected_aim_for_input_sample(sample),
+			])
+			return
+		var observed_hash := str(int(observed_preview.canonical_hash))
+		if causal_hashes.has(observed_hash):
+			_fail("causal input previews reused hash %s" % observed_hash)
+			return
+		causal_hashes[observed_hash] = true
+	_launch.cancel_aim_or_toggle_pause()
+	await physics_frame
+	await physics_frame
+	if str(_controller.current_frame.get("phase", "")) != "inspection":
+		_fail("causal input probe did not return to inspection")
+		return
+	var input_sample := {
+		"command_id": "set_aim_left",
+		"theta_degrees": -2.0,
+		"phase_degrees": 0.0,
+		"speed": 8.0,
+	}
+	var expected_input_aim: Dictionary = _controller._expected_aim_for_input_sample(input_sample)
+	var matching_preview := {"canonical_hash": 101, "aim": expected_input_aim}
+	if not _controller._preview_matches_input_sample(matching_preview, input_sample):
+		_fail("causal input matcher rejected its command-specific preview")
+		return
+	matching_preview.aim = expected_input_aim.duplicate()
+	matching_preview.aim.speed = 9.0
+	if _controller._preview_matches_input_sample(matching_preview, input_sample):
+		_fail("causal input matcher accepted a preview from another command")
+		return
 	var controls := _scene.get_node_or_null("VerticalSliceHUD/Root/ControlsLabel") as Control
 	var hud_root := _scene.get_node_or_null("VerticalSliceHUD/Root") as Control
 	var integrity_label := _scene.get_node("VerticalSliceHUD/Root/TopBar/Margin/Readout/IntegrityLabel") as Label

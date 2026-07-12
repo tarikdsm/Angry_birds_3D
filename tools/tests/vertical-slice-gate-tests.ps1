@@ -54,6 +54,21 @@ Assert-Throws {
     Set-NinhoRequiredDownsampleFrame -Mapping ([int[]]@(0,13,27)) -RequiredSourceFrame 28
 } 'cannot be injected'
 
+$causalInputMarkers = @(
+    [ordered]@{sample_index=0;command_id='set_aim_center';theta_degrees=0.0;phase_degrees=0.0;speed=10.5;observed_tick=4;preview_hash='101'},
+    [ordered]@{sample_index=1;command_id='set_aim_right';theta_degrees=2.0;phase_degrees=0.0;speed=8.0;observed_tick=5;preview_hash='202'},
+    [ordered]@{sample_index=2;command_id='set_aim_left';theta_degrees=-2.0;phase_degrees=0.0;speed=8.0;observed_tick=6;preview_hash='303'}
+)
+Assert-NinhoInputFeedbackMarkers -Markers $causalInputMarkers -Context 'fixture'
+Assert-Throws {
+    Assert-NinhoInputFeedbackMarkers -Markers @($causalInputMarkers[0],$causalInputMarkers[1]) -Context 'missing fixture'
+} 'exactly three causal markers'
+$duplicateInputMarkers = @($causalInputMarkers | ForEach-Object { [ordered]@{} + $_ })
+$duplicateInputMarkers[2].preview_hash = '202'
+Assert-Throws {
+    Assert-NinhoInputFeedbackMarkers -Markers $duplicateInputMarkers -Context 'duplicate fixture'
+} 'duplicated causal command or preview hash'
+
 $timeoutFixture = Join-Path $Root 'artifacts\timed-process-fixture'
 New-Item -ItemType Directory -Force -Path $timeoutFixture | Out-Null
 try {
@@ -196,12 +211,12 @@ capture complete
         physics = @{ step_p95_ms = 1.0; limit_ms = 8.0 }
         renderers = @(
             @{ name='Vulkan'; scales=@(
-                @{ ui_scale=100; frame_p95_ms=10.0; frame_p99_ms=15.0; max_hitch_ms=20.0; input_feedback_p95_ms=16.7; input_feedback_samples=3; frames_measured=300; rupture_observed=$true; vfx_observed=$true; post_vfx_frames=30 },
-                @{ ui_scale=150; frame_p95_ms=10.0; frame_p99_ms=15.0; max_hitch_ms=20.0; input_feedback_p95_ms=16.7; input_feedback_samples=3; frames_measured=300; rupture_observed=$true; vfx_observed=$true; post_vfx_frames=30 }
+                @{ ui_scale=100; frame_p95_ms=10.0; frame_p99_ms=15.0; max_hitch_ms=20.0; input_feedback_p95_ms=16.7; input_feedback_samples=3; input_feedback_markers=$causalInputMarkers; frames_measured=300; rupture_observed=$true; vfx_observed=$true; post_vfx_frames=30 },
+                @{ ui_scale=150; frame_p95_ms=10.0; frame_p99_ms=15.0; max_hitch_ms=20.0; input_feedback_p95_ms=16.7; input_feedback_samples=3; input_feedback_markers=$causalInputMarkers; frames_measured=300; rupture_observed=$true; vfx_observed=$true; post_vfx_frames=30 }
             ); capture=@{ frames=300; width=1920; height=1080; hash=$hash; path='capture.avi'; log_path='capture.log'; log_hash=$logHash; source_path='capture.avi'; source_hash=$hash; source_frames=300; downsample_source_frames=@(0..299) } },
             @{ name='OpenGL'; scales=@(
-                @{ ui_scale=100; frame_p95_ms=10.0; frame_p99_ms=15.0; max_hitch_ms=20.0; input_feedback_p95_ms=16.7; input_feedback_samples=3; frames_measured=300; rupture_observed=$true; vfx_observed=$true; post_vfx_frames=30 },
-                @{ ui_scale=150; frame_p95_ms=10.0; frame_p99_ms=15.0; max_hitch_ms=20.0; input_feedback_p95_ms=16.7; input_feedback_samples=3; frames_measured=300; rupture_observed=$true; vfx_observed=$true; post_vfx_frames=30 }
+                @{ ui_scale=100; frame_p95_ms=10.0; frame_p99_ms=15.0; max_hitch_ms=20.0; input_feedback_p95_ms=16.7; input_feedback_samples=3; input_feedback_markers=$causalInputMarkers; frames_measured=300; rupture_observed=$true; vfx_observed=$true; post_vfx_frames=30 },
+                @{ ui_scale=150; frame_p95_ms=10.0; frame_p99_ms=15.0; max_hitch_ms=20.0; input_feedback_p95_ms=16.7; input_feedback_samples=3; input_feedback_markers=$causalInputMarkers; frames_measured=300; rupture_observed=$true; vfx_observed=$true; post_vfx_frames=30 }
             ); capture=@{ frames=300; width=1920; height=1080; hash=$hash; path='capture.avi'; log_path='capture.log'; log_hash=$logHash; source_path='capture.avi'; source_hash=$hash; source_frames=300; downsample_source_frames=@(0..299) } }
         )
         goldens = @('overview','aim','virela','vulnerable_impact','result')
@@ -238,7 +253,8 @@ capture complete
                 schema='ninho.vertical-slice.runtime-metrics.v1'
                 frame_p95_ms=$scale.frame_p95_ms; frame_p99_ms=$scale.frame_p99_ms
                 max_hitch_ms=$scale.max_hitch_ms; input_feedback_p95_ms=$scale.input_feedback_p95_ms
-                input_feedback_samples=$scale.input_feedback_samples; physics_step_p95_ms=1.0
+                input_feedback_samples=$scale.input_feedback_samples
+                input_feedback_markers=$scale.input_feedback_markers; physics_step_p95_ms=1.0
                 frames_measured=$scale.frames_measured; rupture_observed=$true; vfx_observed=$true
                 post_vfx_frames=$scale.post_vfx_frames
             }
@@ -279,6 +295,14 @@ capture complete
     $validEvidenceText = [IO.File]::ReadAllText($evidencePath)
     $validCaptureManifestText = [IO.File]::ReadAllText($captureManifestPath)
     $validCaptureManifestBytes = [IO.File]::ReadAllBytes($captureManifestPath)
+    $duplicateMarkerEvidence = $validEvidenceText | ConvertFrom-Json
+    $duplicateMarkerEvidence.renderers[0].scales[0].input_feedback_markers[2].preview_hash = '202'
+    $duplicateMarkerEvidence | ConvertTo-Json -Depth 30 | Set-Content -LiteralPath $evidencePath -Encoding utf8
+    Assert-Throws {
+        Assert-NinhoVerticalSliceEvidence -EvidencePath $evidencePath `
+            -ArtifactRoot $sandbox -ExpectedConfiguration Debug -ExpectedCommit $commit
+    } 'duplicated causal command or preview hash'
+    [IO.File]::WriteAllText($evidencePath, $validEvidenceText)
     $cmakeInputPath = Join-Path $sandbox 'cmake\Dependencies.cmake'
     $cmakeInputOriginal = [IO.File]::ReadAllText($cmakeInputPath)
     [IO.File]::WriteAllText($cmakeInputPath, 'include(FetchContent)`n# stale mutation')

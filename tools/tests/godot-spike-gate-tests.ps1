@@ -318,6 +318,25 @@ if (-not (Test-Path -LiteralPath $controllerPath -PathType Leaf)) {
     throw 'vertical slice controller is missing'
 }
 $controllerText = [System.IO.File]::ReadAllText($controllerPath)
+foreach ($inputContract in @(
+        'PERFORMANCE_INPUT_SAMPLES',
+        '"command_id": "set_aim_center"',
+        '"command_id": "set_aim_left"',
+        '"command_id": "set_aim_right"',
+        '_preview_matches_input_sample',
+        '_input_feedback_markers')) {
+    if (-not $controllerText.Contains($inputContract)) {
+        throw "vertical slice controller is missing causal input contract: $inputContract"
+    }
+}
+if ([regex]::Matches($controllerText,
+        [regex]::Escape('set_aim_degrees(0.0, 0.0, 10.5)')).Count -ne 1 -or
+        [regex]::Matches($controllerText,
+        [regex]::Escape('set_aim_degrees(-2.0, 0.0, 8.0)')).Count -ne 1 -or
+        [regex]::Matches($controllerText,
+        [regex]::Escape('set_aim_degrees(2.0, 0.0, 8.0)')).Count -ne 1) {
+    throw 'performance input samples must issue one distinct center, left and right aim command'
+}
 if ([regex]::Matches($controllerText, 'session\.consume_frame\(\)').Count -ne 1) {
     throw 'vertical slice controller must call consume_frame exactly once in source'
 }
