@@ -18,6 +18,8 @@ New-Item -ItemType Directory -Force -Path $artifactDirectory | Out-Null
 Import-Module (Join-Path $PSScriptRoot 'GodotSpikeGate.psm1') -Force
 Import-Module (Join-Path $PSScriptRoot 'UpstreamBox3DGate.psm1') -Force
 Import-Module (Join-Path $PSScriptRoot 'FoundationEvidenceGate.psm1') -Force
+Import-Module (Join-Path $PSScriptRoot 'VerticalSliceGate.psm1') -Force
+Import-Module (Join-Path $PSScriptRoot 'SafePath.psm1') -Force
 $foundationReportTests = Join-Path $PSScriptRoot `
     'tests\test_generate_foundation_report.py'
 & python $foundationReportTests
@@ -302,7 +304,8 @@ function Invoke-GodotSmoke {
         [Parameter(Mandatory)] [string[]]$GodotArguments,
         [string]$RequiredLogText = '',
         [string]$RequiredCompletionMarker = '',
-        [string]$ExpectedMoviePath = ''
+        [string]$ExpectedMoviePath = '',
+        [ValidateRange(1,[int]::MaxValue)][int]$TimeoutMs = 180000
     )
 
     $stdout = Join-Path $artifactDirectory "$Name-$preset.stdout.log"
@@ -328,15 +331,14 @@ function Invoke-GodotSmoke {
         $movieCaptureStartedUtc = [DateTime]::UtcNow
     }
     Assert-NinhoNoReparseAncestors -Path $godot -AllowedRoot $root | Out-Null
-    $process = Start-Process `
+    $process = Invoke-NinhoTimedProcess `
         -FilePath $godot `
         -ArgumentList $GodotArguments `
         -WorkingDirectory $root `
-        -WindowStyle Hidden `
-        -Wait `
-        -PassThru `
-        -RedirectStandardOutput $stdout `
-        -RedirectStandardError $stderr
+        -TimeoutMs $TimeoutMs `
+        -StdoutPath $stdout `
+        -StderrPath $stderr `
+        -FatalMarker "NINHO_GODOT_FATAL name=$Name reason=timeout"
 
     # Godot is an external process and may have replaced either redirected
     # output path while it was running. Revalidate immediately before reads.
@@ -388,6 +390,39 @@ function Invoke-GodotSmoke {
         }
     }
     return 0
+}
+
+# `--quit`/short `--quit-after` only waits for an editor iteration and can
+# return while imported GLB artifacts are still unavailable. The pinned
+# editor's `--import` mode waits for every pending resource import and quits.
+$assetRoot = Join-Path $root 'game\assets'
+Assert-NinhoNoReparseAncestors -Path $assetRoot -AllowedRoot $root | Out-Null
+foreach ($importMetadata in @(
+        Get-ChildItem -LiteralPath $assetRoot -Recurse -File -Filter '*.import')) {
+    Assert-NinhoNoReparseAncestors -Path $importMetadata.FullName -AllowedRoot $root | Out-Null
+    $importMetadataText = [IO.File]::ReadAllText($importMetadata.FullName)
+    if ($importMetadataText.Contains('valid=false')) {
+        throw "Godot import metadata is invalid: $($importMetadata.FullName)"
+    }
+}
+$godotExitCode = Invoke-GodotSmoke `
+    -Name 'godot-full-import' `
+    -TimeoutMs 180000 `
+    -GodotArguments @('--headless', '--path', 'game', '--import')
+if ($godotExitCode -ne 0) {
+    exit $godotExitCode
+}
+
+$godotExitCode = Invoke-GodotSmoke `
+    -Name 'import-completeness' `
+    -RequiredCompletionMarker 'NINHO_IMPORT_COMPLETENESS_OK' `
+    -GodotArguments @(
+        '--headless',
+        '--path', 'game',
+        '--script', 'res://tests/import_completeness_smoke.gd'
+    )
+if ($godotExitCode -ne 0) {
+    exit $godotExitCode
 }
 
 $godotExitCode = Invoke-GodotSmoke -Name 'foundation-scene-load' -GodotArguments @(

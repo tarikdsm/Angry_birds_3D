@@ -50,7 +50,24 @@
       "licenseConcluded": "NOASSERTION",
       "licenseDeclared": "MIT",
       "copyrightText": "Copyright (c) 2014-present Godot Engine contributors; Copyright (c) 2007-2014 Juan Linietsky, Ariel Manzur",
-      "sourceInfo": "Official Windows x86_64 release corresponding to source commit f62fdbde15035c5576dad93e586201f4d41ef0cb; bundled third-party notices remain part of the upstream distribution."
+      "sourceInfo": "Official Windows x86_64 release corresponding to source commit f62fdbde15035c5576dad93e586201f4d41ef0cb. The package redistributes the upstream COPYRIGHT.txt inventory pinned at SHA-256 2039020f520ebd55592070ede2ef38dfbc28a6550140008da004143872789e5d."
+    },
+    {
+      "name": "Godot Export Templates",
+      "SPDXID": "SPDXRef-Package-Godot-Export-Templates",
+      "versionInfo": "4.5.1-stable",
+      "downloadLocation": "https://github.com/godotengine/godot/releases/download/4.5.1-stable/Godot_v4.5.1-stable_export_templates.tpz",
+      "filesAnalyzed": false,
+      "checksums": [
+        {
+          "algorithm": "SHA256",
+          "checksumValue": "1998af37f1387684e2c211cdb483daf492fc64dc6b12096bddcdca25b6910c86"
+        }
+      ],
+      "licenseConcluded": "NOASSERTION",
+      "licenseDeclared": "MIT",
+      "copyrightText": "Copyright (c) 2014-present Godot Engine contributors; Copyright (c) 2007-2014 Juan Linietsky, Ariel Manzur",
+      "sourceInfo": "Official build input matching Godot 4.5.1-stable. The archive is verified before extraction and is not redistributed; generated binaries are accompanied by the upstream COPYRIGHT.txt inventory pinned at SHA-256 2039020f520ebd55592070ede2ef38dfbc28a6550140008da004143872789e5d."
     },
     {
       "name": "nlohmann/json",
@@ -147,6 +164,11 @@
     },
     {
       "spdxElementId": "SPDXRef-Package-Ninho-Orbital",
+      "relationshipType": "GENERATED_FROM",
+      "relatedSpdxElement": "SPDXRef-Package-Godot-Export-Templates"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-Ninho-Orbital",
       "relationshipType": "DEPENDS_ON",
       "relatedSpdxElement": "SPDXRef-Package-nlohmann-json"
     },
@@ -156,19 +178,19 @@
       "relatedSpdxElement": "SPDXRef-Package-godot-cpp"
     },
     {
-      "spdxElementId": "SPDXRef-Package-Ninho-Orbital",
-      "relationshipType": "DEPENDS_ON",
-      "relatedSpdxElement": "SPDXRef-Package-CMake"
+      "spdxElementId": "SPDXRef-Package-CMake",
+      "relationshipType": "BUILD_TOOL_OF",
+      "relatedSpdxElement": "SPDXRef-Package-Ninho-Orbital"
     },
     {
-      "spdxElementId": "SPDXRef-Package-Ninho-Orbital",
-      "relationshipType": "DEPENDS_ON",
-      "relatedSpdxElement": "SPDXRef-Package-Ninja"
+      "spdxElementId": "SPDXRef-Package-Ninja",
+      "relationshipType": "BUILD_TOOL_OF",
+      "relatedSpdxElement": "SPDXRef-Package-Ninho-Orbital"
     },
     {
-      "spdxElementId": "SPDXRef-Package-Ninho-Orbital",
-      "relationshipType": "DEPENDS_ON",
-      "relatedSpdxElement": "SPDXRef-Package-Visual-Studio-Build-Tools"
+      "spdxElementId": "SPDXRef-Package-Visual-Studio-Build-Tools",
+      "relationshipType": "BUILD_TOOL_OF",
+      "relatedSpdxElement": "SPDXRef-Package-Ninho-Orbital"
     }
   ]
 }

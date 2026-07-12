@@ -7,6 +7,7 @@
 #include <cstdint>
 #include <filesystem>
 #include <fstream>
+#include <iomanip>
 #include <iostream>
 #include <limits>
 #include <numbers>
@@ -248,14 +249,65 @@ std::int64_t local_canonical_quantize(double value)
 
 std::uint64_t canonical_signature(const Trace& trace)
 {
+    const auto event_order_bytes = [&]() {
+        std::vector<std::uint8_t> bytes;
+        const auto byte = [&](std::uint8_t value) { bytes.push_back(value); };
+        const auto integer = [&](std::uint64_t value) {
+            for (int shift = 0; shift < 64; shift += 8) {
+                byte(static_cast<std::uint8_t>(value >> shift));
+            }
+        };
+        const auto quantized = [&](double value) {
+            integer(static_cast<std::uint64_t>(local_canonical_quantize(value)));
+        };
+        const auto vector = [&](ninho::physics::Vec3 value) {
+            quantized(value.x);
+            quantized(value.y);
+            quantized(value.z);
+        };
+        for (const DomainEvent& event : trace.events) {
+            integer(event.id.value());
+            integer(event.tick.value());
+            integer(static_cast<std::uint8_t>(event.kind));
+            integer(event.entity_id.value());
+            integer(event.bird_archetype_id.value());
+            integer(static_cast<std::uint8_t>(event.rejection_reason));
+            integer(event.ability_id.value());
+            integer(event.affected_entity_id.value());
+            integer(event.affected_part_id.value());
+            quantized(event.weight);
+            vector(event.force_n);
+            vector(event.impulse_n_s);
+            integer(event.part_id.value());
+            vector(event.position_m);
+            vector(event.normal);
+            quantized(event.energy_j);
+            quantized(event.damage);
+            integer(static_cast<std::uint8_t>(event.neutralization_cause));
+            integer(event.cause_event_id.value());
+            integer(event.joint_id.value());
+            integer(event.material_id.value());
+            quantized(event.joint_load_ratio);
+            quantized(event.fracture_ratio);
+        }
+        return bytes;
+    }();
     std::uint64_t hash = 14695981039346656037ULL;
-    const auto byte = [&](std::uint8_t value) {
+    const auto hash_byte = [&](std::uint8_t value) {
         hash ^= value;
         hash *= 1099511628211ULL;
     };
+    for (const std::uint8_t value : trace.state) hash_byte(value);
+    for (const std::uint8_t value : event_order_bytes) hash_byte(value);
+    return hash;
+}
+
+std::string ordered_events_hex(const Trace& trace)
+{
+    std::vector<std::uint8_t> bytes;
     const auto integer = [&](std::uint64_t value) {
         for (int shift = 0; shift < 64; shift += 8) {
-            byte(static_cast<std::uint8_t>(value >> shift));
+            bytes.push_back(static_cast<std::uint8_t>(value >> shift));
         }
     };
     const auto quantized = [&](double value) {
@@ -266,7 +318,6 @@ std::uint64_t canonical_signature(const Trace& trace)
         quantized(value.y);
         quantized(value.z);
     };
-    for (const std::uint8_t value : trace.state) byte(value);
     for (const DomainEvent& event : trace.events) {
         integer(event.id.value());
         integer(event.tick.value());
@@ -292,7 +343,12 @@ std::uint64_t canonical_signature(const Trace& trace)
         quantized(event.joint_load_ratio);
         quantized(event.fracture_ratio);
     }
-    return hash;
+    std::ostringstream output;
+    output << std::hex << std::setfill('0');
+    for (const std::uint8_t value : bytes) {
+        output << std::setw(2) << static_cast<unsigned>(value);
+    }
+    return output.str();
 }
 
 NINHO_SIM_TEST("playthrough Virela route wins through public commands and physics")
@@ -416,16 +472,39 @@ NINHO_SIM_TEST("playthrough local canonical quantizer enforces fixed point bound
 
 NINHO_SIM_TEST("vertical slice determinism compares quantized canonical signatures ten times")
 {
-    const std::uint64_t virela = canonical_signature(virela_victory_script());
-    const std::uint64_t structural = canonical_signature(structural_victory_script());
-    const std::uint64_t defeat = canonical_signature(defeat_script());
+    const Trace virela_trace = virela_victory_script();
+    const Trace structural_trace = structural_victory_script();
+    const Trace defeat_trace = defeat_script();
+    const std::uint64_t virela = canonical_signature(virela_trace);
+    const std::uint64_t structural = canonical_signature(structural_trace);
+    const std::uint64_t defeat = canonical_signature(defeat_trace);
+    std::uint64_t repeated_virela{};
+    std::uint64_t repeated_structural{};
+    std::uint64_t repeated_defeat{};
+    Trace repeated_virela_trace;
+    Trace repeated_structural_trace;
+    Trace repeated_defeat_trace;
     for (int repetition = 1; repetition < 10; ++repetition) {
-        NINHO_SIM_REQUIRE(canonical_signature(virela_victory_script()) == virela);
-        NINHO_SIM_REQUIRE(canonical_signature(structural_victory_script()) == structural);
-        NINHO_SIM_REQUIRE(canonical_signature(defeat_script()) == defeat);
+        repeated_virela_trace = virela_victory_script();
+        repeated_structural_trace = structural_victory_script();
+        repeated_defeat_trace = defeat_script();
+        repeated_virela = canonical_signature(repeated_virela_trace);
+        repeated_structural = canonical_signature(repeated_structural_trace);
+        repeated_defeat = canonical_signature(repeated_defeat_trace);
+        NINHO_SIM_REQUIRE(repeated_virela == virela);
+        NINHO_SIM_REQUIRE(repeated_structural == structural);
+        NINHO_SIM_REQUIRE(repeated_defeat == defeat);
     }
     std::cout << "[TRACE] canonical_playthrough_v3 "
               << virela << ' ' << structural << ' ' << defeat << '\n';
+    std::cout << "[TRACE] canonical_playthrough_v3_repeat "
+              << repeated_virela << ' ' << repeated_structural << ' ' << repeated_defeat << '\n';
+    std::cout << "[TRACE] ordered_events_v1 virela_win baseline " << ordered_events_hex(virela_trace) << '\n';
+    std::cout << "[TRACE] ordered_events_v1 virela_win repeat " << ordered_events_hex(repeated_virela_trace) << '\n';
+    std::cout << "[TRACE] ordered_events_v1 structural_win baseline " << ordered_events_hex(structural_trace) << '\n';
+    std::cout << "[TRACE] ordered_events_v1 structural_win repeat " << ordered_events_hex(repeated_structural_trace) << '\n';
+    std::cout << "[TRACE] ordered_events_v1 no_ability_loss baseline " << ordered_events_hex(defeat_trace) << '\n';
+    std::cout << "[TRACE] ordered_events_v1 no_ability_loss repeat " << ordered_events_hex(repeated_defeat_trace) << '\n';
 }
 
 }

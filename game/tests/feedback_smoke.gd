@@ -32,7 +32,7 @@ func _run() -> void:
 		_fail("scene must expose feedback, controller, camera and HUD")
 		return
 	for method: String in [
-		"apply_frame", "reset_feedback", "feedback_metrics",
+		"apply_frame", "reset_feedback", "shutdown_feedback", "feedback_metrics",
 		"profile_for_event", "profile_color", "audio_cues", "mapped_event_kinds",
 		"pooled_resource_ids", "directional_anchor_contract",
 	]:
@@ -394,6 +394,10 @@ func _run() -> void:
 		measured_contrast,
 		str(camera.reduced_motion),
 	])
+	feedback.shutdown_feedback()
+	if not feedback.audio_cues().is_empty():
+		_fail("capture shutdown must release every imported audio stream")
+		return
 	print(SUCCESS_MARKER)
 	_finish(0)
 

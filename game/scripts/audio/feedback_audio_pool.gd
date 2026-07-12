@@ -67,6 +67,11 @@ func reset_pool() -> void:
 	_cursor = 0
 
 
+func shutdown_pool() -> void:
+	reset_pool()
+	_streams.clear()
+
+
 func available_cues() -> Array:
 	var result: Array[String] = []
 	for cue: String in _streams:

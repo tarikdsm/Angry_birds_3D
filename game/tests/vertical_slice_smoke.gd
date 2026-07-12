@@ -303,6 +303,35 @@ func _run() -> void:
 		_fail("restart did not restore inspection")
 		return
 
+	# Prove the loss path through the same Godot/GDExtension public controls.
+	# A steep tangential shot misses the fortification; no ability is requested.
+	for defeat_shot in range(3):
+		if not _launch.begin_aim():
+			_fail("defeat shot %d could not begin aim" % defeat_shot)
+			return
+		await physics_frame
+		if not _launch.set_aim_degrees(0.0, 80.0, 8.0):
+			_fail("defeat shot %d rejected miss aim" % defeat_shot)
+			return
+		await physics_frame
+		if not _launch.launch_or_activate():
+			_fail("defeat shot %d could not launch" % defeat_shot)
+			return
+		for defeat_frame in range(MAX_FRAMES_PER_SHOT):
+			await physics_frame
+			var defeat_phase := str(_controller.current_frame.get("phase", ""))
+			if defeat_phase == "result" or defeat_phase == "inspection":
+				break
+			if defeat_frame == MAX_FRAMES_PER_SHOT - 1:
+				_fail("defeat shot %d timed out" % defeat_shot)
+				return
+		if str(_controller.current_frame.get("phase", "")) == "result":
+			break
+	if str(_controller.current_frame.get("phase", "")) != "result" \
+			or str(_controller.current_frame.get("outcome", "")) != "defeat":
+		_fail("three public miss shots did not produce defeat")
+		return
+
 	print(SUCCESS_MARKER)
 	_finish(0)
 

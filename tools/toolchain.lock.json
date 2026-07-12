@@ -20,6 +20,14 @@
     "exe_sha256": "a829242096d640007de9fa93ea923d0f666d13d6a3b472a0231c820be6dc7627",
     "exe": "Godot_v4.5.1-stable_win64.exe"
   },
+  "godot_export_templates": {
+    "version": "4.5.1-stable",
+    "url": "https://github.com/godotengine/godot/releases/download/4.5.1-stable/Godot_v4.5.1-stable_export_templates.tpz",
+    "sha256": "1998af37f1387684e2c211cdb483daf492fc64dc6b12096bddcdca25b6910c86",
+    "install_directory": "4.5.1.stable",
+    "copyright_url": "https://raw.githubusercontent.com/godotengine/godot/4.5.1-stable/COPYRIGHT.txt",
+    "copyright_sha256": "2039020f520ebd55592070ede2ef38dfbc28a6550140008da004143872789e5d"
+  },
   "blender": {
     "version": "5.1.2",
     "url": "https://download.blender.org/release/Blender5.1/blender-5.1.2-windows-x64.zip",

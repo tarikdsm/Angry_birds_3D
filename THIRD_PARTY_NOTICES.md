@@ -32,6 +32,23 @@ nlohmann/json is fetched from the immutable commit archive above and used as a h
 - Executable SHA-256: `a829242096d640007de9fa93ea923d0f666d13d6a3b472a0231c820be6dc7627`
 - License: MIT; Godot distributions also include notices for bundled third-party components
 - Exact pinned project license: [`third_party/godot.LICENSE.txt`](third_party/godot.LICENSE.txt)
+- Exact upstream copyright and bundled third-party license inventory: [`third_party/godot.COPYRIGHT.txt`](third_party/godot.COPYRIGHT.txt), pinned from source commit `f62fdbde15035c5576dad93e586201f4d41ef0cb` with SHA-256 `2039020f520ebd55592070ede2ef38dfbc28a6550140008da004143872789e5d`
+
+### Godot Export Templates 4.5.1-stable
+
+- Upstream: https://github.com/godotengine/godot
+- Archive: https://github.com/godotengine/godot/releases/download/4.5.1-stable/Godot_v4.5.1-stable_export_templates.tpz
+- Archive SHA-256: `1998af37f1387684e2c211cdb483daf492fc64dc6b12096bddcdca25b6910c86`
+- Installed template directory: `4.5.1.stable`
+- License: MIT; exported Godot binaries also carry the notices for bundled third-party components
+- Exact pinned project license: [`third_party/godot-export-templates.LICENSE.txt`](third_party/godot-export-templates.LICENSE.txt)
+- Exact upstream copyright and bundled third-party license inventory: [`third_party/godot.COPYRIGHT.txt`](third_party/godot.COPYRIGHT.txt)
+
+The official templates are verified before extraction and used to produce the
+redistributable Windows executable. They are a build input; only the generated
+Windows executable and applicable notices are included in the game package.
+The packaged `godot.COPYRIGHT.txt` preserves the upstream inventory applicable
+to the generated Godot runtime, including non-MIT bundled components.
 
 ### godot-cpp godot-4.5-stable
 

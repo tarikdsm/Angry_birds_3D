@@ -91,6 +91,12 @@ func reset_feedback() -> void:
 	_impact_latency_samples_ms.clear()
 
 
+func shutdown_feedback() -> void:
+	reset_feedback()
+	if _audio_pool != null and _audio_pool.has_method("shutdown_pool"):
+		_audio_pool.shutdown_pool()
+
+
 func set_reduced_motion(enabled: bool) -> void:
 	_reduced_motion = enabled
 

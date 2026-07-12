@@ -9,6 +9,8 @@ Import-Module (Join-Path $PSScriptRoot '..\GodotSpikeGate.psm1') -Force
 if ($null -eq (Get-Command 'Assert-NinhoNoReparseAncestors' -ErrorAction SilentlyContinue)) {
     throw 'Importing GodotSpikeGate must not remove the caller SafePath commands'
 }
+Import-Module (Join-Path $PSScriptRoot '..\VerticalSliceGate.psm1') -Force
+Import-Module (Join-Path $PSScriptRoot '..\SafePath.psm1') -Force
 
 function Assert-Throws {
     param(
@@ -25,6 +27,27 @@ function Assert-Throws {
         return
     }
     throw "Expected action to throw an error matching '$Pattern'"
+}
+
+$fakeImportFixture = Join-Path $Root 'artifacts\fake-godot-import-timeout'
+New-Item -ItemType Directory -Force -Path $fakeImportFixture | Out-Null
+try {
+    $fakeImportStdout = Join-Path $fakeImportFixture 'stdout.log'
+    $fakeImportStderr = Join-Path $fakeImportFixture 'stderr.log'
+    Assert-Throws -Pattern 'timed out' -Action {
+        Invoke-NinhoTimedProcess -FilePath 'powershell.exe' -ArgumentList @(
+            '-NoProfile', '-Command', 'Start-Sleep -Seconds 5'
+        ) -TimeoutMs 200 -StdoutPath $fakeImportStdout -StderrPath $fakeImportStderr `
+            -FatalMarker 'NINHO_GODOT_FATAL name=fake-import reason=timeout'
+    }
+    if (-not ([IO.File]::ReadAllText($fakeImportStderr)).Contains(
+            'NINHO_GODOT_FATAL name=fake-import reason=timeout')) {
+        throw 'fake hanging importer did not persist its fatal timeout marker'
+    }
+} finally {
+    if (Test-Path -LiteralPath $fakeImportFixture) {
+        Remove-Item -LiteralPath $fakeImportFixture -Recurse -Force
+    }
 }
 
 $descriptorPath = Join-Path $Root 'game\bin\ninho_physics.gdextension'
@@ -243,6 +266,13 @@ foreach ($runnerContract in @(
         'NINHO_VISUAL_CAPTURE_COMPLETE frame=300',
         '-RequiredCompletionMarker $visualCompletionMarker',
         "'--fixed-fps', '60'",
+        "'--headless', '--path', 'game', '--import'",
+        "'--script', 'res://tests/import_completeness_smoke.gd'",
+        "Get-ChildItem -LiteralPath `$assetRoot -Recurse -File -Filter '*.import'",
+        "Contains('valid=false')",
+        'Godot import metadata is invalid',
+        'Invoke-NinhoTimedProcess',
+        '-TimeoutMs 180000',
         "'--', '--ninho-capture-300'",
         "'--path', 'game', '--editor', '--quit', 'res://scenes/physics_spike.tscn'",
         "'--script', 'res://tests/vertical_slice_smoke.gd'",
@@ -253,6 +283,13 @@ foreach ($runnerContract in @(
     if (-not $runnerText.Contains($runnerContract)) {
         throw "tools/test.ps1 is missing runner contract: $runnerContract"
     }
+}
+$importCommandIndex = $runnerText.IndexOf("'--headless', '--path', 'game', '--import'", [StringComparison]::Ordinal)
+$importSmokeIndex = $runnerText.IndexOf("'--script', 'res://tests/import_completeness_smoke.gd'", [StringComparison]::Ordinal)
+$verticalSmokeIndex = $runnerText.IndexOf("'--script', 'res://tests/vertical_slice_smoke.gd'", [StringComparison]::Ordinal)
+if ($importCommandIndex -lt 0 -or $importSmokeIndex -le $importCommandIndex -or
+        $verticalSmokeIndex -le $importSmokeIndex) {
+    throw 'full import and import-completeness smoke must precede the vertical slice smoke'
 }
 if ($runnerText.Contains("'--quit-after'")) {
     throw 'tools/test.ps1 must let the visual scene finish frame 300 itself'

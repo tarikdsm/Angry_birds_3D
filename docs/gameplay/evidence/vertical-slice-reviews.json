@@ -1,0 +1,49 @@
+{
+  "schema": "ninho.vertical-slice.reviews.v1",
+  "source_revision": "3281c2c33e2b3e6267da2d3f65efd8108bc32ee6",
+  "tested_inputs_schema": "ninho.tested-inputs.v1",
+  "tested_inputs_sha256": "3e31e577cb4f2d5ae8195089bfbbdaace61757e7a23949c1d21c051ee780bfcc",
+  "playtest": {
+    "status": "unavailable",
+    "substitute": "independent_agents",
+    "legal_limit": "not_legal_advice"
+  },
+  "reviews": [
+    {
+      "role": "code",
+      "reviewer": "/root/vertical_slice_task12_impl/code_review",
+      "verdict": "approved",
+      "critical": 0,
+      "important": 0,
+      "minor": 0,
+      "summary": "Timeouts, causal raw-source derivation, complete package validation, and full report checking are fail-closed."
+    },
+    {
+      "role": "architecture",
+      "reviewer": "/root/vertical_slice_task12_impl/architecture_review",
+      "verdict": "approved",
+      "critical": 0,
+      "important": 0,
+      "minor": 0,
+      "summary": "Evidence identity, normal-cadence capture, deterministic domain events, configuration isolation, and SPDX semantics are approved."
+    },
+    {
+      "role": "gameplay",
+      "reviewer": "/root/vertical_slice_task12_impl/gameplay_review",
+      "verdict": "approved",
+      "critical": 0,
+      "important": 0,
+      "minor": 0,
+      "summary": "Victory, structural victory, defeat, restart, Virela, rupture, VFX, input feedback, and performance criteria are approved."
+    },
+    {
+      "role": "art",
+      "reviewer": "/root/vertical_slice_task12_impl/art_review",
+      "verdict": "approved",
+      "critical": 0,
+      "important": 0,
+      "minor": 0,
+      "summary": "Visual hierarchy, material readability, causal impact, renderer parity, provenance, and clean-room criteria are approved."
+    }
+  ]
+}

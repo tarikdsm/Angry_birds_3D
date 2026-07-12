@@ -3,6 +3,7 @@ param(
     [Parameter(ParameterSetName='Validate')][switch]$ValidateLock,
     [Parameter(ParameterSetName='Check')][switch]$CheckOnly,
     [Parameter(ParameterSetName='Portable')][switch]$InstallPortable,
+    [Parameter(ParameterSetName='Templates')][switch]$InstallExportTemplates,
     [Parameter(ParameterSetName='VisualStudio')][switch]$InstallVisualStudio,
     [switch]$Json
 )
@@ -23,6 +24,13 @@ foreach ($name in 'cmake','ninja','godot','blender','visual_studio') {
     if ($entry.url -notmatch '^https://') { $errors.Add("$name.url must use https") }
     if (-not (Test-HexSha $entry.sha256)) { $errors.Add("$name.sha256 invalid") }
     if ($name -ne 'visual_studio' -and -not (Test-HexSha $entry.exe_sha256)) { $errors.Add("$name.exe_sha256 invalid") }
+}
+$templateLock = $lock.godot_export_templates
+if (-not $templateLock.version) { $errors.Add('godot_export_templates.version missing') }
+if ($templateLock.url -notmatch '^https://') { $errors.Add('godot_export_templates.url must use https') }
+if (-not (Test-HexSha $templateLock.sha256)) { $errors.Add('godot_export_templates.sha256 invalid') }
+if ($templateLock.install_directory -notmatch '^4\.5\.1\.stable$') {
+    $errors.Add('godot_export_templates.install_directory invalid')
 }
 
 function Get-LockedArchive([string]$name) {
@@ -62,6 +70,84 @@ function Install-Portable([string]$name) {
     return $exe
 }
 
+function Install-GodotExportTemplates {
+    $entry = $lock.godot_export_templates
+    $archive = Get-LockedArchive 'godot_export_templates'
+    $godotRoot = Join-Path $tools 'godot'
+    $selfContainedMarker = Join-Path $godotRoot '_sc_'
+    Assert-NinhoNoReparseAncestors -Path $selfContainedMarker -AllowedRoot $root | Out-Null
+    if (-not (Test-Path -LiteralPath $godotRoot -PathType Container)) {
+        throw 'godot_export_templates requires the pinned portable Godot installation'
+    }
+    if (-not (Test-Path -LiteralPath $selfContainedMarker)) {
+        [IO.File]::WriteAllText($selfContainedMarker, '', [Text.UTF8Encoding]::new($false))
+    }
+    $templatesRoot = Join-Path $godotRoot 'editor_data\export_templates'
+    $destination = Join-Path $templatesRoot $entry.install_directory
+    $temporary = Join-Path $templatesRoot ('.install-' + [Guid]::NewGuid().ToString('N'))
+    Assert-NinhoNoReparseAncestors -Path $templatesRoot -AllowedRoot $root | Out-Null
+    New-Item -ItemType Directory -Force -Path $templatesRoot | Out-Null
+    Assert-NinhoNoReparseAncestors -Path $temporary -AllowedRoot $templatesRoot | Out-Null
+    New-Item -ItemType Directory -Path $temporary | Out-Null
+
+    Add-Type -AssemblyName System.IO.Compression.FileSystem
+    $archiveHandle = $null
+    try {
+        # Get-LockedArchive verifies the complete TPZ before any archive entry is trusted.
+        Assert-NinhoNoReparseAncestors -Path $archive -AllowedRoot $downloads | Out-Null
+        $archiveHandle = [IO.Compression.ZipFile]::OpenRead($archive)
+        foreach ($zipEntry in $archiveHandle.Entries) {
+            $entryPath = $zipEntry.FullName.Replace('\', '/')
+            if (-not $entryPath.StartsWith('templates/', [StringComparison]::Ordinal) -or
+                    $entryPath.Contains('../') -or $entryPath.Contains(':') -or
+                    [IO.Path]::IsPathRooted($entryPath)) {
+                throw "godot_export_templates unsafe archive entry: $entryPath"
+            }
+            $relative = $entryPath.Substring('templates/'.Length)
+            if ([string]::IsNullOrEmpty($relative)) { continue }
+            $mode = (($zipEntry.ExternalAttributes -shr 16) -band 0xF000)
+            if ($mode -eq 0xA000) {
+                throw "godot_export_templates symbolic link entry is forbidden: $entryPath"
+            }
+            $target = Join-Path $temporary $relative
+            Assert-NinhoNoReparseAncestors -Path $target -AllowedRoot $temporary | Out-Null
+            if ($entryPath.EndsWith('/', [StringComparison]::Ordinal)) {
+                New-Item -ItemType Directory -Force -Path $target | Out-Null
+                continue
+            }
+            $parent = Split-Path -Parent $target
+            New-Item -ItemType Directory -Force -Path $parent | Out-Null
+            [IO.Compression.ZipFileExtensions]::ExtractToFile($zipEntry, $target, $true)
+        }
+        $archiveHandle.Dispose()
+        $archiveHandle = $null
+
+        foreach ($required in 'windows_release_x86_64.exe','windows_debug_x86_64.exe') {
+            $requiredPath = Join-Path $temporary $required
+            Assert-NinhoNoReparseAncestors -Path $requiredPath -AllowedRoot $temporary | Out-Null
+            if (-not (Test-Path -LiteralPath $requiredPath -PathType Leaf) -or
+                    (Get-Item -LiteralPath $requiredPath).Length -eq 0) {
+                throw "godot_export_templates missing required file: $required"
+            }
+        }
+
+        if (Test-Path -LiteralPath $destination) {
+            Assert-NinhoNoReparseAncestors -Path $destination -AllowedRoot $templatesRoot | Out-Null
+            Remove-Item -LiteralPath $destination -Recurse -Force
+        }
+        Move-Item -LiteralPath $temporary -Destination $destination
+        Assert-NinhoNoReparseAncestors -Path $destination -AllowedRoot $templatesRoot | Out-Null
+        return $destination
+    }
+    finally {
+        if ($archiveHandle) { $archiveHandle.Dispose() }
+        if (Test-Path -LiteralPath $temporary) {
+            Assert-NinhoNoReparseAncestors -Path $temporary -AllowedRoot $templatesRoot | Out-Null
+            Remove-Item -LiteralPath $temporary -Recurse -Force
+        }
+    }
+}
+
 $cmake = Join-Path $tools ('cmake\' + $lock.cmake.exe)
 $ninja = Join-Path $tools ('ninja\' + $lock.ninja.exe)
 $godot = Join-Path $tools ('godot\' + $lock.godot.exe)
@@ -88,6 +174,10 @@ if ($InstallPortable -and $errors.Count -eq 0) {
     $ninja = Install-Portable 'ninja'
     $godot = Install-Portable 'godot'
     $blender = Install-Portable 'blender'
+}
+$exportTemplates = Join-Path $tools ('godot\editor_data\export_templates\' + $lock.godot_export_templates.install_directory)
+if (($InstallPortable -or $InstallExportTemplates) -and $errors.Count -eq 0) {
+    $exportTemplates = Install-GodotExportTemplates
 }
 if ($InstallVisualStudio -and $errors.Count -eq 0) {
     if (-not $vsInstall) {
@@ -156,6 +246,11 @@ $result = [ordered]@{
     cmake = @{ version=$lock.cmake.version; path=$cmake }
     ninja = @{ version=$lock.ninja.version; path=$ninja }
     godot = @{ version=$lock.godot.version; path=$godot }
+    godot_export_templates = @{
+        version=$lock.godot_export_templates.version
+        path=$exportTemplates
+        archive_sha256=$lock.godot_export_templates.sha256
+    }
     blender = @{ version=$lock.blender.version; path=$blender; executable_sha256=$lock.blender.exe_sha256 }
     python = @{ minimum_version=$lock.python.minimum_version; detected_version=$pythonVersion }
     visual_studio = @{ version=$lock.visual_studio.version; path=$vsInstall }
