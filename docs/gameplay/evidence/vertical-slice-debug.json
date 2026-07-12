@@ -2,11 +2,21 @@
     "schema":  "ninho.vertical-slice.evidence.v1",
     "schema_version":  1,
     "configuration":  "Debug",
-    "commit":  "3281c2c33e2b3e6267da2d3f65efd8108bc32ee6",
-    "source_revision":  "3281c2c33e2b3e6267da2d3f65efd8108bc32ee6",
+    "commit":  "e53095e52914b8a451ad216d7d25570776d9a42e",
+    "source_revision":  "e53095e52914b8a451ad216d7d25570776d9a42e",
     "tested_inputs_schema":  "ninho.tested-inputs.v1",
-    "tested_inputs_sha256":  "3e31e577cb4f2d5ae8195089bfbbdaace61757e7a23949c1d21c051ee780bfcc",
+    "tested_inputs_sha256":  "af88a40f6f6cdf0df65dad7763d74d99246745fd2ae1f63e009f4ef53fc22904",
     "tested_inputs":  [
+                          {
+                              "path":  ".gitattributes",
+                              "size_bytes":  268,
+                              "sha256":  "53f213619e55f770da8260718a650ab39d44dae2151ecc069de07b1737a216d4"
+                          },
+                          {
+                              "path":  ".gitignore",
+                              "size_bytes":  204,
+                              "sha256":  "0d0af74d8fd31c92e52202d250538a5875465a9d0d2cf31eec4301c7b33bb85b"
+                          },
                           {
                               "path":  "art/config/vertical_slice_assets.json",
                               "size_bytes":  11040,
@@ -96,6 +106,26 @@
                               "path":  "art/source/vertical_slice/KIT_PineLintel_A.blend",
                               "size_bytes":  93730,
                               "sha256":  "eb01610ba7905516845c2f7d1b50edbd8127ddf2528e356e32b6536e9c8d916d"
+                          },
+                          {
+                              "path":  "cmake/Dependencies.cmake",
+                              "size_bytes":  3909,
+                              "sha256":  "8d3dc247f6ab7e46b245e7e8559caeba82751d643bd01a09ee5bc1846d5298f8"
+                          },
+                          {
+                              "path":  "cmake/PrepareGDExtensionTest.cmake",
+                              "size_bytes":  261,
+                              "sha256":  "66d8783a8394ecd593da4d2d221196e00cc5e4bb377dab83c7862f651388a1b5"
+                          },
+                          {
+                              "path":  "cmake/VerifyGDExtension.cmake",
+                              "size_bytes":  3835,
+                              "sha256":  "e3c69a8c71cd1339fdb35f899bb35fd151bba89e6825f80efe65f26d590d2b28"
+                          },
+                          {
+                              "path":  "cmake/WriteGDExtensionStamp.cmake",
+                              "size_bytes":  656,
+                              "sha256":  "8e74397a6c2878f0e3da5077d65d4f84589e4a7a363c855672a62c6a9d671856"
                           },
                           {
                               "path":  "CMakeLists.txt",
@@ -559,8 +589,8 @@
                           },
                           {
                               "path":  "game/scripts/game/vertical_slice_controller.gd",
-                              "size_bytes":  10249,
-                              "sha256":  "a91dcd2865fe2050f1ef885e3120199150fa436d1defb909c31395878f2ac99d"
+                              "size_bytes":  13770,
+                              "sha256":  "cc75f76b1ea08a8150d9491b1c79f4d5ea765afb236e7d2a941c042974d87096"
                           },
                           {
                               "path":  "game/scripts/game/vertical_slice_controller.gd.uid",
@@ -664,8 +694,8 @@
                           },
                           {
                               "path":  "game/tests/vertical_slice_smoke.gd",
-                              "size_bytes":  13972,
-                              "sha256":  "d950d96c43010de016281bd87f8c44da5ef35868d70859668c5e74fb5af616b8"
+                              "size_bytes":  16270,
+                              "sha256":  "ae2707c246f51535aa1697cd84cb6496531611994e51f7a31c71eaffb046eb4c"
                           },
                           {
                               "path":  "game/tests/vertical_slice_smoke.gd.uid",
@@ -859,8 +889,8 @@
                           },
                           {
                               "path":  "native/simulation/src/fracture_system.cpp",
-                              "size_bytes":  15579,
-                              "sha256":  "ffb39cf7b38b1eb826feea9c25e658c835d0acc8b469ab14ec3e57558afd72d0"
+                              "size_bytes":  15180,
+                              "sha256":  "0d19385c9256476cdc2c3773eedbcce8663f07405997507c1fbc29c3649ee960"
                           },
                           {
                               "path":  "native/simulation/src/gravity_field_ability_system.cpp",
@@ -914,8 +944,8 @@
                           },
                           {
                               "path":  "native/simulation/tests/fracture_objective_tests.cpp",
-                              "size_bytes":  10905,
-                              "sha256":  "5cf4a2644699df24c4e2adcff1151245899753643ec4ec3ed48eab87948cc77d"
+                              "size_bytes":  10767,
+                              "sha256":  "21b8d5c0c72a4f8de787625dbfc8c8579b8536ba780885f431093e05b5f0cb0c"
                           },
                           {
                               "path":  "native/simulation/tests/gravity_field_ability_tests.cpp",
@@ -934,8 +964,8 @@
                           },
                           {
                               "path":  "native/simulation/tests/playthrough_tests.cpp",
-                              "size_bytes":  20498,
-                              "sha256":  "bd8bf02a9a3b980f270502a10d9122a61fcd9146ea9d203833b09d82fe6ac138"
+                              "size_bytes":  20956,
+                              "sha256":  "8dfdac510f66913892b8ce33e7b3bd66fe819cbbbb687bca037eb05eb4dd7a32"
                           },
                           {
                               "path":  "native/simulation/tests/session_tests.cpp",
@@ -1124,8 +1154,8 @@
                           },
                           {
                               "path":  "tools/capture_vertical_slice.ps1",
-                              "size_bytes":  19577,
-                              "sha256":  "d0d1cd063d3ceaa248a67955305cc4ddfde4b36b816e121aa6c3e4909d2345cc"
+                              "size_bytes":  19650,
+                              "sha256":  "ce2dd4781417715941b650aded5da047e0847d482c90adcbd2394a8a84901597"
                           },
                           {
                               "path":  "tools/check_vertical_slice_evidence.ps1",
@@ -1144,8 +1174,8 @@
                           },
                           {
                               "path":  "tools/generate_vertical_slice_report.py",
-                              "size_bytes":  7122,
-                              "sha256":  "3283e0da80a0c94d4d1a94511d56649600c711e488360640cbe55d2d8314823d"
+                              "size_bytes":  7262,
+                              "sha256":  "43d0e6865931b4deed3786123980fb1260f10f64d7cee55aa40b3c6933282f22"
                           },
                           {
                               "path":  "tools/GodotSpikeGate.psm1",
@@ -1219,8 +1249,8 @@
                           },
                           {
                               "path":  "tools/tests/godot-spike-gate-tests.ps1",
-                              "size_bytes":  15503,
-                              "sha256":  "492215ef18898117bd75bc33197fe9c1ab6e0f5f5f6e7b6efa6aa6c81f486eb1"
+                              "size_bytes":  16375,
+                              "sha256":  "060bd9fd5e543cbf920ff3975d68332ac2a5cd28d9f7ffad79b94dae0be6a39e"
                           },
                           {
                               "path":  "tools/tests/package-windows-tests.ps1",
@@ -1249,8 +1279,8 @@
                           },
                           {
                               "path":  "tools/tests/test_generate_vertical_slice_report.py",
-                              "size_bytes":  3884,
-                              "sha256":  "0df85a2402a30cb0953dc367c1f43b70d0a03378c88e754f3b4d6d28cee5411b"
+                              "size_bytes":  4148,
+                              "sha256":  "409abc9364fdbb0308bf01cd358c25fba3e16a674ddb7132af5eacff5bab62e1"
                           },
                           {
                               "path":  "tools/tests/upstream-box3d-gate-tests.ps1",
@@ -1259,8 +1289,8 @@
                           },
                           {
                               "path":  "tools/tests/vertical-slice-gate-tests.ps1",
-                              "size_bytes":  32993,
-                              "sha256":  "1896cb1103651ffb43bd0377f4c91c01dae31c667bbbdcc21745199461966e45"
+                              "size_bytes":  35721,
+                              "sha256":  "962c753422675b52d1e1bb95ccab1c3e2bde67843487126873b5f85c91c28325"
                           },
                           {
                               "path":  "tools/toolchain.lock.json",
@@ -1274,11 +1304,11 @@
                           },
                           {
                               "path":  "tools/VerticalSliceGate.psm1",
-                              "size_bytes":  41884,
-                              "sha256":  "e76618b8198f816a11c5e9a474ce91c102a285557e51cd31d13edfc1e78ebbff"
+                              "size_bytes":  44865,
+                              "sha256":  "9afac2297ca5bcd2344c8f00d405ae61016723f882c29558a511324a7bc27c62"
                           }
                       ],
-    "generated_utc":  "2026-07-12T07:13:50.2246738Z",
+    "generated_utc":  "2026-07-12T08:34:08.9021816Z",
     "hardware":  {
                      "cpu":  "11th Gen Intel(R) Core(TM) i7-11800H @ 2.30GHz",
                      "gpu":  "NVIDIA GeForce RTX 3070 Laptop GPU",
@@ -1291,19 +1321,19 @@
                        "name":  "virela_win",
                        "outcome":  "Victory",
                        "hashes":  [
-                                      "18304663578686684669",
-                                      "18304663578686684669"
+                                      "460897019529119944",
+                                      "460897019529119944"
                                   ],
-                       "ordered_events_sha256":  "e941f4f90a3f30d4a680305fbf9758ad60335104a79f1144a2ce657452ca5e0f"
+                       "ordered_events_sha256":  "965c6dfe3109212d2d83d5f06bdf52411a60d6c42d8308c941860111061f7ec1"
                    },
                    {
                        "name":  "structural_win",
                        "outcome":  "Victory",
                        "hashes":  [
-                                      "15827554224084106611",
-                                      "15827554224084106611"
+                                      "13375825633044651172",
+                                      "13375825633044651172"
                                   ],
-                       "ordered_events_sha256":  "cfc08750354f8323fc61d82e9f65a9eb6e9c9807171f2c1695986aa417ba96a8"
+                       "ordered_events_sha256":  "566bc6d57566049cc79cb4d1412242494cc49f8bf4568a94e5ede969844a2ec9"
                    },
                    {
                        "name":  "no_ability_loss",
@@ -1326,7 +1356,7 @@
                        "box3d_only":  true
                    },
     "physics":  {
-                    "step_p95_ms":  1.6341,
+                    "step_p95_ms":  2.3593,
                     "limit_ms":  8
                 },
     "renderers":  [
@@ -1335,33 +1365,91 @@
                           "scales":  [
                                          {
                                              "ui_scale":  100,
-                                             "frame_p95_ms":  6.06060606060606,
-                                             "frame_p99_ms":  6.182,
-                                             "max_hitch_ms":  11.4093636363637,
-                                             "input_feedback_p95_ms":  6.872,
+                                             "frame_p95_ms":  6.25,
+                                             "frame_p99_ms":  9.38081818181819,
+                                             "max_hitch_ms":  13.45,
+                                             "input_feedback_p95_ms":  6.071,
                                              "input_feedback_samples":  3,
-                                             "physics_step_p95_ms":  1.6324,
-                                             "frames_measured":  490,
+                                             "input_feedback_markers":  [
+                                                                            {
+                                                                                "command_id":  "set_aim_center",
+                                                                                "observed_tick":  5,
+                                                                                "phase_degrees":  0.0,
+                                                                                "preview_hash":  "-5737333301593154889",
+                                                                                "sample_index":  0,
+                                                                                "speed":  10.5,
+                                                                                "theta_degrees":  0.0
+                                                                            },
+                                                                            {
+                                                                                "command_id":  "set_aim_right",
+                                                                                "observed_tick":  6,
+                                                                                "phase_degrees":  0.0,
+                                                                                "preview_hash":  "-5465358568780565436",
+                                                                                "sample_index":  1,
+                                                                                "speed":  8.0,
+                                                                                "theta_degrees":  2.0
+                                                                            },
+                                                                            {
+                                                                                "command_id":  "set_aim_left",
+                                                                                "observed_tick":  7,
+                                                                                "phase_degrees":  0.0,
+                                                                                "preview_hash":  "5678929320877639882",
+                                                                                "sample_index":  2,
+                                                                                "speed":  8.0,
+                                                                                "theta_degrees":  -2.0
+                                                                            }
+                                                                        ],
+                                             "physics_step_p95_ms":  1.6848,
+                                             "frames_measured":  483,
                                              "rupture_observed":  true,
                                              "vfx_observed":  true,
                                              "post_vfx_frames":  35,
                                              "metrics_path":  "artifacts/vertical-slice/debug/metrics-vulkan-100.json",
-                                             "metrics_sha256":  "12b3aa6bd0d02302c7843d64c29d96722fbd8c35b71ad7b24b33fedf6cdd7d1b"
+                                             "metrics_sha256":  "15145bff6e1804be4a0026296e377626c7fef6b15223e270f66a6206bd9336d6"
                                          },
                                          {
                                              "ui_scale":  150,
-                                             "frame_p95_ms":  6.06060606060606,
-                                             "frame_p99_ms":  6.092,
-                                             "max_hitch_ms":  11.9713636363637,
-                                             "input_feedback_p95_ms":  6.569,
+                                             "frame_p95_ms":  6.94444444444444,
+                                             "frame_p99_ms":  10.009393939394,
+                                             "max_hitch_ms":  12.845393939394,
+                                             "input_feedback_p95_ms":  6.02,
                                              "input_feedback_samples":  3,
-                                             "physics_step_p95_ms":  1.5976,
-                                             "frames_measured":  488,
+                                             "input_feedback_markers":  [
+                                                                            {
+                                                                                "command_id":  "set_aim_center",
+                                                                                "observed_tick":  5,
+                                                                                "phase_degrees":  0.0,
+                                                                                "preview_hash":  "-5737333301593154889",
+                                                                                "sample_index":  0,
+                                                                                "speed":  10.5,
+                                                                                "theta_degrees":  0.0
+                                                                            },
+                                                                            {
+                                                                                "command_id":  "set_aim_right",
+                                                                                "observed_tick":  6,
+                                                                                "phase_degrees":  0.0,
+                                                                                "preview_hash":  "-5465358568780565436",
+                                                                                "sample_index":  1,
+                                                                                "speed":  8.0,
+                                                                                "theta_degrees":  2.0
+                                                                            },
+                                                                            {
+                                                                                "command_id":  "set_aim_left",
+                                                                                "observed_tick":  7,
+                                                                                "phase_degrees":  0.0,
+                                                                                "preview_hash":  "5678929320877639882",
+                                                                                "sample_index":  2,
+                                                                                "speed":  8.0,
+                                                                                "theta_degrees":  -2.0
+                                                                            }
+                                                                        ],
+                                             "physics_step_p95_ms":  2.3593,
+                                             "frames_measured":  484,
                                              "rupture_observed":  true,
                                              "vfx_observed":  true,
                                              "post_vfx_frames":  35,
                                              "metrics_path":  "artifacts/vertical-slice/debug/metrics-vulkan-150.json",
-                                             "metrics_sha256":  "73a06061f3f7fd9fa2f70b9159127a4666b115490dac1c22e4d18dc30aae6a25"
+                                             "metrics_sha256":  "8cb36b8de800f32841d8a43493d6f88df1ee5415146cd4902ccd983f576c28e9"
                                          }
                                      ],
                           "capture":  {
@@ -1369,12 +1457,12 @@
                                           "width":  1920,
                                           "height":  1080,
                                           "path":  "artifacts/vertical-slice/debug/vertical-slice-vulkan.avi",
-                                          "hash":  "8f2c20f68102a9b62a734120f106c5b6be59450d0d54e92df50fefafcab7fa1c",
+                                          "hash":  "eb12f54caec974203e78e6d53a870de8e04a10de238971198f1eb3e22a58e6a4",
                                           "log_path":  "artifacts/vertical-slice/debug/capture-vulkan-attempt1.stdout.log",
-                                          "log_hash":  "4a159f75dd0bbca6147ec3d2a633426d4b3b89931b5c7acce238ca019671e21e",
+                                          "log_hash":  "10fac6169bdde677614c27a83da25d3613116b18fa87be376077d72ab239b99f",
                                           "retry_count":  0,
                                           "source_path":  "artifacts/vertical-slice/debug/vertical-slice-vulkan-source.avi",
-                                          "source_hash":  "47d2feedbde7e1ea0b66577b5a4dd2362a08c84529c86afbab24d724dfa498f4",
+                                          "source_hash":  "0bcd531916df57af95915bfb366b0bdb776fdce66dcc8a53af5285c61c25ab6b",
                                           "source_frames":  3971,
                                           "downsample_source_frames":  [
                                                                            0,
@@ -1685,33 +1773,91 @@
                           "scales":  [
                                          {
                                              "ui_scale":  100,
-                                             "frame_p95_ms":  6.25,
-                                             "frame_p99_ms":  6.25,
-                                             "max_hitch_ms":  11.6988787878789,
-                                             "input_feedback_p95_ms":  4.319,
+                                             "frame_p95_ms":  6.06060606060606,
+                                             "frame_p99_ms":  8.00906060606073,
+                                             "max_hitch_ms":  10.7662121212123,
+                                             "input_feedback_p95_ms":  4.437,
                                              "input_feedback_samples":  3,
-                                             "physics_step_p95_ms":  1.5754,
-                                             "frames_measured":  483,
+                                             "input_feedback_markers":  [
+                                                                            {
+                                                                                "command_id":  "set_aim_center",
+                                                                                "observed_tick":  5,
+                                                                                "phase_degrees":  0.0,
+                                                                                "preview_hash":  "-5737333301593154889",
+                                                                                "sample_index":  0,
+                                                                                "speed":  10.5,
+                                                                                "theta_degrees":  0.0
+                                                                            },
+                                                                            {
+                                                                                "command_id":  "set_aim_right",
+                                                                                "observed_tick":  6,
+                                                                                "phase_degrees":  0.0,
+                                                                                "preview_hash":  "-5465358568780565436",
+                                                                                "sample_index":  1,
+                                                                                "speed":  8.0,
+                                                                                "theta_degrees":  2.0
+                                                                            },
+                                                                            {
+                                                                                "command_id":  "set_aim_left",
+                                                                                "observed_tick":  7,
+                                                                                "phase_degrees":  0.0,
+                                                                                "preview_hash":  "5678929320877639882",
+                                                                                "sample_index":  2,
+                                                                                "speed":  8.0,
+                                                                                "theta_degrees":  -2.0
+                                                                            }
+                                                                        ],
+                                             "physics_step_p95_ms":  1.6201,
+                                             "frames_measured":  481,
                                              "rupture_observed":  true,
                                              "vfx_observed":  true,
                                              "post_vfx_frames":  35,
                                              "metrics_path":  "artifacts/vertical-slice/debug/metrics-opengl-100.json",
-                                             "metrics_sha256":  "e47783a24ef2666930074c3d7e700bafcb8034f4e55fb22cb5dbc2b020f8293e"
+                                             "metrics_sha256":  "d06f416917d60a7e5f74979204da094c23bd235a63d170100e78e8de6d9e4e4c"
                                          },
                                          {
                                              "ui_scale":  150,
                                              "frame_p95_ms":  6.06060606060606,
-                                             "frame_p99_ms":  8.33333333333333,
-                                             "max_hitch_ms":  13.5358787878789,
-                                             "input_feedback_p95_ms":  4.248,
+                                             "frame_p99_ms":  6.06060606060606,
+                                             "max_hitch_ms":  9.01457575757576,
+                                             "input_feedback_p95_ms":  4.685,
                                              "input_feedback_samples":  3,
-                                             "physics_step_p95_ms":  1.6341,
-                                             "frames_measured":  484,
+                                             "input_feedback_markers":  [
+                                                                            {
+                                                                                "command_id":  "set_aim_center",
+                                                                                "observed_tick":  5,
+                                                                                "phase_degrees":  0.0,
+                                                                                "preview_hash":  "-5737333301593154889",
+                                                                                "sample_index":  0,
+                                                                                "speed":  10.5,
+                                                                                "theta_degrees":  0.0
+                                                                            },
+                                                                            {
+                                                                                "command_id":  "set_aim_right",
+                                                                                "observed_tick":  6,
+                                                                                "phase_degrees":  0.0,
+                                                                                "preview_hash":  "-5465358568780565436",
+                                                                                "sample_index":  1,
+                                                                                "speed":  8.0,
+                                                                                "theta_degrees":  2.0
+                                                                            },
+                                                                            {
+                                                                                "command_id":  "set_aim_left",
+                                                                                "observed_tick":  7,
+                                                                                "phase_degrees":  0.0,
+                                                                                "preview_hash":  "5678929320877639882",
+                                                                                "sample_index":  2,
+                                                                                "speed":  8.0,
+                                                                                "theta_degrees":  -2.0
+                                                                            }
+                                                                        ],
+                                             "physics_step_p95_ms":  1.6743,
+                                             "frames_measured":  479,
                                              "rupture_observed":  true,
                                              "vfx_observed":  true,
                                              "post_vfx_frames":  35,
                                              "metrics_path":  "artifacts/vertical-slice/debug/metrics-opengl-150.json",
-                                             "metrics_sha256":  "e72c445900508625826efa64a134931a6a89b249cca37f8288721077855072cb"
+                                             "metrics_sha256":  "99d60ad5179cad7d8e2d56cd551873cb3058d0a0b12f4e582ae7486a562b9a1a"
                                          }
                                      ],
                           "capture":  {
@@ -1719,12 +1865,12 @@
                                           "width":  1920,
                                           "height":  1080,
                                           "path":  "artifacts/vertical-slice/debug/vertical-slice-opengl.avi",
-                                          "hash":  "a39edbc149ba35b5ce50c0f5db25027beea0f5400f360042045fce486becbaf1",
+                                          "hash":  "352d1940e6b6ff3cdcc960187694e312acefe1e53a4cde94a37bf0788e1ca78f",
                                           "log_path":  "artifacts/vertical-slice/debug/capture-opengl-attempt1.stdout.log",
-                                          "log_hash":  "530215563c706aba6a02d272f9f05b0f2445ba88b7acc05d3161bb7e09fa6e5e",
+                                          "log_hash":  "dce5270bdd05e90d3ad48f40a7dc37a4bb871f81cc9a1d62f80a3637907a2b1e",
                                           "retry_count":  0,
                                           "source_path":  "artifacts/vertical-slice/debug/vertical-slice-opengl-source.avi",
-                                          "source_hash":  "938c01aabc3db1f23ae4f78c161ab7ebfbdfdc30fc970de23fc72d7f63990b82",
+                                          "source_hash":  "f61c08111b37e2220a63f1498778d4395ca6b152c86db82d1f7345bac8558284",
                                           "source_frames":  3971,
                                           "downsample_source_frames":  [
                                                                            0,
@@ -2067,7 +2213,7 @@
                                 "exposure":  1,
                                 "renderer":  "Vulkan",
                                 "path":  "docs/art/goldens/vertical-slice/debug/aim.png",
-                                "sha256":  "1c2faf6b7d50089fdff2c7a6b3bbc850839a8191b34d80da493e4ad07f1a1d2c"
+                                "sha256":  "b17acb71db13e4a47c7a759a640407c1ae1bdebe4895721c51aa595293a49ab8"
                             },
                             {
                                 "name":  "virela",
@@ -2078,11 +2224,11 @@
                                 "phase":  "flight_ability",
                                 "outcome":  "none",
                                 "event":  "phase_transition",
-                                "camera":  "(-16.50722, 21.09821, 17.29954)",
+                                "camera":  "(-16.50704, 21.09833, 17.29956)",
                                 "exposure":  1,
                                 "renderer":  "Vulkan",
                                 "path":  "docs/art/goldens/vertical-slice/debug/virela.png",
-                                "sha256":  "61cddda984cfa4eb2cc415750b00bfa59e43b5edfcdc1f182537dd01435c0879"
+                                "sha256":  "29e73941612287d5e9d229ab3bfdf4668b8a1b730af6461485c85988c204fb1d"
                             },
                             {
                                 "name":  "vulnerable_impact",
@@ -2097,7 +2243,7 @@
                                 "exposure":  1,
                                 "renderer":  "Vulkan",
                                 "path":  "docs/art/goldens/vertical-slice/debug/vulnerable_impact.png",
-                                "sha256":  "6194774ba5c18b938e371349abfdc028f9eb1dae2144a3a290fd6a0711265b8d"
+                                "sha256":  "360e17104fd7efcc559cd04423bf8ae80fc480c0861fcb19e6b6662a36767899"
                             },
                             {
                                 "name":  "result",
@@ -2112,7 +2258,7 @@
                                 "exposure":  1,
                                 "renderer":  "Vulkan",
                                 "path":  "docs/art/goldens/vertical-slice/debug/result.png",
-                                "sha256":  "68d020c7eeec7459701c61d60d4d271fcedaea0dcee4a81225af64277fc2f045"
+                                "sha256":  "5a16112f52da5bada0501809c6902d9264e6cd770a26a362a5de87eb34c38c1c"
                             }
                         ],
     "rubric":  {
@@ -2150,11 +2296,11 @@
                    },
     "capture_manifest":  {
                              "path":  "artifacts/vertical-slice/debug/capture-manifest.json",
-                             "sha256":  "67421e994abc8e8d5e76f2c126e5e25581180e934ef0c27db168f025e1fece79"
+                             "sha256":  "b314d64febf8b6e4928305e0edc4c6a30fddab6db75d11290892b53e944529f5"
                          },
     "reviews_manifest":  {
                              "path":  "docs/gameplay/evidence/vertical-slice-reviews.json",
-                             "sha256":  "b1f14a8b04b167a8bff05aed06e89b818d5a56ac6b8a10daf886164bc21f3e22"
+                             "sha256":  "1a5b3769f97e7d8244c4373a726b9f9ef46b0b2a32d0c32d5ca0070f7a11d169"
                          },
     "package":  {
                     "path":  "not_applicable_debug",
@@ -2164,7 +2310,7 @@
     "source_artifacts":  [
                              {
                                  "path":  "artifacts/vertical-slice/debug/capture-vulkan-attempt1.stdout.log",
-                                 "sha256":  "4a159f75dd0bbca6147ec3d2a633426d4b3b89931b5c7acce238ca019671e21e"
+                                 "sha256":  "10fac6169bdde677614c27a83da25d3613116b18fa87be376077d72ab239b99f"
                              },
                              {
                                  "path":  "artifacts/vertical-slice/debug/capture-vulkan-attempt1.stderr.log",
@@ -2180,15 +2326,15 @@
                              },
                              {
                                  "path":  "artifacts/vertical-slice/debug/vertical-slice-vulkan-source.avi",
-                                 "sha256":  "47d2feedbde7e1ea0b66577b5a4dd2362a08c84529c86afbab24d724dfa498f4"
+                                 "sha256":  "0bcd531916df57af95915bfb366b0bdb776fdce66dcc8a53af5285c61c25ab6b"
                              },
                              {
                                  "path":  "artifacts/vertical-slice/debug/vertical-slice-vulkan.avi",
-                                 "sha256":  "8f2c20f68102a9b62a734120f106c5b6be59450d0d54e92df50fefafcab7fa1c"
+                                 "sha256":  "eb12f54caec974203e78e6d53a870de8e04a10de238971198f1eb3e22a58e6a4"
                              },
                              {
                                  "path":  "artifacts/vertical-slice/debug/performance-vulkan-100-attempt1.stdout.log",
-                                 "sha256":  "5e911ce3f6502303eb67195979bfec34aec1bf8b643d14ab6e8e4c1261485f3e"
+                                 "sha256":  "d13367e2c8395d3f805a89517e202468879b4a4d3dc7a9e4391b237c51982ee4"
                              },
                              {
                                  "path":  "artifacts/vertical-slice/debug/performance-vulkan-100-attempt1.stderr.log",
@@ -2196,11 +2342,11 @@
                              },
                              {
                                  "path":  "artifacts/vertical-slice/debug/metrics-vulkan-100.json",
-                                 "sha256":  "12b3aa6bd0d02302c7843d64c29d96722fbd8c35b71ad7b24b33fedf6cdd7d1b"
+                                 "sha256":  "15145bff6e1804be4a0026296e377626c7fef6b15223e270f66a6206bd9336d6"
                              },
                              {
                                  "path":  "artifacts/vertical-slice/debug/performance-vulkan-150-attempt1.stdout.log",
-                                 "sha256":  "b87bbbfbe1cdfd04ae31d6eeee95856c0a5a521dbcaa31d67733af85ef313fde"
+                                 "sha256":  "f929097d1978e5208ddd31d7b6fb9c35b57deed3e444ec27c08876046e4cd3cf"
                              },
                              {
                                  "path":  "artifacts/vertical-slice/debug/performance-vulkan-150-attempt1.stderr.log",
@@ -2208,11 +2354,11 @@
                              },
                              {
                                  "path":  "artifacts/vertical-slice/debug/metrics-vulkan-150.json",
-                                 "sha256":  "73a06061f3f7fd9fa2f70b9159127a4666b115490dac1c22e4d18dc30aae6a25"
+                                 "sha256":  "8cb36b8de800f32841d8a43493d6f88df1ee5415146cd4902ccd983f576c28e9"
                              },
                              {
                                  "path":  "artifacts/vertical-slice/debug/capture-opengl-attempt1.stdout.log",
-                                 "sha256":  "530215563c706aba6a02d272f9f05b0f2445ba88b7acc05d3161bb7e09fa6e5e"
+                                 "sha256":  "dce5270bdd05e90d3ad48f40a7dc37a4bb871f81cc9a1d62f80a3637907a2b1e"
                              },
                              {
                                  "path":  "artifacts/vertical-slice/debug/capture-opengl-attempt1.stderr.log",
@@ -2228,15 +2374,15 @@
                              },
                              {
                                  "path":  "artifacts/vertical-slice/debug/vertical-slice-opengl-source.avi",
-                                 "sha256":  "938c01aabc3db1f23ae4f78c161ab7ebfbdfdc30fc970de23fc72d7f63990b82"
+                                 "sha256":  "f61c08111b37e2220a63f1498778d4395ca6b152c86db82d1f7345bac8558284"
                              },
                              {
                                  "path":  "artifacts/vertical-slice/debug/vertical-slice-opengl.avi",
-                                 "sha256":  "a39edbc149ba35b5ce50c0f5db25027beea0f5400f360042045fce486becbaf1"
+                                 "sha256":  "352d1940e6b6ff3cdcc960187694e312acefe1e53a4cde94a37bf0788e1ca78f"
                              },
                              {
                                  "path":  "artifacts/vertical-slice/debug/performance-opengl-100-attempt1.stdout.log",
-                                 "sha256":  "8790f65af893c827a3825412143a92eb8129734d748d47af840607eb5ca38a4a"
+                                 "sha256":  "2e4c5c7e97730707b40d6075982b354f44591346d48a6d75d22c9f1f791a55de"
                              },
                              {
                                  "path":  "artifacts/vertical-slice/debug/performance-opengl-100-attempt1.stderr.log",
@@ -2244,11 +2390,11 @@
                              },
                              {
                                  "path":  "artifacts/vertical-slice/debug/metrics-opengl-100.json",
-                                 "sha256":  "e47783a24ef2666930074c3d7e700bafcb8034f4e55fb22cb5dbc2b020f8293e"
+                                 "sha256":  "d06f416917d60a7e5f74979204da094c23bd235a63d170100e78e8de6d9e4e4c"
                              },
                              {
                                  "path":  "artifacts/vertical-slice/debug/performance-opengl-150-attempt1.stdout.log",
-                                 "sha256":  "22134c377d5901c212bd2cc9b25085b8c7736b2cfbd446fc038b6aa04d73a8b2"
+                                 "sha256":  "c51e459f700735544b9b443aaa9450c7cadadec1ca1d088f04f43c66f5dabe00"
                              },
                              {
                                  "path":  "artifacts/vertical-slice/debug/performance-opengl-150-attempt1.stderr.log",
@@ -2256,15 +2402,15 @@
                              },
                              {
                                  "path":  "artifacts/vertical-slice/debug/metrics-opengl-150.json",
-                                 "sha256":  "e72c445900508625826efa64a134931a6a89b249cca37f8288721077855072cb"
+                                 "sha256":  "99d60ad5179cad7d8e2d56cd551873cb3058d0a0b12f4e582ae7486a562b9a1a"
                              },
                              {
                                  "path":  "artifacts/vertical-slice/debug/route-determinism-raw.log",
-                                 "sha256":  "25310e0db9ddd6904d74c774832ce086efd39df403a767aa12372f584d835247"
+                                 "sha256":  "fd7944f4960c700b2d41710f37a4594c9d980c50ca0d01d5de846719922edd37"
                              },
                              {
                                  "path":  "artifacts/vertical-slice/debug/route-determinism.log",
-                                 "sha256":  "e7d0b8d0cf5eef3e5ceddeed130b76235c1c9d77d0fc3678ac1a18b6d7129e85"
+                                 "sha256":  "5a1954bb0ed2dfa3913e3212b982c3eda4e08aa5d0821cceaeeae26d90833cb6"
                              },
                              {
                                  "path":  "artifacts/vertical-slice/debug/golden-overview.stdout.log",
@@ -2288,7 +2434,7 @@
                              },
                              {
                                  "path":  "docs/art/goldens/vertical-slice/debug/aim.png",
-                                 "sha256":  "1c2faf6b7d50089fdff2c7a6b3bbc850839a8191b34d80da493e4ad07f1a1d2c"
+                                 "sha256":  "b17acb71db13e4a47c7a759a640407c1ae1bdebe4895721c51aa595293a49ab8"
                              },
                              {
                                  "path":  "artifacts/vertical-slice/debug/golden-virela.stdout.log",
@@ -2300,7 +2446,7 @@
                              },
                              {
                                  "path":  "docs/art/goldens/vertical-slice/debug/virela.png",
-                                 "sha256":  "61cddda984cfa4eb2cc415750b00bfa59e43b5edfcdc1f182537dd01435c0879"
+                                 "sha256":  "29e73941612287d5e9d229ab3bfdf4668b8a1b730af6461485c85988c204fb1d"
                              },
                              {
                                  "path":  "artifacts/vertical-slice/debug/golden-vulnerable_impact.stdout.log",
@@ -2312,7 +2458,7 @@
                              },
                              {
                                  "path":  "docs/art/goldens/vertical-slice/debug/vulnerable_impact.png",
-                                 "sha256":  "6194774ba5c18b938e371349abfdc028f9eb1dae2144a3a290fd6a0711265b8d"
+                                 "sha256":  "360e17104fd7efcc559cd04423bf8ae80fc480c0861fcb19e6b6662a36767899"
                              },
                              {
                                  "path":  "artifacts/vertical-slice/debug/golden-result.stdout.log",
@@ -2324,7 +2470,7 @@
                              },
                              {
                                  "path":  "docs/art/goldens/vertical-slice/debug/result.png",
-                                 "sha256":  "68d020c7eeec7459701c61d60d4d271fcedaea0dcee4a81225af64277fc2f045"
+                                 "sha256":  "5a16112f52da5bada0501809c6902d9264e6cd770a26a362a5de87eb34c38c1c"
                              }
                          ]
 }
