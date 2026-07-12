@@ -6,8 +6,8 @@ Os arquivos desta pasta foram sintetizados offline, sem downloads, samples exter
 - Licença: proprietary-original
 - Seed global: 510211
 - Configuração: `tools/audio/vertical_slice_audio.json` (`9919553274a5056360ce2f520091b3a236de9f2614a15972b7be536f1657abe2`)
-- Gerador: `tools/audio/generate_audio.py` (`fb7026893a16af09b9c0baefce44f41907a96d624686ab6b4c8cd6e68c01d718`)
-- Build hash: `1d829d348318549555658375f14f44e958a791a1e7e7c7307b4101153af6f85d`
+- Gerador: `tools/audio/generate_audio.py` (`35de2fdbd9b392e0a3550667360dcc532c02934ef48b6ccf6194b6d7ddbc8ce2`)
+- Build hash: `ec042e1fb9d45314359e5e28da11c426117b103e4334f5e0608655ca8ff95fc9`
 - Formato: WAV mono, 48 kHz, PCM16
 
 ## Arquivos

@@ -27,6 +27,15 @@ def sha256_bytes(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
 
 
+def canonical_text_bytes(data: bytes) -> bytes:
+    text = data.decode("utf-8")
+    return text.replace("\r\n", "\n").replace("\r", "\n").encode("utf-8")
+
+
+def text_source_sha256(data: bytes) -> str:
+    return sha256_bytes(canonical_text_bytes(data))
+
+
 def canonical_json(value: object) -> bytes:
     return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
 
@@ -256,6 +265,7 @@ def inspect_wav(data: bytes) -> dict:
 
 
 def _source_contract(config_bytes: bytes) -> dict:
+    config_bytes = canonical_text_bytes(config_bytes)
     config = json.loads(config_bytes.decode("utf-8"))
     return {
         "kind": "Python standard-library procedural PCM synthesis",
@@ -265,9 +275,9 @@ def _source_contract(config_bytes: bytes) -> dict:
         "generation_mode": config["generation_mode"],
         "external_sources": config["external_sources"],
         "config_path": "tools/audio/vertical_slice_audio.json",
-        "config_sha256": sha256_bytes(config_bytes),
+        "config_sha256": text_source_sha256(config_bytes),
         "generator_path": "tools/audio/generate_audio.py",
-        "generator_sha256": sha256_bytes(SCRIPT_PATH.read_bytes()),
+        "generator_sha256": text_source_sha256(SCRIPT_PATH.read_bytes()),
     }
 
 
@@ -303,7 +313,7 @@ def _render_readme(manifest: dict) -> str:
 
 def build(output_root: Path, allowed_root: Path, clean: bool) -> dict:
     output_root = resolve_output_root(output_root, allowed_root)
-    config_bytes = CONFIG_PATH.read_bytes()
+    config_bytes = canonical_text_bytes(CONFIG_PATH.read_bytes())
     config = json.loads(config_bytes.decode("utf-8"))
     validate_config(config)
     audio_directory = output_root / AUDIO_DIRECTORY_RELATIVE
@@ -352,7 +362,7 @@ def build(output_root: Path, allowed_root: Path, clean: bool) -> dict:
 
 def validate(output_root: Path, allowed_root: Path) -> dict:
     output_root = resolve_output_root(output_root, allowed_root)
-    config_bytes = CONFIG_PATH.read_bytes()
+    config_bytes = canonical_text_bytes(CONFIG_PATH.read_bytes())
     config = json.loads(config_bytes.decode("utf-8"))
     validate_config(config)
     manifest_path = output_root / MANIFEST_RELATIVE

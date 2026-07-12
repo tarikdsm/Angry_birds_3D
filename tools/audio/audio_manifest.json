@@ -10,7 +10,7 @@
     "config_path": "tools/audio/vertical_slice_audio.json",
     "config_sha256": "9919553274a5056360ce2f520091b3a236de9f2614a15972b7be536f1657abe2",
     "generator_path": "tools/audio/generate_audio.py",
-    "generator_sha256": "fb7026893a16af09b9c0baefce44f41907a96d624686ab6b4c8cd6e68c01d718"
+    "generator_sha256": "35de2fdbd9b392e0a3550667360dcc532c02934ef48b6ccf6194b6d7ddbc8ce2"
   },
   "outputs": [
     {
@@ -21,7 +21,7 @@
       "license": "proprietary-original",
       "seed": 1085073533,
       "source_config_sha256": "9919553274a5056360ce2f520091b3a236de9f2614a15972b7be536f1657abe2",
-      "generator_sha256": "fb7026893a16af09b9c0baefce44f41907a96d624686ab6b4c8cd6e68c01d718",
+      "generator_sha256": "35de2fdbd9b392e0a3550667360dcc532c02934ef48b6ccf6194b6d7ddbc8ce2",
       "sha256": "487c776c858d0bf484f755bdbafded2b653e16983d4d122c240b0b603ee84e05",
       "sample_rate_hz": 48000,
       "channels": 1,
@@ -38,7 +38,7 @@
       "license": "proprietary-original",
       "seed": 2778501591,
       "source_config_sha256": "9919553274a5056360ce2f520091b3a236de9f2614a15972b7be536f1657abe2",
-      "generator_sha256": "fb7026893a16af09b9c0baefce44f41907a96d624686ab6b4c8cd6e68c01d718",
+      "generator_sha256": "35de2fdbd9b392e0a3550667360dcc532c02934ef48b6ccf6194b6d7ddbc8ce2",
       "sha256": "413a86d244067930dc69670cff0a0ca1875d507bbf83b1124830131babe279c6",
       "sample_rate_hz": 48000,
       "channels": 1,
@@ -55,7 +55,7 @@
       "license": "proprietary-original",
       "seed": 138860350,
       "source_config_sha256": "9919553274a5056360ce2f520091b3a236de9f2614a15972b7be536f1657abe2",
-      "generator_sha256": "fb7026893a16af09b9c0baefce44f41907a96d624686ab6b4c8cd6e68c01d718",
+      "generator_sha256": "35de2fdbd9b392e0a3550667360dcc532c02934ef48b6ccf6194b6d7ddbc8ce2",
       "sha256": "ee1425e5033be30880c391f5a2061da7139b229e91ba93bf8dab40663791d8e4",
       "sample_rate_hz": 48000,
       "channels": 1,
@@ -72,7 +72,7 @@
       "license": "proprietary-original",
       "seed": 123257533,
       "source_config_sha256": "9919553274a5056360ce2f520091b3a236de9f2614a15972b7be536f1657abe2",
-      "generator_sha256": "fb7026893a16af09b9c0baefce44f41907a96d624686ab6b4c8cd6e68c01d718",
+      "generator_sha256": "35de2fdbd9b392e0a3550667360dcc532c02934ef48b6ccf6194b6d7ddbc8ce2",
       "sha256": "338a7c7351528b8c5fc4824e08800e7704613bb042099ddb2015a79233946152",
       "sample_rate_hz": 48000,
       "channels": 1,
@@ -89,7 +89,7 @@
       "license": "proprietary-original",
       "seed": 2141241287,
       "source_config_sha256": "9919553274a5056360ce2f520091b3a236de9f2614a15972b7be536f1657abe2",
-      "generator_sha256": "fb7026893a16af09b9c0baefce44f41907a96d624686ab6b4c8cd6e68c01d718",
+      "generator_sha256": "35de2fdbd9b392e0a3550667360dcc532c02934ef48b6ccf6194b6d7ddbc8ce2",
       "sha256": "3ad2b6fd2e0ad2df72c7e425d68214b9f01842f661794b2264f69ea261c1119d",
       "sample_rate_hz": 48000,
       "channels": 1,
@@ -106,7 +106,7 @@
       "license": "proprietary-original",
       "seed": 3491036703,
       "source_config_sha256": "9919553274a5056360ce2f520091b3a236de9f2614a15972b7be536f1657abe2",
-      "generator_sha256": "fb7026893a16af09b9c0baefce44f41907a96d624686ab6b4c8cd6e68c01d718",
+      "generator_sha256": "35de2fdbd9b392e0a3550667360dcc532c02934ef48b6ccf6194b6d7ddbc8ce2",
       "sha256": "2da7fa2482866b11cf9a5428d21c34ba035f981e4f3b076d3819156af228d891",
       "sample_rate_hz": 48000,
       "channels": 1,
@@ -123,7 +123,7 @@
       "license": "proprietary-original",
       "seed": 3630162949,
       "source_config_sha256": "9919553274a5056360ce2f520091b3a236de9f2614a15972b7be536f1657abe2",
-      "generator_sha256": "fb7026893a16af09b9c0baefce44f41907a96d624686ab6b4c8cd6e68c01d718",
+      "generator_sha256": "35de2fdbd9b392e0a3550667360dcc532c02934ef48b6ccf6194b6d7ddbc8ce2",
       "sha256": "628ad5d12da6398dc0b3badea2b7ffc4d464e396a0bdc1a54e8c2413d3c57ecd",
       "sample_rate_hz": 48000,
       "channels": 1,
@@ -140,7 +140,7 @@
       "license": "proprietary-original",
       "seed": 3641430036,
       "source_config_sha256": "9919553274a5056360ce2f520091b3a236de9f2614a15972b7be536f1657abe2",
-      "generator_sha256": "fb7026893a16af09b9c0baefce44f41907a96d624686ab6b4c8cd6e68c01d718",
+      "generator_sha256": "35de2fdbd9b392e0a3550667360dcc532c02934ef48b6ccf6194b6d7ddbc8ce2",
       "sha256": "26ed285e54f989e1f0176623534d1477cf2bcf430589f62c3bb8904451a09873",
       "sample_rate_hz": 48000,
       "channels": 1,
@@ -157,7 +157,7 @@
       "license": "proprietary-original",
       "seed": 1144733591,
       "source_config_sha256": "9919553274a5056360ce2f520091b3a236de9f2614a15972b7be536f1657abe2",
-      "generator_sha256": "fb7026893a16af09b9c0baefce44f41907a96d624686ab6b4c8cd6e68c01d718",
+      "generator_sha256": "35de2fdbd9b392e0a3550667360dcc532c02934ef48b6ccf6194b6d7ddbc8ce2",
       "sha256": "643d1c279a46c9cae40e29335225e1466e8329900ab98b9e7ec7ad755d2678c2",
       "sample_rate_hz": 48000,
       "channels": 1,
@@ -167,5 +167,5 @@
       "peak_sample": 26214
     }
   ],
-  "build_hash": "1d829d348318549555658375f14f44e958a791a1e7e7c7307b4101153af6f85d"
+  "build_hash": "ec042e1fb9d45314359e5e28da11c426117b103e4334f5e0608655ca8ff95fc9"
 }

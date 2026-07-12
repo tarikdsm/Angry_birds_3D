@@ -86,6 +86,14 @@ class AudioSourceContractTests(unittest.TestCase):
         changed[0]["sha256"] = "e" * 64
         self.assertNotEqual(first, module.compute_build_hash(generator, changed))
 
+    def test_text_source_hash_is_line_ending_independent_and_sensitive(self):
+        module = load_audio_module()
+        lf = b"first line\nsecond line\n"
+        crlf = b"first line\r\nsecond line\r\n"
+        changed = b"first line\nchanged line\n"
+        self.assertEqual(module.text_source_sha256(lf), module.text_source_sha256(crlf))
+        self.assertNotEqual(module.text_source_sha256(lf), module.text_source_sha256(changed))
+
     def test_pcm_encoder_is_deterministic_and_bounded(self):
         module = load_audio_module()
         config = {
