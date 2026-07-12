@@ -19,7 +19,7 @@ target_link_libraries(ninho_simulation_kernel
   PRIVATE nlohmann_json::nlohmann_json
 )
 target_compile_features(ninho_simulation_kernel PUBLIC cxx_std_20)
-if(BUILD_TESTING)
+if(NINHO_ENABLE_TEST_FACADES)
   target_compile_definitions(ninho_simulation_kernel PRIVATE NINHO_ENABLE_TEST_FACADES=1)
 endif()
 

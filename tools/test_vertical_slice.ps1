@@ -62,6 +62,8 @@ if (-not (Test-Path -LiteralPath $reviewPath -PathType Leaf)) {
 $reviews = Get-Content -Raw -LiteralPath $reviewPath | ConvertFrom-Json
 if ($reviews.schema -cne 'ninho.vertical-slice.reviews.v1' -or
         @($reviews.reviews).Count -ne 4) { throw 'independent review evidence schema/count mismatch' }
+Assert-NinhoIndependentReviews -Reviews $reviews `
+    -ExpectedTestedInputsSha256 ([string]$reviews.tested_inputs_sha256)
 $critical = [int](@($reviews.reviews | Measure-Object critical -Sum).Sum)
 $important = [int](@($reviews.reviews | Measure-Object important -Sum).Sum)
 if ($critical -ne 0 -or $important -ne 0) { throw "blocking review findings remain: C=$critical I=$important" }

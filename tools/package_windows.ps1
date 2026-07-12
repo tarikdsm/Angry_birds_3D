@@ -53,6 +53,7 @@ function Get-PackageRole {
     if ($RelativePath -ceq 'NinhoOrbital.exe' -or $RelativePath -ceq 'NinhoOrbital.console.exe') { return 'game_executable' }
     if ($RelativePath -ceq 'NinhoOrbital.pck') { return 'game_data' }
     if ($RelativePath -ceq 'package-content.json') { return 'content_inventory' }
+    if ($RelativePath -ceq 'build-contract.json') { return 'build_provenance' }
     if ($RelativePath -ceq 'ninho_physics.windows.template_release.x86_64.dll') { return 'native_extension' }
     if ($RelativePath -ceq 'licenses/sbom.spdx.json') { return 'sbom' }
     if ($RelativePath -ceq 'licenses/THIRD_PARTY_NOTICES.md') { return 'notice' }
@@ -101,6 +102,30 @@ function Assert-WindowsPackage {
             $manifest.runtime_extension.source_path -cne "game/bin/$releaseDllName" -or
             [string]$manifest.runtime_extension.source_sha256 -notmatch '^[0-9a-f]{64}$') {
         throw 'Package manifest runtime-extension snapshot mismatch'
+    }
+    $buildContractPath = Join-Path $PackageRoot 'build-contract.json'
+    if (-not (Test-Path -LiteralPath $buildContractPath -PathType Leaf)) {
+        throw 'Package native build contract is missing'
+    }
+    $buildContractHash = (Get-FileHash -Algorithm SHA256 -LiteralPath $buildContractPath).Hash.ToLowerInvariant()
+    $buildContract = Get-Content -Raw -LiteralPath $buildContractPath | ConvertFrom-Json
+    if ($buildContract.schema -cne 'ninho.native-build-contract.v1' -or
+            $buildContract.configuration -cne 'Release' -or
+            $buildContract.build_testing -cne $false -or
+            $buildContract.test_facades -cne $false -or
+            $buildContract.NINHO_ENABLE_TEST_FACADES -cne 'absent' -or
+            $manifest.native_build_contract.path -cne 'build-contract.json' -or
+            $manifest.native_build_contract.sha256 -cne $buildContractHash -or
+            $manifest.native_build_contract.build_testing -cne $false -or
+            $manifest.native_build_contract.test_facades -cne $false) {
+        throw 'Package native build contract mismatch'
+    }
+    $content = Get-Content -Raw -LiteralPath (Join-Path $PackageRoot 'package-content.json') | ConvertFrom-Json
+    if ($content.native_build_contract.path -cne 'build-contract.json' -or
+            $content.native_build_contract.sha256 -cne $buildContractHash -or
+            $content.native_build_contract.build_testing -cne $false -or
+            $content.native_build_contract.test_facades -cne $false) {
+        throw 'Package content native build provenance mismatch'
     }
 
     $manifestPaths = [Collections.Generic.List[string]]::new()
@@ -156,6 +181,7 @@ function Assert-WindowsPackage {
         'NinhoOrbital.pck',
         'ninho_physics.windows.template_release.x86_64.dll',
         'package-content.json',
+        'build-contract.json',
         'licenses/THIRD_PARTY_NOTICES.md',
         'licenses/sbom.spdx.json',
         'licenses/godot.COPYRIGHT.txt',
@@ -176,14 +202,34 @@ if ($VerifyOnly) {
 
 Write-Verbose 'Building the Release GDExtension'
 $quotedBuildScript = '"' + (Join-Path $PSScriptRoot 'build.ps1') + '"'
-$buildProcess = Start-Process -FilePath 'powershell' -ArgumentList @(
-    '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', $quotedBuildScript,
-    '-Configuration', 'Release', '-WithGodot'
-) -Wait -PassThru -WindowStyle Hidden
-if ($buildProcess.ExitCode -ne 0) {
-    throw "Release GDExtension build failed with exit code $($buildProcess.ExitCode)"
+$buildProcess = $null
+try {
+    $buildProcess = Start-Process -FilePath 'powershell' -ArgumentList @(
+        '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', $quotedBuildScript,
+        '-Configuration', 'Release', '-WithGodot', '-ProductionPackage'
+    ) -Wait -PassThru -WindowStyle Hidden
+    $buildExitCode = $buildProcess.ExitCode
+} finally {
+    if ($null -ne $buildProcess) { $buildProcess.Dispose() }
+}
+if ($buildExitCode -ne 0) {
+    throw "Release GDExtension build failed with exit code $buildExitCode"
 }
 Write-Verbose 'Release GDExtension build completed'
+$sourceBuildContractPath = Join-Path $root 'build\release\ninho-build-contract.json'
+Assert-NinhoNoReparseAncestors -Path $sourceBuildContractPath -AllowedRoot $root | Out-Null
+if (-not (Test-Path -LiteralPath $sourceBuildContractPath -PathType Leaf)) {
+    throw 'Release native build contract is missing after build'
+}
+$nativeBuildContract = Get-Content -Raw -LiteralPath $sourceBuildContractPath | ConvertFrom-Json
+if ($nativeBuildContract.schema -cne 'ninho.native-build-contract.v1' -or
+        $nativeBuildContract.configuration -cne 'Release' -or
+        $nativeBuildContract.build_testing -cne $false -or
+        $nativeBuildContract.test_facades -cne $false -or
+        $nativeBuildContract.NINHO_ENABLE_TEST_FACADES -cne 'absent') {
+    throw 'Release native build contract permits test-only code'
+}
+$nativeBuildContractHash = (Get-FileHash -Algorithm SHA256 -LiteralPath $sourceBuildContractPath).Hash.ToLowerInvariant()
 $releaseDllName = 'ninho_physics.windows.template_release.x86_64.dll'
 $releaseDll = Join-Path $gameRoot "bin\$releaseDllName"
 Assert-NinhoNoReparseAncestors -Path $releaseDll -AllowedRoot $root | Out-Null
@@ -198,11 +244,12 @@ Assert-NinhoNoReparseAncestors -Path $bootstrapStdout -AllowedRoot $artifactsRoo
 Assert-NinhoNoReparseAncestors -Path $bootstrapStderr -AllowedRoot $artifactsRoot | Out-Null
 Write-Verbose 'Installing the pinned Godot export templates'
 $quotedBootstrapScript = '"' + (Join-Path $PSScriptRoot 'bootstrap.ps1') + '"'
-$bootstrapProcess = Start-Process -FilePath 'powershell' -ArgumentList @(
-    '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', $quotedBootstrapScript,
-    '-InstallExportTemplates', '-Json'
-) -Wait -PassThru -WindowStyle Hidden -RedirectStandardOutput $bootstrapStdout -RedirectStandardError $bootstrapStderr
+$bootstrapProcess = $null
 try {
+    $bootstrapProcess = Start-Process -FilePath 'powershell' -ArgumentList @(
+        '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', $quotedBootstrapScript,
+        '-InstallExportTemplates', '-Json'
+    ) -Wait -PassThru -WindowStyle Hidden -RedirectStandardOutput $bootstrapStdout -RedirectStandardError $bootstrapStderr
     if ($bootstrapProcess.ExitCode -ne 0) {
         $diagnostic = ((Get-Content -Raw -LiteralPath $bootstrapStdout -ErrorAction SilentlyContinue) +
             (Get-Content -Raw -LiteralPath $bootstrapStderr -ErrorAction SilentlyContinue)).Trim()
@@ -211,6 +258,7 @@ try {
     Write-Verbose 'Pinned Godot export templates installed'
 }
 finally {
+    if ($null -ne $bootstrapProcess) { $bootstrapProcess.Dispose() }
     foreach ($log in @($bootstrapStdout, $bootstrapStderr)) {
         if (Test-Path -LiteralPath $log) {
             Assert-NinhoNoReparseAncestors -Path $log -AllowedRoot $artifactsRoot | Out-Null
@@ -242,11 +290,16 @@ Assert-NinhoNoReparseAncestors -Path $launchStderr -AllowedRoot $artifactsRoot |
 try {
     New-Item -ItemType Directory -Path $stagingRoot | Out-Null
     $exportExecutable = Join-Path $stagingRoot 'NinhoOrbital.exe'
-    $exportProcess = Start-Process -FilePath $godot -WorkingDirectory $gameRoot -ArgumentList @(
-        '--headless', '--path', ('"' + $gameRoot + '"'),
-        '--export-release', '"Windows Desktop"', ('"' + $exportExecutable + '"')
-    ) -Wait -PassThru -WindowStyle Hidden -RedirectStandardOutput $exportStdout -RedirectStandardError $exportStderr
-    $exportExitCode = $exportProcess.ExitCode
+    $exportProcess = $null
+    try {
+        $exportProcess = Start-Process -FilePath $godot -WorkingDirectory $gameRoot -ArgumentList @(
+            '--headless', '--path', ('"' + $gameRoot + '"'),
+            '--export-release', '"Windows Desktop"', ('"' + $exportExecutable + '"')
+        ) -Wait -PassThru -WindowStyle Hidden -RedirectStandardOutput $exportStdout -RedirectStandardError $exportStderr
+        $exportExitCode = $exportProcess.ExitCode
+    } finally {
+        if ($null -ne $exportProcess) { $exportProcess.Dispose() }
+    }
     $exportOutput = ((Get-Content -Raw -LiteralPath $exportStdout -ErrorAction SilentlyContinue) +
         "`n" + (Get-Content -Raw -LiteralPath $exportStderr -ErrorAction SilentlyContinue)).Trim()
     if ($exportExitCode -ne 0) {
@@ -296,6 +349,7 @@ try {
         Assert-NinhoNoReparseAncestors -Path $target -AllowedRoot $stagingRoot | Out-Null
         Copy-Item -LiteralPath $source -Destination $target
     }
+    Copy-Item -LiteralPath $sourceBuildContractPath -Destination (Join-Path $stagingRoot 'build-contract.json')
 
     $resourceRows = [Collections.Generic.List[object]]::new()
     foreach ($category in @(
@@ -329,6 +383,12 @@ try {
     Write-CanonicalJson -Value ([ordered]@{
         schema_version = 1
         note = 'These source resources are embedded in NinhoOrbital.pck; packaged launch validates their runtime load.'
+        native_build_contract = [ordered]@{
+            path = 'build-contract.json'
+            sha256 = $nativeBuildContractHash
+            build_testing = $false
+            test_facades = $false
+        }
         resources = $canonicalResources
     }) -Path (Join-Path $stagingRoot 'package-content.json')
 
@@ -358,6 +418,12 @@ try {
             path = $releaseDllName
             source_path = "game/bin/$releaseDllName"
             source_sha256 = $releaseDllSnapshotHash
+        }
+        native_build_contract = [ordered]@{
+            path = 'build-contract.json'
+            sha256 = $nativeBuildContractHash
+            build_testing = $false
+            test_facades = $false
         }
         files = $canonicalFiles
     }) -Path (Join-Path $stagingRoot 'manifest.sha256.json')

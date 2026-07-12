@@ -143,13 +143,43 @@ function Get-NinhoTestedInputPaths {
         ls-files --cached --others --exclude-standard)
     if ($LASTEXITCODE -ne 0) { throw 'unable to enumerate tested inputs with git' }
     $filtered = @($paths | ForEach-Object { ([string]$_).Replace('\','/') } | Where-Object {
-        $_ -match '^(\.gitattributes$|\.gitignore$|art/|cmake/|game/|native/|tools/|third_party/|CMakeLists\.txt$|CMakePresets\.json$|THIRD_PARTY_NOTICES\.md$|README\.md$)' -and
+        $_ -match '^(\.gitattributes$|\.gitignore$|art/|cmake/|game/|native/|tools/|third_party/|CMakeLists\.txt$|CMakePresets\.json$|THIRD_PARTY_NOTICES\.md$|README\.md$|docs/superpowers/specs/2026-07-11-vertical-slice(-balance-correction)?-design\.md$|docs/superpowers/plans/2026-07-11-vertical-slice-(implementation|balance-correction)\.md$)' -and
         $_ -notmatch '^(docs/gameplay/evidence/|docs/art/goldens/)' -and
         $_ -notmatch '^game/bin/.*\.(dll|pdb|ilk)$' -and
         $_ -notmatch '(^|/)\.godot/'
     })
     [Array]::Sort($filtered, [StringComparer]::Ordinal)
     return $filtered
+}
+
+function Assert-NinhoIndependentReviews {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]$Reviews,
+        [Parameter(Mandatory)][string]$ExpectedTestedInputsSha256
+    )
+    if ($Reviews.schema -cne 'ninho.vertical-slice.reviews.v1' -or
+            $Reviews.tested_inputs_sha256 -cne $ExpectedTestedInputsSha256) {
+        throw 'reviews manifest schema/tested-content mismatch'
+    }
+    $reviewerIds = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
+    foreach ($role in 'code','architecture','gameplay','art') {
+        $review = @($Reviews.reviews | Where-Object role -CEQ $role)
+        if ($review.Count -ne 1 -or $review[0].verdict -cne 'approved' -or
+                $review[0].critical -ne 0 -or $review[0].important -ne 0) {
+            throw "blocking or missing independent review: $role"
+        }
+        $reviewerId = [string]$review[0].reviewer_id
+        if ($reviewerId -notmatch '^/root(?:/[a-z][a-z0-9_]*)+$') {
+            throw "reviewer ID is not canonical for role ${role}: $reviewerId"
+        }
+        if (-not $reviewerIds.Add($reviewerId)) {
+            throw "reviewer IDs must be unique across canonical roles: $reviewerId"
+        }
+    }
+    if (@($Reviews.reviews).Count -ne 4) {
+        throw 'reviews manifest must contain exactly four canonical roles'
+    }
 }
 
 function Get-NinhoTestedInputs {
@@ -445,7 +475,7 @@ function Assert-NinhoVerticalSliceEvidence {
         $packagePaths = @($packageDocument.files.path)
         foreach ($required in @(
             'NinhoOrbital.exe','NinhoOrbital.pck','ninho_physics.windows.template_release.x86_64.dll',
-            'package-content.json','licenses/THIRD_PARTY_NOTICES.md','licenses/sbom.spdx.json',
+            'package-content.json','build-contract.json','licenses/THIRD_PARTY_NOTICES.md','licenses/sbom.spdx.json',
             'licenses/box3d.LICENSE.txt','licenses/godot.LICENSE.txt','licenses/godot.COPYRIGHT.txt',
             'licenses/godot-export-templates.LICENSE.txt','licenses/godot-cpp.LICENSE.txt',
             'licenses/nlohmann-json.LICENSE.txt')) {
@@ -495,6 +525,25 @@ function Assert-NinhoVerticalSliceEvidence {
                 $runtimeRow.Count -ne 1 -or
                 [string]$packageDocument.runtime_extension.source_sha256 -cne [string]$runtimeRow[0].sha256) {
             throw 'Release package runtime DLL snapshot mismatch'
+        }
+        $buildContractPath = Join-Path $packageRoot 'build-contract.json'
+        $buildContract = Get-Content -Raw -LiteralPath $buildContractPath | ConvertFrom-Json
+        $buildContractHash = (Get-FileHash -Algorithm SHA256 -LiteralPath $buildContractPath).Hash.ToLowerInvariant()
+        $contentDocument = Get-Content -Raw -LiteralPath (Join-Path $packageRoot 'package-content.json') | ConvertFrom-Json
+        if ($buildContract.schema -cne 'ninho.native-build-contract.v1' -or
+                $buildContract.configuration -cne 'Release' -or
+                $buildContract.build_testing -cne $false -or
+                $buildContract.test_facades -cne $false -or
+                $buildContract.NINHO_ENABLE_TEST_FACADES -cne 'absent' -or
+                $packageDocument.native_build_contract.path -cne 'build-contract.json' -or
+                $packageDocument.native_build_contract.sha256 -cne $buildContractHash -or
+                $packageDocument.native_build_contract.build_testing -cne $false -or
+                $packageDocument.native_build_contract.test_facades -cne $false -or
+                $contentDocument.native_build_contract.path -cne 'build-contract.json' -or
+                $contentDocument.native_build_contract.sha256 -cne $buildContractHash -or
+                $contentDocument.native_build_contract.build_testing -cne $false -or
+                $contentDocument.native_build_contract.test_facades -cne $false) {
+            throw 'Release package native build provenance mismatch'
         }
         if ($packagePaths -ccontains 'ninho_physics.windows.template_debug.x86_64.dll') {
             throw 'Release package contains the Debug runtime DLL'
@@ -694,17 +743,8 @@ function Assert-NinhoVerticalSliceEvidence {
     }
     $reviewsPath = Assert-NinhoRelativeArtifactPath $doc.reviews_manifest.path $ArtifactRoot
     $reviews = Get-Content -Raw -LiteralPath $reviewsPath | ConvertFrom-Json
-    if ($reviews.schema -cne 'ninho.vertical-slice.reviews.v1' -or
-            $reviews.tested_inputs_sha256 -cne $doc.tested_inputs_sha256) {
-        throw 'reviews manifest schema/tested-content mismatch'
-    }
-    foreach ($role in 'code','architecture','gameplay','art') {
-        $review = @($reviews.reviews | Where-Object role -CEQ $role)
-        if ($review.Count -ne 1 -or $review[0].verdict -cne 'approved' -or
-                $review[0].critical -ne 0 -or $review[0].important -ne 0) {
-            throw "blocking or missing independent review: $role"
-        }
-    }
+    Assert-NinhoIndependentReviews -Reviews $reviews `
+        -ExpectedTestedInputsSha256 ([string]$doc.tested_inputs_sha256)
     $vulkanLog = [IO.File]::ReadAllText((Assert-NinhoRelativeArtifactPath $vulkan.capture.log_path $ArtifactRoot))
     $stateProofPattern = '(?m)^NINHO_CAPTURE_STATE frame=(\d+) tick=(\d+) phase=(\S+) outcome=(\S+) camera=(\([^)]+\)) exposure=([0-9.]+)\s*$'
     $stateProofs = @([regex]::Matches($vulkanLog, $stateProofPattern))
@@ -796,4 +836,4 @@ function Invoke-NinhoLimitedRetry {
     throw "$Name failed after $MaximumAttempts attempts (exit codes: $codes)"
 }
 
-Export-ModuleMember -Function Assert-NinhoVerticalSliceEvidence,Assert-NinhoRelativeArtifactPath,Get-NinhoRouteEvidenceFromLog,Invoke-NinhoLimitedRetry,Get-NinhoTestedInputPaths,Get-NinhoTestedInputs,Get-NinhoCausalFrameIndex,Set-NinhoRequiredDownsampleFrame,Invoke-NinhoTimedProcess,Resolve-NinhoPackageManifestOutput,Assert-NinhoInputFeedbackMarkers
+Export-ModuleMember -Function Assert-NinhoVerticalSliceEvidence,Assert-NinhoRelativeArtifactPath,Get-NinhoRouteEvidenceFromLog,Invoke-NinhoLimitedRetry,Get-NinhoTestedInputPaths,Get-NinhoTestedInputs,Get-NinhoCausalFrameIndex,Set-NinhoRequiredDownsampleFrame,Invoke-NinhoTimedProcess,Resolve-NinhoPackageManifestOutput,Assert-NinhoInputFeedbackMarkers,Assert-NinhoIndependentReviews

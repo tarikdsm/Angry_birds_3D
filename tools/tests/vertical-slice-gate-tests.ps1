@@ -270,7 +270,7 @@ capture complete
     $reviews = [ordered]@{
         schema='ninho.vertical-slice.reviews.v1'; tested_inputs_sha256=$testedInputs.sha256
         reviews=@('code','architecture','gameplay','art' | ForEach-Object {
-            [ordered]@{role=$_;verdict='approved';critical=0;important=0;minor=0}
+            [ordered]@{role=$_;reviewer_id="/root/task12_$($_)_review";verdict='approved';critical=0;important=0;minor=0}
         })
     }
     $reviews | ConvertTo-Json -Depth 10 | Set-Content -LiteralPath $reviewsPath -Encoding utf8
@@ -389,7 +389,7 @@ capture complete
     New-Item -ItemType Directory -Force -Path $packageRoot | Out-Null
     foreach ($name in @(
         'NinhoOrbital.exe','NinhoOrbital.pck','ninho_physics.windows.template_release.x86_64.dll',
-        'package-content.json','licenses/THIRD_PARTY_NOTICES.md','licenses/sbom.spdx.json',
+        'package-content.json','build-contract.json','licenses/THIRD_PARTY_NOTICES.md','licenses/sbom.spdx.json',
         'licenses/box3d.LICENSE.txt','licenses/godot.LICENSE.txt','licenses/godot.COPYRIGHT.txt',
         'licenses/godot-export-templates.LICENSE.txt','licenses/godot-cpp.LICENSE.txt',
         'licenses/nlohmann-json.LICENSE.txt')) {
@@ -397,10 +397,21 @@ capture complete
         if ($directory) { New-Item -ItemType Directory -Force -Path $directory | Out-Null }
         [IO.File]::WriteAllText((Join-Path $packageRoot $name), $name)
     }
+    $buildContractPath = Join-Path $packageRoot 'build-contract.json'
+    [ordered]@{
+        schema='ninho.native-build-contract.v1';configuration='Release';build_testing=$false
+        test_facades=$false;NINHO_ENABLE_TEST_FACADES='absent'
+    } | ConvertTo-Json -Compress | Set-Content -LiteralPath $buildContractPath -Encoding utf8
+    $buildContractHash = (Get-FileHash -Algorithm SHA256 -LiteralPath $buildContractPath).Hash.ToLowerInvariant()
+    [ordered]@{
+        schema_version=1;note='fixture';native_build_contract=@{
+            path='build-contract.json';sha256=$buildContractHash;build_testing=$false;test_facades=$false
+        };resources=@()
+    } | ConvertTo-Json -Depth 10 | Set-Content -LiteralPath (Join-Path $packageRoot 'package-content.json') -Encoding utf8
     $packageManifest = Join-Path $packageRoot 'manifest.sha256.json'
     [string[]]$packageNames = @(
         'NinhoOrbital.exe','NinhoOrbital.pck','ninho_physics.windows.template_release.x86_64.dll',
-        'package-content.json','licenses/THIRD_PARTY_NOTICES.md','licenses/sbom.spdx.json',
+        'package-content.json','build-contract.json','licenses/THIRD_PARTY_NOTICES.md','licenses/sbom.spdx.json',
         'licenses/box3d.LICENSE.txt','licenses/godot.LICENSE.txt','licenses/godot.COPYRIGHT.txt',
         'licenses/godot-export-templates.LICENSE.txt','licenses/godot-cpp.LICENSE.txt',
         'licenses/nlohmann-json.LICENSE.txt')
@@ -413,6 +424,7 @@ capture complete
     [ordered]@{
         schema_version=1;algorithm='SHA-256';configuration='Release';files=$packageRows
         runtime_extension=@{path='ninho_physics.windows.template_release.x86_64.dll';source_path='game/bin/ninho_physics.windows.template_release.x86_64.dll';source_sha256=$packageDllHash}
+        native_build_contract=@{path='build-contract.json';sha256=$buildContractHash;build_testing=$false;test_facades=$false}
     } | ConvertTo-Json -Depth 10 | Set-Content -LiteralPath $packageManifest -Encoding utf8
     $releaseEvidence = Get-Content -Raw -LiteralPath $evidencePath | ConvertFrom-Json
     $releaseEvidence.configuration = 'Release'
