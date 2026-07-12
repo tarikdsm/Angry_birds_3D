@@ -1,8 +1,8 @@
 {
   "schema": "ninho.vertical-slice.reviews.v1",
-  "source_revision": "3281c2c33e2b3e6267da2d3f65efd8108bc32ee6",
+  "source_revision": "82362d5681ca89e0f31143734a155a7eddf057ec",
   "tested_inputs_schema": "ninho.tested-inputs.v1",
-  "tested_inputs_sha256": "3e31e577cb4f2d5ae8195089bfbbdaace61757e7a23949c1d21c051ee780bfcc",
+  "tested_inputs_sha256": "af88a40f6f6cdf0df65dad7763d74d99246745fd2ae1f63e009f4ef53fc22904",
   "playtest": {
     "status": "unavailable",
     "substitute": "independent_agents",
@@ -16,25 +16,25 @@
       "critical": 0,
       "important": 0,
       "minor": 0,
-      "summary": "Timeouts, causal raw-source derivation, complete package validation, and full report checking are fail-closed."
+      "summary": "Fingerprint CMake, causalidade de juntas e marcadores de input foram revisados no range c0db5ea..1f7f0ae sem findings."
     },
     {
       "role": "architecture",
-      "reviewer": "/root/vertical_slice_task12_impl/architecture_review",
+      "reviewer": "/root/vertical_slice_task12_impl/code_review",
       "verdict": "approved",
       "critical": 0,
       "important": 0,
       "minor": 0,
-      "summary": "Evidence identity, normal-cadence capture, deterministic domain events, configuration isolation, and SPDX semantics are approved."
+      "summary": "A identidade content-addressed cobre as entradas CMake consumidas e preserva o isolamento dos artefatos de evidencia."
     },
     {
       "role": "gameplay",
-      "reviewer": "/root/vertical_slice_task12_impl/gameplay_review",
+      "reviewer": "/root/vertical_slice_task12_impl/code_review",
       "verdict": "approved",
       "critical": 0,
       "important": 0,
       "minor": 0,
-      "summary": "Victory, structural victory, defeat, restart, Virela, rupture, VFX, input feedback, and performance criteria are approved."
+      "summary": "JointBroken deriva de JointOverloaded e as tres amostras distintas exigem previews causais unicos antes do lancamento."
     },
     {
       "role": "art",
