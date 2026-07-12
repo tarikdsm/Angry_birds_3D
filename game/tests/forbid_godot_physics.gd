@@ -2,7 +2,10 @@ extends SceneTree
 
 const SCENE_PATH := "res://scenes/vertical_slice.tscn"
 const SUCCESS_MARKER := "FORBID_GODOT_PHYSICS_OK"
-const PRODUCTION_ROOTS := ["res://scenes", "res://scripts/game", "res://scripts/camera", "res://scripts/ui"]
+const PRODUCTION_ROOTS := [
+	"res://scenes", "res://scripts/game", "res://scripts/camera",
+	"res://scripts/ui", "res://scripts/vfx", "res://scripts/audio",
+]
 const FORBIDDEN_CLASSES := [
 	"Rigid" + "Body3D",
 	"Static" + "Body3D",

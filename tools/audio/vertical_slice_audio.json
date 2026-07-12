@@ -1,0 +1,85 @@
+{
+  "schema_version": 1,
+  "seed": 510211,
+  "author": "Ninho Orbital",
+  "license": "proprietary-original",
+  "generation_mode": "procedural-offline",
+  "external_sources": [],
+  "sample_rate_hz": 48000,
+  "channels": 1,
+  "sample_width_bytes": 2,
+  "sounds": [
+    {
+      "id": "launch",
+      "file": "launch.wav",
+      "profile": "harmonic_rise",
+      "duration_ms": 620,
+      "peak": 0.78,
+      "parameters": {"start_hz": 155.0, "end_hz": 920.0, "pulse_hz": 72.0}
+    },
+    {
+      "id": "vortex",
+      "file": "vortex.wav",
+      "profile": "gravitational_vortex",
+      "duration_ms": 1450,
+      "peak": 0.74,
+      "parameters": {"base_hz": 58.0, "orbit_hz": 3.4, "air": 0.18}
+    },
+    {
+      "id": "pine",
+      "file": "pine.wav",
+      "profile": "fibrous_snap",
+      "duration_ms": 410,
+      "peak": 0.82,
+      "parameters": {"body_hz": 238.0, "fiber_hz": 1320.0, "noise": 0.52}
+    },
+    {
+      "id": "glass",
+      "file": "glass.wav",
+      "profile": "prismatic_chime",
+      "duration_ms": 980,
+      "peak": 0.76,
+      "parameters": {"fundamental_hz": 1160.0, "ratio_a": 1.4142, "ratio_b": 2.238}
+    },
+    {
+      "id": "brick",
+      "file": "brick.wav",
+      "profile": "dry_masonry_impact",
+      "duration_ms": 470,
+      "peak": 0.84,
+      "parameters": {"body_hz": 104.0, "knock_hz": 184.0, "grit": 0.46}
+    },
+    {
+      "id": "helmet",
+      "file": "helmet.wav",
+      "profile": "muted_guard_chord",
+      "duration_ms": 560,
+      "peak": 0.72,
+      "parameters": {"root_hz": 174.0, "damping": 6.8, "spark_hz": 2480.0}
+    },
+    {
+      "id": "vulnerable",
+      "file": "vulnerable.wav",
+      "profile": "amber_low_pulse",
+      "duration_ms": 720,
+      "peak": 0.8,
+      "parameters": {"root_hz": 67.0, "overtone_hz": 134.0, "swell_hz": 2.1}
+    },
+    {
+      "id": "victory",
+      "file": "victory.wav",
+      "profile": "ascending_constellation",
+      "duration_ms": 1840,
+      "peak": 0.77,
+      "parameters": {"root_hz": 293.66, "step_ms": 260.0, "shimmer": 0.14}
+    },
+    {
+      "id": "defeat",
+      "file": "defeat.wav",
+      "profile": "descending_eclipse",
+      "duration_ms": 1680,
+      "peak": 0.73,
+      "parameters": {"root_hz": 246.94, "step_ms": 310.0, "air": 0.08}
+    }
+  ]
+}

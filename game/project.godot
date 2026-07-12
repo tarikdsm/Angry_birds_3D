@@ -51,6 +51,10 @@ aim_power_up={
 "deadzone": 0.5,
 "events": [Object(InputEventKey,"physical_keycode":68,"unicode":100)]
 }
+toggle_reduced_motion={
+"deadzone": 0.5,
+"events": [Object(InputEventKey,"physical_keycode":77,"unicode":109)]
+}
 
 [physics]
 

@@ -9,6 +9,12 @@ extends CanvasLayer
 
 var _anchor_integrity := 100.0
 var _last_tick := -1
+var _last_phase := "loading"
+var _reduced_motion := false
+
+const SPACE_COLOR := Color("07111f")
+const PRIMARY_TEXT_COLOR := Color("bef9e8")
+const SECONDARY_TEXT_COLOR := Color("f6c95c")
 
 
 func apply_frame(frame: Dictionary) -> void:
@@ -25,10 +31,11 @@ func apply_frame(frame: Dictionary) -> void:
 				and int(event.get("affected_entity_id", 0)) == 200:
 			_anchor_integrity = 0.0
 	var phase := str(frame.get("phase", "loading"))
+	_last_phase = phase
 	phase_label.text = "FASE  %s" % phase.to_upper().replace("_", " ")
 	birds_label.text = "VIRELAS  %d" % int(frame.get("birds_remaining", 0))
 	integrity_label.text = "INTEGRIDADE DA ÂNCORA  %03d%%" % roundi(_anchor_integrity)
-	controls_label.text = _controls_for_phase(phase)
+	controls_label.text = _controls_with_accessibility(phase)
 	var outcome := str(frame.get("outcome", "none"))
 	if outcome == "victory":
 		result_label.text = "ÓRBITA CONQUISTADA"
@@ -40,6 +47,17 @@ func apply_frame(frame: Dictionary) -> void:
 
 func show_fault(code: String, message: String) -> void:
 	fault_label.text = "FALHA [%s] %s" % [code, message]
+
+
+func set_reduced_motion(enabled: bool) -> void:
+	_reduced_motion = enabled
+	controls_label.text = _controls_with_accessibility(_last_phase)
+
+
+func minimum_contrast_ratio() -> float:
+	return minf(
+		_contrast_ratio(PRIMARY_TEXT_COLOR, SPACE_COLOR),
+		_contrast_ratio(SECONDARY_TEXT_COLOR, SPACE_COLOR))
 
 
 func _controls_for_phase(phase: String) -> String:
@@ -54,3 +72,26 @@ func _controls_for_phase(phase: String) -> String:
 			return "SEGURE R 0,5 s  REINICIAR"
 		_:
 			return "ESC  PAUSA    SEGURE R 0,5 s  REINICIAR"
+
+
+func _controls_with_accessibility(phase: String) -> String:
+	return "%s    M  MOVIMENTO %s" % [
+		_controls_for_phase(phase),
+		"REDUZIDO" if _reduced_motion else "COMPLETO",
+	]
+
+
+func _contrast_ratio(foreground: Color, background: Color) -> float:
+	var lighter := maxf(_relative_luminance(foreground), _relative_luminance(background))
+	var darker := minf(_relative_luminance(foreground), _relative_luminance(background))
+	return (lighter + 0.05) / (darker + 0.05)
+
+
+func _relative_luminance(color: Color) -> float:
+	return 0.2126 * _linear_channel(color.r) \
+		+ 0.7152 * _linear_channel(color.g) \
+		+ 0.0722 * _linear_channel(color.b)
+
+
+func _linear_channel(value: float) -> float:
+	return value / 12.92 if value <= 0.04045 else pow((value + 0.055) / 1.055, 2.4)

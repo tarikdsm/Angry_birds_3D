@@ -1,6 +1,18 @@
-[gd_scene load_steps=2 format=3]
+[gd_scene load_steps=3 format=3]
 
 [ext_resource type="Script" path="res://scripts/ui/vertical_slice_hud.gd" id="1_hud"]
+
+[sub_resource type="StyleBoxFlat" id="Style_top_bar"]
+bg_color = Color(0.027, 0.067, 0.122, 0.94)
+border_width_left = 2
+border_width_top = 2
+border_width_right = 2
+border_width_bottom = 2
+border_color = Color(0.259, 0.882, 0.816, 0.72)
+corner_radius_top_left = 10
+corner_radius_top_right = 10
+corner_radius_bottom_right = 10
+corner_radius_bottom_left = 10
 
 [node name="VerticalSliceHUD" type="CanvasLayer"]
 script = ExtResource("1_hud")
@@ -19,6 +31,7 @@ offset_left = 24.0
 offset_top = 20.0
 offset_right = 496.0
 offset_bottom = 132.0
+theme_override_styles/panel = SubResource("Style_top_bar")
 
 [node name="Margin" type="MarginContainer" parent="Root/TopBar"]
 theme_override_constants/margin_left = 18
@@ -37,10 +50,12 @@ text = "FASE  CARREGANDO"
 
 [node name="BirdsLabel" type="Label" parent="Root/TopBar/Margin/Readout"]
 unique_name_in_owner = true
+theme_override_colors/font_color = Color(0.745, 0.976, 0.91, 1)
 text = "VIRELAS  3"
 
 [node name="IntegrityLabel" type="Label" parent="Root/TopBar/Margin/Readout"]
 unique_name_in_owner = true
+theme_override_colors/font_color = Color(0.965, 0.788, 0.361, 1)
 text = "INTEGRIDADE DA ÂNCORA  100%"
 
 [node name="ControlsLabel" type="Label" parent="Root"]
@@ -55,7 +70,7 @@ offset_right = -28.0
 offset_bottom = -22.0
 grow_horizontal = 2
 grow_vertical = 0
-theme_override_colors/font_color = Color(0.82, 0.86, 0.72, 1)
+theme_override_colors/font_color = Color(0.965, 0.788, 0.361, 1)
 text = "CLIQUE  MIRAR    RMB  ÓRBITA    F  RECENTRAR"
 horizontal_alignment = 1
 

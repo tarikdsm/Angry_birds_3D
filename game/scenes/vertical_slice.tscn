@@ -1,4 +1,4 @@
-[gd_scene load_steps=18 format=3]
+[gd_scene load_steps=20 format=3]
 
 [ext_resource type="Script" path="res://scripts/game/vertical_slice_controller.gd" id="1_controller"]
 [ext_resource type="Script" path="res://scripts/game/launch_controller.gd" id="2_launch"]
@@ -7,6 +7,8 @@
 [ext_resource type="PackedScene" path="res://scripts/ui/vertical_slice_hud.tscn" id="5_hud"]
 [ext_resource type="Script" path="res://scripts/game/authored_asset_view.gd" id="6_asset_view"]
 [ext_resource type="PackedScene" path="res://assets/vertical_slice/devices/DEV_ImpulseRing.glb" id="8_ring"]
+[ext_resource type="Script" path="res://scripts/vfx/feedback_director.gd" id="9_feedback"]
+[ext_resource type="Script" path="res://scripts/audio/feedback_audio_pool.gd" id="10_feedback_audio"]
 
 [sub_resource type="Environment" id="Environment_orbit"]
 background_mode = 1
@@ -123,6 +125,13 @@ script = ExtResource("2_launch")
 
 [node name="BodyViews" type="Node3D" parent="."]
 script = ExtResource("3_views")
+
+[node name="FeedbackDirector" type="Node3D" parent="."]
+script = ExtResource("9_feedback")
+
+[node name="FeedbackAudioPool" type="Node3D" parent="FeedbackDirector"]
+script = ExtResource("10_feedback_audio")
+voice_count = 12
 
 [node name="OrbitalCamera" type="Camera3D" parent="."]
 transform = Transform3D(0.848048, -0.280814, 0.448951, 0, 0.847202, 0.531271, -0.529919, -0.45054, 0.718554, -8.078, 21.062, 13.334)

@@ -262,8 +262,8 @@ if ([regex]::Matches(
         [regex]::Escape('-RequiredCompletionMarker $visualCompletionMarker')).Count -ne 2) {
     throw 'Both Vulkan and OpenGL movie gates must require the frame-300 marker'
 }
-if ([regex]::Matches($runnerText, [regex]::Escape("'--fixed-fps', '60'")).Count -ne 5) {
-    throw 'Logical smoke plus foundation and playable captures must use fixed 60 FPS'
+if ([regex]::Matches($runnerText, [regex]::Escape("'--fixed-fps', '60'")).Count -ne 6) {
+    throw 'Logical and feedback smokes plus foundation and playable captures must use fixed 60 FPS'
 }
 if ([regex]::Matches(
         $runnerText,

@@ -12,6 +12,7 @@ const CAPTURE_MARKER := "VERTICAL_SLICE_CAPTURE_COMPLETE frame=300"
 @onready var body_views: Node = get_node("../BodyViews")
 @onready var orbital_camera: Node = get_node("../OrbitalCamera")
 @onready var hud: Node = get_node("../VerticalSliceHUD")
+@onready var feedback: Node = get_node("../FeedbackDirector")
 
 var current_frame: Dictionary = {}
 var consume_calls := 0
@@ -40,6 +41,7 @@ func _physics_process(_delta: float) -> void:
 	body_views.apply_frame(current_frame)
 	orbital_camera.observe_frame(current_frame)
 	hud.apply_frame(current_frame)
+	feedback.apply_frame(current_frame)
 	if _capture_enabled:
 		_drive_capture()
 
@@ -64,3 +66,14 @@ func _drive_capture() -> void:
 
 func _on_gameplay_fault(code: String, message: String) -> void:
 	hud.show_fault(code, message)
+
+
+func set_reduced_motion(enabled: bool) -> void:
+	orbital_camera.set_reduced_motion(enabled)
+	feedback.set_reduced_motion(enabled)
+	hud.set_reduced_motion(enabled)
+
+
+func _unhandled_input(event: InputEvent) -> void:
+	if event.is_action_pressed("toggle_reduced_motion"):
+		set_reduced_motion(not orbital_camera.reduced_motion)

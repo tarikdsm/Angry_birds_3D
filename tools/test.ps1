@@ -28,6 +28,10 @@ if ($foundationReportTestExitCode -ne 0) {
 & (Join-Path $PSScriptRoot 'tests\spike-report-gate-tests.ps1') -Root $root
 & (Join-Path $PSScriptRoot 'tests\upstream-box3d-gate-tests.ps1') -Root $root
 & (Join-Path $PSScriptRoot 'tests\foundation-evidence-gate-tests.ps1') -Root $root
+& (Join-Path $PSScriptRoot 'tests\audio-pipeline-tests.ps1')
+if ($LASTEXITCODE -ne 0) {
+    exit $LASTEXITCODE
+}
 
 Assert-NinhoNoReparseAncestors -Path $foundationReport -AllowedRoot $root | Out-Null
 if (-not (Test-Path -LiteralPath $foundationReport -PathType Leaf)) {
@@ -417,6 +421,16 @@ $godotExitCode = Invoke-GodotSmoke -Name 'vertical-slice-smoke' -GodotArguments 
     '--path', 'game',
     '--fixed-fps', '60',
     '--script', 'res://tests/vertical_slice_smoke.gd'
+)
+if ($godotExitCode -ne 0) {
+    exit $godotExitCode
+}
+
+$godotExitCode = Invoke-GodotSmoke -Name 'feedback-smoke' -GodotArguments @(
+    '--headless',
+    '--path', 'game',
+    '--fixed-fps', '60',
+    '--script', 'res://tests/feedback_smoke.gd'
 )
 if ($godotExitCode -ne 0) {
     exit $godotExitCode

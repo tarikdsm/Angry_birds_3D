@@ -1,0 +1,57 @@
+{
+  "schema_version": 1,
+  "budgets": {
+    "vfx_pool_size": 24,
+    "audio_voice_pool_size": 12,
+    "fragment_pool_size": 48,
+    "max_particles_per_slot": 96,
+    "max_particles_total": 2304,
+    "max_fragments_total": 48,
+    "glass_screen_coverage_limit": 0.15,
+    "first_impact_limit_ms": 150.0
+  },
+  "directional_anchor": {
+    "entity_id": 200,
+    "enemy_archetype_id": 1
+  },
+  "material_profiles": {
+    "1": "pine",
+    "5": "brick",
+    "9": "glass"
+  },
+  "event_profiles": {
+    "bird_launched": "launch",
+    "ability_activation_requested": "vortex",
+    "command_rejected": "rejected",
+    "ability_started": "vortex",
+    "ability_affected_body": "constellation",
+    "ability_pulse": "virela_pulse",
+    "ability_ended": "virela_release",
+    "damage_applied": "material_or_anchor",
+    "entity_neutralized": "neutralized",
+    "joint_overloaded": "material",
+    "piece_fracture_triggered": "material",
+    "joint_broken": "material",
+    "piece_fractured": "material"
+  },
+  "outcome_profiles": {
+    "victory": "victory",
+    "defeat": "defeat"
+  },
+  "profiles": {
+    "launch": {"color": "#F6C95C", "particles": 32, "lifetime_s": 0.32, "size_m": 0.10, "audio": "launch"},
+    "vortex": {"color": "#42E1D0", "particles": 72, "lifetime_s": 0.72, "size_m": 0.12, "audio": "vortex"},
+    "constellation": {"color": "#42E1D0", "particles": 16, "lifetime_s": 0.42, "size_m": 0.07, "audio": ""},
+    "virela_pulse": {"color": "#42E1D0", "particles": 96, "lifetime_s": 0.55, "size_m": 0.16, "audio": "vortex"},
+    "virela_release": {"color": "#8DE0E8", "particles": 36, "lifetime_s": 0.38, "size_m": 0.08, "audio": ""},
+    "pine": {"color": "#C88E55", "particles": 30, "lifetime_s": 0.38, "size_m": 0.09, "audio": "pine"},
+    "glass": {"color": "#8DE0E8", "particles": 42, "lifetime_s": 0.30, "size_m": 0.06, "audio": "glass"},
+    "brick": {"color": "#B85B42", "particles": 24, "lifetime_s": 0.44, "size_m": 0.11, "audio": "brick"},
+    "helmet": {"color": "#F7FBFF", "particles": 28, "lifetime_s": 0.22, "size_m": 0.08, "audio": "helmet"},
+    "vulnerable": {"color": "#D7A441", "particles": 48, "lifetime_s": 0.48, "size_m": 0.13, "audio": "vulnerable"},
+    "neutralized": {"color": "#D7A441", "particles": 52, "lifetime_s": 0.62, "size_m": 0.14, "audio": "vulnerable"},
+    "victory": {"color": "#42E1D0", "particles": 88, "lifetime_s": 0.90, "size_m": 0.16, "audio": "victory"},
+    "defeat": {"color": "#674361", "particles": 46, "lifetime_s": 0.80, "size_m": 0.13, "audio": "defeat"},
+    "rejected": {"color": "#F47C72", "particles": 12, "lifetime_s": 0.20, "size_m": 0.06, "audio": ""}
+  }
+}
