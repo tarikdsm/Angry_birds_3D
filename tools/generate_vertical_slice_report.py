@@ -16,13 +16,19 @@ EVIDENCE = {
 REPORT = Path("docs/gameplay/vertical-slice-report.md")
 
 
+def canonical_text_bytes(raw: bytes) -> bytes:
+    """Return a checkout-independent UTF-8 representation for tracked text."""
+    text = raw.decode("utf-8")
+    return text.replace("\r\n", "\n").replace("\r", "\n").encode("utf-8")
+
+
 def load(root: Path) -> list[tuple[str, Path, bytes, dict]]:
     result = []
     for configuration, relative in EVIDENCE.items():
         path = root / relative
         if not path.is_file():
             raise ValueError(f"evidence missing: {relative.as_posix()}")
-        raw = path.read_bytes()
+        raw = canonical_text_bytes(path.read_bytes())
         doc = json.loads(raw)
         if doc.get("schema") != "ninho.vertical-slice.evidence.v1" or doc.get("schema_version") != 1:
             raise ValueError(f"evidence schema/version mismatch: {relative.as_posix()}")

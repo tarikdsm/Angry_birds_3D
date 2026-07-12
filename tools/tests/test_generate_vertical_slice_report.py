@@ -65,6 +65,14 @@ class VerticalSliceReportTests(unittest.TestCase):
             self.assertIn(b"Generation-Head-Release", original)
             self.assertIn(b"Normative-Certification-Identity: Tested-Inputs-SHA256", original)
             self.assertNotIn(b"Certified-Commit", original)
+            for evidence_path in evidence_dir.glob("vertical-slice-*.json"):
+                evidence_path.write_bytes(evidence_path.read_bytes().replace(b"\n", b"\r\n"))
+            crlf_write = subprocess.run(
+                [sys.executable, str(SCRIPT), "--root", str(root), "--write"],
+                capture_output=True, text=True, encoding="utf-8"
+            )
+            self.assertEqual(crlf_write.returncode, 0, crlf_write.stderr)
+            self.assertEqual(report.read_bytes(), original)
             full_check = subprocess.run(
                 [sys.executable, str(SCRIPT), "--root", str(root), "--check"],
                 capture_output=True, text=True, encoding="utf-8"
