@@ -1,8 +1,8 @@
 {
   "schema": "ninho.vertical-slice.reviews.v1",
-  "source_revision": "70942458d25bc928bc1761a2927b4766a2423b33",
+  "source_revision": "b63aa274a60a375299478d1c7a7d4542e8c2ae99",
   "tested_inputs_schema": "ninho.tested-inputs.v2",
-  "tested_inputs_sha256": "5578688596dc6501cc7a080e6d412a09b75aa62578aec73793ffdcc111c09642",
+  "tested_inputs_sha256": "7960929ca4fa00b59edd50db5cfe7f6c30158527ee77a5e9024595122874e379",
   "playtest": {
     "status": "unavailable",
     "substitute": "independent_agents",
@@ -16,7 +16,7 @@
       "critical": 0,
       "important": 0,
       "minor": 0,
-      "summary": "Lifecycle, dano, estado autoritativo, preview, readiness, processos, contratos de build e hashes portaveis do relatorio foram revisados sem findings."
+      "summary": "Lifecycle, dano, estado autoritativo, preview, readiness, processos, contratos de build e proveniencia textual portavel de relatorio/audio foram revisados sem findings."
     },
     {
       "role": "architecture",
