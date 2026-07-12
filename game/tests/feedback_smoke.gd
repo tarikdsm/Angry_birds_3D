@@ -454,6 +454,27 @@ func _test_authoritative_hud(hud: Node) -> void:
 		_fail("early ability rejection must be legible")
 		return
 	hud.apply_frame({
+		"tick": 52,
+		"phase": "flight_ability",
+		"outcome": "none",
+		"objective_targets": [target],
+		"ability_readiness": "active",
+		"ability_armed": false,
+		"events": [{"kind": "ability_started"}],
+	})
+	if "VIRELA ATIVA" not in controls.text or "AINDA NÃO ARMADA" in controls.text:
+		_fail("active ability must replace a prior not-armed warning")
+		return
+	hud.apply_frame({
+		"tick": 0,
+		"phase": "inspection",
+		"outcome": "none",
+		"objective_targets": [target],
+		"ability_readiness": "unavailable",
+		"ability_armed": false,
+		"events": [],
+	})
+	hud.apply_frame({
 		"tick": 59,
 		"phase": "flight_ability",
 		"outcome": "none",

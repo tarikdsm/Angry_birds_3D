@@ -22,7 +22,7 @@ func apply_frame(frame: Dictionary) -> void:
 	var phase := str(frame.get("phase", "loading"))
 	var readiness := str(frame.get("ability_readiness", "unavailable"))
 	var ability_armed := bool(frame.get("ability_armed", false))
-	if phase != "flight_ability" or ability_armed:
+	if phase != "flight_ability" or readiness != "arming":
 		_ability_rejected_early = false
 	for event: Dictionary in frame.get("events", []):
 		if str(event.get("kind", "")) == "command_rejected" \
