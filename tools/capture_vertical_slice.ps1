@@ -187,13 +187,13 @@ foreach ($renderer in 'Vulkan','OpenGL') {
         }
         $scales.Add([ordered]@{
             ui_scale = $scale
-            frame_p95_ms = [double]$document.frame_p95_ms
-            frame_p99_ms = [double]$document.frame_p99_ms
-            max_hitch_ms = [double]$document.max_hitch_ms
-            input_feedback_p95_ms = [double]$document.input_feedback_p95_ms
+            frame_p95_ms = $document.frame_p95_ms
+            frame_p99_ms = $document.frame_p99_ms
+            max_hitch_ms = $document.max_hitch_ms
+            input_feedback_p95_ms = $document.input_feedback_p95_ms
             input_feedback_samples = [int]$document.input_feedback_samples
             input_feedback_markers = @($document.input_feedback_markers)
-            physics_step_p95_ms = [double]$document.physics_step_p95_ms
+            physics_step_p95_ms = $document.physics_step_p95_ms
             frames_measured = [int]$document.frames_measured
             rupture_observed = [bool]$document.rupture_observed
             vfx_observed = [bool]$document.vfx_observed
