@@ -59,6 +59,19 @@ class VerticalSliceToolingContractsTest(unittest.TestCase):
                 f"${variable} must be disposed from a finally block",
             )
 
+    def test_capture_preserves_runtime_metric_decimal_tokens(self) -> None:
+        capture = (ROOT / "tools" / "capture_vertical_slice.ps1").read_text(encoding="utf-8")
+        decimal_fields = (
+            "frame_p95_ms",
+            "frame_p99_ms",
+            "max_hitch_ms",
+            "input_feedback_p95_ms",
+            "physics_step_p95_ms",
+        )
+        for field in decimal_fields:
+            self.assertIn(f"{field} = $document.{field}", capture)
+            self.assertNotIn(f"{field} = [double]$document.{field}", capture)
+
 
 if __name__ == "__main__":
     unittest.main()
