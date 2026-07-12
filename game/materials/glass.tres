@@ -1,10 +1,16 @@
-[gd_resource type="ShaderMaterial" load_steps=2 format=3]
+[gd_resource type="ShaderMaterial" load_steps=3 format=3]
 
 [ext_resource type="Shader" path="res://shaders/stylized_glass.gdshader" id="1_glass"]
+
+[ext_resource type="Texture2D" path="res://assets/vertical_slice/kit/KIT_GlassPanel_A_TEX_Glass.png" id="2_tex"]
 
 [resource]
 render_priority = 0
 shader = ExtResource("1_glass")
-shader_parameter/glass_tint = Color(0.2, 0.72, 0.78, 0.56)
+shader_parameter/albedo_texture = ExtResource("2_tex")
 shader_parameter/rim_tint = Color(0.57, 0.882, 0.918, 1)
 shader_parameter/rim_power = 3.2
+shader_parameter/authored_roughness = 0.18
+shader_parameter/authored_metallic = 0.0
+shader_parameter/transmission_weight = 0.78
+shader_parameter/coat_weight = 0.24

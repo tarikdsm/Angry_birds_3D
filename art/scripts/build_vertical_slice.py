@@ -20,10 +20,29 @@ SCRIPT_DIR = Path(__file__).resolve().parent
 if str(SCRIPT_DIR) not in sys.path:
     sys.path.insert(0, str(SCRIPT_DIR))
 
-from ninho_blender.contracts import safe_output_path, validate_config_contract
-from ninho_blender.export import collect_asset_record, save_source_and_glb, semantic_scene_sha256, sha256_file
-from ninho_blender.geometry import build_asset, reset_scene
-from ninho_blender.materials import build_materials, write_runtime_materials
+from ninho_blender.contracts import (
+    enforce_global_budgets,
+    measure_instantiated_budgets,
+    safe_output_path,
+    validate_config_contract,
+)
+from ninho_blender.export import (
+    collect_asset_record,
+    inspect_glb,
+    mesh_triangles,
+    save_source_and_glb,
+    semantic_scene_sha256,
+    sha256_file,
+)
+from ninho_blender.geometry import apply_authored_uvs, build_asset, reset_scene
+from ninho_blender.materials import (
+    build_materials,
+    material_semantics_sha256,
+    runtime_material_semantics,
+    validate_runtime_material_semantics,
+    write_runtime_materials,
+)
+from ninho_blender.textures import encode_png_rgba, generate_material_rgba, inspect_png_rgba
 
 NAME_RE = re.compile(r"^(VIS|COL|FRAG|SOCKET|RIG)_[A-Za-z0-9_]+$")
 ASSET_RE = re.compile(r"^(AST|CHR|ENM|DEV|KIT)_[A-Za-z0-9_]+$")
@@ -57,14 +76,12 @@ def validate_config(config: dict) -> None:
 def build_proxies(project_root: Path, config: dict) -> list[dict]:
     level = read_json(project_root / "game/data/levels/first_orbit.level.json")
     assets = {asset["id"]: asset for asset in config["assets"]}
-    proxies = []
+    level_proxies = []
     for body in level["bodies"]:
         asset_id = body["visual"]["asset_id"]
         if asset_id not in assets:
             raise RuntimeError(f"level references missing authored asset: {asset_id}")
-        if assets[asset_id]["bounds_m"] != body["visual"]["bounds_m"]:
-            raise RuntimeError(f"proxy bounds differ from authored config for body {body['body_id']}")
-        proxies.append(
+        level_proxies.append(
             {
                 "body_id": body["body_id"],
                 "entity_id": body["entity_id"],
@@ -74,7 +91,13 @@ def build_proxies(project_root: Path, config: dict) -> list[dict]:
                 "transform": body["transform"],
             }
         )
-    return proxies
+    canonical = config["level_layout"]["proxies"]
+    if level["id"] != config["level_layout"]["level_id"] or canonical_json(level_proxies) != canonical_json(canonical):
+        raise RuntimeError("level layout differs from authored config")
+    for proxy in canonical:
+        if assets[proxy["asset_id"]]["bounds_m"] != proxy["bounds_m"]:
+            raise RuntimeError(f"proxy bounds differ from asset config for body {proxy['body_id']}")
+    return canonical
 
 
 def compute_pipeline_hash(config_path: Path, executable_hash: str) -> str:
@@ -88,7 +111,14 @@ def compute_pipeline_hash(config_path: Path, executable_hash: str) -> str:
     return digest.hexdigest()
 
 
-def compute_build_hash(generator: dict, outputs: list[dict], sources: list[dict], proxies: list[dict]) -> str:
+def compute_build_hash(
+    generator: dict,
+    outputs: list[dict],
+    sources: list[dict],
+    proxies: list[dict],
+    global_budgets: dict,
+    material_hash: str,
+) -> str:
     source_semantics = [
         {"path": source["path"], "semantic_sha256": source["semantic_sha256"]}
         for source in sorted(sources, key=lambda item: item["path"])
@@ -99,11 +129,97 @@ def compute_build_hash(generator: dict, outputs: list[dict], sources: list[dict]
             "outputs": sorted(outputs, key=lambda item: item["path"]),
             "source_semantics": source_semantics,
             "proxies": proxies,
+            "global_budgets": global_budgets,
+            "material_semantics_sha256": material_hash,
         }
     )
     return hashlib.sha256(material.encode("utf-8")).hexdigest()
 
 
+def scene_particle_count(project_root: Path) -> int:
+    scene_text = (project_root / "game/scenes/vertical_slice.tscn").read_text(encoding="utf-8")
+    return sum(int(value) for value in re.findall(r"(?m)^amount = (\d+)$", scene_text))
+
+
+def global_budget_record(measured: dict[str, int], configured: dict[str, int]) -> dict:
+    sources = {
+        "triangles": "VIS LOD0/decor triangles multiplied by canonical runtime instances",
+        "draw_calls": "VIS LOD0/decor material draws multiplied by canonical runtime instances",
+        "texture_bytes": "embedded GLB image bufferView bytes",
+        "particles": "game/scenes/vertical_slice.tscn particle amount properties",
+        "fragments": "FRAG definitions multiplied by canonical runtime instances",
+    }
+    enforce_global_budgets(measured, configured)
+    return {
+        key: {"actual": int(measured[key]), "max": int(configured[key]), "source": sources[key]}
+        for key in sources
+    }
+
+
+def write_asset_textures(config: dict, asset: dict, output_root: Path) -> tuple[dict[str, Path], list[dict]]:
+    specs = {item["name"]: item for item in config["materials"]}
+    paths = {}
+    records = []
+    for material_name in sorted(set(asset["materials"])):
+        spec = specs[material_name]
+        rgba = generate_material_rgba(config, spec)
+        size = int(spec["texture"]["size_px"])
+        payload = encode_png_rgba(size, size, rgba)
+        relative = Path("game/assets/vertical_slice") / asset["folder"] / f"{asset['id']}_TEX_{material_name[4:]}.png"
+        path = safe_output_path(output_root, relative)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(payload)
+        contract = inspect_png_rgba(payload)
+        if contract["unique_colors"] <= 1 or not contract["has_nonblack_rgb"]:
+            raise RuntimeError(f"procedural texture is constant or black: {material_name}")
+        paths[material_name] = path
+        records.append(
+            {
+                "material": material_name,
+                "image_name": f"TEX_{material_name[4:]}",
+                "path": relative.as_posix(),
+                "sha256": sha256_file(path),
+                **contract,
+            }
+        )
+    return paths, records
+
+
+def expected_asset_textures(config: dict, asset: dict, output_root: Path) -> list[dict]:
+    specs = {item["name"]: item for item in config["materials"]}
+    records = []
+    for material_name in sorted(set(asset["materials"])):
+        spec = specs[material_name]
+        size = int(spec["texture"]["size_px"])
+        expected_payload = encode_png_rgba(size, size, generate_material_rgba(config, spec))
+        relative = Path("game/assets/vertical_slice") / asset["folder"] / f"{asset['id']}_TEX_{material_name[4:]}.png"
+        path = safe_output_path(output_root, relative)
+        actual_payload = path.read_bytes()
+        if actual_payload != expected_payload:
+            raise RuntimeError(f"authored PNG differs from procedural source: {relative.as_posix()}")
+        records.append(
+            {
+                "material": material_name,
+                "image_name": f"TEX_{material_name[4:]}",
+                "path": relative.as_posix(),
+                "sha256": sha256_file(path),
+                **inspect_png_rgba(actual_payload),
+            }
+        )
+    return records
+
+
+def asset_runtime_metrics(record: dict) -> dict[str, int]:
+    visible = [
+        item
+        for item in record["objects"]
+        if item["role"] == "VIS" and ("lod" not in item or int(item["lod"]) == 0)
+    ]
+    return {
+        "triangles": sum(int(item["triangles"]) for item in visible),
+        "draw_calls": sum(max(1, len(item["materials"])) for item in visible),
+        "fragments": sum(1 for item in record["objects"] if item["role"] == "FRAG"),
+    }
 def build(project_root: Path, output_root: Path, executable_hash: str) -> None:
     config_path = project_root / "art/config/vertical_slice_assets.json"
     config = read_json(config_path)
@@ -112,10 +228,14 @@ def build(project_root: Path, output_root: Path, executable_hash: str) -> None:
     assets = []
     outputs = []
     sources = []
+    measured = {"triangles": 0, "draw_calls": 0, "texture_bytes": 0, "particles": 0, "fragments": 0}
+    config_sha256 = sha256_file(config_path)
     for asset in config["assets"]:
         reset_scene()
-        materials = build_materials(config)
+        texture_paths, authored_textures = write_asset_textures(config, asset, output_root)
+        materials = build_materials(config, set(asset["materials"]), texture_paths)
         objects = build_asset(asset, config, materials)
+        apply_authored_uvs(objects)
         record = collect_asset_record(asset, objects)
         source_relative = Path("art/source/vertical_slice") / f"{asset['id']}.blend"
         glb_relative = Path("game/assets/vertical_slice") / asset["folder"] / f"{asset['id']}.glb"
@@ -123,11 +243,28 @@ def build(project_root: Path, output_root: Path, executable_hash: str) -> None:
         glb_path = safe_output_path(output_root, glb_relative)
         semantic_hash = semantic_scene_sha256()
         save_source_and_glb(source_path, glb_path)
+        glb_contract = inspect_glb(glb_path)
+        authored_by_name = {item["image_name"]: item for item in authored_textures}
+        for embedded in glb_contract["images"]:
+            source = authored_by_name.get(embedded["name"])
+            if source is None or embedded["sha256"] != source["sha256"] or embedded["pixel_sha256"] != source["pixel_sha256"]:
+                raise RuntimeError(f"embedded texture differs from authored PNG: {embedded['name']}")
         record["source_blend"] = source_relative.as_posix()
         record["glb"] = glb_relative.as_posix()
         record["blend_file_sha256"] = sha256_file(source_path)
         record["blend_semantic_sha256"] = semantic_hash
         record["glb_sha256"] = sha256_file(glb_path)
+        record["author"] = config["author"]
+        record["license"] = config["license"]
+        record["seed"] = config["seed"]
+        record["source"] = config["source"]
+        record["source_config_sha256"] = config_sha256
+        record["texture_images"] = glb_contract["images"]
+        record["authored_textures"] = authored_textures
+        record["texture_count"] = glb_contract["texture_count"]
+        record["uv_layers"] = glb_contract["uv_primitives"]
+        record["draw_calls"] = glb_contract["draw_calls"]
+        measured["texture_bytes"] += int(glb_contract["texture_bytes"])
         assets.append(record)
         sources.append(
             {
@@ -137,6 +274,8 @@ def build(project_root: Path, output_root: Path, executable_hash: str) -> None:
             }
         )
         outputs.append({"path": glb_relative.as_posix(), "sha256": record["glb_sha256"]})
+        for texture in authored_textures:
+            outputs.append({"path": texture["path"], "sha256": texture["sha256"]})
 
     for runtime_path in write_runtime_materials(config, output_root):
         relative = runtime_path.relative_to(output_root).as_posix()
@@ -148,7 +287,7 @@ def build(project_root: Path, output_root: Path, executable_hash: str) -> None:
         "blender_build_hash": bpy.app.build_hash.decode("ascii"),
         "blender_executable_sha256": executable_hash,
         "seed": config["seed"],
-        "config_sha256": sha256_file(config_path),
+        "config_sha256": config_sha256,
         "pipeline_sha256": pipeline_hash,
         "unit": "meter",
         "up_axis": "+Z",
@@ -156,15 +295,31 @@ def build(project_root: Path, output_root: Path, executable_hash: str) -> None:
     }
     outputs.sort(key=lambda item: item["path"])
     proxies = build_proxies(project_root, config)
+    runtime_instances = list(config["level_layout"]["runtime_singletons"]) + [item["asset_id"] for item in proxies]
+    instantiated = measure_instantiated_budgets(
+        {asset["id"]: asset_runtime_metrics(asset) for asset in assets}, runtime_instances
+    )
+    measured.update(instantiated)
+    measured["particles"] = scene_particle_count(project_root)
+    budgets = global_budget_record(measured, config["global_budgets"])
+    runtime_semantics = runtime_material_semantics(output_root)
+    validate_runtime_material_semantics(config, runtime_semantics)
+    material_hash = material_semantics_sha256(runtime_semantics)
     manifest = {
         "schema_version": 1,
         "generator": generator,
-        "build_hash": compute_build_hash(generator, outputs, sources, proxies),
+        "build_hash": compute_build_hash(generator, outputs, sources, proxies, budgets, material_hash),
         "reproducibility_note": "Blender 5.1.2 blend binaries contain nondeterministic internal state; blend_semantic_sha256 is normative and blend_file_sha256 is informational.",
         "assets": assets,
         "proxies": proxies,
         "sources": sources,
         "outputs": outputs,
+        "global_budgets": budgets,
+        "material_semantics_sha256": material_hash,
+        "non_normative_derivatives": [
+            {"glob": "game/assets/vertical_slice/**/*.import", "reason": "Godot import metadata is regenerated by the pinned editor from normative PNG/GLB outputs"},
+            {"glob": "game/.godot/**", "reason": "Godot local import cache is not a shipped authored output"},
+        ],
     }
     manifest_path = safe_output_path(output_root, Path("tools/art/vertical_slice_asset_manifest.json"))
     manifest_path.parent.mkdir(parents=True, exist_ok=True)
@@ -246,6 +401,8 @@ def validate(project_root: Path, output_root: Path, executable_hash: str) -> Non
     found_roles: set[str] = set()
     actual_sources = []
     configured_assets = {asset["id"]: asset for asset in config["assets"]}
+    measured = {"triangles": 0, "draw_calls": 0, "texture_bytes": 0, "particles": 0, "fragments": 0}
+    runtime_metrics = {}
     if {asset["id"] for asset in manifest["assets"]} != set(configured_assets):
         raise RuntimeError("manifest asset IDs differ from config")
     for asset in manifest["assets"]:
@@ -260,6 +417,24 @@ def validate(project_root: Path, output_root: Path, executable_hash: str) -> Non
         glb_path = safe_output_path(output_root, Path(asset["glb"]))
         if sha256_file(glb_path) != asset["glb_sha256"]:
             raise RuntimeError(f"GLB hash mismatch: {asset['id']}")
+        glb_contract = inspect_glb(glb_path)
+        authored_textures = expected_asset_textures(config, configured_assets[asset["id"]], output_root)
+        if authored_textures != asset.get("authored_textures"):
+            raise RuntimeError(f"authored texture manifest mismatch: {asset['id']}")
+        authored_by_name = {item["image_name"]: item for item in authored_textures}
+        for embedded in glb_contract["images"]:
+            source = authored_by_name.get(embedded["name"])
+            if source is None or embedded["sha256"] != source["sha256"] or embedded["pixel_sha256"] != source["pixel_sha256"]:
+                raise RuntimeError(f"embedded texture differs from authored PNG: {embedded['name']}")
+        if (
+            glb_contract["images"] != asset["texture_images"]
+            or glb_contract["texture_count"] != asset["texture_count"]
+            or glb_contract["uv_primitives"] != asset["uv_layers"]
+            or glb_contract["draw_calls"] != asset["draw_calls"]
+        ):
+            raise RuntimeError(f"GLB texture/UV contract mismatch: {asset['id']}")
+        measured["draw_calls"] += int(glb_contract["draw_calls"])
+        measured["texture_bytes"] += int(glb_contract["texture_bytes"])
         bpy.ops.wm.read_factory_settings(use_empty=True)
         result = bpy.ops.import_scene.gltf(filepath=str(glb_path), import_scene_as_collection=False)
         if "FINISHED" not in result:
@@ -336,6 +511,16 @@ def validate(project_root: Path, output_root: Path, executable_hash: str) -> Non
                 raise RuntimeError("impulse ring aperture differs from authored interaction radius")
         if actual_triangles != asset["triangles"]:
             raise RuntimeError(f"exported asset triangle count mismatch: {asset['id']}")
+        visible_objects = [
+            obj
+            for obj in objects
+            if str(obj.get("ninho_role", "")) == "VIS" and ("lod" not in obj or int(obj["lod"]) == 0)
+        ]
+        runtime_metrics[asset["id"]] = {
+            "triangles": sum(mesh_triangles(obj) for obj in visible_objects),
+            "draw_calls": sum(max(1, len([slot for slot in obj.data.materials if slot])) for obj in visible_objects),
+            "fragments": sum(1 for obj in objects if str(obj.get("ninho_role", "")) == "FRAG"),
+        }
         if sorted(actual_materials) != sorted(asset["materials"]):
             raise RuntimeError(f"exported materials mismatch: {asset['id']}")
         if not math.isclose(actual_collision_volume, float(asset["collision_volume_m3"]), rel_tol=1e-4, abs_tol=1e-6):
@@ -356,6 +541,15 @@ def validate(project_root: Path, output_root: Path, executable_hash: str) -> Non
             or asset["material_budget"] != configured["material_budget"]
         ):
             raise RuntimeError(f"manifest asset contract differs from config: {asset['id']}")
+        expected_provenance = {
+            "author": config["author"],
+            "license": config["license"],
+            "seed": config["seed"],
+            "source": config["source"],
+            "source_config_sha256": expected_generator["config_sha256"],
+        }
+        if any(asset.get(key) != value for key, value in expected_provenance.items()):
+            raise RuntimeError(f"manifest provenance mismatch: {asset['id']}")
     if not expected_roles.issubset(found_roles):
         raise RuntimeError(f"export set lacks roles: {sorted(expected_roles - found_roles)}")
     manifest_source_semantics = [
@@ -364,11 +558,24 @@ def validate(project_root: Path, output_root: Path, executable_hash: str) -> Non
     ]
     if manifest_source_semantics != sorted(actual_sources, key=lambda item: item["path"]):
         raise RuntimeError("manifest source semantics mismatch")
+    runtime_semantics = runtime_material_semantics(output_root)
+    validate_runtime_material_semantics(config, runtime_semantics)
+    material_hash = material_semantics_sha256(runtime_semantics)
+    if manifest.get("material_semantics_sha256") != material_hash:
+        raise RuntimeError("material semantics hash mismatch")
+    runtime_instances = list(config["level_layout"]["runtime_singletons"]) + [item["asset_id"] for item in expected_proxies]
+    measured.update(measure_instantiated_budgets(runtime_metrics, runtime_instances))
+    measured["particles"] = scene_particle_count(project_root)
+    budgets = global_budget_record(measured, config["global_budgets"])
+    if manifest.get("global_budgets") != budgets:
+        raise RuntimeError("global budget measurements mismatch")
     if manifest["build_hash"] != compute_build_hash(
         expected_generator,
         manifest["outputs"],
         actual_sources,
         expected_proxies,
+        budgets,
+        material_hash,
     ):
         raise RuntimeError("manifest build hash mismatch")
     print(f"NINHO_VALIDATED_ASSETS={len(manifest['assets'])}")

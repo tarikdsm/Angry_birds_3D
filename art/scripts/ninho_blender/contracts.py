@@ -7,6 +7,7 @@ from pathlib import Path
 
 ASSET_RE = re.compile(r"^(AST|CHR|ENM|DEV|KIT)_[A-Za-z0-9_]+$")
 FOLDER_RE = re.compile(r"^[a-z][a-z0-9_-]*$")
+GLOBAL_BUDGET_KEYS = ("triangles", "draw_calls", "texture_bytes", "particles", "fragments")
 
 
 def validate_config_contract(config: dict) -> None:
@@ -30,6 +31,25 @@ def validate_config_contract(config: dict) -> None:
         folder = asset.get("folder", "")
         if not isinstance(folder, str) or not FOLDER_RE.fullmatch(folder):
             raise ValueError(f"invalid asset folder: {folder!r}")
+    budgets = config.get("global_budgets", {})
+    if any(not isinstance(budgets.get(key), int) or budgets[key] < 0 for key in GLOBAL_BUDGET_KEYS):
+        raise ValueError("global budgets are missing or invalid")
+
+
+def enforce_global_budgets(measured: dict[str, int], budgets: dict[str, int]) -> None:
+    for key in GLOBAL_BUDGET_KEYS:
+        if int(measured.get(key, 0)) > int(budgets[key]):
+            raise ValueError(f"{key} global budget exceeded: {measured[key]} > {budgets[key]}")
+
+
+def measure_instantiated_budgets(asset_metrics: dict[str, dict[str, int]], instance_asset_ids: list[str]) -> dict:
+    result = {"triangles": 0, "draw_calls": 0, "fragments": 0}
+    for asset_id in instance_asset_ids:
+        if asset_id not in asset_metrics:
+            raise ValueError(f"runtime instance references missing asset metrics: {asset_id}")
+        for key in result:
+            result[key] += int(asset_metrics[asset_id][key])
+    return result
 
 
 def safe_output_path(output_root: Path, relative: Path) -> Path:

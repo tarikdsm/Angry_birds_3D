@@ -71,6 +71,14 @@ Assert-True ($config.seed -is [long] -or $config.seed -is [int]) 'asset config s
 Assert-True ($config.coordinate_system.unit -eq 'meter') 'asset config unit must be meter'
 Assert-True ($config.coordinate_system.up_axis -eq '+Z') 'asset config up axis must be +Z'
 Assert-True ($config.coordinate_system.forward_axis -eq '-Y') 'asset config forward axis must be -Y'
+Assert-True ($config.level_layout.proxies.Count -eq 22) 'canonical level layout must live in the authored config'
+Assert-True ($config.level_layout.runtime_singletons.Count -eq 3) 'runtime singleton layout must be authored'
+Assert-True ($config.materials.Count -ge 11) 'PBR material semantics must live in the authored config'
+Assert-True ($config.global_budgets.triangles -eq 300000) 'global triangle budget must be authored'
+Assert-True ($config.global_budgets.draw_calls -eq 180) 'global draw-call budget must be authored'
+Assert-True ($config.global_budgets.texture_bytes -eq 134217728) 'global texture budget must be 128 MiB'
+Assert-True ($config.global_budgets.particles -eq 30000) 'global particle budget must be authored'
+Assert-True ($config.global_budgets.fragments -eq 120) 'global fragment budget must be authored'
 $configuredIds = @($config.assets | ForEach-Object { $_.id })
 Assert-True ((($configuredIds | Sort-Object) -join '|') -eq (($expectedAssets | Sort-Object) -join '|')) 'configured asset IDs differ from the vertical slice contract'
 Assert-True (($configuredIds | Where-Object { $_ -match '-col($|_)' }).Count -eq 0) 'Godot -col suffix is forbidden'
@@ -127,6 +135,20 @@ try {
         Assert-True ($asset.lods.Count -ge 2) "$($asset.id) must have at least two LODs"
         Assert-True ($asset.triangles -le $asset.triangle_budget) "$($asset.id) exceeds its triangle budget"
         Assert-True ($asset.materials.Count -le $asset.material_budget) "$($asset.id) exceeds its material budget"
+        Assert-True ($asset.author -eq $config.author) "$($asset.id) lacks author provenance"
+        Assert-True ($asset.license -eq $config.license) "$($asset.id) lacks license provenance"
+        Assert-True ($asset.seed -eq $config.seed) "$($asset.id) lacks seed provenance"
+        Assert-True ($asset.source_config_sha256 -eq $firstManifest.generator.config_sha256) "$($asset.id) lacks source hash provenance"
+        Assert-True ($asset.texture_images.Count -ge 1) "$($asset.id) GLB lacks embedded procedural texture"
+        Assert-True ($asset.authored_textures.Count -ge $asset.texture_images.Count) "$($asset.id) lacks normative authored PNG outputs"
+        foreach ($image in $asset.texture_images) {
+            Assert-True ($image.unique_colors -gt 1 -and $image.has_nonblack_rgb) "$($asset.id) embeds a constant or black texture"
+            $sourceImage = @($asset.authored_textures | Where-Object { $_.image_name -eq $image.name })
+            Assert-True ($sourceImage.Count -eq 1) "$($asset.id) embedded image lacks a source PNG"
+            Assert-True ($sourceImage[0].sha256 -eq $image.sha256 -and $sourceImage[0].pixel_sha256 -eq $image.pixel_sha256) "$($asset.id) embedded pixels differ from source PNG"
+            Assert-True (@($firstManifest.outputs | Where-Object { $_.path -eq $sourceImage[0].path -and $_.sha256 -eq $sourceImage[0].sha256 }).Count -eq 1) "$($asset.id) source PNG is not a normative output"
+        }
+        Assert-True ($asset.uv_layers -ge 1) "$($asset.id) GLB lacks UV coordinates"
         Assert-True ($asset.blend_file_sha256 -match '^[0-9a-f]{64}$') "$($asset.id) lacks informational blend file hash"
         Assert-True ($asset.blend_semantic_sha256 -match '^[0-9a-f]{64}$') "$($asset.id) lacks normative blend semantic hash"
         $otherAsset = @($secondManifest.assets | Where-Object { $_.id -eq $asset.id })
@@ -149,6 +171,83 @@ try {
         Assert-NumberArrayEqual $proxy[0].transform.position_m $body.transform.position_m "proxy position mismatch for body $($body.body_id)"
         Assert-NumberArrayEqual $proxy[0].transform.rotation_xyzw $body.transform.rotation_xyzw "proxy rotation mismatch for body $($body.body_id)"
     }
+    Assert-True ($firstManifest.global_budgets.triangles.actual -le 300000) 'global triangles exceed budget'
+    Assert-True ($firstManifest.global_budgets.draw_calls.actual -le 180) 'global draw calls exceed budget'
+    Assert-True ($firstManifest.global_budgets.texture_bytes.actual -gt 0) 'embedded texture bytes were not measured'
+    Assert-True ($firstManifest.global_budgets.texture_bytes.actual -le 134217728) 'global textures exceed budget'
+    Assert-True ($firstManifest.global_budgets.particles.actual -le 30000) 'global particles exceed budget'
+    Assert-True ($firstManifest.global_budgets.fragments.actual -le 120) 'global fragments exceed budget'
+    Assert-True ($firstManifest.material_semantics_sha256 -match '^[0-9a-f]{64}$') 'cross-runtime material semantics hash is missing'
+    Assert-True (@($firstManifest.non_normative_derivatives | Where-Object { $_.glob -match '\.import' }).Count -eq 1) 'Godot .import derivatives must be explicitly non-normative'
+    $distinctMaterialPixels = @($firstManifest.assets.authored_textures | ForEach-Object { $_ } | Group-Object material | ForEach-Object { $_.Group[0].pixel_sha256 } | Sort-Object -Unique)
+    Assert-True ($distinctMaterialPixels.Count -ge 8) 'different procedural material specs produced identical pixels'
+    Assert-True ($firstManifest.global_budgets.triangles.source -match 'multiplied by canonical runtime instances') 'triangle budget is not instance-aware'
+    Assert-True ($firstManifest.global_budgets.draw_calls.source -match 'multiplied by canonical runtime instances') 'draw-call budget is not instance-aware'
+    Assert-True ($firstManifest.global_budgets.fragments.source -match 'multiplied by canonical runtime instances') 'fragment budget is not instance-aware'
+
+    $contentRoot = Join-Path $tempBase 'content-drift'
+    New-Item -ItemType Directory -Force -Path (Join-Path $contentRoot 'art\config'), (Join-Path $contentRoot 'game\data\levels') | Out-Null
+    Copy-Item -LiteralPath (Join-Path $root 'art\config\vertical_slice_assets.json') -Destination (Join-Path $contentRoot 'art\config\vertical_slice_assets.json')
+    $tamperedLevel = Read-Json (Join-Path $root 'game\data\levels\first_orbit.level.json')
+    $tamperedLevel.bodies[0].transform.position_m[0] = [double]$tamperedLevel.bodies[0].transform.position_m[0] + 0.125
+    $tamperedLevelJson = $tamperedLevel | ConvertTo-Json -Depth 100 -Compress
+    [IO.File]::WriteAllText((Join-Path $contentRoot 'game\data\levels\first_orbit.level.json'), $tamperedLevelJson, [Text.UTF8Encoding]::new($false))
+    $previousPreference = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    $layoutOutput = & powershell -NoProfile -ExecutionPolicy Bypass -File $validateScript -OutputRoot $firstRoot -ContentRoot $contentRoot 2>&1
+    $layoutExitCode = $LASTEXITCODE
+    $ErrorActionPreference = $previousPreference
+    Assert-True ($layoutExitCode -ne 0) 'validator accepted a level transform that differs from authored config'
+    Assert-True (($layoutOutput -join "`n") -match 'level layout differs from authored config') 'validator did not diagnose level transform drift'
+
+    Copy-Item -LiteralPath (Join-Path $root 'game\data\levels\first_orbit.level.json') -Destination (Join-Path $contentRoot 'game\data\levels\first_orbit.level.json') -Force
+    New-Item -ItemType Directory -Force -Path (Join-Path $contentRoot 'game\scenes') | Out-Null
+    $particleScene = (Get-Content -Raw -LiteralPath (Join-Path $root 'game\scenes\vertical_slice.tscn')) -replace '(?m)^amount = 24$', 'amount = 30001'
+    [IO.File]::WriteAllText((Join-Path $contentRoot 'game\scenes\vertical_slice.tscn'), $particleScene, [Text.UTF8Encoding]::new($false))
+    $previousPreference = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    $budgetOutput = & powershell -NoProfile -ExecutionPolicy Bypass -File $validateScript -OutputRoot $firstRoot -ContentRoot $contentRoot 2>&1
+    $budgetExitCode = $LASTEXITCODE
+    $ErrorActionPreference = $previousPreference
+    Assert-True ($budgetExitCode -ne 0) 'validator accepted a measured global particle budget excess'
+    Assert-True (($budgetOutput -join "`n") -match 'particles global budget exceeded') 'validator did not diagnose global budget excess'
+
+    $texturePath = Join-Path $firstRoot $firstManifest.assets[0].authored_textures[0].path
+    $manifestPath = Join-Path $firstRoot 'tools\art\vertical_slice_asset_manifest.json'
+    $originalTexture = [IO.File]::ReadAllBytes($texturePath)
+    $originalManifest = [IO.File]::ReadAllText($manifestPath)
+    $tamperedTexture = [byte[]]$originalTexture.Clone()
+    $tamperedTexture[$tamperedTexture.Length - 16] = $tamperedTexture[$tamperedTexture.Length - 16] -bxor 1
+    [IO.File]::WriteAllBytes($texturePath, $tamperedTexture)
+    $tamperedManifest = Read-Json $manifestPath
+    $tamperedSha = (Get-FileHash -Algorithm SHA256 -LiteralPath $texturePath).Hash.ToLowerInvariant()
+    ($tamperedManifest.outputs | Where-Object { $_.path -eq $firstManifest.assets[0].authored_textures[0].path }).sha256 = $tamperedSha
+    [IO.File]::WriteAllText($manifestPath, ($tamperedManifest | ConvertTo-Json -Depth 100 -Compress), [Text.UTF8Encoding]::new($false))
+    $previousPreference = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    $textureOutput = & powershell -NoProfile -ExecutionPolicy Bypass -File $validateScript -OutputRoot $firstRoot 2>&1
+    $textureExitCode = $LASTEXITCODE
+    $ErrorActionPreference = $previousPreference
+    Assert-True ($textureExitCode -ne 0) 'validator accepted source PNG pixel tamper'
+    Assert-True (($textureOutput -join "`n") -match 'authored PNG differs from procedural source') 'validator did not diagnose source PNG pixel tamper'
+    [IO.File]::WriteAllBytes($texturePath, $originalTexture)
+    [IO.File]::WriteAllText($manifestPath, $originalManifest, [Text.UTF8Encoding]::new($false))
+
+    $pinePath = Join-Path $firstRoot 'game\materials\pine.tres'
+    $originalPine = [IO.File]::ReadAllText($pinePath)
+    [IO.File]::WriteAllText($pinePath, ($originalPine -replace '(?m)^roughness = 0\.76$', 'roughness = 0.75'), [Text.UTF8Encoding]::new($false))
+    $materialManifest = Read-Json $manifestPath
+    ($materialManifest.outputs | Where-Object { $_.path -eq 'game/materials/pine.tres' }).sha256 = (Get-FileHash -Algorithm SHA256 -LiteralPath $pinePath).Hash.ToLowerInvariant()
+    [IO.File]::WriteAllText($manifestPath, ($materialManifest | ConvertTo-Json -Depth 100 -Compress), [Text.UTF8Encoding]::new($false))
+    $previousPreference = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    $materialOutput = & powershell -NoProfile -ExecutionPolicy Bypass -File $validateScript -OutputRoot $firstRoot 2>&1
+    $materialExitCode = $LASTEXITCODE
+    $ErrorActionPreference = $previousPreference
+    Assert-True ($materialExitCode -ne 0) 'validator accepted effective Godot material drift'
+    Assert-True (($materialOutput -join "`n") -match 'effective Godot material semantics differ') 'validator did not diagnose effective Godot material drift'
+    [IO.File]::WriteAllText($pinePath, $originalPine, [Text.UTF8Encoding]::new($false))
+    [IO.File]::WriteAllText($manifestPath, $originalManifest, [Text.UTF8Encoding]::new($false))
 
     $driftSource = Join-Path $firstRoot 'art\source\vertical_slice\KIT_Brick_A.blend'
     $driftTarget = Join-Path $firstRoot 'art\source\vertical_slice\KIT_PineBeam_A.blend'
@@ -189,6 +288,13 @@ Assert-True ($registryText -match '"CHR_LaunchBird"\s*:\s*preload\("res://assets
 Assert-True (($sceneText + $registryText) -notmatch '(CollisionShape3D|StaticBody3D|RigidBody3D|CharacterBody3D)') 'Godot physics nodes are forbidden'
 Assert-True ($glassShaderText -match 'depth_prepass_alpha') 'glass shader must use the Godot 4.5 depth prepass render mode'
 Assert-True ($glassShaderText -notmatch 'depth_draw_alpha_prepass') 'obsolete glass shader render mode is forbidden'
+Assert-True ($glassShaderText -match 'texture\(albedo_texture, UV\)') 'glass override must sample its authored texture'
+Assert-True ($glassShaderText -match '(?m)^\s*ALBEDO = texel\.rgb;$') 'glass shader must not reapply authored base color'
+Assert-True ($glassShaderText -match '(?m)^\s*ALPHA = texel\.a;$') 'glass shader must not reapply authored alpha'
+Assert-True ($glassShaderText -notmatch 'glass_tint|authored_alpha|texel\.rgb\s*\*') 'glass shader reapplies baked texture semantics'
+foreach ($uniform in 'authored_roughness','authored_metallic','transmission_weight','coat_weight') {
+    Assert-True ($glassShaderText -match "uniform float $uniform") "glass shader lacks effective $uniform semantics"
+}
 
 $forbidden = @(Get-ChildItem -Path (Join-Path $root 'game\assets\vertical_slice') -Recurse -File -ErrorAction SilentlyContinue | Where-Object { $_.Name -match '-col($|[._-])' })
 Assert-True ($forbidden.Count -eq 0) 'Godot -col files are forbidden'

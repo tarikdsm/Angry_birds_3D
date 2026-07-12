@@ -16,6 +16,26 @@ def reset_scene() -> None:
     scene.render.engine = "BLENDER_EEVEE"
 
 
+def apply_authored_uvs(objects: list[bpy.types.Object]) -> None:
+    """Replace operator UV state with a deterministic cylindrical unwrap."""
+    for obj in objects:
+        if obj.type != "MESH" or not obj.data.materials:
+            continue
+        mesh = obj.data
+        while mesh.uv_layers:
+            mesh.uv_layers.remove(mesh.uv_layers[0])
+        layer = mesh.uv_layers.new(name="UV_Authored", do_init=False)
+        z_values = [float(vertex.co.z) for vertex in mesh.vertices]
+        z_min = min(z_values, default=0.0)
+        z_span = max(max(z_values, default=1.0) - z_min, 1e-9)
+        for loop in mesh.loops:
+            coordinate = mesh.vertices[loop.vertex_index].co
+            u = (math.atan2(float(coordinate.y), float(coordinate.x)) / math.tau + 0.5) % 1.0
+            v = (float(coordinate.z) - z_min) / z_span
+            layer.data[loop.index].uv = (round(u, 7), round(v, 7))
+        layer.active_render = True
+
+
 def _tag(obj: bpy.types.Object, asset_id: str, role: str, lod: int | None = None) -> None:
     obj["ninho_asset_id"] = asset_id
     obj["ninho_role"] = role

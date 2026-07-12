@@ -3,12 +3,20 @@
   "seed": 510201,
   "author": "Ninho Orbital",
   "license": "proprietary-original",
+  "source": "art/config/vertical_slice_assets.json",
   "coordinate_system": {
     "unit": "meter",
     "unit_scale": 1.0,
     "up_axis": "+Z",
     "forward_axis": "-Y",
     "pivot": "CENTER_OF_MASS"
+  },
+  "global_budgets": {
+    "triangles": 300000,
+    "draw_calls": 180,
+    "texture_bytes": 134217728,
+    "particles": 30000,
+    "fragments": 120
   },
   "palette": {
     "aster_soil": [0.105, 0.185, 0.145, 1.0],
@@ -21,6 +29,47 @@
     "glass": [0.20, 0.72, 0.78, 0.56],
     "ink": [0.025, 0.035, 0.048, 1.0],
     "cream": [0.95, 0.82, 0.53, 1.0]
+  },
+  "materials": [
+    {"name": "MAT_AsterSoil", "palette_key": "aster_soil", "roughness": 0.94, "metallic": 0.0, "alpha": 1.0, "emission_strength": 0.0, "texture": {"pattern": "stone", "size_px": 32, "contrast": 0.16}},
+    {"name": "MAT_AsterMoss", "palette_key": "aster_moss", "roughness": 0.86, "metallic": 0.0, "alpha": 1.0, "emission_strength": 0.0, "texture": {"pattern": "moss", "size_px": 32, "contrast": 0.22}},
+    {"name": "MAT_GardenGold", "palette_key": "garden_gold", "roughness": 0.58, "metallic": 0.08, "alpha": 1.0, "emission_strength": 0.0, "texture": {"pattern": "woven", "size_px": 32, "contrast": 0.12}},
+    {"name": "MAT_VirelaTeal", "palette_key": "virela_teal", "roughness": 0.48, "metallic": 0.04, "alpha": 1.0, "emission_strength": 0.0, "texture": {"pattern": "feather", "size_px": 32, "contrast": 0.18}},
+    {"name": "MAT_AnchorPlum", "palette_key": "anchor_plum", "roughness": 0.62, "metallic": 0.02, "alpha": 1.0, "emission_strength": 0.0, "texture": {"pattern": "scale", "size_px": 32, "contrast": 0.14}},
+    {"name": "MAT_Pine", "palette_key": "pine", "roughness": 0.76, "metallic": 0.0, "alpha": 1.0, "emission_strength": 0.0, "texture": {"pattern": "wood", "size_px": 32, "contrast": 0.24}},
+    {"name": "MAT_Brick", "palette_key": "brick", "roughness": 0.82, "metallic": 0.0, "alpha": 1.0, "emission_strength": 0.0, "texture": {"pattern": "brick", "size_px": 32, "contrast": 0.2}},
+    {"name": "MAT_Glass", "palette_key": "glass", "roughness": 0.18, "metallic": 0.0, "alpha": 0.56, "transmission": 0.78, "coat": 0.24, "emission_strength": 0.0, "texture": {"pattern": "glass", "size_px": 32, "contrast": 0.08}},
+    {"name": "MAT_ImpulseTeal", "palette_key": "virela_teal", "roughness": 0.26, "metallic": 0.22, "alpha": 0.82, "emission_strength": 2.0, "texture": {"pattern": "pulse", "size_px": 32, "contrast": 0.28}},
+    {"name": "MAT_Ink", "palette_key": "ink", "roughness": 0.42, "metallic": 0.0, "alpha": 1.0, "emission_strength": 0.0, "texture": {"pattern": "speckle", "size_px": 32, "contrast": 0.08}},
+    {"name": "MAT_Cream", "palette_key": "cream", "roughness": 0.54, "metallic": 0.0, "alpha": 1.0, "emission_strength": 0.0, "texture": {"pattern": "soft", "size_px": 32, "contrast": 0.1}}
+  ],
+  "level_layout": {
+    "level_id": "first_orbit_counterweight_of_aster",
+    "runtime_singletons": ["AST_AsterPlanet", "CHR_Virela", "DEV_ImpulseRing"],
+    "proxies": [
+      {"body_id": 1, "entity_id": 10, "part_id": 1, "asset_id": "AST_Platform", "bounds_m": [6.4, 0.3, 3.6], "transform": {"position_m": [0.0, 10.15, 0.0], "rotation_xyzw": [0.0, 0.0, 0.0, 1.0]}},
+      {"body_id": 2, "entity_id": 100, "part_id": 1, "asset_id": "KIT_PineBeam_A", "bounds_m": [0.5, 2.4, 0.5], "transform": {"position_m": [-1.7, 11.5, -0.9], "rotation_xyzw": [0.0, 0.0, 0.0, 1.0]}},
+      {"body_id": 3, "entity_id": 101, "part_id": 1, "asset_id": "KIT_PineBeam_A", "bounds_m": [0.5, 2.4, 0.5], "transform": {"position_m": [1.7, 11.5, -0.9], "rotation_xyzw": [0.0, 0.0, 0.0, 1.0]}},
+      {"body_id": 4, "entity_id": 102, "part_id": 1, "asset_id": "KIT_PineBeam_A", "bounds_m": [0.5, 2.4, 0.5], "transform": {"position_m": [-1.7, 11.5, 1.8], "rotation_xyzw": [0.0, 0.0, 0.0, 1.0]}},
+      {"body_id": 5, "entity_id": 103, "part_id": 1, "asset_id": "KIT_PineBeam_A", "bounds_m": [0.5, 2.4, 0.5], "transform": {"position_m": [1.7, 11.5, 1.8], "rotation_xyzw": [0.0, 0.0, 0.0, 1.0]}},
+      {"body_id": 6, "entity_id": 104, "part_id": 1, "asset_id": "KIT_PineLintel_A", "bounds_m": [4.1, 0.4, 0.5], "transform": {"position_m": [0.0, 12.45, 0.3], "rotation_xyzw": [0.0, 0.0, 0.0, 1.0]}},
+      {"body_id": 7, "entity_id": 105, "part_id": 1, "asset_id": "KIT_PineLintel_A", "bounds_m": [4.1, 0.4, 0.5], "transform": {"position_m": [0.0, 12.45, 1.2], "rotation_xyzw": [0.0, 0.0, 0.0, 1.0]}},
+      {"body_id": 8, "entity_id": 106, "part_id": 1, "asset_id": "KIT_PineBrace_A", "bounds_m": [0.4, 0.4, 2.3], "transform": {"position_m": [-2.0, 11.2, 0.0], "rotation_xyzw": [0.0, 0.0, 0.0, 1.0]}},
+      {"body_id": 9, "entity_id": 107, "part_id": 1, "asset_id": "KIT_PineBrace_A", "bounds_m": [0.4, 0.4, 2.3], "transform": {"position_m": [2.0, 11.2, 0.0], "rotation_xyzw": [0.0, 0.0, 0.0, 1.0]}},
+      {"body_id": 10, "entity_id": 110, "part_id": 1, "asset_id": "KIT_GlassPanel_A", "bounds_m": [0.04, 0.7, 0.9], "transform": {"position_m": [-2.22, 11.9, -0.65], "rotation_xyzw": [0.0, 0.0, 0.0, 1.0]}},
+      {"body_id": 11, "entity_id": 111, "part_id": 1, "asset_id": "KIT_GlassPanel_A", "bounds_m": [0.04, 0.7, 0.9], "transform": {"position_m": [0.0, 12.67, 0.75], "rotation_xyzw": [0.0, 0.0, 0.7071067811865476, 0.7071067811865476]}},
+      {"body_id": 12, "entity_id": 112, "part_id": 1, "asset_id": "KIT_GlassPanel_A", "bounds_m": [0.04, 0.7, 0.9], "transform": {"position_m": [0.3, 12.67, 0.75], "rotation_xyzw": [0.0, 0.0, 0.7071067811865476, 0.7071067811865476]}},
+      {"body_id": 13, "entity_id": 120, "part_id": 1, "asset_id": "KIT_Brick_A", "bounds_m": [0.3, 0.8, 0.32], "transform": {"position_m": [-0.3, 13.09, 0.43], "rotation_xyzw": [0.0, 0.0, 0.0, 1.0]}},
+      {"body_id": 14, "entity_id": 121, "part_id": 1, "asset_id": "KIT_Brick_A", "bounds_m": [0.3, 0.8, 0.32], "transform": {"position_m": [0.0, 13.09, 0.43], "rotation_xyzw": [0.0, 0.0, 0.0, 1.0]}},
+      {"body_id": 15, "entity_id": 122, "part_id": 1, "asset_id": "KIT_Brick_A", "bounds_m": [0.3, 0.8, 0.32], "transform": {"position_m": [0.3, 13.09, 0.43], "rotation_xyzw": [0.0, 0.0, 0.0, 1.0]}},
+      {"body_id": 16, "entity_id": 123, "part_id": 1, "asset_id": "KIT_Brick_A", "bounds_m": [0.3, 0.8, 0.32], "transform": {"position_m": [-0.3, 13.09, 0.75], "rotation_xyzw": [0.0, 0.0, 0.0, 1.0]}},
+      {"body_id": 17, "entity_id": 124, "part_id": 1, "asset_id": "KIT_Brick_A", "bounds_m": [0.3, 0.8, 0.32], "transform": {"position_m": [0.0, 13.09, 0.75], "rotation_xyzw": [0.0, 0.0, 0.0, 1.0]}},
+      {"body_id": 18, "entity_id": 125, "part_id": 1, "asset_id": "KIT_Brick_A", "bounds_m": [0.3, 0.8, 0.32], "transform": {"position_m": [0.299, 13.09, 0.75], "rotation_xyzw": [0.0, 0.0, 0.0, 1.0]}},
+      {"body_id": 19, "entity_id": 126, "part_id": 1, "asset_id": "KIT_Brick_A", "bounds_m": [0.3, 0.8, 0.32], "transform": {"position_m": [-0.3, 13.09, 1.07], "rotation_xyzw": [0.0, 0.0, 0.0, 1.0]}},
+      {"body_id": 20, "entity_id": 127, "part_id": 1, "asset_id": "KIT_Brick_A", "bounds_m": [0.3, 0.8, 0.32], "transform": {"position_m": [0.0, 13.09, 1.07], "rotation_xyzw": [0.0, 0.0, 0.0, 1.0]}},
+      {"body_id": 21, "entity_id": 128, "part_id": 1, "asset_id": "KIT_Brick_A", "bounds_m": [0.3, 0.8, 0.32], "transform": {"position_m": [0.3, 13.09, 1.07], "rotation_xyzw": [0.0, 0.0, 0.0, 1.0]}},
+      {"body_id": 22, "entity_id": 200, "part_id": 1, "asset_id": "ENM_Anchor", "bounds_m": [1.3, 0.85, 1.0], "transform": {"position_m": [-0.28, 10.95, 0.75], "rotation_xyzw": [0.0, 0.0, 0.7071067811865476, 0.7071067811865476]}}
+    ]
   },
   "assets": [
     {

@@ -1,9 +1,14 @@
 [CmdletBinding()]
-param([string]$OutputRoot)
+param(
+    [string]$OutputRoot,
+    [string]$ContentRoot
+)
 $ErrorActionPreference = 'Stop'
 $projectRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
 if (-not $OutputRoot) { $OutputRoot = $projectRoot }
 $OutputRoot = [IO.Path]::GetFullPath($OutputRoot)
+if (-not $ContentRoot) { $ContentRoot = $projectRoot }
+$ContentRoot = [IO.Path]::GetFullPath($ContentRoot)
 
 $bootstrap = & (Join-Path $projectRoot 'tools\bootstrap.ps1') -CheckOnly -Json | ConvertFrom-Json
 if (-not $bootstrap.ok) { throw ($bootstrap.errors -join '; ') }
@@ -12,7 +17,7 @@ $expectedHash = $bootstrap.blender.executable_sha256
 $script = Join-Path $projectRoot 'art\scripts\build_vertical_slice.py'
 
 & $blender --background --factory-startup --disable-autoexec --python-exit-code 1 --python $script -- `
-    --project-root $projectRoot `
+    --project-root $ContentRoot `
     --output-root $OutputRoot `
     --blender-executable-sha256 $expectedHash `
     --validate

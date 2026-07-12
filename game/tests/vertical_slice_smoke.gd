@@ -11,6 +11,18 @@ var _controller: Node
 var _launch: Node
 
 
+func _find_glass_material(node: Node) -> ShaderMaterial:
+	if node is GeometryInstance3D:
+		var material := (node as GeometryInstance3D).material_override
+		if material is ShaderMaterial:
+			return material as ShaderMaterial
+	for child in node.get_children():
+		var found := _find_glass_material(child)
+		if found != null:
+			return found
+	return null
+
+
 func _initialize() -> void:
 	call_deferred("_run")
 
@@ -53,6 +65,17 @@ func _run() -> void:
 		return
 	if not body_views.missing_asset_ids().is_empty():
 		_fail("authored visuals missing: %s" % body_views.missing_asset_ids())
+		return
+	var glass_material := _find_glass_material(body_views)
+	if glass_material == null:
+		_fail("effective glass override material was not found")
+		return
+	if glass_material.get_shader_parameter("albedo_texture") == null \
+			or not is_equal_approx(float(glass_material.get_shader_parameter("authored_roughness")), 0.18) \
+			or not is_equal_approx(float(glass_material.get_shader_parameter("authored_metallic")), 0.0) \
+			or not is_equal_approx(float(glass_material.get_shader_parameter("transmission_weight")), 0.78) \
+			or not is_equal_approx(float(glass_material.get_shader_parameter("coat_weight")), 0.24):
+		_fail("effective glass material differs from authored PBR semantics")
 		return
 	if not _controller.session_configured:
 		_fail("session did not configure from the shipped catalogs")
