@@ -20,7 +20,8 @@ function Assert-Throws {
 }
 
 $normativeDocuments = @(
-    'docs/superpowers/specs/2026-07-11-vertical-slice-design.md',
+	'docs/gameplay/vertical-slice-content-schema.md',
+	'docs/superpowers/specs/2026-07-11-vertical-slice-design.md',
     'docs/superpowers/specs/2026-07-11-vertical-slice-balance-correction-design.md',
     'docs/superpowers/plans/2026-07-11-vertical-slice-implementation.md',
     'docs/superpowers/plans/2026-07-11-vertical-slice-balance-correction.md'

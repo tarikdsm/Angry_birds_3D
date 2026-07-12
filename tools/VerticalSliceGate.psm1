@@ -143,7 +143,7 @@ function Get-NinhoTestedInputPaths {
         ls-files --cached --others --exclude-standard)
     if ($LASTEXITCODE -ne 0) { throw 'unable to enumerate tested inputs with git' }
     $filtered = @($paths | ForEach-Object { ([string]$_).Replace('\','/') } | Where-Object {
-        $_ -match '^(\.gitattributes$|\.gitignore$|art/|cmake/|game/|native/|tools/|third_party/|CMakeLists\.txt$|CMakePresets\.json$|THIRD_PARTY_NOTICES\.md$|README\.md$|docs/superpowers/specs/2026-07-11-vertical-slice(-balance-correction)?-design\.md$|docs/superpowers/plans/2026-07-11-vertical-slice-(implementation|balance-correction)\.md$)' -and
+		$_ -match '^(\.gitattributes$|\.gitignore$|art/|cmake/|game/|native/|tools/|third_party/|CMakeLists\.txt$|CMakePresets\.json$|THIRD_PARTY_NOTICES\.md$|README\.md$|docs/gameplay/vertical-slice-content-schema\.md$|docs/superpowers/specs/2026-07-11-vertical-slice(-balance-correction)?-design\.md$|docs/superpowers/plans/2026-07-11-vertical-slice-(implementation|balance-correction)\.md$)' -and
         $_ -notmatch '^(docs/gameplay/evidence/|docs/art/goldens/)' -and
         $_ -notmatch '^game/bin/.*\.(dll|pdb|ilk)$' -and
         $_ -notmatch '(^|/)\.godot/'

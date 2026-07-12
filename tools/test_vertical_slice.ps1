@@ -24,6 +24,8 @@ if ($IncludeUpstream) { $foundationArguments.IncludeUpstream = $true }
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
 Invoke-Checked { python (Join-Path $PSScriptRoot 'tests\test_generate_vertical_slice_report.py') } 'vertical slice report tests'
+Invoke-Checked { python (Join-Path $PSScriptRoot 'tests\test_vertical_slice_tooling_contracts.py') } 'vertical slice tooling contract tests'
+& (Join-Path $PSScriptRoot 'tests\vertical-slice-identity-contract-tests.ps1') -Root $root | Out-Null
 & (Join-Path $PSScriptRoot 'tests\vertical-slice-gate-tests.ps1') -Root $root | Out-Null
 Invoke-Checked { python (Join-Path $PSScriptRoot 'tests\test_art_contracts.py') } 'art contract tests'
 & (Join-Path $PSScriptRoot 'tests\art-pipeline-tests.ps1')
