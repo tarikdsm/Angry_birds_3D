@@ -179,8 +179,7 @@ NINHO_SIM_TEST("fracture objective material threshold publishes typed trigger")
     const DomainEvent* broken = find_event(
         *session, DomainEventKind::JointBroken, trigger->joint_id);
     const DomainEvent* fractured = find_event(*session, DomainEventKind::PieceFractured);
-    NINHO_SIM_REQUIRE(broken != nullptr && fractured != nullptr);
-    NINHO_SIM_REQUIRE(broken->cause_event_id == trigger->id);
+    NINHO_SIM_REQUIRE(broken == nullptr && fractured != nullptr);
     NINHO_SIM_REQUIRE(fractured->cause_event_id == trigger->id);
 }
 
@@ -210,8 +209,7 @@ NINHO_SIM_TEST("fracture objective piece chooses nearest incident joint then Joi
     NINHO_SIM_REQUIRE(fractured->cause_event_id == trigger_id);
     NINHO_SIM_REQUIRE(fractured->joint_id == JointId{1});
     const DomainEvent* broken = find_event(*session, DomainEventKind::JointBroken, JointId{1});
-    NINHO_SIM_REQUIRE(broken != nullptr);
-    NINHO_SIM_REQUIRE(broken->cause_event_id == fractured->cause_event_id);
+    NINHO_SIM_REQUIRE(broken == nullptr);
     NINHO_SIM_REQUIRE(session->tick().ok());
     NINHO_SIM_REQUIRE(find_event(*session, DomainEventKind::PieceFractured) == nullptr);
 }

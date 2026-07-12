@@ -216,8 +216,7 @@ void require_resolved_causes(const Trace& trace)
             NINHO_SIM_REQUIRE(cause.kind == DomainEventKind::DamageApplied);
             break;
         case DomainEventKind::JointBroken:
-            NINHO_SIM_REQUIRE(cause.kind == DomainEventKind::JointOverloaded
-                || cause.kind == DomainEventKind::PieceFractureTriggered);
+            NINHO_SIM_REQUIRE(cause.kind == DomainEventKind::JointOverloaded);
             break;
         case DomainEventKind::PieceFractured:
             NINHO_SIM_REQUIRE(cause.kind == DomainEventKind::PieceFractureTriggered);
@@ -392,8 +391,17 @@ NINHO_SIM_TEST("playthrough structural route wins through public commands and ph
     NINHO_SIM_REQUIRE(has_event(trace, DomainEventKind::DamageApplied)
         || has_event(trace, DomainEventKind::EntityNeutralized));
     NINHO_SIM_REQUIRE(has_event(trace, DomainEventKind::EntityNeutralized));
-    NINHO_SIM_REQUIRE(has_exact_causal_pair(
-        trace, DomainEventKind::JointBroken, DomainEventKind::JointOverloaded));
+    const auto joint_breaks = std::ranges::count(
+        trace.events, DomainEventKind::JointBroken, &DomainEvent::kind);
+    const auto overloaded_breaks = std::ranges::count_if(
+        trace.events, [&](const DomainEvent& event) {
+            if (event.kind != DomainEventKind::JointBroken) return false;
+            return std::ranges::count_if(trace.events, [&](const DomainEvent& cause) {
+                return cause.id == event.cause_event_id && cause.id < event.id
+                    && cause.kind == DomainEventKind::JointOverloaded;
+            }) == 1;
+        });
+    NINHO_SIM_REQUIRE(joint_breaks > 0 && overloaded_breaks == joint_breaks);
     NINHO_SIM_REQUIRE(has_exact_causal_pair(trace,
         DomainEventKind::PieceFractured, DomainEventKind::PieceFractureTriggered));
     require_resolved_causes(trace);

@@ -208,15 +208,6 @@ EventId publish_piece_fracture_trigger(Impl& session, const Impl::JointRecord& j
         .material_id = material,
         .fracture_ratio = fracture_ratio,
     });
-    const auto pending = std::ranges::find_if(session.pending_joint_breaks,
-        [&](const Impl::PendingJointBreak& value) {
-            return value.joint_id == joint.snapshot.id;
-        });
-    if (pending == session.pending_joint_breaks.end()) {
-        session.pending_joint_breaks.push_back({joint.snapshot.id, trigger_id});
-    } else {
-        pending->cause_event_id = trigger_id;
-    }
     return trigger_id;
 }
 
