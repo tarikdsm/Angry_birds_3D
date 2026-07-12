@@ -36,12 +36,13 @@ def render(entries: list[tuple[str, Path, bytes, dict]]) -> str:
     lines = [
         "# First Orbit Vertical Slice Certification", "",
         "Generated from the two tracked evidence snapshots. Manual edits are rejected by `--check`.", "",
+        "Normative-Certification-Identity: Tested-Inputs-SHA256 (content-addressed and revalidated against the current tree).", "",
     ]
     for configuration, relative, raw, doc in entries:
         lines += [
             f"Evidence-{configuration}-Path: {relative.as_posix()}",
             f"Evidence-{configuration}-SHA256: {hashlib.sha256(raw).hexdigest()}",
-            f"Certified-Commit-{configuration}: {doc['commit']}",
+            f"Generation-Head-{configuration}: {doc['source_revision']}",
             f"Tested-Inputs-{configuration}-SHA256: {doc['tested_inputs_sha256']}",
             f"Capture-Manifest-{configuration}-SHA256: {doc['capture_manifest']['sha256']}", "",
         ]

@@ -28,6 +28,7 @@ class VerticalSliceReportTests(unittest.TestCase):
                 "schema": "ninho.vertical-slice.evidence.v1",
                 "schema_version": 1,
                 "commit": "0" * 40,
+                "source_revision": "0" * 40,
                 "tested_inputs_sha256": "b" * 64,
                 "capture_manifest": {"sha256": "c" * 64},
                 "reviews_manifest": {"sha256": "d" * 64},
@@ -61,6 +62,9 @@ class VerticalSliceReportTests(unittest.TestCase):
             self.assertIn(b"not a legal opinion", original)
             self.assertIn(b"Release goldens are the canonical certification images", original)
             self.assertIn(b"Tested-Inputs-Release-SHA256", original)
+            self.assertIn(b"Generation-Head-Release", original)
+            self.assertIn(b"Normative-Certification-Identity: Tested-Inputs-SHA256", original)
+            self.assertNotIn(b"Certified-Commit", original)
             full_check = subprocess.run(
                 [sys.executable, str(SCRIPT), "--root", str(root), "--check"],
                 capture_output=True, text=True, encoding="utf-8"
