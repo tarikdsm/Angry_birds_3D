@@ -10,7 +10,7 @@ import struct
 import bmesh
 import bpy
 
-from .textures import inspect_png_rgba
+from .textures import decoded_rgba8_mip_bytes, inspect_png_rgba
 
 
 def sha256_file(path: Path) -> str:
@@ -271,6 +271,7 @@ def inspect_glb(path: Path) -> dict:
         length = int(view["byteLength"])
         payload = binary[start : start + length]
         pixel_contract = inspect_png_rgba(payload)
+        decoded_mip_bytes = decoded_rgba8_mip_bytes(pixel_contract["width"], pixel_contract["height"])
         if pixel_contract["unique_colors"] <= 1 or not pixel_contract["has_nonblack_rgb"]:
             raise RuntimeError(f"embedded authored texture is constant or black: {path}")
         images.append(
@@ -280,6 +281,7 @@ def inspect_glb(path: Path) -> dict:
                 "byte_length": length,
                 "sha256": hashlib.sha256(payload).hexdigest(),
                 **pixel_contract,
+                "decoded_mip_bytes": decoded_mip_bytes,
             }
         )
     mesh_roles: dict[int, set[str]] = {}
@@ -301,13 +303,40 @@ def inspect_glb(path: Path) -> dict:
                     raise RuntimeError(f"visual primitive lacks TEXCOORD_0: {path}")
     if not images or not document.get("textures"):
         raise RuntimeError(f"GLB lacks embedded authored textures: {path}")
+    material_records = []
+    textures = document.get("textures", [])
+    for material in document.get("materials", []):
+        pbr = material.get("pbrMetallicRoughness", {})
+        texture_binding = pbr.get("baseColorTexture", {}).get("index")
+        image_name = None
+        if texture_binding is not None:
+            source_index = textures[int(texture_binding)].get("source")
+            if source_index is not None:
+                image_name = images[int(source_index)]["name"]
+        extensions = material.get("extensions", {})
+        material_records.append(
+            {
+                "name": material.get("name", ""),
+                "base_color_factor": [float(value) for value in pbr.get("baseColorFactor", [1, 1, 1, 1])],
+                "roughness_factor": float(pbr.get("roughnessFactor", 1.0)),
+                "metallic_factor": float(pbr.get("metallicFactor", 1.0)),
+                "base_color_image": image_name,
+                "alpha_mode": material.get("alphaMode", "OPAQUE"),
+                "emissive_factor": [float(value) for value in material.get("emissiveFactor", [0, 0, 0])],
+                "emissive_strength": float(extensions.get("KHR_materials_emissive_strength", {}).get("emissiveStrength", 1.0)),
+                "transmission_factor": float(extensions.get("KHR_materials_transmission", {}).get("transmissionFactor", 0.0)),
+                "coat_factor": float(extensions.get("KHR_materials_clearcoat", {}).get("clearcoatFactor", 0.0)),
+            }
+        )
     return {
         "images": images,
         "texture_count": len(document.get("textures", [])),
         "texture_bytes": sum(item["byte_length"] for item in images),
+        "decoded_texture_bytes": sum(item["decoded_mip_bytes"] for item in images),
         "draw_calls": draw_calls,
         "uv_primitives": uv_primitives,
         "visual_primitives": visual_primitives,
+        "materials": sorted(material_records, key=lambda item: item["name"]),
     }
 
 

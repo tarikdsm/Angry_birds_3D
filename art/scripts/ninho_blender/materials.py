@@ -52,8 +52,6 @@ def _parse_number(text: str, key: str) -> float:
 
 
 def runtime_material_semantics(output_root: Path) -> dict:
-    pine_text = safe_output_path(output_root, Path("game/materials/pine.tres")).read_text(encoding="utf-8")
-    brick_text = safe_output_path(output_root, Path("game/materials/brick.tres")).read_text(encoding="utf-8")
     glass_text = safe_output_path(output_root, Path("game/materials/glass.tres")).read_text(encoding="utf-8")
     shader_text = safe_output_path(output_root, Path("game/shaders/stylized_glass.gdshader")).read_text(encoding="utf-8")
     texture_match = re.search(r'\[ext_resource type="Texture2D" path="([^"]+)" id="2_tex"\]', glass_text)
@@ -62,16 +60,6 @@ def runtime_material_semantics(output_root: Path) -> dict:
     texture_relative = Path("game") / texture_match.group(1).removeprefix("res://")
     texture_contract = inspect_png_rgba(safe_output_path(output_root, texture_relative).read_bytes())
     return {
-        "pine": {
-            "base_color": _parse_color(pine_text, "albedo_color"),
-            "roughness": _parse_number(pine_text, "roughness"),
-            "metallic": _parse_number(pine_text, "metallic"),
-        },
-        "brick": {
-            "base_color": _parse_color(brick_text, "albedo_color"),
-            "roughness": _parse_number(brick_text, "roughness"),
-            "metallic": _parse_number(brick_text, "metallic"),
-        },
         "glass": {
             "texture_path": texture_match.group(1),
             "texture_pixel_sha256": texture_contract["pixel_sha256"],
@@ -96,8 +84,6 @@ def validate_runtime_material_semantics(config: dict, semantics: dict) -> None:
         encode_png_rgba(texture_size, texture_size, generate_material_rgba(config, texture_spec))
     )
     expected = {
-        "pine": {key: specs["MAT_Pine"][key] for key in ("base_color", "roughness", "metallic")},
-        "brick": {key: specs["MAT_Brick"][key] for key in ("base_color", "roughness", "metallic")},
         "glass": {
             "texture_path": f"res://assets/vertical_slice/{expected_glass_asset['folder']}/{expected_glass_asset['id']}_TEX_Glass.png",
             "texture_pixel_sha256": expected_texture["pixel_sha256"],

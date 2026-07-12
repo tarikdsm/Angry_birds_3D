@@ -25,6 +25,7 @@ from ninho_blender.contracts import (
     measure_instantiated_budgets,
     safe_output_path,
     validate_config_contract,
+    validate_texture_bijection,
 )
 from ninho_blender.export import (
     collect_asset_record,
@@ -42,7 +43,7 @@ from ninho_blender.materials import (
     validate_runtime_material_semantics,
     write_runtime_materials,
 )
-from ninho_blender.textures import encode_png_rgba, generate_material_rgba, inspect_png_rgba
+from ninho_blender.textures import decoded_rgba8_mip_bytes, encode_png_rgba, generate_material_rgba, inspect_png_rgba
 
 NAME_RE = re.compile(r"^(VIS|COL|FRAG|SOCKET|RIG)_[A-Za-z0-9_]+$")
 ASSET_RE = re.compile(r"^(AST|CHR|ENM|DEV|KIT)_[A-Za-z0-9_]+$")
@@ -141,19 +142,22 @@ def scene_particle_count(project_root: Path) -> int:
     return sum(int(value) for value in re.findall(r"(?m)^amount = (\d+)$", scene_text))
 
 
-def global_budget_record(measured: dict[str, int], configured: dict[str, int]) -> dict:
+def global_budget_record(measured: dict[str, int], configured: dict[str, int], texture_storage_bytes: int) -> dict:
     sources = {
         "triangles": "VIS LOD0/decor triangles multiplied by canonical runtime instances",
         "draw_calls": "VIS LOD0/decor material draws multiplied by canonical runtime instances",
-        "texture_bytes": "embedded GLB image bufferView bytes",
+        "texture_bytes": "decoded RGBA8 full mip chains for embedded images plus external glass override",
         "particles": "game/scenes/vertical_slice.tscn particle amount properties",
         "fragments": "FRAG definitions multiplied by canonical runtime instances",
     }
     enforce_global_budgets(measured, configured)
-    return {
+    result = {
         key: {"actual": int(measured[key]), "max": int(configured[key]), "source": sources[key]}
         for key in sources
     }
+    result["texture_bytes"]["storage_bytes"] = int(texture_storage_bytes)
+    result["texture_bytes"]["storage_source"] = "compressed embedded payloads plus external glass override PNG"
+    return result
 
 
 def write_asset_textures(config: dict, asset: dict, output_root: Path) -> tuple[dict[str, Path], list[dict]]:
@@ -220,6 +224,44 @@ def asset_runtime_metrics(record: dict) -> dict[str, int]:
         "draw_calls": sum(max(1, len(item["materials"])) for item in visible),
         "fragments": sum(1 for item in record["objects"] if item["role"] == "FRAG"),
     }
+
+
+def validate_glb_material_contract(
+    config: dict, asset_config: dict, glb_materials: list[dict], authored_textures: list[dict]
+) -> None:
+    specs = {item["name"]: item for item in config["materials"]}
+    texture_names = {item["material"]: item["image_name"] for item in authored_textures}
+    actual = {item["name"]: item for item in glb_materials}
+    if set(actual) != set(asset_config["materials"]):
+        raise RuntimeError(f"effective GLB materials differ from asset contract: {asset_config['id']}")
+    for material_name in sorted(actual):
+        material = actual[material_name]
+        spec = specs[material_name]
+        if material["base_color_image"] != texture_names[material_name]:
+            raise RuntimeError(f"effective GLB texture binding mismatch: {material_name}")
+        if any(not math.isclose(value, 1.0, abs_tol=1e-6) for value in material["base_color_factor"]):
+            raise RuntimeError(f"effective GLB base color factor must preserve baked pixels: {material_name}")
+        numeric_pairs = (
+            (material["roughness_factor"], spec["roughness"]),
+            (material["metallic_factor"], spec["metallic"]),
+            (material["transmission_factor"], spec.get("transmission", 0.0)),
+            (material["coat_factor"], spec.get("coat", 0.0)),
+        )
+        if any(not math.isclose(float(actual_value), float(expected), rel_tol=1e-5, abs_tol=1e-6) for actual_value, expected in numeric_pairs):
+            raise RuntimeError(f"effective GLB PBR factors differ from config: {material_name}")
+        expected_alpha_mode = "BLEND" if float(spec["alpha"]) < 1.0 else "OPAQUE"
+        if material["alpha_mode"] != expected_alpha_mode:
+            raise RuntimeError(f"effective GLB alpha mode differs from config: {material_name}")
+        expected_emission = [
+            float(value) * float(spec.get("emission_strength", 0.0))
+            for value in config["palette"][spec["palette_key"]][:3]
+        ]
+        actual_emission = [
+            float(value) * float(material["emissive_strength"])
+            for value in material["emissive_factor"]
+        ]
+        if any(not math.isclose(a, e, rel_tol=1e-5, abs_tol=1e-6) for a, e in zip(actual_emission, expected_emission)):
+            raise RuntimeError(f"effective GLB emission differs from config: {material_name}")
 def build(project_root: Path, output_root: Path, executable_hash: str) -> None:
     config_path = project_root / "art/config/vertical_slice_assets.json"
     config = read_json(config_path)
@@ -229,6 +271,7 @@ def build(project_root: Path, output_root: Path, executable_hash: str) -> None:
     outputs = []
     sources = []
     measured = {"triangles": 0, "draw_calls": 0, "texture_bytes": 0, "particles": 0, "fragments": 0}
+    texture_storage_bytes = 0
     config_sha256 = sha256_file(config_path)
     for asset in config["assets"]:
         reset_scene()
@@ -245,10 +288,12 @@ def build(project_root: Path, output_root: Path, executable_hash: str) -> None:
         save_source_and_glb(source_path, glb_path)
         glb_contract = inspect_glb(glb_path)
         authored_by_name = {item["image_name"]: item for item in authored_textures}
+        validate_texture_bijection(set(authored_by_name), {item["name"] for item in glb_contract["images"]})
         for embedded in glb_contract["images"]:
             source = authored_by_name.get(embedded["name"])
             if source is None or embedded["sha256"] != source["sha256"] or embedded["pixel_sha256"] != source["pixel_sha256"]:
                 raise RuntimeError(f"embedded texture differs from authored PNG: {embedded['name']}")
+        validate_glb_material_contract(config, asset, glb_contract["materials"], authored_textures)
         record["source_blend"] = source_relative.as_posix()
         record["glb"] = glb_relative.as_posix()
         record["blend_file_sha256"] = sha256_file(source_path)
@@ -264,7 +309,9 @@ def build(project_root: Path, output_root: Path, executable_hash: str) -> None:
         record["texture_count"] = glb_contract["texture_count"]
         record["uv_layers"] = glb_contract["uv_primitives"]
         record["draw_calls"] = glb_contract["draw_calls"]
-        measured["texture_bytes"] += int(glb_contract["texture_bytes"])
+        record["glb_materials"] = glb_contract["materials"]
+        measured["texture_bytes"] += int(glb_contract["decoded_texture_bytes"])
+        texture_storage_bytes += int(glb_contract["texture_bytes"])
         assets.append(record)
         sources.append(
             {
@@ -301,7 +348,11 @@ def build(project_root: Path, output_root: Path, executable_hash: str) -> None:
     )
     measured.update(instantiated)
     measured["particles"] = scene_particle_count(project_root)
-    budgets = global_budget_record(measured, config["global_budgets"])
+    glass_asset_record = next(asset for asset in assets if asset["id"] == "KIT_GlassPanel_A")
+    glass_texture = next(item for item in glass_asset_record["authored_textures"] if item["material"] == "MAT_Glass")
+    measured["texture_bytes"] += decoded_rgba8_mip_bytes(int(glass_texture["width"]), int(glass_texture["height"]))
+    texture_storage_bytes += int(safe_output_path(output_root, Path(glass_texture["path"])).stat().st_size)
+    budgets = global_budget_record(measured, config["global_budgets"], texture_storage_bytes)
     runtime_semantics = runtime_material_semantics(output_root)
     validate_runtime_material_semantics(config, runtime_semantics)
     material_hash = material_semantics_sha256(runtime_semantics)
@@ -316,6 +367,10 @@ def build(project_root: Path, output_root: Path, executable_hash: str) -> None:
         "outputs": outputs,
         "global_budgets": budgets,
         "material_semantics_sha256": material_hash,
+        "auxiliary_material_outputs": [
+            {"path": "game/materials/pine.tres", "role": "reusable editor preview; runtime PBR authority is MAT_Pine inside GLB"},
+            {"path": "game/materials/brick.tres", "role": "reusable editor preview; runtime PBR authority is MAT_Brick inside GLB"},
+        ],
         "non_normative_derivatives": [
             {"glob": "game/assets/vertical_slice/**/*.import", "reason": "Godot import metadata is regenerated by the pinned editor from normative PNG/GLB outputs"},
             {"glob": "game/.godot/**", "reason": "Godot local import cache is not a shipped authored output"},
@@ -402,6 +457,7 @@ def validate(project_root: Path, output_root: Path, executable_hash: str) -> Non
     actual_sources = []
     configured_assets = {asset["id"]: asset for asset in config["assets"]}
     measured = {"triangles": 0, "draw_calls": 0, "texture_bytes": 0, "particles": 0, "fragments": 0}
+    texture_storage_bytes = 0
     runtime_metrics = {}
     if {asset["id"] for asset in manifest["assets"]} != set(configured_assets):
         raise RuntimeError("manifest asset IDs differ from config")
@@ -422,6 +478,7 @@ def validate(project_root: Path, output_root: Path, executable_hash: str) -> Non
         if authored_textures != asset.get("authored_textures"):
             raise RuntimeError(f"authored texture manifest mismatch: {asset['id']}")
         authored_by_name = {item["image_name"]: item for item in authored_textures}
+        validate_texture_bijection(set(authored_by_name), {item["name"] for item in glb_contract["images"]})
         for embedded in glb_contract["images"]:
             source = authored_by_name.get(embedded["name"])
             if source is None or embedded["sha256"] != source["sha256"] or embedded["pixel_sha256"] != source["pixel_sha256"]:
@@ -431,10 +488,13 @@ def validate(project_root: Path, output_root: Path, executable_hash: str) -> Non
             or glb_contract["texture_count"] != asset["texture_count"]
             or glb_contract["uv_primitives"] != asset["uv_layers"]
             or glb_contract["draw_calls"] != asset["draw_calls"]
+            or glb_contract["materials"] != asset["glb_materials"]
         ):
             raise RuntimeError(f"GLB texture/UV contract mismatch: {asset['id']}")
+        validate_glb_material_contract(config, configured_assets[asset["id"]], glb_contract["materials"], authored_textures)
         measured["draw_calls"] += int(glb_contract["draw_calls"])
-        measured["texture_bytes"] += int(glb_contract["texture_bytes"])
+        measured["texture_bytes"] += int(glb_contract["decoded_texture_bytes"])
+        texture_storage_bytes += int(glb_contract["texture_bytes"])
         bpy.ops.wm.read_factory_settings(use_empty=True)
         result = bpy.ops.import_scene.gltf(filepath=str(glb_path), import_scene_as_collection=False)
         if "FINISHED" not in result:
@@ -566,7 +626,11 @@ def validate(project_root: Path, output_root: Path, executable_hash: str) -> Non
     runtime_instances = list(config["level_layout"]["runtime_singletons"]) + [item["asset_id"] for item in expected_proxies]
     measured.update(measure_instantiated_budgets(runtime_metrics, runtime_instances))
     measured["particles"] = scene_particle_count(project_root)
-    budgets = global_budget_record(measured, config["global_budgets"])
+    glass_asset_record = next(asset for asset in manifest["assets"] if asset["id"] == "KIT_GlassPanel_A")
+    glass_texture = next(item for item in glass_asset_record["authored_textures"] if item["material"] == "MAT_Glass")
+    measured["texture_bytes"] += decoded_rgba8_mip_bytes(int(glass_texture["width"]), int(glass_texture["height"]))
+    texture_storage_bytes += int(safe_output_path(output_root, Path(glass_texture["path"])).stat().st_size)
+    budgets = global_budget_record(measured, config["global_budgets"], texture_storage_bytes)
     if manifest.get("global_budgets") != budgets:
         raise RuntimeError("global budget measurements mismatch")
     if manifest["build_hash"] != compute_build_hash(

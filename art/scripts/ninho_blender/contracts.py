@@ -52,6 +52,13 @@ def measure_instantiated_budgets(asset_metrics: dict[str, dict[str, int]], insta
     return result
 
 
+def validate_texture_bijection(authored_names: set[str], embedded_names: set[str]) -> None:
+    if authored_names != embedded_names:
+        orphaned = sorted(authored_names - embedded_names)
+        missing = sorted(embedded_names - authored_names)
+        raise ValueError(f"texture bijection mismatch: orphaned={orphaned}, missing={missing}")
+
+
 def safe_output_path(output_root: Path, relative: Path) -> Path:
     root = output_root.resolve()
     candidate = (root / relative).resolve(strict=False)

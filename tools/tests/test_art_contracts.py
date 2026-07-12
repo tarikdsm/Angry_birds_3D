@@ -14,9 +14,17 @@ from ninho_blender.contracts import (
     enforce_global_budgets,
     measure_instantiated_budgets,
     safe_output_path,
+    validate_texture_bijection,
     validate_config_contract,
 )
-from ninho_blender.textures import encode_png_rgba, generate_material_rgba, inspect_png_rgba
+from ninho_blender.textures import (
+    decoded_rgba8_mip_bytes,
+    encode_png_rgba,
+    encode_solid_png_rgba,
+    generate_material_rgba,
+    inspect_png_dimensions,
+    inspect_png_rgba,
+)
 
 
 class ArtContractTests(unittest.TestCase):
@@ -71,6 +79,25 @@ class ArtContractTests(unittest.TestCase):
             self.assertTrue(contract["has_nonblack_rgb"])
             contracts.append(contract)
         self.assertNotEqual(contracts[0]["pixel_sha256"], contracts[1]["pixel_sha256"])
+
+    def test_texture_contract_rejects_orphan_and_missing_bindings(self) -> None:
+        validate_texture_bijection({"TEX_A", "TEX_B"}, {"TEX_A", "TEX_B"})
+        with self.assertRaisesRegex(ValueError, "texture bijection"):
+            validate_texture_bijection({"TEX_A", "TEX_B"}, {"TEX_A"})
+        with self.assertRaisesRegex(ValueError, "texture bijection"):
+            validate_texture_bijection({"TEX_A"}, {"TEX_A", "TEX_B"})
+
+    def test_decoded_mip_budget_rejects_large_highly_compressible_png(self) -> None:
+        png = encode_solid_png_rgba(8192, 8192, (0, 0, 0, 255))
+        width, height = inspect_png_dimensions(png)
+        self.assertLess(len(png), 1_000_000)
+        decoded = decoded_rgba8_mip_bytes(width, height)
+        self.assertGreater(decoded, 128 * 1024 * 1024)
+        with self.assertRaisesRegex(ValueError, "texture_bytes global budget exceeded"):
+            enforce_global_budgets(
+                {"triangles": 0, "draw_calls": 0, "texture_bytes": decoded, "particles": 0, "fragments": 0},
+                {"triangles": 1, "draw_calls": 1, "texture_bytes": 128 * 1024 * 1024, "particles": 1, "fragments": 1},
+            )
 
     def test_safe_output_path_stays_below_root(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

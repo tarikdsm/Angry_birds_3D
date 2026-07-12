@@ -64,11 +64,43 @@ def encode_png_rgba(width: int, height: int, rgba: bytes) -> bytes:
     return PNG_SIGNATURE + _chunk(b"IHDR", header) + _chunk(b"IDAT", zlib.compress(scanlines, 9)) + _chunk(b"IEND", b"")
 
 
+def encode_solid_png_rgba(width: int, height: int, color: tuple[int, int, int, int]) -> bytes:
+    compressor = zlib.compressobj(9)
+    compressed = bytearray()
+    row = b"\0" + bytes(color) * width
+    for _ in range(height):
+        compressed.extend(compressor.compress(row))
+    compressed.extend(compressor.flush())
+    header = struct.pack(">IIBBBBB", width, height, 8, 6, 0, 0, 0)
+    return PNG_SIGNATURE + _chunk(b"IHDR", header) + _chunk(b"IDAT", bytes(compressed)) + _chunk(b"IEND", b"")
+
+
+def inspect_png_dimensions(payload: bytes) -> tuple[int, int]:
+    if not payload.startswith(PNG_SIGNATURE) or payload[12:16] != b"IHDR":
+        raise ValueError("PNG IHDR is missing")
+    width, height, depth, color_type, compression, filtering, interlace = struct.unpack(
+        ">IIBBBBB", payload[16:29]
+    )
+    if (depth, color_type, compression, filtering, interlace) != (8, 6, 0, 0, 0):
+        raise ValueError("PNG must be non-interlaced 8-bit RGBA")
+    return width, height
+
+
+def decoded_rgba8_mip_bytes(width: int, height: int) -> int:
+    total = 0
+    while True:
+        total += width * height * 4
+        if width == 1 and height == 1:
+            return total
+        width = max(1, width // 2)
+        height = max(1, height // 2)
+
+
 def inspect_png_rgba(payload: bytes) -> dict:
     if not payload.startswith(PNG_SIGNATURE):
         raise ValueError("embedded image is not PNG")
     offset = len(PNG_SIGNATURE)
-    width = height = 0
+    width, height = inspect_png_dimensions(payload)
     compressed = bytearray()
     while offset < len(payload):
         length = struct.unpack_from(">I", payload, offset)[0]

@@ -140,13 +140,25 @@ try {
         Assert-True ($asset.seed -eq $config.seed) "$($asset.id) lacks seed provenance"
         Assert-True ($asset.source_config_sha256 -eq $firstManifest.generator.config_sha256) "$($asset.id) lacks source hash provenance"
         Assert-True ($asset.texture_images.Count -ge 1) "$($asset.id) GLB lacks embedded procedural texture"
-        Assert-True ($asset.authored_textures.Count -ge $asset.texture_images.Count) "$($asset.id) lacks normative authored PNG outputs"
+        Assert-True ($asset.authored_textures.Count -eq $asset.texture_images.Count) "$($asset.id) PNG-to-GLB image contract is not bijective"
+        Assert-True ($asset.glb_materials.Count -eq $asset.materials.Count) "$($asset.id) effective GLB PBR material count differs"
         foreach ($image in $asset.texture_images) {
             Assert-True ($image.unique_colors -gt 1 -and $image.has_nonblack_rgb) "$($asset.id) embeds a constant or black texture"
             $sourceImage = @($asset.authored_textures | Where-Object { $_.image_name -eq $image.name })
             Assert-True ($sourceImage.Count -eq 1) "$($asset.id) embedded image lacks a source PNG"
             Assert-True ($sourceImage[0].sha256 -eq $image.sha256 -and $sourceImage[0].pixel_sha256 -eq $image.pixel_sha256) "$($asset.id) embedded pixels differ from source PNG"
             Assert-True (@($firstManifest.outputs | Where-Object { $_.path -eq $sourceImage[0].path -and $_.sha256 -eq $sourceImage[0].sha256 }).Count -eq 1) "$($asset.id) source PNG is not a normative output"
+        }
+        foreach ($glbMaterial in $asset.glb_materials) {
+            $configuredMaterial = @($config.materials | Where-Object { $_.name -eq $glbMaterial.name })
+            Assert-True ($configuredMaterial.Count -eq 1) "$($asset.id) GLB material lacks config semantics"
+            Assert-True (-not [string]::IsNullOrWhiteSpace([string]$glbMaterial.base_color_image)) "$($asset.id) GLB material lacks base color texture binding"
+            Assert-True ([Math]::Abs([double]$glbMaterial.roughness_factor - [double]$configuredMaterial[0].roughness) -le 1e-5) "$($asset.id) GLB roughness drift"
+            Assert-True ([Math]::Abs([double]$glbMaterial.metallic_factor - [double]$configuredMaterial[0].metallic) -le 1e-5) "$($asset.id) GLB metallic drift"
+            $expectedTransmission = if ($null -eq $configuredMaterial[0].transmission) { 0.0 } else { [double]$configuredMaterial[0].transmission }
+            $expectedCoat = if ($null -eq $configuredMaterial[0].coat) { 0.0 } else { [double]$configuredMaterial[0].coat }
+            Assert-True ([Math]::Abs([double]$glbMaterial.transmission_factor - $expectedTransmission) -le 1e-5) "$($asset.id) GLB transmission drift"
+            Assert-True ([Math]::Abs([double]$glbMaterial.coat_factor - $expectedCoat) -le 1e-5) "$($asset.id) GLB coat drift"
         }
         Assert-True ($asset.uv_layers -ge 1) "$($asset.id) GLB lacks UV coordinates"
         Assert-True ($asset.blend_file_sha256 -match '^[0-9a-f]{64}$') "$($asset.id) lacks informational blend file hash"
@@ -175,6 +187,8 @@ try {
     Assert-True ($firstManifest.global_budgets.draw_calls.actual -le 180) 'global draw calls exceed budget'
     Assert-True ($firstManifest.global_budgets.texture_bytes.actual -gt 0) 'embedded texture bytes were not measured'
     Assert-True ($firstManifest.global_budgets.texture_bytes.actual -le 134217728) 'global textures exceed budget'
+    Assert-True ($firstManifest.global_budgets.texture_bytes.source -match 'decoded RGBA8 full mip chains') 'texture budget is not decoded runtime memory'
+    Assert-True ($firstManifest.global_budgets.texture_bytes.storage_bytes -gt 0) 'compressed texture storage diagnostic is missing'
     Assert-True ($firstManifest.global_budgets.particles.actual -le 30000) 'global particles exceed budget'
     Assert-True ($firstManifest.global_budgets.fragments.actual -le 120) 'global fragments exceed budget'
     Assert-True ($firstManifest.material_semantics_sha256 -match '^[0-9a-f]{64}$') 'cross-runtime material semantics hash is missing'
@@ -233,11 +247,11 @@ try {
     [IO.File]::WriteAllBytes($texturePath, $originalTexture)
     [IO.File]::WriteAllText($manifestPath, $originalManifest, [Text.UTF8Encoding]::new($false))
 
-    $pinePath = Join-Path $firstRoot 'game\materials\pine.tres'
-    $originalPine = [IO.File]::ReadAllText($pinePath)
-    [IO.File]::WriteAllText($pinePath, ($originalPine -replace '(?m)^roughness = 0\.76$', 'roughness = 0.75'), [Text.UTF8Encoding]::new($false))
+    $materialPath = Join-Path $firstRoot 'game\materials\glass.tres'
+    $originalMaterial = [IO.File]::ReadAllText($materialPath)
+    [IO.File]::WriteAllText($materialPath, ($originalMaterial -replace '(?m)^shader_parameter/coat_weight = 0\.24$', 'shader_parameter/coat_weight = 0.25'), [Text.UTF8Encoding]::new($false))
     $materialManifest = Read-Json $manifestPath
-    ($materialManifest.outputs | Where-Object { $_.path -eq 'game/materials/pine.tres' }).sha256 = (Get-FileHash -Algorithm SHA256 -LiteralPath $pinePath).Hash.ToLowerInvariant()
+    ($materialManifest.outputs | Where-Object { $_.path -eq 'game/materials/glass.tres' }).sha256 = (Get-FileHash -Algorithm SHA256 -LiteralPath $materialPath).Hash.ToLowerInvariant()
     [IO.File]::WriteAllText($manifestPath, ($materialManifest | ConvertTo-Json -Depth 100 -Compress), [Text.UTF8Encoding]::new($false))
     $previousPreference = $ErrorActionPreference
     $ErrorActionPreference = 'Continue'
@@ -246,7 +260,7 @@ try {
     $ErrorActionPreference = $previousPreference
     Assert-True ($materialExitCode -ne 0) 'validator accepted effective Godot material drift'
     Assert-True (($materialOutput -join "`n") -match 'effective Godot material semantics differ') 'validator did not diagnose effective Godot material drift'
-    [IO.File]::WriteAllText($pinePath, $originalPine, [Text.UTF8Encoding]::new($false))
+    [IO.File]::WriteAllText($materialPath, $originalMaterial, [Text.UTF8Encoding]::new($false))
     [IO.File]::WriteAllText($manifestPath, $originalManifest, [Text.UTF8Encoding]::new($false))
 
     $driftSource = Join-Path $firstRoot 'art\source\vertical_slice\KIT_Brick_A.blend'
