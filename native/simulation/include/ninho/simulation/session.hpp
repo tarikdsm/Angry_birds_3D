@@ -47,6 +47,23 @@ struct SessionState {
     std::optional<ninho::physics::Vec3> last_impact_m;
 };
 
+struct ObjectiveTargetStatus {
+    EntityId entity_id{};
+    double current_integrity{};
+    double maximum_integrity{};
+    bool neutralized{};
+
+    bool operator==(const ObjectiveTargetStatus&) const = default;
+};
+
+enum class AbilityReadiness : std::uint8_t {
+    Unavailable,
+    Arming,
+    Armed,
+    Active,
+    Spent,
+};
+
 struct SessionStatus {
     ContentError error{};
 
@@ -138,6 +155,8 @@ public:
     [[nodiscard]] const SessionState& state() const noexcept;
     [[nodiscard]] std::uint32_t birds_remaining() const noexcept;
     [[nodiscard]] bool objectives_complete() const noexcept;
+    [[nodiscard]] std::vector<ObjectiveTargetStatus> objective_target_statuses() const;
+    [[nodiscard]] AbilityReadiness ability_readiness() const noexcept;
     [[nodiscard]] ninho::physics::WorldMetrics physics_metrics() const noexcept;
     [[nodiscard]] const std::vector<std::uint8_t>& canonical_state_v1() const noexcept;
     [[nodiscard]] std::uint64_t canonical_hash_v1() const noexcept;

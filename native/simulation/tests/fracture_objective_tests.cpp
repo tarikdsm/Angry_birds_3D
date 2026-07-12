@@ -214,6 +214,54 @@ NINHO_SIM_TEST("fracture objective piece chooses nearest incident joint then Joi
     NINHO_SIM_REQUIRE(find_event(*session, DomainEventKind::PieceFractured) == nullptr);
 }
 
+NINHO_SIM_TEST("fracture objective keeps active joint endpoints represented beyond six radii")
+{
+    auto session = create_session();
+    constexpr JointId joint_id{11};
+    const auto joint = std::ranges::find(
+        session->structural_joints(), joint_id, &StructuralJointSnapshot::id);
+    NINHO_SIM_REQUIRE(joint != session->structural_joints().end() && joint->active);
+    const auto endpoint = std::ranges::find_if(session->snapshots(), [&](const auto& value) {
+        return value.entity_id == joint->a.entity_id && value.part_id == joint->a.part_id;
+    });
+    NINHO_SIM_REQUIRE(endpoint != session->snapshots().end());
+    const JointEndpoint moved_identity{endpoint->entity_id, endpoint->part_id};
+    const auto outward = ninho::physics::normalized_or_zero(endpoint->transform.position);
+    NINHO_SIM_REQUIRE(detail::SessionTestFacade::impulse_entity(
+        *session, endpoint->entity_id, outward * 200000.0f));
+
+    bool crossed_six_r{};
+    for (int tick = 0; tick < 120 && !crossed_six_r; ++tick) {
+        for (const StructuralJointSnapshot& current : session->structural_joints()) {
+            if (current.active) {
+                detail::SessionTestFacade::override_joint_ratio_after_solver(
+                    *session, current.id, 0.0);
+            }
+        }
+        NINHO_SIM_REQUIRE(session->tick().ok());
+        const auto moved = std::ranges::find_if(session->snapshots(), [&](const auto& value) {
+            return value.entity_id == moved_identity.entity_id
+                && value.part_id == moved_identity.part_id;
+        });
+        crossed_six_r = moved != session->snapshots().end()
+            && ninho::physics::length(moved->transform.position) > 60.0f;
+    }
+    NINHO_SIM_REQUIRE(crossed_six_r);
+
+    NINHO_SIM_REQUIRE(session->tick().ok());
+    const auto current_joint = std::ranges::find(
+        session->structural_joints(), joint_id, &StructuralJointSnapshot::id);
+    NINHO_SIM_REQUIRE(current_joint != session->structural_joints().end());
+    NINHO_SIM_REQUIRE(current_joint->active);
+    for (const JointEndpoint identity : {current_joint->a, current_joint->b}) {
+        NINHO_SIM_REQUIRE(std::ranges::any_of(
+            session->snapshots(), [&](const EntitySnapshot& snapshot) {
+                return snapshot.entity_id == identity.entity_id
+                    && snapshot.part_id == identity.part_id;
+            }));
+    }
+}
+
 NINHO_SIM_TEST("fracture objective completion is monotonic and result only follows Evaluation")
 {
     auto session = create_session();

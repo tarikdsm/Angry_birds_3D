@@ -129,6 +129,64 @@ bool SimulationSession::objectives_complete() const noexcept
     return impl_->objective_complete;
 }
 
+std::vector<ObjectiveTargetStatus> SimulationSession::objective_target_statuses() const
+{
+    std::vector<ObjectiveTargetStatus> result;
+    result.reserve(impl_->bundle.level.objectives.size());
+    for (const ObjectiveDefinition& objective : impl_->bundle.level.objectives) {
+        if (objective.kind != ObjectiveKind::NeutralizeEntity) {
+            continue;
+        }
+        const auto body = std::ranges::find_if(impl_->body_records, [&](const auto& record) {
+            return record.entity_id == objective.target_entity_id
+                && record.enemy_archetype_id.has_value();
+        });
+        if (body == impl_->body_records.end()) {
+            continue;
+        }
+        const auto enemy = std::ranges::find(impl_->bundle.archetypes.enemies,
+            *body->enemy_archetype_id, &EnemyArchetype::id);
+        if (enemy == impl_->bundle.archetypes.enemies.end()) {
+            continue;
+        }
+        const auto damage = impl_->damage_system.state(body->entity_id, body->part_id);
+        const bool neutralized = body->neutralized
+            || (damage.has_value() && damage->neutralized);
+        result.push_back({
+            .entity_id = objective.target_entity_id,
+            .current_integrity = neutralized ? 0.0
+                : damage.has_value() ? damage->remaining_integrity : enemy->integrity,
+            .maximum_integrity = enemy->integrity,
+            .neutralized = neutralized,
+        });
+    }
+    std::ranges::sort(result, {}, &ObjectiveTargetStatus::entity_id);
+    return result;
+}
+
+AbilityReadiness SimulationSession::ability_readiness() const noexcept
+{
+    if (!impl_->projectile) {
+        return AbilityReadiness::Unavailable;
+    }
+    if (impl_->projectile->ability_active) {
+        return AbilityReadiness::Active;
+    }
+    if (impl_->projectile->ability_requested || impl_->projectile->finished
+        || impl_->session_state.phase != SessionPhase::FlightAbility) {
+        return AbilityReadiness::Spent;
+    }
+    const AbilityArchetype* ability = impl_->ability_archetype(
+        impl_->projectile->ability_id);
+    if (ability == nullptr) {
+        return AbilityReadiness::Unavailable;
+    }
+    const auto armed_tick = impl_->projectile->launch_tick.value()
+        + static_cast<std::uint64_t>(ability->arm_ticks);
+    return impl_->session_state.tick.value() >= armed_tick
+        ? AbilityReadiness::Armed : AbilityReadiness::Arming;
+}
+
 ninho::physics::WorldMetrics SimulationSession::physics_metrics() const noexcept
 {
     return impl_->physics.metrics();

@@ -714,4 +714,36 @@ NINHO_SIM_TEST("session restart reproduces canonical state and allocator usage t
     }
 }
 
+NINHO_SIM_TEST("session exposes authoritative objective integrity and ability readiness")
+{
+    auto session = create_real_session();
+    const auto initial_targets = session->objective_target_statuses();
+    NINHO_SIM_REQUIRE(initial_targets.size() == 1U);
+    NINHO_SIM_REQUIRE(initial_targets.front().entity_id == EntityId{200});
+    NINHO_SIM_REQUIRE(initial_targets.front().current_integrity == 100.0);
+    NINHO_SIM_REQUIRE(initial_targets.front().maximum_integrity == 100.0);
+    NINHO_SIM_REQUIRE(!initial_targets.front().neutralized);
+    NINHO_SIM_REQUIRE(session->ability_readiness() == AbilityReadiness::Unavailable);
+
+    NINHO_SIM_REQUIRE(session->enqueue(BeginAimCommand{}).ok());
+    NINHO_SIM_REQUIRE(session->tick().ok());
+    NINHO_SIM_REQUIRE(session->enqueue(LaunchCommand{}).ok());
+    NINHO_SIM_REQUIRE(session->tick().ok());
+    const TickIndex launched = detail::SessionTestFacade::projectile_launch_tick(*session);
+    NINHO_SIM_REQUIRE(session->ability_readiness() == AbilityReadiness::Arming);
+    while (session->state().tick < TickIndex{launched.value() + 9U}) {
+        NINHO_SIM_REQUIRE(session->tick().ok());
+    }
+    NINHO_SIM_REQUIRE(session->ability_readiness() == AbilityReadiness::Armed);
+
+    NINHO_SIM_REQUIRE(session->enqueue(ActivateAbilityCommand{}).ok());
+    NINHO_SIM_REQUIRE(session->tick().ok());
+    NINHO_SIM_REQUIRE(session->ability_readiness() == AbilityReadiness::Active);
+    const TickIndex ability_end = detail::SessionTestFacade::ability_end_tick(*session);
+    while (session->state().tick < ability_end) {
+        NINHO_SIM_REQUIRE(session->tick().ok());
+    }
+    NINHO_SIM_REQUIRE(session->ability_readiness() == AbilityReadiness::Spent);
+}
+
 }

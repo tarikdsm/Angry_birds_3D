@@ -7,6 +7,7 @@
 #include <ranges>
 #include <string>
 #include <unordered_map>
+#include <unordered_set>
 #include <utility>
 
 namespace ninho::simulation {
@@ -99,7 +100,7 @@ namespace {
 }
 
 [[nodiscard]] ninho::physics::BodyDesc make_body(
-    const BodyDefinition& body, const MaterialCatalog& materials)
+    const BodyDefinition& body, const MaterialCatalog& materials, bool participates_in_joint)
 {
     ninho::physics::BodyDesc result;
     result.type = body.body_type == BodyType::Dynamic
@@ -108,7 +109,11 @@ namespace {
     result.transform = transform_from(body.transform);
     result.shapes.push_back(make_shape(body, materials));
     result.radial_gravity = body.body_type == BodyType::Dynamic;
-    result.remove_beyond_six_r = body.body_type == BodyType::Dynamic;
+    // A physics-side body removal also invalidates every attached solver joint.
+    // Keep jointed bodies under simulation ownership so public/canonical joint
+    // state can never claim an invalid solver constraint is still active.
+    result.remove_beyond_six_r = body.body_type == BodyType::Dynamic
+        && !participates_in_joint;
     result.name = body.visual.asset_id;
     return result;
 }
@@ -147,6 +152,12 @@ SessionStatus SimulationSession::Impl::build() noexcept
         std::unordered_map<std::uint32_t, const BodyDefinition*> bodies_by_id;
         handles_by_body_id.reserve(bundle.level.bodies.size());
         bodies_by_id.reserve(bundle.level.bodies.size());
+        std::unordered_set<std::uint32_t> jointed_body_ids;
+        jointed_body_ids.reserve(bundle.level.joints.size() * 2U);
+        for (const JointDefinition& joint : bundle.level.joints) {
+            jointed_body_ids.insert(joint.body_a_id);
+            jointed_body_ids.insert(joint.body_b_id);
+        }
 
         struct PendingBody {
             EntityId entity_id;
@@ -211,7 +222,8 @@ SessionStatus SimulationSession::Impl::build() noexcept
             }
 
             const BodyDefinition& body = *pending.level_body;
-            const auto created = physics.create_body(make_body(body, bundle.materials));
+            const auto created = physics.create_body(make_body(body, bundle.materials,
+                jointed_body_ids.contains(body.body_id)));
             if (!created) {
                 return build_failure(created.status.message);
             }

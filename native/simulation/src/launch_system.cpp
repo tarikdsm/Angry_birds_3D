@@ -332,7 +332,10 @@ SessionStatus SimulationSession::Impl::create_projectile()
         * static_cast<float>(session_state.aim->speed_m_s);
     description.bullet = bird->bullet;
     description.radial_gravity = true;
-    description.remove_beyond_six_r = true;
+    // The simulation FSM owns projectile lifetime. In particular, an active
+    // ability still needs its source body after crossing the world's 6R cleanup
+    // boundary so it can deterministically publish its final pulse and end.
+    description.remove_beyond_six_r = false;
     description.name = "CHR_LaunchBird";
     description.shapes.front().friction = static_cast<float>(bird->friction);
     description.shapes.front().restitution = static_cast<float>(bird->restitution);
@@ -488,6 +491,16 @@ void SimulationSession::Impl::update_fsm_after_step()
         return;
     }
     ++projectile->age_ticks;
+    if (objective_complete && !projectile->ability_active) {
+        if (!projectile->pending_destroy) {
+            static_cast<void>(physics.destroy_body(projectile->physics_handle));
+            projectile->pending_destroy = true;
+        }
+        projectile->finished = true;
+        session_state.phase = SessionPhase::Evaluation;
+        resolution_rest_ticks = rest_required_ticks;
+        return;
+    }
     if (projectile->age_ticks >= watchdog_ticks) {
         if (!projectile->pending_destroy) {
             static_cast<void>(physics.destroy_body(projectile->physics_handle));

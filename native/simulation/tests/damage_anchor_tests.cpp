@@ -181,6 +181,13 @@ NINHO_SIM_TEST("damage anchor uses data driven directional protection mass denom
     NINHO_SIM_REQUIRE(front_events.front().normal_cause_to_target == expected_normal);
     NINHO_SIM_REQUIRE(front_events.front().energy_j == half_denominator_energy);
 
+    detail::DamageSystem saturated_front;
+    const auto saturated_front_events = saturated_front.process(
+        materials, archetypes, bodies,
+        std::vector{hit({0.0f, 0.0f, 1.0f}, half_denominator_energy * 10.0)});
+    NINHO_SIM_REQUIRE(saturated_front_events.size() == 1U);
+    NINHO_SIM_REQUIRE(std::abs(saturated_front_events.front().damage - 55.0) < 1.0e-9);
+
     detail::DamageSystem lateral;
     const auto lateral_events = lateral.process(materials, archetypes, bodies,
         std::vector{hit({1.0f, 0.0f, 0.0f}, half_denominator_energy)});

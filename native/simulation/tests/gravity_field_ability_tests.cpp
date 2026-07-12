@@ -329,6 +329,43 @@ NINHO_SIM_TEST("gravity field ability remains active after projectile impact")
     NINHO_SIM_REQUIRE(session->state().phase == SessionPhase::Resolution);
 }
 
+NINHO_SIM_TEST("gravity field ability owns an ejected projectile through AbilityEnded")
+{
+    auto session = create_session();
+    launch(*session);
+    const TickIndex launched = detail::SessionTestFacade::projectile_launch_tick(*session);
+    advance_to_tick(*session, TickIndex{launched.value() + 8U});
+    NINHO_SIM_REQUIRE(session->enqueue(ActivateAbilityCommand{}).ok());
+    NINHO_SIM_REQUIRE(session->tick().ok());
+    const TickIndex ability_end = detail::SessionTestFacade::ability_end_tick(*session);
+    const auto projectile = projectile_snapshot(*session);
+    const auto outward = ninho::physics::normalized_or_zero(projectile.transform.position);
+    NINHO_SIM_REQUIRE(detail::SessionTestFacade::impulse_entity(
+        *session, projectile.entity_id, outward * 10000.0f));
+
+    double maximum_radius{};
+    bool ability_ended{};
+    while (session->state().tick < ability_end) {
+        NINHO_SIM_REQUIRE(session->tick().ok());
+        const auto current = std::ranges::find_if(session->snapshots(), [&](const auto& value) {
+            return value.entity_id == projectile.entity_id;
+        });
+        if (current != session->snapshots().end()) {
+            maximum_radius = std::max(maximum_radius,
+                static_cast<double>(ninho::physics::length(current->transform.position)));
+        }
+        ability_ended = ability_ended || std::ranges::any_of(
+            session->events(), [](const auto& event) {
+                return event.kind == DomainEventKind::AbilityEnded;
+            });
+    }
+
+    NINHO_SIM_REQUIRE(maximum_radius > 60.0);
+    NINHO_SIM_REQUIRE(ability_ended);
+    NINHO_SIM_REQUIRE(!detail::SessionTestFacade::ability_active(*session));
+    NINHO_SIM_REQUIRE(session->state().phase == SessionPhase::Resolution);
+}
+
 NINHO_SIM_TEST("gravity field ability rejects early second and expired activation")
 {
     auto early = create_session();

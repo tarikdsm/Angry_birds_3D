@@ -133,8 +133,8 @@ void apply_enemy_damage(std::vector<DamageState>& states,
     }
     const double denominator = enemy->mass_kg * enemy->damage_energy_j_per_kg;
     const double uncapped = enemy->integrity * energy / denominator;
-    const double damage = std::min(enemy->max_damage, uncapped)
-        * directional_multiplier(*weakpoint, target, cause_to_target);
+    const double damage = std::min(enemy->max_damage,
+        uncapped * directional_multiplier(*weakpoint, target, cause_to_target));
     const double applied = std::min(state->remaining_integrity, damage);
     if (applied <= 0.0) {
         return;

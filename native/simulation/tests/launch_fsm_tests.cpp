@@ -397,6 +397,28 @@ NINHO_SIM_TEST("launch fsm resolves victory on first second or third launch and 
     NINHO_SIM_REQUIRE(defeat->state().outcome == Outcome::Defeat);
 }
 
+NINHO_SIM_TEST("launch fsm completes a neutralized objective without waiting for unrelated debris")
+{
+    auto session = create_session();
+    launch(*session);
+    NINHO_SIM_REQUIRE(detail::SessionTestFacade::add_dynamic_sphere(*session,
+        EntityId{0x70000000U}, PartId{1}, {0.0f, 20.0f, 0.0f}, 25.0,
+        {18.0f, 0.0f, 0.0f}, 0.25));
+    detail::SessionTestFacade::complete_objective(*session);
+
+    NINHO_SIM_REQUIRE(session->tick().ok());
+    NINHO_SIM_REQUIRE(session->objectives_complete());
+    NINHO_SIM_REQUIRE(session->state().phase == SessionPhase::Evaluation);
+    NINHO_SIM_REQUIRE(std::ranges::any_of(session->snapshots(), [](const auto& snapshot) {
+        return snapshot.entity_id == EntityId{0x70000000U}
+            && ninho::physics::length(snapshot.linear_velocity_m_s) > 1.0f;
+    }));
+
+    NINHO_SIM_REQUIRE(session->tick().ok());
+    NINHO_SIM_REQUIRE(session->state().phase == SessionPhase::Result);
+    NINHO_SIM_REQUIRE(session->state().outcome == Outcome::Victory);
+}
+
 NINHO_SIM_TEST("launch fsm waits for active ability then lifetime and watchdog guarantee evaluation")
 {
     auto session = create_session();
