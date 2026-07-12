@@ -460,7 +460,10 @@ func _test_authoritative_hud(hud: Node) -> void:
 		"objective_targets": [target],
 		"ability_readiness": "active",
 		"ability_armed": false,
-		"events": [{"kind": "ability_started"}],
+		"events": [{
+			"kind": "command_rejected",
+			"rejection_reason_name": "not_armed",
+		}],
 	})
 	if "VIRELA ATIVA" not in controls.text or "AINDA NÃO ARMADA" in controls.text:
 		_fail("active ability must replace a prior not-armed warning")

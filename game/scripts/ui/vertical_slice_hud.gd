@@ -25,7 +25,8 @@ func apply_frame(frame: Dictionary) -> void:
 	if phase != "flight_ability" or readiness != "arming":
 		_ability_rejected_early = false
 	for event: Dictionary in frame.get("events", []):
-		if str(event.get("kind", "")) == "command_rejected" \
+		if readiness == "arming" \
+				and str(event.get("kind", "")) == "command_rejected" \
 				and str(event.get("rejection_reason_name", "")) == "not_armed":
 			_ability_rejected_early = true
 	_last_phase = phase
