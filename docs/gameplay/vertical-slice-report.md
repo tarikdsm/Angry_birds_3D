@@ -5,30 +5,30 @@ Generated from the two tracked evidence snapshots. Manual edits are rejected by 
 Normative-Certification-Identity: Tested-Inputs-SHA256 (content-addressed and revalidated against the current tree).
 
 Evidence-Debug-Path: docs/gameplay/evidence/vertical-slice-debug.json
-Evidence-Debug-SHA256: 2095407658abd160b047703fc59fcd1f45e02fe0c3563ba9f0e458b9cfa3ffc6
-Generation-Head-Debug: e53095e52914b8a451ad216d7d25570776d9a42e
-Tested-Inputs-Debug-SHA256: af88a40f6f6cdf0df65dad7763d74d99246745fd2ae1f63e009f4ef53fc22904
-Capture-Manifest-Debug-SHA256: b314d64febf8b6e4928305e0edc4c6a30fddab6db75d11290892b53e944529f5
+Evidence-Debug-SHA256: ce6962b6ceafa8e435192ca7d9c748dc966170c10d376e855be176ec8e0bb0eb
+Generation-Head-Debug: 8a6e62e2456c87ff9cba8b67e3cad2747ea92aec
+Tested-Inputs-Debug-SHA256: 707ae24fafcd15c3f1df3179d76110685d909e4d54e4466af703b1834811a4b8
+Capture-Manifest-Debug-SHA256: 9b457ae4155f9b8d16b74c5f7a678d6a09871e2056ce07a09c5f44eb3a9264a4
 
 Evidence-Release-Path: docs/gameplay/evidence/vertical-slice-release.json
-Evidence-Release-SHA256: bdfcac230785dbb1163f7173f2810a15fdfd3348bf5223af8188d29c2d04ed5c
-Generation-Head-Release: e53095e52914b8a451ad216d7d25570776d9a42e
-Tested-Inputs-Release-SHA256: af88a40f6f6cdf0df65dad7763d74d99246745fd2ae1f63e009f4ef53fc22904
-Capture-Manifest-Release-SHA256: 31d4a2db85b90562df3362d7384ba05df34f4c861d0aeee57d4e6324048f8e04
+Evidence-Release-SHA256: 52f0275bdd608647ff355bdb0717307904809c1ae32473429ee7030f16293ec7
+Generation-Head-Release: 8a6e62e2456c87ff9cba8b67e3cad2747ea92aec
+Tested-Inputs-Release-SHA256: 707ae24fafcd15c3f1df3179d76110685d909e4d54e4466af703b1834811a4b8
+Capture-Manifest-Release-SHA256: 19543c123e0bf3197f983c78f5703f783a4caee03065935817402e5c74ed5c45
 
 ## Gate summary
 
 | Build | Physics p95 | Vulkan p95/p99 | OpenGL p95/p99 |
 | --- | ---: | ---: | ---: |
-| Debug | 2.359 ms | 6.250/9.381 ms | 6.061/8.009 ms |
-| Release | 1.869 ms | 6.250/6.250 ms | 6.136/6.667 ms |
+| Debug | 1.925 ms | 6.061/6.138 ms | 6.061/6.095 ms |
+| Release | 1.950 ms | 6.061/6.137 ms | 6.061/6.101 ms |
 
 ## Deterministic routes
 
 | Route | Outcome | Repeat hashes |
 | --- | --- | --- |
-| `virela_win` | `Victory` | `460897019529119944 = 460897019529119944` |
-| `structural_win` | `Victory` | `13375825633044651172 = 13375825633044651172` |
+| `virela_win` | `Victory` | `14930337922665451601 = 14930337922665451601` |
+| `structural_win` | `Victory` | `9772566425278638545 = 9772566425278638545` |
 | `no_ability_loss` | `Defeat` | `11323609224403413012 = 11323609224403413012` |
 
 ## Visual evidence
@@ -37,13 +37,13 @@ Release goldens are the canonical certification images; Debug goldens are diagno
 
 | Golden | Source frame | Transition frame | SHA-256 |
 | --- | ---: | ---: | --- |
-| `overview` | 0 | 0 | `dfc7a30f32f2cabaf135ae12b01217b8487ef718948fcb8020582c38a4dcf4fb` |
-| `aim` | 40 | 3 | `b17acb71db13e4a47c7a759a640407c1ae1bdebe4895721c51aa595293a49ab8` |
-| `virela` | 60 | 55 | `29e73941612287d5e9d229ab3bfdf4668b8a1b730af6461485c85988c204fb1d` |
-| `vulnerable_impact` | 493 | 492 | `433c1934992ab71f61df7b9759f49b93d47b3abf56ceac49108ac3e1e19e4a1a` |
-| `result` | 3957 | 3936 | `81833a08ebdbdc9a57c734cf3ff62d4f342b8b9ce602b1cbd1cf67366690e291` |
+| `overview` | 0 | 0 | `cf1718912d511a5382a36451a36b8688476dda2ec076d10aa14ffbae68b72d08` |
+| `aim` | 39 | 3 | `9142a81b833679ff28f622a191b28a457bca6dce62ba4d9f5cf4c49320280f59` |
+| `virela` | 60 | 55 | `b823c2996cbb231e6a15e9f881be0b64b5c5479cf81d01a926c4c662ab070feb` |
+| `vulnerable_impact` | 493 | 492 | `52bfe4751149e3fe0d17bef08f65d3a75e7387df164ee6ed95d5d60c26be3341` |
+| `result` | 2283 | 2272 | `7e827977701c032bfbb755bb0b7921a00a10b11684668ba6e33e8d6db27389ad` |
 
-The 300-frame Vulkan and OpenGL records were deterministically sampled from normal-cadence source captures of 3971 and 3971 frames.
+The 300-frame Vulkan and OpenGL records were deterministically sampled from normal-cadence source captures of 2307 and 2307 frames.
 
 ## Review and clean-room
 
@@ -51,12 +51,12 @@ The 300-frame Vulkan and OpenGL records were deterministically sampled from norm
 - The comparative clean-room review covers names, logos, silhouettes, sounds, UI, layouts, and promotional material.
 - Virela, Nox, and Talo remain codenames pending clearance.
 - This engineering review is not a legal opinion and does not replace legal counsel before commercial publication.
-- Review manifest SHA-256: `1a5b3769f97e7d8244c4373a726b9f9ef46b0b2a32d0c32d5ca0070f7a11d169`.
+- Review manifest SHA-256: `dd05419c0c3e4d2df36fda92e1f70c760a808bd6a3a1f2559c5329ab48ab165e`.
 
 ## Windows package
 
 - Path: `artifacts/package/windows-release`
-- Manifest SHA-256: `286ec93c9328cc62043700ec6b25ff8c44f015fad08f6bcbde24e10673eb3d64`
+- Manifest SHA-256: `fff70e71ff3c86c61c11370a5da8e77e2946c7ccf8596ee75625b40dbbf935af`
 - Launch from path containing spaces: `passed`
 
 ## Verdict
