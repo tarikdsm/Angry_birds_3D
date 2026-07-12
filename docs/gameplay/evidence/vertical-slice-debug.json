@@ -2,10 +2,10 @@
     "schema":  "ninho.vertical-slice.evidence.v1",
     "schema_version":  1,
     "configuration":  "Debug",
-    "commit":  "c7b80303a216c0e2d03fc575bdf32834a8ea3aba",
-    "source_revision":  "c7b80303a216c0e2d03fc575bdf32834a8ea3aba",
+    "commit":  "2312994724bc5b55684194158e4e2d8af64b2918",
+    "source_revision":  "2312994724bc5b55684194158e4e2d8af64b2918",
     "tested_inputs_schema":  "ninho.tested-inputs.v2",
-    "tested_inputs_sha256":  "5578688596dc6501cc7a080e6d412a09b75aa62578aec73793ffdcc111c09642",
+    "tested_inputs_sha256":  "e2bfea17396bdc850521f3ac6fe1be55854272954fd0bf22e719102bda8401b3",
     "tested_inputs":  [
                           {
                               "path":  ".gitattributes",
@@ -305,7 +305,7 @@
                               "path":  "game/assets/audio/README.md",
                               "mode":  "text_utf8_lf",
                               "size_bytes":  2204,
-                              "sha256":  "055875bd83ad993c049539640fdef5970b10bba4fe1fbe37b9966c5d845ea0f8"
+                              "sha256":  "017c8c4655fced6efa3a0fff1961fa8502f1fd407c2995eec8684aebeae4d41d"
                           },
                           {
                               "path":  "game/assets/vertical_slice/aster/AST_AsterPlanet.glb",
@@ -1367,7 +1367,7 @@
                               "path":  "tools/audio/audio_manifest.json",
                               "mode":  "text_utf8_lf",
                               "size_bytes":  6695,
-                              "sha256":  "6d01f7d52be202236987bf05a650b57120b4af5732233db14c9cb355a95570e0"
+                              "sha256":  "81a0da120342fef596ce03d3dd622575e462f47ebfd354a94f5430c5176a5b2e"
                           },
                           {
                               "path":  "tools/audio/build_audio.ps1",
@@ -1378,8 +1378,8 @@
                           {
                               "path":  "tools/audio/generate_audio.py",
                               "mode":  "text_utf8_lf",
-                              "size_bytes":  19897,
-                              "sha256":  "fb7026893a16af09b9c0baefce44f41907a96d624686ab6b4c8cd6e68c01d718"
+                              "size_bytes":  20261,
+                              "sha256":  "35de2fdbd9b392e0a3550667360dcc532c02934ef48b6ccf6194b6d7ddbc8ce2"
                           },
                           {
                               "path":  "tools/audio/validate_audio.ps1",
@@ -1414,8 +1414,8 @@
                           {
                               "path":  "tools/capture_vertical_slice.ps1",
                               "mode":  "text_utf8_lf",
-                              "size_bytes":  19650,
-                              "sha256":  "ce2dd4781417715941b650aded5da047e0847d482c90adcbd2394a8a84901597"
+                              "size_bytes":  19610,
+                              "sha256":  "f533103588645ddb75922515f2616f135510b4c2930073867e37fe3a2ef8f42d"
                           },
                           {
                               "path":  "tools/check_vertical_slice_evidence.ps1",
@@ -1552,8 +1552,8 @@
                           {
                               "path":  "tools/tests/test_audio_contracts.py",
                               "mode":  "text_utf8_lf",
-                              "size_bytes":  4664,
-                              "sha256":  "baca923e1e0738d10c8f6d5be920a91f7c5417ca4ccd2d54b7231f14b65df832"
+                              "size_bytes":  5102,
+                              "sha256":  "7aeb04810a081c39fb5a2b3651e555eea682f73245c5d3e6af44c4c7e3b94423"
                           },
                           {
                               "path":  "tools/tests/test_generate_foundation_report.py",
@@ -1570,8 +1570,8 @@
                           {
                               "path":  "tools/tests/test_vertical_slice_tooling_contracts.py",
                               "mode":  "text_utf8_lf",
-                              "size_bytes":  2541,
-                              "sha256":  "48a25804f456091195bec60ad77d49fa303893fc604b8f62b9822f06dfb3a94c"
+                              "size_bytes":  3087,
+                              "sha256":  "a5f8a324bf5a27fbda2d0fd07072468523dbc9df7dcbd0744e0e00cd2be2a5a6"
                           },
                           {
                               "path":  "tools/tests/upstream-box3d-gate-tests.ps1",
@@ -1610,7 +1610,7 @@
                               "sha256":  "9c89d313367a5e6a9cece014d7f3f4f29509532030a23b5855d31206da476add"
                           }
                       ],
-    "generated_utc":  "2026-07-12T11:39:51.3801177Z",
+    "generated_utc":  "2026-07-12T12:47:48.9347573Z",
     "hardware":  {
                      "cpu":  "11th Gen Intel(R) Core(TM) i7-11800H @ 2.30GHz",
                      "gpu":  "NVIDIA GeForce RTX 3070 Laptop GPU",
@@ -1658,7 +1658,7 @@
                        "box3d_only":  true
                    },
     "physics":  {
-                    "step_p95_ms":  1.6786,
+                    "step_p95_ms":  1.65,
                     "limit_ms":  8
                 },
     "renderers":  [
@@ -1667,10 +1667,10 @@
                           "scales":  [
                                          {
                                              "ui_scale":  100,
-                                             "frame_p95_ms":  6.66666666666667,
-                                             "frame_p99_ms":  9.559,
-                                             "max_hitch_ms":  11.148,
-                                             "input_feedback_p95_ms":  6.595,
+                                             "frame_p95_ms":  6.25,
+                                             "frame_p99_ms":  6.25,
+                                             "max_hitch_ms":  11.0102121212123,
+                                             "input_feedback_p95_ms":  6.032,
                                              "input_feedback_samples":  3,
                                              "input_feedback_markers":  [
                                                                             {
@@ -1701,20 +1701,20 @@
                                                                                 "theta_degrees":  -2.0
                                                                             }
                                                                         ],
-                                             "physics_step_p95_ms":  1.6421,
-                                             "frames_measured":  485,
+                                             "physics_step_p95_ms":  1.6015,
+                                             "frames_measured":  486,
                                              "rupture_observed":  true,
                                              "vfx_observed":  true,
                                              "post_vfx_frames":  35,
                                              "metrics_path":  "artifacts/vertical-slice/debug/metrics-vulkan-100.json",
-                                             "metrics_sha256":  "7ebfbfe52bc3b7f9575e8bb7002fe3452c47627e037cb191ddfa5a5e5e9fd34a"
+                                             "metrics_sha256":  "8c3af4dc8199330179f3abc99ce800f8cfc8ce9eff9b01ba23646b090613d384"
                                          },
                                          {
                                              "ui_scale":  150,
-                                             "frame_p95_ms":  6.25,
-                                             "frame_p99_ms":  6.46918181818182,
-                                             "max_hitch_ms":  8.14,
-                                             "input_feedback_p95_ms":  6.192,
+                                             "frame_p95_ms":  6.06060606060606,
+                                             "frame_p99_ms":  6.107,
+                                             "max_hitch_ms":  10.9045151515153,
+                                             "input_feedback_p95_ms":  5.856,
                                              "input_feedback_samples":  3,
                                              "input_feedback_markers":  [
                                                                             {
@@ -1745,13 +1745,13 @@
                                                                                 "theta_degrees":  -2.0
                                                                             }
                                                                         ],
-                                             "physics_step_p95_ms":  1.6351,
+                                             "physics_step_p95_ms":  1.6186,
                                              "frames_measured":  488,
                                              "rupture_observed":  true,
                                              "vfx_observed":  true,
                                              "post_vfx_frames":  35,
                                              "metrics_path":  "artifacts/vertical-slice/debug/metrics-vulkan-150.json",
-                                             "metrics_sha256":  "f0df5a030463a72b1442d73b4101ec75fbe2b14297871a3a8ed75d5257435745"
+                                             "metrics_sha256":  "346b6973669a468f25f88325a228074b647f014fa8081ef4e67923a3fd5d9f39"
                                          }
                                      ],
                           "capture":  {
@@ -1759,12 +1759,12 @@
                                           "width":  1920,
                                           "height":  1080,
                                           "path":  "artifacts/vertical-slice/debug/vertical-slice-vulkan.avi",
-                                          "hash":  "5cf7a252669de61cb73b39939525394e8106ccffb558ff2ec9baef7c628e9359",
+                                          "hash":  "4a1882d1bd8212752eb30f4670bd6e697f9c630b2b62a640f9f3aa12840a0eb2",
                                           "log_path":  "artifacts/vertical-slice/debug/capture-vulkan-attempt1.stdout.log",
-                                          "log_hash":  "8073c50ff99a0555e4d5f77c8c527dc30dc507741ecc1dcd8f7c10934cbd3b7e",
+                                          "log_hash":  "703a9e0871e7b36935cea21f54e7c55ec209fa46bb0e244dcb7c439741f5c583",
                                           "retry_count":  0,
                                           "source_path":  "artifacts/vertical-slice/debug/vertical-slice-vulkan-source.avi",
-                                          "source_hash":  "deb50aaf0c1ff5ae705b1a63a1ef2fe6578b2828b377d362992560835560e159",
+                                          "source_hash":  "ef786ff5ebf4c0791e786637891e3a038b357d5ba64c6183765205bdfde35418",
                                           "source_frames":  2307,
                                           "downsample_source_frames":  [
                                                                            0,
@@ -2075,10 +2075,10 @@
                           "scales":  [
                                          {
                                              "ui_scale":  100,
-                                             "frame_p95_ms":  6.25,
-                                             "frame_p99_ms":  9.725,
-                                             "max_hitch_ms":  10.683,
-                                             "input_feedback_p95_ms":  4.283,
+                                             "frame_p95_ms":  6.06060606060606,
+                                             "frame_p99_ms":  6.06060606060606,
+                                             "max_hitch_ms":  6.06060606060606,
+                                             "input_feedback_p95_ms":  3.635,
                                              "input_feedback_samples":  3,
                                              "input_feedback_markers":  [
                                                                             {
@@ -2109,20 +2109,20 @@
                                                                                 "theta_degrees":  -2.0
                                                                             }
                                                                         ],
-                                             "physics_step_p95_ms":  1.6786,
+                                             "physics_step_p95_ms":  1.5836,
                                              "frames_measured":  481,
                                              "rupture_observed":  true,
                                              "vfx_observed":  true,
                                              "post_vfx_frames":  35,
                                              "metrics_path":  "artifacts/vertical-slice/debug/metrics-opengl-100.json",
-                                             "metrics_sha256":  "f38e6a5cf1088e364fb22376aabe5443a9ed5680442cf43f350869691541169d"
+                                             "metrics_sha256":  "0d4c7ac219b3a006280c187be8571b58893741e4fa33fe82a563e037883a829e"
                                          },
                                          {
                                              "ui_scale":  150,
-                                             "frame_p95_ms":  6.25,
-                                             "frame_p99_ms":  8.33333333333333,
-                                             "max_hitch_ms":  11.975,
-                                             "input_feedback_p95_ms":  3.995,
+                                             "frame_p95_ms":  6.06060606060606,
+                                             "frame_p99_ms":  6.09124242424242,
+                                             "max_hitch_ms":  12.710181818182,
+                                             "input_feedback_p95_ms":  3.953,
                                              "input_feedback_samples":  3,
                                              "input_feedback_markers":  [
                                                                             {
@@ -2153,13 +2153,13 @@
                                                                                 "theta_degrees":  -2.0
                                                                             }
                                                                         ],
-                                             "physics_step_p95_ms":  1.6181,
-                                             "frames_measured":  480,
+                                             "physics_step_p95_ms":  1.65,
+                                             "frames_measured":  482,
                                              "rupture_observed":  true,
                                              "vfx_observed":  true,
                                              "post_vfx_frames":  35,
                                              "metrics_path":  "artifacts/vertical-slice/debug/metrics-opengl-150.json",
-                                             "metrics_sha256":  "e55852e1eff53f8711d5d67835b3bab38c9113eb7158dfd602706a707494a988"
+                                             "metrics_sha256":  "2c6a6c31900c16d7d236ef0baa10bfe9b4f0e1debd014b30276fb0efc5b737c0"
                                          }
                                      ],
                           "capture":  {
@@ -2167,12 +2167,12 @@
                                           "width":  1920,
                                           "height":  1080,
                                           "path":  "artifacts/vertical-slice/debug/vertical-slice-opengl.avi",
-                                          "hash":  "3f8d90440d0a5a065d55e09898085cbd09cd38591c4c5016399bcc386f65cde4",
+                                          "hash":  "30eecb670c3b192c5f481f5b12953188b792ea10867182f44c1c52e2cfddf57c",
                                           "log_path":  "artifacts/vertical-slice/debug/capture-opengl-attempt1.stdout.log",
-                                          "log_hash":  "83f1bad0b994659c311b6da24680d5681a21e91689eceb16e2ccfeb56763cd14",
+                                          "log_hash":  "6bf9b872672257a141924ccb0c96849d6dde336a1b876d2784a4822cd9f16c2d",
                                           "retry_count":  0,
                                           "source_path":  "artifacts/vertical-slice/debug/vertical-slice-opengl-source.avi",
-                                          "source_hash":  "71ce6c48a91849444413fea33a2b3567fcfdce3dce30cd2f4f3153601ba0482b",
+                                          "source_hash":  "94e8ceaa4eb29bb168e330149a7f1816d28c742653b09a994f3a5d37460bccfb",
                                           "source_frames":  2307,
                                           "downsample_source_frames":  [
                                                                            0,
@@ -2545,7 +2545,7 @@
                                 "exposure":  1,
                                 "renderer":  "Vulkan",
                                 "path":  "docs/art/goldens/vertical-slice/debug/vulnerable_impact.png",
-                                "sha256":  "c3ebd4803e3a321182c4df8dfcf0a2331c1f0c03e7a434b5303a7faa71d9bf72"
+                                "sha256":  "9c5127e167d1ce0f0651f6adf5e7b38d1e68953417c8ff6b23cba5b99fdc6d3b"
                             },
                             {
                                 "name":  "result",
@@ -2560,7 +2560,7 @@
                                 "exposure":  1,
                                 "renderer":  "Vulkan",
                                 "path":  "docs/art/goldens/vertical-slice/debug/result.png",
-                                "sha256":  "a5e7f4d9cb4a3332fbfdc601760dc52c8b7bdf18e71dbc1d65fc37ebf2b31358"
+                                "sha256":  "1c60700e3f26b4b37e8fccf0c86279f4c58b0f904dfc18561c286c62f6b291a2"
                             }
                         ],
     "rubric":  {
@@ -2579,7 +2579,7 @@
                  },
     "clean_room":  {
                        "approved":  true,
-                       "provenance_manifest_sha256":  "74754c5df526537d4e9589cae85c427cd3bda005d8aa4f22ff86cd38734e51d3",
+                       "provenance_manifest_sha256":  "539ea81212dbe6b7b0c709033adb956c435fc7d0bb4f7a3065a12fa5ee4dc2a9",
                        "comparative_review":  "approved",
                        "scope":  [
                                      "names",
@@ -2598,11 +2598,11 @@
                    },
     "capture_manifest":  {
                              "path":  "artifacts/vertical-slice/debug/capture-manifest.json",
-                             "sha256":  "7f61adfc38979feeedc35a5953faba6aa80f4dd720c18baf5c1e4841c558772f"
+                             "sha256":  "f3d84e46839bdd4479d4418e815f1bb12fe20412aa85c972c1ed37810ea20b72"
                          },
     "reviews_manifest":  {
                              "path":  "docs/gameplay/evidence/vertical-slice-reviews.json",
-                             "sha256":  "6bdfdff70d5ce23bf28efa1f31b30f34bec68d097a3ef9aa218acf61d8f88f2d"
+                             "sha256":  "fd7edd3d3fec558b91d0855ca7b94effa362993d3a1c2fd22312b78604625281"
                          },
     "package":  {
                     "path":  "not_applicable_debug",
@@ -2612,7 +2612,7 @@
     "source_artifacts":  [
                              {
                                  "path":  "artifacts/vertical-slice/debug/capture-vulkan-attempt1.stdout.log",
-                                 "sha256":  "8073c50ff99a0555e4d5f77c8c527dc30dc507741ecc1dcd8f7c10934cbd3b7e"
+                                 "sha256":  "703a9e0871e7b36935cea21f54e7c55ec209fa46bb0e244dcb7c439741f5c583"
                              },
                              {
                                  "path":  "artifacts/vertical-slice/debug/capture-vulkan-attempt1.stderr.log",
@@ -2628,15 +2628,15 @@
                              },
                              {
                                  "path":  "artifacts/vertical-slice/debug/vertical-slice-vulkan-source.avi",
-                                 "sha256":  "deb50aaf0c1ff5ae705b1a63a1ef2fe6578b2828b377d362992560835560e159"
+                                 "sha256":  "ef786ff5ebf4c0791e786637891e3a038b357d5ba64c6183765205bdfde35418"
                              },
                              {
                                  "path":  "artifacts/vertical-slice/debug/vertical-slice-vulkan.avi",
-                                 "sha256":  "5cf7a252669de61cb73b39939525394e8106ccffb558ff2ec9baef7c628e9359"
+                                 "sha256":  "4a1882d1bd8212752eb30f4670bd6e697f9c630b2b62a640f9f3aa12840a0eb2"
                              },
                              {
                                  "path":  "artifacts/vertical-slice/debug/performance-vulkan-100-attempt1.stdout.log",
-                                 "sha256":  "406617be0531884b62128d3d70c03306776520e5c5faa35d3f7e8993346b8b5f"
+                                 "sha256":  "43e631d2805b94ebb0e7fe1b14ff20b2d29b2bc44690d7b7b6dd754127e5c144"
                              },
                              {
                                  "path":  "artifacts/vertical-slice/debug/performance-vulkan-100-attempt1.stderr.log",
@@ -2644,11 +2644,11 @@
                              },
                              {
                                  "path":  "artifacts/vertical-slice/debug/metrics-vulkan-100.json",
-                                 "sha256":  "7ebfbfe52bc3b7f9575e8bb7002fe3452c47627e037cb191ddfa5a5e5e9fd34a"
+                                 "sha256":  "8c3af4dc8199330179f3abc99ce800f8cfc8ce9eff9b01ba23646b090613d384"
                              },
                              {
                                  "path":  "artifacts/vertical-slice/debug/performance-vulkan-150-attempt1.stdout.log",
-                                 "sha256":  "ea059d3cbe6173db393d55dd1812a0b641c4c362585b3d503f914bedb5746545"
+                                 "sha256":  "808657eed8fe2d966b5191d8ee129e339c464189c4befccc2db61829855f245c"
                              },
                              {
                                  "path":  "artifacts/vertical-slice/debug/performance-vulkan-150-attempt1.stderr.log",
@@ -2656,11 +2656,11 @@
                              },
                              {
                                  "path":  "artifacts/vertical-slice/debug/metrics-vulkan-150.json",
-                                 "sha256":  "f0df5a030463a72b1442d73b4101ec75fbe2b14297871a3a8ed75d5257435745"
+                                 "sha256":  "346b6973669a468f25f88325a228074b647f014fa8081ef4e67923a3fd5d9f39"
                              },
                              {
                                  "path":  "artifacts/vertical-slice/debug/capture-opengl-attempt1.stdout.log",
-                                 "sha256":  "83f1bad0b994659c311b6da24680d5681a21e91689eceb16e2ccfeb56763cd14"
+                                 "sha256":  "6bf9b872672257a141924ccb0c96849d6dde336a1b876d2784a4822cd9f16c2d"
                              },
                              {
                                  "path":  "artifacts/vertical-slice/debug/capture-opengl-attempt1.stderr.log",
@@ -2676,15 +2676,15 @@
                              },
                              {
                                  "path":  "artifacts/vertical-slice/debug/vertical-slice-opengl-source.avi",
-                                 "sha256":  "71ce6c48a91849444413fea33a2b3567fcfdce3dce30cd2f4f3153601ba0482b"
+                                 "sha256":  "94e8ceaa4eb29bb168e330149a7f1816d28c742653b09a994f3a5d37460bccfb"
                              },
                              {
                                  "path":  "artifacts/vertical-slice/debug/vertical-slice-opengl.avi",
-                                 "sha256":  "3f8d90440d0a5a065d55e09898085cbd09cd38591c4c5016399bcc386f65cde4"
+                                 "sha256":  "30eecb670c3b192c5f481f5b12953188b792ea10867182f44c1c52e2cfddf57c"
                              },
                              {
                                  "path":  "artifacts/vertical-slice/debug/performance-opengl-100-attempt1.stdout.log",
-                                 "sha256":  "c5803ccdde5b6da25a4d5ed13f1ad71688702b5a59ad14bfa6c104f07d360ff2"
+                                 "sha256":  "a53c54b6dd97b2b304e86a95c9a411280b886eb22944fc544013fa573d88299b"
                              },
                              {
                                  "path":  "artifacts/vertical-slice/debug/performance-opengl-100-attempt1.stderr.log",
@@ -2692,11 +2692,11 @@
                              },
                              {
                                  "path":  "artifacts/vertical-slice/debug/metrics-opengl-100.json",
-                                 "sha256":  "f38e6a5cf1088e364fb22376aabe5443a9ed5680442cf43f350869691541169d"
+                                 "sha256":  "0d4c7ac219b3a006280c187be8571b58893741e4fa33fe82a563e037883a829e"
                              },
                              {
                                  "path":  "artifacts/vertical-slice/debug/performance-opengl-150-attempt1.stdout.log",
-                                 "sha256":  "dcd541e5a33afa4d74adbc71cb8620683710e761ad3f7440e7c5f9060b00feb6"
+                                 "sha256":  "0c9b3a326f25beec7c9bce4cfc4fa76db1a3ddf4b692e1c421abe1c3dbdba11a"
                              },
                              {
                                  "path":  "artifacts/vertical-slice/debug/performance-opengl-150-attempt1.stderr.log",
@@ -2704,7 +2704,7 @@
                              },
                              {
                                  "path":  "artifacts/vertical-slice/debug/metrics-opengl-150.json",
-                                 "sha256":  "e55852e1eff53f8711d5d67835b3bab38c9113eb7158dfd602706a707494a988"
+                                 "sha256":  "2c6a6c31900c16d7d236ef0baa10bfe9b4f0e1debd014b30276fb0efc5b737c0"
                              },
                              {
                                  "path":  "artifacts/vertical-slice/debug/route-determinism-raw.log",
@@ -2760,7 +2760,7 @@
                              },
                              {
                                  "path":  "docs/art/goldens/vertical-slice/debug/vulnerable_impact.png",
-                                 "sha256":  "c3ebd4803e3a321182c4df8dfcf0a2331c1f0c03e7a434b5303a7faa71d9bf72"
+                                 "sha256":  "9c5127e167d1ce0f0651f6adf5e7b38d1e68953417c8ff6b23cba5b99fdc6d3b"
                              },
                              {
                                  "path":  "artifacts/vertical-slice/debug/golden-result.stdout.log",
@@ -2772,7 +2772,7 @@
                              },
                              {
                                  "path":  "docs/art/goldens/vertical-slice/debug/result.png",
-                                 "sha256":  "a5e7f4d9cb4a3332fbfdc601760dc52c8b7bdf18e71dbc1d65fc37ebf2b31358"
+                                 "sha256":  "1c60700e3f26b4b37e8fccf0c86279f4c58b0f904dfc18561c286c62f6b291a2"
                              }
                          ]
 }
