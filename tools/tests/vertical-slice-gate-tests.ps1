@@ -198,7 +198,7 @@ capture complete
     $evidence = [ordered]@{
         schema = 'ninho.vertical-slice.evidence.v1'; schema_version = 1
         configuration = 'Debug'; commit = $commit; generated_utc = '2026-07-11T12:00:00Z'
-        source_revision = $commit; tested_inputs_schema='ninho.tested-inputs.v1'
+        source_revision = $commit; tested_inputs_schema='ninho.tested-inputs.v2'
         tested_inputs_sha256=$testedInputs.sha256; tested_inputs=@($testedInputs.files)
         hardware = @{ cpu = 'fixture'; gpu = 'fixture'; ram_bytes = 1; os = 'fixture' }
         canonical_state_contract = 'canonical_state_v1'
@@ -268,7 +268,7 @@ capture complete
     }
     $reviewsPath = Join-Path $sandbox 'reviews.json'
     $reviews = [ordered]@{
-        schema='ninho.vertical-slice.reviews.v1'; tested_inputs_sha256=$testedInputs.sha256
+        schema='ninho.vertical-slice.reviews.v1'; tested_inputs_schema='ninho.tested-inputs.v2'; tested_inputs_sha256=$testedInputs.sha256
         reviews=@('code','architecture','gameplay','art' | ForEach-Object {
             [ordered]@{role=$_;reviewer_id="/root/task12_$($_)_review";verdict='approved';critical=0;important=0;minor=0}
         })

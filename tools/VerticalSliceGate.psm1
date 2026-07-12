@@ -159,6 +159,7 @@ function Assert-NinhoIndependentReviews {
         [Parameter(Mandatory)][string]$ExpectedTestedInputsSha256
     )
     if ($Reviews.schema -cne 'ninho.vertical-slice.reviews.v1' -or
+            $Reviews.tested_inputs_schema -cne 'ninho.tested-inputs.v2' -or
             $Reviews.tested_inputs_sha256 -cne $ExpectedTestedInputsSha256) {
         throw 'reviews manifest schema/tested-content mismatch'
     }
@@ -182,6 +183,27 @@ function Assert-NinhoIndependentReviews {
     }
 }
 
+function Get-NinhoCanonicalTestedInputContent {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)][string]$Path,
+        [Parameter(Mandatory)][string]$RelativePath
+    )
+    [byte[]]$bytes = [IO.File]::ReadAllBytes($Path)
+    $binaryExtension = $RelativePath -match '(?i)\.(blend|glb|png|wav|dll|exe|pck|avi|jpg|jpeg|webp|ttf|otf)$'
+    if ($binaryExtension -or $bytes -contains 0) {
+        return [pscustomobject]@{ mode='binary'; bytes=$bytes }
+    }
+    $strictUtf8 = [Text.UTF8Encoding]::new($false, $true)
+    try { $text = $strictUtf8.GetString($bytes) }
+    catch { return [pscustomobject]@{ mode='binary'; bytes=$bytes } }
+    $canonicalText = $text.Replace("`r`n", "`n").Replace("`r", "`n")
+    return [pscustomobject]@{
+        mode = 'text_utf8_lf'
+        bytes = [Text.UTF8Encoding]::new($false).GetBytes($canonicalText)
+    }
+}
+
 function Get-NinhoTestedInputs {
     [CmdletBinding()]
     param([Parameter(Mandatory)][string]$Root)
@@ -190,10 +212,16 @@ function Get-NinhoTestedInputs {
     foreach ($relative in @(Get-NinhoTestedInputPaths -Root $Root)) {
         $path = Assert-NinhoRelativeArtifactPath $relative $Root
         if (-not (Test-Path -LiteralPath $path -PathType Leaf)) { throw "tested input missing: $relative" }
-        $size = [int64](Get-Item -LiteralPath $path).Length
-        $hash = (Get-FileHash -Algorithm SHA256 -LiteralPath $path).Hash.ToLowerInvariant()
-        $rows.Add([ordered]@{ path=$relative; size_bytes=$size; sha256=$hash })
-        $null = $aggregate.Append($relative).Append("`0").Append($size).Append("`0").Append($hash).Append("`n")
+        $content = Get-NinhoCanonicalTestedInputContent -Path $path -RelativePath $relative
+        $size = [int64]$content.bytes.Length
+        $fileAlgorithm = [Security.Cryptography.SHA256]::Create()
+        try {
+            $hash = -join ($fileAlgorithm.ComputeHash($content.bytes) |
+                ForEach-Object { $_.ToString('x2') })
+        } finally { $fileAlgorithm.Dispose() }
+        $rows.Add([ordered]@{ path=$relative; mode=$content.mode; size_bytes=$size; sha256=$hash })
+        $null = $aggregate.Append($relative).Append("`0").Append($content.mode).Append("`0")
+        $null = $aggregate.Append($size).Append("`0").Append($hash).Append("`n")
     }
     $algorithm = [Security.Cryptography.SHA256]::Create()
     try {
@@ -309,7 +337,7 @@ function Assert-NinhoVerticalSliceEvidence {
         throw "vertical slice evidence is stale: expected commit $ExpectedCommit, got $($doc.commit)"
     }
     if ($doc.source_revision -cne $doc.commit -or
-            $doc.tested_inputs_schema -cne 'ninho.tested-inputs.v1' -or
+            $doc.tested_inputs_schema -cne 'ninho.tested-inputs.v2' -or
             $doc.tested_inputs_sha256 -notmatch '^[0-9a-f]{64}$') {
         throw 'tested-content identity header mismatch'
     }
@@ -326,7 +354,8 @@ function Assert-NinhoVerticalSliceEvidence {
     for ($inputIndex = 0; $inputIndex -lt $declaredInputs.Count; ++$inputIndex) {
         $declared = $declaredInputs[$inputIndex]
         $actual = $actualInputs.files[$inputIndex]
-        if ($declared.path -cne $actual.path -or [int64]$declared.size_bytes -ne $actual.size_bytes -or
+        if ($declared.path -cne $actual.path -or $declared.mode -cne $actual.mode -or
+                [int64]$declared.size_bytes -ne $actual.size_bytes -or
                 $declared.sha256 -cne $actual.sha256) {
             throw "tested input mismatch at index $inputIndex"
         }
@@ -836,4 +865,4 @@ function Invoke-NinhoLimitedRetry {
     throw "$Name failed after $MaximumAttempts attempts (exit codes: $codes)"
 }
 
-Export-ModuleMember -Function Assert-NinhoVerticalSliceEvidence,Assert-NinhoRelativeArtifactPath,Get-NinhoRouteEvidenceFromLog,Invoke-NinhoLimitedRetry,Get-NinhoTestedInputPaths,Get-NinhoTestedInputs,Get-NinhoCausalFrameIndex,Set-NinhoRequiredDownsampleFrame,Invoke-NinhoTimedProcess,Resolve-NinhoPackageManifestOutput,Assert-NinhoInputFeedbackMarkers,Assert-NinhoIndependentReviews
+Export-ModuleMember -Function Assert-NinhoVerticalSliceEvidence,Assert-NinhoRelativeArtifactPath,Get-NinhoRouteEvidenceFromLog,Invoke-NinhoLimitedRetry,Get-NinhoTestedInputPaths,Get-NinhoTestedInputs,Get-NinhoCausalFrameIndex,Set-NinhoRequiredDownsampleFrame,Invoke-NinhoTimedProcess,Resolve-NinhoPackageManifestOutput,Assert-NinhoInputFeedbackMarkers,Assert-NinhoIndependentReviews,Get-NinhoCanonicalTestedInputContent

@@ -31,6 +31,29 @@ foreach ($document in $normativeDocuments) {
     Assert-True ($inputs -ccontains $document) "normative fingerprint omits $document"
 }
 
+$lineEndingPath = Join-Path $Root 'tools\tests\.line-ending-contract.tmp'
+$binaryPath = Join-Path $Root 'art\.binary-contract.tmp'
+try {
+    [IO.File]::WriteAllBytes($lineEndingPath, [Text.UTF8Encoding]::new($false).GetBytes("alpha`nbeta`n"))
+    $lf = Get-NinhoCanonicalTestedInputContent -Path $lineEndingPath -RelativePath 'tools/tests/.line-ending-contract.tmp'
+    [IO.File]::WriteAllBytes($lineEndingPath, [Text.UTF8Encoding]::new($false).GetBytes("alpha`r`nbeta`r`n"))
+    $crlf = Get-NinhoCanonicalTestedInputContent -Path $lineEndingPath -RelativePath 'tools/tests/.line-ending-contract.tmp'
+    Assert-True ($lf.mode -ceq 'text_utf8_lf' -and $crlf.mode -ceq 'text_utf8_lf') `
+        'UTF-8 text must use canonical LF mode'
+    Assert-True ([Convert]::ToBase64String($lf.bytes) -ceq [Convert]::ToBase64String($crlf.bytes)) `
+        'LF and CRLF text must have identical canonical bytes'
+    [IO.File]::WriteAllBytes($binaryPath, [byte[]](0,13,10,255))
+    $binaryA = Get-NinhoCanonicalTestedInputContent -Path $binaryPath -RelativePath 'art/.binary-contract.tmp'
+    [IO.File]::WriteAllBytes($binaryPath, [byte[]](0,10,255))
+    $binaryB = Get-NinhoCanonicalTestedInputContent -Path $binaryPath -RelativePath 'art/.binary-contract.tmp'
+    Assert-True ($binaryA.mode -ceq 'binary' -and $binaryB.mode -ceq 'binary') `
+        'binary inputs must remain byte-preserving'
+    Assert-True ([Convert]::ToBase64String($binaryA.bytes) -cne [Convert]::ToBase64String($binaryB.bytes)) `
+        'binary inputs must remain sensitive to CRLF byte changes'
+} finally {
+    Remove-Item -LiteralPath $lineEndingPath,$binaryPath -Force -ErrorAction SilentlyContinue
+}
+
 $sandbox = Join-Path ([IO.Path]::GetTempPath()) ('ninho-identity-' + [Guid]::NewGuid().ToString('N'))
 try {
     New-Item -ItemType Directory -Force -Path $sandbox | Out-Null
@@ -54,6 +77,7 @@ try {
 
 $reviews = [pscustomobject]@{
     schema = 'ninho.vertical-slice.reviews.v1'
+    tested_inputs_schema = 'ninho.tested-inputs.v2'
     tested_inputs_sha256 = ('a' * 64)
     reviews = @(
         [pscustomobject]@{ role='code'; reviewer_id='/root/task12_code_review'; verdict='approved'; critical=0; important=0 },
