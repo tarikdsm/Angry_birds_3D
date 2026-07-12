@@ -20,6 +20,7 @@ var _targets: Dictionary = {}
 var _missing_asset_ids: Dictionary = {}
 var _preview_mesh: MeshInstance3D
 var _impact_marker: MeshInstance3D
+var _phase := "inspection"
 
 
 func _ready() -> void:
@@ -40,6 +41,7 @@ func _ready() -> void:
 
 
 func apply_frame(frame: Dictionary) -> void:
+	_phase = str(frame.get("phase", "inspection"))
 	var alive := {}
 	for snapshot: Dictionary in frame.get("snapshots", []):
 		var key := "%d:%d" % [int(snapshot.get("entity_id", 0)), int(snapshot.get("part_id", 0))]
@@ -118,7 +120,7 @@ func _material(color: Color, emission: Color, emission_energy: float) -> Standar
 
 
 func _apply_kernel_preview(preview_value: Variant) -> void:
-	if preview_value == null or not preview_value is Dictionary:
+	if _phase != "aim" or preview_value == null or not preview_value is Dictionary:
 		_preview_mesh.mesh = null
 		_impact_marker.visible = false
 		return

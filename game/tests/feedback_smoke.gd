@@ -28,8 +28,16 @@ func _run() -> void:
 	var controller := _scene.get_node_or_null("VerticalSliceController")
 	var camera := _scene.get_node_or_null("OrbitalCamera")
 	var hud := _scene.get_node_or_null("VerticalSliceHUD")
-	if feedback == null or controller == null or camera == null or hud == null:
+	var body_views := _scene.get_node_or_null("BodyViews")
+	if feedback == null or controller == null or camera == null or hud == null \
+			or body_views == null:
 		_fail("scene must expose feedback, controller, camera and HUD")
+		return
+	_test_authoritative_hud(hud)
+	if not is_instance_valid(_scene):
+		return
+	_test_preview_phase_visibility(body_views)
+	if not is_instance_valid(_scene):
 		return
 	for method: String in [
 		"apply_frame", "reset_feedback", "shutdown_feedback", "feedback_metrics",
@@ -400,6 +408,99 @@ func _run() -> void:
 		return
 	print(SUCCESS_MARKER)
 	_finish(0)
+
+
+func _test_authoritative_hud(hud: Node) -> void:
+	var integrity := hud.get_node("Root/TopBar/Margin/Readout/IntegrityLabel") as Label
+	var controls := hud.get_node("Root/ControlsLabel") as Label
+	var target := {
+		"entity_id": 701,
+		"current_integrity": 30.0,
+		"maximum_integrity": 70.0,
+		"neutralized": false,
+	}
+	hud.apply_frame({
+		"tick": 50,
+		"phase": "flight_ability",
+		"outcome": "none",
+		"objective_targets": [target],
+		"ability_readiness": "arming",
+		"ability_armed": false,
+		"events": [{
+			"kind": "damage_applied",
+			"affected_entity_id": 701,
+			"damage": 29.0,
+		}],
+	})
+	if "043%" not in integrity.text:
+		_fail("HUD must render authoritative objective integrity, got %s" % integrity.text)
+		return
+	if "ATIVAR VIRELA" in controls.text:
+		_fail("ability activation prompt must stay hidden before L+9")
+		return
+	hud.apply_frame({
+		"tick": 51,
+		"phase": "flight_ability",
+		"outcome": "none",
+		"objective_targets": [target],
+		"ability_readiness": "arming",
+		"ability_armed": false,
+		"events": [{
+			"kind": "command_rejected",
+			"rejection_reason_name": "not_armed",
+		}],
+	})
+	if "AINDA NÃO ARMADA" not in controls.text or "AGUARDE" not in controls.text:
+		_fail("early ability rejection must be legible")
+		return
+	hud.apply_frame({
+		"tick": 59,
+		"phase": "flight_ability",
+		"outcome": "none",
+		"objective_targets": [target],
+		"ability_readiness": "armed",
+		"ability_armed": true,
+		"events": [],
+	})
+	if "ATIVAR VIRELA" not in controls.text:
+		_fail("ability activation prompt must appear when authoritative state is armed")
+		return
+	hud.apply_frame({
+		"tick": 0,
+		"phase": "inspection",
+		"outcome": "none",
+		"objective_targets": [{
+			"entity_id": 999,
+			"current_integrity": 40.0,
+			"maximum_integrity": 50.0,
+			"neutralized": false,
+		}],
+		"ability_readiness": "unavailable",
+		"ability_armed": false,
+		"events": [],
+	})
+	if "080%" not in integrity.text:
+		_fail("restart/reconfigure must replace HUD target and integrity authoritatively")
+
+
+func _test_preview_phase_visibility(body_views: Node) -> void:
+	var preview := {
+		"samples": [Vector3.ZERO, Vector3.UP],
+		"first_hit": {"point": Vector3.UP},
+	}
+	body_views.apply_frame({
+		"phase": "aim", "snapshots": [], "trajectory_preview": preview})
+	var preview_mesh := body_views.get_node("KernelTrajectoryPreview") as MeshInstance3D
+	var impact_marker := body_views.get_node("FirstImpactMarker") as MeshInstance3D
+	if preview_mesh.mesh == null or not impact_marker.visible:
+		_fail("aim phase must render the authoritative trajectory preview")
+		return
+	for phase: String in ["inspection", "flight_ability", "result"]:
+		body_views.apply_frame({
+			"phase": phase, "snapshots": [], "trajectory_preview": preview})
+		if preview_mesh.mesh != null or impact_marker.visible:
+			_fail("stale trajectory preview remained visible in %s" % phase)
+			return
 
 
 func _descendant_count(node: Node) -> int:

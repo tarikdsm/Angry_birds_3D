@@ -92,12 +92,14 @@ NINHO_TEST("session frame batch preserves every event and only the latest state 
     const std::array first_events{first};
     const std::array first_snapshots{old_snapshot};
     batch.capture_tick(first_events, first_snapshots,
-        SessionState{.tick = TickIndex{3}}, 3, false, {}, old_preview);
+        SessionState{.tick = TickIndex{3}, .phase = SessionPhase::Aim},
+        3, false, {}, old_preview);
 
     const std::array second_events{second};
     const std::array second_snapshots{latest_snapshot};
     batch.capture_tick(second_events, second_snapshots,
-        SessionState{.tick = TickIndex{4}}, 2, true, {}, latest_preview);
+        SessionState{.tick = TickIndex{4}, .phase = SessionPhase::Aim},
+        2, true, {}, latest_preview);
 
     const SessionFrameData frame = batch.consume();
     NINHO_REQUIRE(frame.ticks_executed == 2);
@@ -118,6 +120,35 @@ NINHO_TEST("session frame batch preserves every event and only the latest state 
     NINHO_REQUIRE(after_consume.state.outcome == frame.state.outcome);
     NINHO_REQUIRE(after_consume.preview.has_value());
     NINHO_REQUIRE(after_consume.preview->canonical_hash == frame.preview->canonical_hash);
+}
+
+NINHO_TEST("session frame batch clears trajectory preview after cancel launch and result")
+{
+    SessionFrameBatch batch;
+    TrajectoryPreview preview{.canonical_hash = 37};
+
+    batch.capture_latest({}, SessionState{.phase = SessionPhase::Aim}, 3, false, {});
+    batch.set_preview(preview);
+    NINHO_REQUIRE(batch.peek().preview.has_value());
+
+    batch.capture_latest(
+        {}, SessionState{.phase = SessionPhase::Inspection}, 3, false, {});
+    NINHO_REQUIRE(!batch.peek().preview.has_value());
+
+    batch.set_preview(preview);
+    NINHO_REQUIRE(batch.peek().preview.has_value());
+    batch.capture_latest(
+        {}, SessionState{.phase = SessionPhase::Aim}, 3, false, {});
+    NINHO_REQUIRE(batch.peek().preview.has_value());
+
+    batch.capture_latest(
+        {}, SessionState{.phase = SessionPhase::FlightAbility}, 2, false, {});
+    NINHO_REQUIRE(!batch.peek().preview.has_value());
+
+    batch.set_preview(preview);
+    batch.capture_latest(
+        {}, SessionState{.phase = SessionPhase::Result}, 0, true, {});
+    NINHO_REQUIRE(!batch.peek().preview.has_value());
 }
 
 NINHO_TEST("session frame batch latches first fault until explicitly cleared")

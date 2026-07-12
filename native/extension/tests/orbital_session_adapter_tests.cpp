@@ -62,12 +62,23 @@ NINHO_TEST("orbital adapter configures queues all commands advances and restarts
     NINHO_REQUIRE(launched.ticks_executed == 3);
     NINHO_REQUIRE(!launched.events.empty());
     NINHO_REQUIRE(!launched.snapshots.empty());
-    NINHO_REQUIRE(launched.preview.has_value());
+    NINHO_REQUIRE(!launched.preview.has_value());
+    NINHO_REQUIRE(launched.objective_targets.size() == 1U);
+    NINHO_REQUIRE(launched.objective_targets.front().entity_id.value() == 200U);
+    NINHO_REQUIRE_NEAR(launched.objective_targets.front().current_integrity, 100.0, 1.0e-9);
+    NINHO_REQUIRE_NEAR(launched.objective_targets.front().maximum_integrity, 100.0, 1.0e-9);
+    NINHO_REQUIRE(
+        launched.ability_readiness == ninho::simulation::AbilityReadiness::Arming);
 
     NINHO_REQUIRE(adapter.restart());
     const SessionFrameData restarted = adapter.consume_frame();
     NINHO_REQUIRE(restarted.state.tick.value() == 0);
     NINHO_REQUIRE(restarted.events.empty());
+    NINHO_REQUIRE(restarted.objective_targets.size() == 1U);
+    NINHO_REQUIRE_NEAR(
+        restarted.objective_targets.front().current_integrity, 100.0, 1.0e-9);
+    NINHO_REQUIRE(
+        restarted.ability_readiness == ninho::simulation::AbilityReadiness::Unavailable);
 }
 
 NINHO_TEST("orbital adapter rolls back invalid configuration latches fault and recovers")

@@ -70,10 +70,25 @@ func _initialize() -> void:
 		return
 	if not _controller.latest.has_all([
 		"tick", "ticks_executed", "phase", "outcome", "birds_remaining",
-		"snapshots", "events", "objectives_complete", "trajectory_preview",
+		"snapshots", "events", "objectives_complete", "objective_targets",
+		"ability_readiness", "ability_armed", "trajectory_preview",
 		"metrics", "discarded_time_seconds"
 	]):
 		_fail("consume_frame dictionary contract is incomplete")
+		return
+	var objective_targets: Array = _controller.latest.objective_targets
+	if objective_targets.size() != 1 \
+			or not (objective_targets[0] as Dictionary).has_all([
+				"entity_id", "current_integrity", "maximum_integrity", "neutralized"]):
+		_fail("objective target frame state is incomplete")
+		return
+	if float((objective_targets[0] as Dictionary).current_integrity) != 100.0 \
+			or float((objective_targets[0] as Dictionary).maximum_integrity) != 100.0:
+		_fail("initial objective integrity is not authoritative")
+		return
+	if str(_controller.latest.ability_readiness) != "unavailable" \
+			or bool(_controller.latest.ability_armed):
+		_fail("inspection must expose unavailable unarmed ability state")
 		return
 
 	if _session.queue_aim(Vector3(INF, 0.0, 0.0), Vector3.UP, 10.5):

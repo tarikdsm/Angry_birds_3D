@@ -110,13 +110,16 @@ void SessionFrameBatch::capture_tick(
     std::uint32_t birds_remaining,
     bool objectives_complete,
     const physics::WorldMetrics& metrics,
-    std::optional<simulation::TrajectoryPreview> preview)
+    std::optional<simulation::TrajectoryPreview> preview,
+    std::span<const simulation::ObjectiveTargetStatus> objective_targets,
+    simulation::AbilityReadiness ability_readiness)
 {
     pending_.events.insert(pending_.events.end(), events.begin(), events.end());
     ++pending_.ticks_executed;
     capture_latest(
-        snapshots, state, birds_remaining, objectives_complete, metrics);
-    if (preview) {
+        snapshots, state, birds_remaining, objectives_complete, metrics,
+        objective_targets, ability_readiness);
+    if (preview && state.phase == simulation::SessionPhase::Aim) {
         pending_.preview = std::move(preview);
     }
 }
@@ -126,13 +129,20 @@ void SessionFrameBatch::capture_latest(
     const simulation::SessionState& state,
     std::uint32_t birds_remaining,
     bool objectives_complete,
-    const physics::WorldMetrics& metrics)
+    const physics::WorldMetrics& metrics,
+    std::span<const simulation::ObjectiveTargetStatus> objective_targets,
+    simulation::AbilityReadiness ability_readiness)
 {
     pending_.snapshots.assign(snapshots.begin(), snapshots.end());
     pending_.state = state;
     pending_.birds_remaining = birds_remaining;
     pending_.objectives_complete = objectives_complete;
+    pending_.objective_targets.assign(objective_targets.begin(), objective_targets.end());
+    pending_.ability_readiness = ability_readiness;
     pending_.metrics = metrics;
+    if (state.phase != simulation::SessionPhase::Aim) {
+        pending_.preview.reset();
+    }
 }
 
 void SessionFrameBatch::set_preview(simulation::TrajectoryPreview preview)
@@ -197,13 +207,18 @@ void capture_session_tick(
     const simulation::SimulationSession& session)
 {
     const std::span<const simulation::DomainEvent> events = session.events();
+    const std::vector<simulation::ObjectiveTargetStatus> objective_targets =
+        session.objective_target_statuses();
     batch.capture_tick(
         events,
         session.snapshots(),
         session.state(),
         session.birds_remaining(),
         session.objectives_complete(),
-        session.physics_metrics());
+        session.physics_metrics(),
+        std::nullopt,
+        objective_targets,
+        session.ability_readiness());
 }
 
 void OrbitalSessionAdapter::latch_content_error(
@@ -281,12 +296,16 @@ bool OrbitalSessionAdapter::configure(
         }
 
         SessionFrameBatch candidate_batch;
+        const std::vector<simulation::ObjectiveTargetStatus> objective_targets =
+            candidate.value->objective_target_statuses();
         candidate_batch.capture_latest(
             candidate.value->snapshots(),
             candidate.value->state(),
             candidate.value->birds_remaining(),
             candidate.value->objectives_complete(),
-            candidate.value->physics_metrics());
+            candidate.value->physics_metrics(),
+            objective_targets,
+            candidate.value->ability_readiness());
 
         session_ = std::move(candidate.value);
         content_ = std::move(candidate_content);
@@ -398,12 +417,16 @@ bool OrbitalSessionAdapter::restart() noexcept
             return false;
         }
         SessionFrameBatch candidate_batch;
+        const std::vector<simulation::ObjectiveTargetStatus> objective_targets =
+            candidate.value->objective_target_statuses();
         candidate_batch.capture_latest(
             candidate.value->snapshots(),
             candidate.value->state(),
             candidate.value->birds_remaining(),
             candidate.value->objectives_complete(),
-            candidate.value->physics_metrics());
+            candidate.value->physics_metrics(),
+            objective_targets,
+            candidate.value->ability_readiness());
 
         session_ = std::move(candidate.value);
         batch_ = std::move(candidate_batch);
@@ -421,12 +444,16 @@ bool OrbitalSessionAdapter::restart() noexcept
 
 void OrbitalSessionAdapter::capture_latest()
 {
+    const std::vector<simulation::ObjectiveTargetStatus> objective_targets =
+        session_->objective_target_statuses();
     batch_.capture_latest(
         session_->snapshots(),
         session_->state(),
         session_->birds_remaining(),
         session_->objectives_complete(),
-        session_->physics_metrics());
+        session_->physics_metrics(),
+        objective_targets,
+        session_->ability_readiness());
 }
 
 bool OrbitalSessionAdapter::advance(double delta) noexcept
@@ -533,6 +560,32 @@ namespace {
     return "unknown";
 }
 
+[[nodiscard]] const char* ability_readiness_name(
+    simulation::AbilityReadiness readiness) noexcept
+{
+    switch (readiness) {
+    case simulation::AbilityReadiness::Unavailable: return "unavailable";
+    case simulation::AbilityReadiness::Arming: return "arming";
+    case simulation::AbilityReadiness::Armed: return "armed";
+    case simulation::AbilityReadiness::Active: return "active";
+    case simulation::AbilityReadiness::Spent: return "spent";
+    }
+    return "unavailable";
+}
+
+[[nodiscard]] const char* rejection_reason_name(
+    simulation::CommandRejectionReason reason) noexcept
+{
+    switch (reason) {
+    case simulation::CommandRejectionReason::None: return "none";
+    case simulation::CommandRejectionReason::InvalidPhase: return "invalid_phase";
+    case simulation::CommandRejectionReason::InvalidAim: return "invalid_aim";
+    case simulation::CommandRejectionReason::NotArmed: return "not_armed";
+    case simulation::CommandRejectionReason::NoBirdAvailable: return "no_bird_available";
+    }
+    return "unknown";
+}
+
 [[nodiscard]] const char* event_kind_name(simulation::DomainEventKind kind) noexcept
 {
     using enum simulation::DomainEventKind;
@@ -613,6 +666,7 @@ namespace {
     result["entity_id"] = static_cast<std::int64_t>(event.entity_id.value());
     result["bird_archetype_id"] = static_cast<std::int64_t>(event.bird_archetype_id.value());
     result["rejection_reason"] = static_cast<std::int64_t>(event.rejection_reason);
+    result["rejection_reason_name"] = rejection_reason_name(event.rejection_reason);
     result["ability_id"] = static_cast<std::int64_t>(event.ability_id.value());
     result["affected_entity_id"] = static_cast<std::int64_t>(event.affected_entity_id.value());
     result["affected_part_id"] = static_cast<std::int64_t>(event.affected_part_id.value());
@@ -670,6 +724,15 @@ namespace {
     for (const auto& event : frame.events) {
         events.push_back(event_dictionary(event));
     }
+    godot::TypedArray<godot::Dictionary> objective_targets;
+    for (const auto& target : frame.objective_targets) {
+        godot::Dictionary item;
+        item["entity_id"] = static_cast<std::int64_t>(target.entity_id.value());
+        item["current_integrity"] = target.current_integrity;
+        item["maximum_integrity"] = target.maximum_integrity;
+        item["neutralized"] = target.neutralized;
+        objective_targets.push_back(item);
+    }
     godot::Dictionary metrics;
     metrics["body_count"] = frame.metrics.body_count;
     metrics["shape_count"] = frame.metrics.shape_count;
@@ -687,6 +750,10 @@ namespace {
     result["snapshots"] = snapshots;
     result["events"] = events;
     result["objectives_complete"] = frame.objectives_complete;
+    result["objective_targets"] = objective_targets;
+    result["ability_readiness"] = ability_readiness_name(frame.ability_readiness);
+    result["ability_armed"] =
+        frame.ability_readiness == simulation::AbilityReadiness::Armed;
     result["trajectory_preview"] = preview_variant(frame.preview);
     result["metrics"] = metrics;
     result["discarded_time_seconds"] = frame.discarded_time_seconds;

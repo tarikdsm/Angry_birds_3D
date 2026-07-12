@@ -143,7 +143,7 @@ func _run() -> void:
 	if _controller._preview_matches_input_sample(matching_preview, input_sample):
 		_fail("causal input matcher accepted a preview from another command")
 		return
-	var controls := _scene.get_node_or_null("VerticalSliceHUD/Root/ControlsLabel") as Control
+	var controls := _scene.get_node_or_null("VerticalSliceHUD/Root/ControlsLabel") as Label
 	var hud_root := _scene.get_node_or_null("VerticalSliceHUD/Root") as Control
 	var integrity_label := _scene.get_node("VerticalSliceHUD/Root/TopBar/Margin/Readout/IntegrityLabel") as Label
 	if controls == null:
@@ -208,9 +208,9 @@ func _run() -> void:
 		return
 
 	var saw_ability_started := false
-	var saw_anchor_damage_below_full := false
-	var saw_anchor_neutralized_at_zero := false
-	var expected_anchor_integrity := 100.0
+	var saw_early_ability_rejection := false
+	var saw_objective_damage_below_full := false
+	var saw_objective_neutralized_at_zero := false
 	for shot in range(ROUTE_THETA_DEGREES.size()):
 		root.size = ASPECT_VIEWPORTS[shot]
 		for settle_frame in range(20):
@@ -235,6 +235,9 @@ func _run() -> void:
 					or int(_controller.current_frame.get("birds_remaining", -1)) != birds_before_cancel:
 				_fail("Esc cancel must preserve progress and the remaining roster")
 				return
+			if _controller.current_frame.get("trajectory_preview") != null:
+				_fail("Esc cancel must clear the authoritative trajectory preview")
+				return
 		if not _launch.begin_aim():
 			_fail("shot %d could not begin aim" % shot)
 			return
@@ -258,6 +261,7 @@ func _run() -> void:
 
 		var launch_tick := -1
 		var ability_requested := false
+		var early_ability_requested := false
 		var event_trace: Array[String] = []
 		for frame_index in range(MAX_FRAMES_PER_SHOT):
 			await physics_frame
@@ -278,8 +282,6 @@ func _run() -> void:
 					and camera.global_position.distance_to(camera.get("_focus")) > 24.001:
 				_fail("runtime camera exceeded 24 m during shot %d frame %d" % [shot, frame_index])
 				return
-			var anchor_damage_in_frame := false
-			var anchor_neutralized_in_frame := false
 			for event: Dictionary in frame.get("events", []):
 				var kind := str(event.get("kind", ""))
 				if kind in ["bird_launched", "ability_started", "ability_ended", "entity_neutralized", "command_rejected"]:
@@ -288,25 +290,40 @@ func _run() -> void:
 					launch_tick = int(event.get("tick", frame.get("tick", 0)))
 				elif kind == "ability_started":
 					saw_ability_started = true
-				elif kind == "damage_applied" \
-						and int(event.get("affected_entity_id", 0)) == 200:
-					expected_anchor_integrity = maxf(
-						0.0, expected_anchor_integrity - float(event.get("damage", 0.0)))
-					anchor_damage_in_frame = true
-				elif kind == "entity_neutralized" \
-						and int(event.get("affected_entity_id", 0)) == 200:
-					expected_anchor_integrity = 0.0
-					anchor_neutralized_in_frame = true
-			if anchor_damage_in_frame or anchor_neutralized_in_frame:
-				var displayed_integrity := _hud_integrity_percent(integrity_label)
-				if displayed_integrity != roundi(expected_anchor_integrity):
-					_fail("Anchor HUD=%d differs from affected-target integrity=%d" % [
-						displayed_integrity, roundi(expected_anchor_integrity)])
+				elif kind == "command_rejected" \
+						and str(event.get("rejection_reason_name", "")) == "not_armed":
+					saw_early_ability_rejection = true
+					if "AINDA NÃO ARMADA" not in controls.text \
+							or "AGUARDE" not in controls.text:
+						_fail("early Virela rejection was not legible in the HUD")
+						return
+			var objective_targets: Array = frame.get("objective_targets", [])
+			if objective_targets.size() != 1:
+				_fail("frame must expose exactly one authoritative objective target")
+				return
+			var objective := objective_targets.front() as Dictionary
+			var current_integrity := float(objective.get("current_integrity", -1.0))
+			var maximum_integrity := float(objective.get("maximum_integrity", 0.0))
+			if maximum_integrity <= 0.0 or current_integrity < 0.0 \
+					or current_integrity > maximum_integrity:
+				_fail("objective integrity state is invalid: %s" % objective)
+				return
+			var expected_percent := roundi(100.0 * current_integrity / maximum_integrity)
+			var displayed_integrity := _hud_integrity_percent(integrity_label)
+			if displayed_integrity != expected_percent:
+				_fail("HUD=%d differs from authoritative objective integrity=%d" % [
+					displayed_integrity, expected_percent])
+				return
+			if current_integrity < maximum_integrity:
+				saw_objective_damage_below_full = true
+			if bool(objective.get("neutralized", false)) and displayed_integrity == 0:
+				saw_objective_neutralized_at_zero = true
+			if shot == 0 and not early_ability_requested and launch_tick >= 0 \
+					and int(frame.get("tick", 0)) >= launch_tick + 1:
+				if not _launch.launch_or_activate():
+					_fail("controller did not delegate the early Virela request")
 					return
-				if anchor_damage_in_frame and displayed_integrity < 100:
-					saw_anchor_damage_below_full = true
-				if anchor_neutralized_in_frame and displayed_integrity == 0:
-					saw_anchor_neutralized_at_zero = true
+				early_ability_requested = true
 			if not ability_requested and launch_tick >= 0 \
 					and int(frame.get("tick", 0)) >= launch_tick + 39:
 				if not _launch.launch_or_activate():
@@ -343,10 +360,13 @@ func _run() -> void:
 	if not saw_ability_started:
 		_fail("verified route did not publish ability_started")
 		return
-	if not saw_anchor_damage_below_full:
+	if not saw_early_ability_rejection:
+		_fail("verified route did not expose the authoritative early ability rejection")
+		return
+	if not saw_objective_damage_below_full:
 		_fail("real Anchor damage did not reduce the HUD below 100%")
 		return
-	if not saw_anchor_neutralized_at_zero:
+	if not saw_objective_neutralized_at_zero:
 		_fail("Anchor neutralization did not set the HUD to 0%")
 		return
 	if not _launch.restart_now():
@@ -356,6 +376,20 @@ func _run() -> void:
 	await physics_frame
 	if str(_controller.current_frame.get("phase", "")) != "inspection":
 		_fail("restart did not restore inspection")
+		return
+	var restarted_targets: Array = _controller.current_frame.get("objective_targets", [])
+	if restarted_targets.size() != 1:
+		_fail("restart did not restore authoritative objective state")
+		return
+	var restarted_target := restarted_targets.front() as Dictionary
+	if not is_equal_approx(
+			float(restarted_target.get("current_integrity", -1.0)),
+			float(restarted_target.get("maximum_integrity", 0.0))) \
+			or _hud_integrity_percent(integrity_label) != 100 \
+			or str(_controller.current_frame.get("ability_readiness", "")) != "unavailable" \
+			or bool(_controller.current_frame.get("ability_armed", true)) \
+			or _controller.current_frame.get("trajectory_preview") != null:
+		_fail("restart did not reset HUD, ability readiness and preview authoritatively")
 		return
 
 	# Prove the loss path through the same Godot/GDExtension public controls.

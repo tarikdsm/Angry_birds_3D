@@ -51,12 +51,12 @@ text = "FASE  CARREGANDO"
 [node name="BirdsLabel" type="Label" parent="Root/TopBar/Margin/Readout"]
 unique_name_in_owner = true
 theme_override_colors/font_color = Color(0.745, 0.976, 0.91, 1)
-text = "VIRELAS  3"
+text = "VIRELAS  ---"
 
 [node name="IntegrityLabel" type="Label" parent="Root/TopBar/Margin/Readout"]
 unique_name_in_owner = true
 theme_override_colors/font_color = Color(0.965, 0.788, 0.361, 1)
-text = "INTEGRIDADE DA ÂNCORA  100%"
+text = "INTEGRIDADE DO ALVO  ---"
 
 [node name="ControlsLabel" type="Label" parent="Root"]
 unique_name_in_owner = true

@@ -65,6 +65,9 @@ struct SessionFrameData {
     std::vector<simulation::EntitySnapshot> snapshots;
     std::vector<simulation::DomainEvent> events;
     bool objectives_complete{};
+    std::vector<simulation::ObjectiveTargetStatus> objective_targets;
+    simulation::AbilityReadiness ability_readiness{
+        simulation::AbilityReadiness::Unavailable};
     std::optional<simulation::TrajectoryPreview> preview;
     physics::WorldMetrics metrics;
     double discarded_time_seconds{};
@@ -79,13 +82,19 @@ public:
         std::uint32_t birds_remaining,
         bool objectives_complete,
         const physics::WorldMetrics& metrics,
-        std::optional<simulation::TrajectoryPreview> preview = std::nullopt);
+        std::optional<simulation::TrajectoryPreview> preview = std::nullopt,
+        std::span<const simulation::ObjectiveTargetStatus> objective_targets = {},
+        simulation::AbilityReadiness ability_readiness =
+            simulation::AbilityReadiness::Unavailable);
     void capture_latest(
         std::span<const simulation::EntitySnapshot> snapshots,
         const simulation::SessionState& state,
         std::uint32_t birds_remaining,
         bool objectives_complete,
-        const physics::WorldMetrics& metrics);
+        const physics::WorldMetrics& metrics,
+        std::span<const simulation::ObjectiveTargetStatus> objective_targets = {},
+        simulation::AbilityReadiness ability_readiness =
+            simulation::AbilityReadiness::Unavailable);
     void set_preview(simulation::TrajectoryPreview preview);
     void add_discarded_time(double seconds) noexcept;
     [[nodiscard]] SessionFrameData consume();

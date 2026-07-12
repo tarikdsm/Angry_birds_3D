@@ -7,9 +7,10 @@ extends CanvasLayer
 @onready var result_label: Label = %ResultLabel
 @onready var fault_label: Label = %FaultLabel
 
-var _anchor_integrity := 100.0
-var _last_tick := -1
 var _last_phase := "loading"
+var _last_ability_readiness := "unavailable"
+var _last_ability_armed := false
+var _ability_rejected_early := false
 var _reduced_motion := false
 
 const SPACE_COLOR := Color("07111f")
@@ -18,24 +19,22 @@ const SECONDARY_TEXT_COLOR := Color("f6c95c")
 
 
 func apply_frame(frame: Dictionary) -> void:
-	var tick := int(frame.get("tick", 0))
-	if tick < _last_tick:
-		_anchor_integrity = 100.0
-	_last_tick = tick
-	for event: Dictionary in frame.get("events", []):
-		var kind := str(event.get("kind", ""))
-		if kind == "damage_applied" \
-				and int(event.get("affected_entity_id", 0)) == 200:
-			_anchor_integrity = maxf(0.0, _anchor_integrity - float(event.get("damage", 0.0)))
-		elif kind == "entity_neutralized" \
-				and int(event.get("affected_entity_id", 0)) == 200:
-			_anchor_integrity = 0.0
 	var phase := str(frame.get("phase", "loading"))
+	var readiness := str(frame.get("ability_readiness", "unavailable"))
+	var ability_armed := bool(frame.get("ability_armed", false))
+	if phase != "flight_ability" or ability_armed:
+		_ability_rejected_early = false
+	for event: Dictionary in frame.get("events", []):
+		if str(event.get("kind", "")) == "command_rejected" \
+				and str(event.get("rejection_reason_name", "")) == "not_armed":
+			_ability_rejected_early = true
 	_last_phase = phase
+	_last_ability_readiness = readiness
+	_last_ability_armed = ability_armed
 	phase_label.text = "FASE  %s" % phase.to_upper().replace("_", " ")
 	birds_label.text = "VIRELAS  %d" % int(frame.get("birds_remaining", 0))
-	integrity_label.text = "INTEGRIDADE DA ÂNCORA  %03d%%" % roundi(_anchor_integrity)
-	controls_label.text = _controls_with_accessibility(phase)
+	integrity_label.text = _objective_integrity_text(frame.get("objective_targets", []))
+	controls_label.text = _controls_with_accessibility(phase, readiness, ability_armed)
 	var outcome := str(frame.get("outcome", "none"))
 	if outcome == "victory":
 		result_label.text = "ÓRBITA CONQUISTADA"
@@ -51,7 +50,8 @@ func show_fault(code: String, message: String) -> void:
 
 func set_reduced_motion(enabled: bool) -> void:
 	_reduced_motion = enabled
-	controls_label.text = _controls_with_accessibility(_last_phase)
+	controls_label.text = _controls_with_accessibility(
+		_last_phase, _last_ability_readiness, _last_ability_armed)
 
 
 func minimum_contrast_ratio() -> float:
@@ -60,23 +60,46 @@ func minimum_contrast_ratio() -> float:
 		_contrast_ratio(SECONDARY_TEXT_COLOR, SPACE_COLOR))
 
 
-func _controls_for_phase(phase: String) -> String:
+func _objective_integrity_text(targets_value: Variant) -> String:
+	if targets_value == null or not targets_value is Array or targets_value.is_empty():
+		return "INTEGRIDADE DO ALVO  ---"
+	var target_value: Variant = targets_value.front()
+	if target_value == null or not target_value is Dictionary:
+		return "INTEGRIDADE DO ALVO  ---"
+	var target := target_value as Dictionary
+	var maximum := float(target.get("maximum_integrity", 0.0))
+	if maximum <= 0.0:
+		return "INTEGRIDADE DO ALVO  ---"
+	var current := clampf(float(target.get("current_integrity", 0.0)), 0.0, maximum)
+	return "INTEGRIDADE DO ALVO  %03d%%" % roundi(100.0 * current / maximum)
+
+
+func _controls_for_phase(phase: String, readiness: String, ability_armed: bool) -> String:
 	match phase:
 		"inspection":
 			return "CLIQUE  MIRAR    RMB  ÓRBITA    F  RECENTRAR"
 		"aim":
 			return "Q/E  ARCO    A/D  POTÊNCIA    ESPAÇO  LANÇAR    ESC  CANCELAR"
 		"flight_ability":
-			return "ESPAÇO  ATIVAR VIRELA    F  RECENTRAR"
+			if _ability_rejected_early:
+				return "VIRELA AINDA NÃO ARMADA    AGUARDE    F  RECENTRAR"
+			if ability_armed and readiness == "armed":
+				return "ESPAÇO  ATIVAR VIRELA    F  RECENTRAR"
+			if readiness == "arming":
+				return "VIRELA CARREGANDO    F  RECENTRAR"
+			if readiness == "active":
+				return "VIRELA ATIVA    F  RECENTRAR"
+			return "F  RECENTRAR"
 		"result":
 			return "SEGURE R 0,5 s  REINICIAR"
 		_:
 			return "ESC  PAUSA    SEGURE R 0,5 s  REINICIAR"
 
 
-func _controls_with_accessibility(phase: String) -> String:
+func _controls_with_accessibility(
+	phase: String, readiness: String, ability_armed: bool) -> String:
 	return "%s    M  MOVIMENTO %s" % [
-		_controls_for_phase(phase),
+		_controls_for_phase(phase, readiness, ability_armed),
 		"REDUZIDO" if _reduced_motion else "COMPLETO",
 	]
 
