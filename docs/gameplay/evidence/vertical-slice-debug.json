@@ -2,1348 +2,1615 @@
     "schema":  "ninho.vertical-slice.evidence.v1",
     "schema_version":  1,
     "configuration":  "Debug",
-    "commit":  "8a6e62e2456c87ff9cba8b67e3cad2747ea92aec",
-    "source_revision":  "8a6e62e2456c87ff9cba8b67e3cad2747ea92aec",
-    "tested_inputs_schema":  "ninho.tested-inputs.v1",
-    "tested_inputs_sha256":  "707ae24fafcd15c3f1df3179d76110685d909e4d54e4466af703b1834811a4b8",
+    "commit":  "64e9e365260d8042ac47255d0dba2224641cf659",
+    "source_revision":  "64e9e365260d8042ac47255d0dba2224641cf659",
+    "tested_inputs_schema":  "ninho.tested-inputs.v2",
+    "tested_inputs_sha256":  "e1197ead992736ca5a328619ddc5716e86335460beb2f6e82a8c794fdb0aeb5d",
     "tested_inputs":  [
                           {
                               "path":  ".gitattributes",
-                              "size_bytes":  268,
-                              "sha256":  "53f213619e55f770da8260718a650ab39d44dae2151ecc069de07b1737a216d4"
+                              "mode":  "text_utf8_lf",
+                              "size_bytes":  259,
+                              "sha256":  "06d1f3077a82b748f21ab4a9b807764771a188a92426dc2d6b41327eee7ccdb6"
                           },
                           {
                               "path":  ".gitignore",
-                              "size_bytes":  204,
-                              "sha256":  "0d0af74d8fd31c92e52202d250538a5875465a9d0d2cf31eec4301c7b33bb85b"
+                              "mode":  "text_utf8_lf",
+                              "size_bytes":  189,
+                              "sha256":  "40d99f365076bddda50fde627fac007b1feb60d0ae3cf5d92a66b058ce0d2a3f"
                           },
                           {
                               "path":  "art/config/vertical_slice_assets.json",
+                              "mode":  "text_utf8_lf",
                               "size_bytes":  11040,
                               "sha256":  "c0a153a95129dfdbab144c43d9ad45099d6cbacd47070c2ccd77080c491892b1"
                           },
                           {
                               "path":  "art/scripts/build_vertical_slice.py",
+                              "mode":  "text_utf8_lf",
                               "size_bytes":  33431,
                               "sha256":  "86038db6b355f561b45f5da55a6ec05c5eebf4d1788dbaffdc4948b15cb94917"
                           },
                           {
                               "path":  "art/scripts/ninho_blender/__init__.py",
+                              "mode":  "text_utf8_lf",
                               "size_bytes":  90,
                               "sha256":  "80acec724fe6cdd083a12d5d3e9265068b5e9da500515416ba98061395fef53b"
                           },
                           {
                               "path":  "art/scripts/ninho_blender/contracts.py",
+                              "mode":  "text_utf8_lf",
                               "size_bytes":  3034,
                               "sha256":  "c376eafc07f5074ba8d006ee07e67a5290fe6ecbcc0f474005ad2b184e5e5943"
                           },
                           {
                               "path":  "art/scripts/ninho_blender/export.py",
+                              "mode":  "text_utf8_lf",
                               "size_bytes":  19722,
                               "sha256":  "050faa62222df7b318566b389eb5f1196266f252adf4d52590d2e05d2a2b9849"
                           },
                           {
                               "path":  "art/scripts/ninho_blender/geometry.py",
+                              "mode":  "text_utf8_lf",
                               "size_bytes":  9819,
                               "sha256":  "fec5a1665f7bc85ecca8c2da4f6ca2900ed4e98586f0f357bd07869f24678423"
                           },
                           {
                               "path":  "art/scripts/ninho_blender/materials.py",
+                              "mode":  "text_utf8_lf",
                               "size_bytes":  11647,
                               "sha256":  "a158f02ab119157d0f8aa71a79f140822d4e26064fa115fa0dd0d22f2dfbbf5a"
                           },
                           {
                               "path":  "art/scripts/ninho_blender/textures.py",
+                              "mode":  "text_utf8_lf",
                               "size_bytes":  5519,
                               "sha256":  "a72505893f3dcc54b7c2c3803f0a0df6984bda813a0e7cbfe22763c0b807e414"
                           },
                           {
                               "path":  "art/source/vertical_slice/AST_AsterPlanet.blend",
+                              "mode":  "binary",
                               "size_bytes":  117650,
                               "sha256":  "6d872a289d8a24a62a375652d32071ccadf7b3fc413d2a62352d042fbed7174c"
                           },
                           {
                               "path":  "art/source/vertical_slice/AST_Platform.blend",
+                              "mode":  "binary",
                               "size_bytes":  96037,
                               "sha256":  "672b725682569271859fa58b3b66705a3fb6b376ba3607ec9937f07dbac8117d"
                           },
                           {
                               "path":  "art/source/vertical_slice/CHR_Virela.blend",
+                              "mode":  "binary",
                               "size_bytes":  110845,
                               "sha256":  "1c0acb3c947dfcbd849497d6a448511904a5efd90c76b1069fbf2475db879785"
                           },
                           {
                               "path":  "art/source/vertical_slice/DEV_ImpulseRing.blend",
+                              "mode":  "binary",
                               "size_bytes":  111341,
                               "sha256":  "9e6fa14f03501ba3ec9f4b1bca95962b7a5441908bbe79f813f308a3dffaf31f"
                           },
                           {
                               "path":  "art/source/vertical_slice/ENM_Anchor.blend",
+                              "mode":  "binary",
                               "size_bytes":  111610,
                               "sha256":  "308da2f53ff8fdc8b4828f1b8c9f275ab15ad4953006ff2c5e6fb9f572687f1b"
                           },
                           {
                               "path":  "art/source/vertical_slice/KIT_Brick_A.blend",
+                              "mode":  "binary",
                               "size_bytes":  92848,
                               "sha256":  "c270145c50434acd864d3454271eae0bedc96d3c8858bc17dcd749956a1240f6"
                           },
                           {
                               "path":  "art/source/vertical_slice/KIT_GlassPanel_A.blend",
+                              "mode":  "binary",
                               "size_bytes":  93253,
                               "sha256":  "b50f4fe1472d5402f1f1c32af88f2d7a39deed51f752be09b9a49430d9ce81a6"
                           },
                           {
                               "path":  "art/source/vertical_slice/KIT_PineBeam_A.blend",
+                              "mode":  "binary",
                               "size_bytes":  93720,
                               "sha256":  "a3986eeff6133b76276eaebc852aca7102be84a7763ae879ce0db5bbca2a0a95"
                           },
                           {
                               "path":  "art/source/vertical_slice/KIT_PineBrace_A.blend",
+                              "mode":  "binary",
                               "size_bytes":  93686,
                               "sha256":  "622019c7b20cc844198045328ca9bd888317cfeb8f84df424d8d307bbcc676b1"
                           },
                           {
                               "path":  "art/source/vertical_slice/KIT_PineLintel_A.blend",
+                              "mode":  "binary",
                               "size_bytes":  93730,
                               "sha256":  "eb01610ba7905516845c2f7d1b50edbd8127ddf2528e356e32b6536e9c8d916d"
                           },
                           {
                               "path":  "cmake/Dependencies.cmake",
-                              "size_bytes":  3909,
-                              "sha256":  "8d3dc247f6ab7e46b245e7e8559caeba82751d643bd01a09ee5bc1846d5298f8"
+                              "mode":  "text_utf8_lf",
+                              "size_bytes":  3840,
+                              "sha256":  "f9e9907bc94d3fb5b03d744b3e7b2fbda35a67a5813208281d976ce35c3fe43d"
                           },
                           {
                               "path":  "cmake/PrepareGDExtensionTest.cmake",
+                              "mode":  "text_utf8_lf",
                               "size_bytes":  261,
                               "sha256":  "66d8783a8394ecd593da4d2d221196e00cc5e4bb377dab83c7862f651388a1b5"
                           },
                           {
                               "path":  "cmake/VerifyGDExtension.cmake",
-                              "size_bytes":  3835,
-                              "sha256":  "e3c69a8c71cd1339fdb35f899bb35fd151bba89e6825f80efe65f26d590d2b28"
+                              "mode":  "text_utf8_lf",
+                              "size_bytes":  3752,
+                              "sha256":  "612f8a47cfd3c5a31d214560797a7679c120dc8567bdb22271274dc64d582efb"
                           },
                           {
                               "path":  "cmake/WriteGDExtensionStamp.cmake",
-                              "size_bytes":  656,
-                              "sha256":  "8e74397a6c2878f0e3da5077d65d4f84589e4a7a363c855672a62c6a9d671856"
+                              "mode":  "text_utf8_lf",
+                              "size_bytes":  637,
+                              "sha256":  "fc17c00d02334a374a63df6401a6f88fe3d1150a32f98daba8e6158b655a5a5c"
                           },
                           {
                               "path":  "CMakeLists.txt",
-                              "size_bytes":  3011,
-                              "sha256":  "91f9e1a71549f47bcb2ac70299cc75ee232fa821539793f8133cd2dfa318c1c3"
+                              "mode":  "text_utf8_lf",
+                              "size_bytes":  2968,
+                              "sha256":  "290349fdde411bd07b35b73d71520c39148a875a51ee05349f10c6e368691194"
                           },
                           {
                               "path":  "CMakePresets.json",
+                              "mode":  "text_utf8_lf",
                               "size_bytes":  1120,
                               "sha256":  "3316126b405902b73d22d6ea299a9da7c77adcdf09ef24da8c15404273bef1aa"
                           },
                           {
                               "path":  "docs/gameplay/vertical-slice-content-schema.md",
+                              "mode":  "text_utf8_lf",
                               "size_bytes":  5965,
                               "sha256":  "09ae8c42061a05f3c993da97bcee47471d00d19ebfd1668fd0cfc182efc2dde0"
                           },
                           {
                               "path":  "docs/superpowers/plans/2026-07-11-vertical-slice-balance-correction.md",
+                              "mode":  "text_utf8_lf",
                               "size_bytes":  9207,
                               "sha256":  "4c1ee738c24d9f47b646658930da6c101cc4cd3dafc8fcde90cf0a265bbe9b74"
                           },
                           {
                               "path":  "docs/superpowers/plans/2026-07-11-vertical-slice-implementation.md",
+                              "mode":  "text_utf8_lf",
                               "size_bytes":  29402,
                               "sha256":  "116267352b2e2c3ff6cb8dcb6d866de160de83623df541f22c579b584fc20a6e"
                           },
                           {
                               "path":  "docs/superpowers/specs/2026-07-11-vertical-slice-balance-correction-design.md",
+                              "mode":  "text_utf8_lf",
                               "size_bytes":  8891,
                               "sha256":  "c69b996a9dd83cf4152b65aceab7dff1f76435a3197cf1f4ca4ff7c8af6a04d8"
                           },
                           {
                               "path":  "docs/superpowers/specs/2026-07-11-vertical-slice-design.md",
+                              "mode":  "text_utf8_lf",
                               "size_bytes":  22566,
                               "sha256":  "2770bfd429c86c7515ff0d322ec5849856b3402a1ba262745de152735f1cb5c8"
                           },
                           {
                               "path":  "game/assets/audio/generated/brick.wav",
+                              "mode":  "binary",
                               "size_bytes":  45164,
                               "sha256":  "487c776c858d0bf484f755bdbafded2b653e16983d4d122c240b0b603ee84e05"
                           },
                           {
                               "path":  "game/assets/audio/generated/brick.wav.import",
+                              "mode":  "text_utf8_lf",
                               "size_bytes":  495,
                               "sha256":  "c887262c874b687eccfc1355c6077d10085ba8afb4a9626cbc867346a9d92492"
                           },
                           {
                               "path":  "game/assets/audio/generated/defeat.wav",
+                              "mode":  "binary",
                               "size_bytes":  161324,
                               "sha256":  "413a86d244067930dc69670cff0a0ca1875d507bbf83b1124830131babe279c6"
                           },
                           {
                               "path":  "game/assets/audio/generated/defeat.wav.import",
+                              "mode":  "text_utf8_lf",
                               "size_bytes":  499,
                               "sha256":  "beb8a7e1f6bf3e7405973b1aef3220fd51200a20f39d2199db222402f3013682"
                           },
                           {
                               "path":  "game/assets/audio/generated/glass.wav",
+                              "mode":  "binary",
                               "size_bytes":  94124,
                               "sha256":  "ee1425e5033be30880c391f5a2061da7139b229e91ba93bf8dab40663791d8e4"
                           },
                           {
                               "path":  "game/assets/audio/generated/glass.wav.import",
+                              "mode":  "text_utf8_lf",
                               "size_bytes":  496,
                               "sha256":  "da8fe2820c8eed9e782a1d345ae1ce7c4e41a13fd669eb702213e9d88b60eef1"
                           },
                           {
                               "path":  "game/assets/audio/generated/helmet.wav",
+                              "mode":  "binary",
                               "size_bytes":  53804,
                               "sha256":  "338a7c7351528b8c5fc4824e08800e7704613bb042099ddb2015a79233946152"
                           },
                           {
                               "path":  "game/assets/audio/generated/helmet.wav.import",
+                              "mode":  "text_utf8_lf",
                               "size_bytes":  499,
                               "sha256":  "124fa28503ab99b51b84ae84fad916747858c0a07b50e7a4f34816eabc55f4f1"
                           },
                           {
                               "path":  "game/assets/audio/generated/launch.wav",
+                              "mode":  "binary",
                               "size_bytes":  59564,
                               "sha256":  "3ad2b6fd2e0ad2df72c7e425d68214b9f01842f661794b2264f69ea261c1119d"
                           },
                           {
                               "path":  "game/assets/audio/generated/launch.wav.import",
+                              "mode":  "text_utf8_lf",
                               "size_bytes":  498,
                               "sha256":  "844e428200711c31ec09bd581d1c0d92b79862b573b6acffd3daa2cc55ccced7"
                           },
                           {
                               "path":  "game/assets/audio/generated/pine.wav",
+                              "mode":  "binary",
                               "size_bytes":  39404,
                               "sha256":  "2da7fa2482866b11cf9a5428d21c34ba035f981e4f3b076d3819156af228d891"
                           },
                           {
                               "path":  "game/assets/audio/generated/pine.wav.import",
+                              "mode":  "text_utf8_lf",
                               "size_bytes":  493,
                               "sha256":  "81730fa0922b294a5008993630c71ff81cacc59a3c40479b2d46788359a1c78d"
                           },
                           {
                               "path":  "game/assets/audio/generated/victory.wav",
+                              "mode":  "binary",
                               "size_bytes":  176684,
                               "sha256":  "628ad5d12da6398dc0b3badea2b7ffc4d464e396a0bdc1a54e8c2413d3c57ecd"
                           },
                           {
                               "path":  "game/assets/audio/generated/victory.wav.import",
+                              "mode":  "text_utf8_lf",
                               "size_bytes":  502,
                               "sha256":  "a05d010146e03451def80cfeadf753fabde250340b204a58f6ce02a1c2e94ee5"
                           },
                           {
                               "path":  "game/assets/audio/generated/vortex.wav",
+                              "mode":  "binary",
                               "size_bytes":  139244,
                               "sha256":  "26ed285e54f989e1f0176623534d1477cf2bcf430589f62c3bb8904451a09873"
                           },
                           {
                               "path":  "game/assets/audio/generated/vortex.wav.import",
+                              "mode":  "text_utf8_lf",
                               "size_bytes":  498,
                               "sha256":  "90dd109f625124d0f0341790385648e60c40b7c9b996c40d985a4f61ef35e440"
                           },
                           {
                               "path":  "game/assets/audio/generated/vulnerable.wav",
+                              "mode":  "binary",
                               "size_bytes":  69164,
                               "sha256":  "643d1c279a46c9cae40e29335225e1466e8329900ab98b9e7ec7ad755d2678c2"
                           },
                           {
                               "path":  "game/assets/audio/generated/vulnerable.wav.import",
+                              "mode":  "text_utf8_lf",
                               "size_bytes":  510,
                               "sha256":  "df9f0502344f6330c9dde27ddd37d06625bf9b80522afcb9bfe8a2f453c80274"
                           },
                           {
                               "path":  "game/assets/audio/README.md",
+                              "mode":  "text_utf8_lf",
                               "size_bytes":  2204,
                               "sha256":  "055875bd83ad993c049539640fdef5970b10bba4fe1fbe37b9966c5d845ea0f8"
                           },
                           {
                               "path":  "game/assets/vertical_slice/aster/AST_AsterPlanet.glb",
+                              "mode":  "binary",
                               "size_bytes":  32700,
                               "sha256":  "825099180d7d4c08f79e8fab4abe21aae91e84bc3863015e2b7c073becf403d3"
                           },
                           {
                               "path":  "game/assets/vertical_slice/aster/AST_AsterPlanet.glb.import",
+                              "mode":  "text_utf8_lf",
                               "size_bytes":  1079,
                               "sha256":  "f5f29d8d64358e61d1e21a532c7dafe20d2e5acf699be02dacdafb05cbb56b41"
                           },
                           {
                               "path":  "game/assets/vertical_slice/aster/AST_AsterPlanet_TEX_AsterSoil.png",
+                              "mode":  "binary",
                               "size_bytes":  745,
                               "sha256":  "30156f8ba7288fa8b16034a91bc65c9d1a97b68d7447d654f5a42c825a9a24ce"
                           },
                           {
                               "path":  "game/assets/vertical_slice/aster/AST_AsterPlanet_TEX_AsterSoil.png.import",
+                              "mode":  "text_utf8_lf",
                               "size_bytes":  1017,
                               "sha256":  "b7b0b5e3682a3d6c02a8af5beac0396170168967117d5d9f45c8399f3a38ec32"
                           },
                           {
                               "path":  "game/assets/vertical_slice/aster/AST_Platform.glb",
+                              "mode":  "binary",
                               "size_bytes":  11252,
                               "sha256":  "39848b68d31799f91a3cc0f1e980676a4b17e67467f3d9bf8c0b587d850db0da"
                           },
                           {
                               "path":  "game/assets/vertical_slice/aster/AST_Platform.glb.import",
+                              "mode":  "text_utf8_lf",
                               "size_bytes":  1070,
                               "sha256":  "d86df8fb74ec056b84cf30e7b40926928e35e3d5a17778e01973b341d8fddc35"
                           },
                           {
                               "path":  "game/assets/vertical_slice/aster/AST_Platform_TEX_AsterMoss.png",
+                              "mode":  "binary",
                               "size_bytes":  1635,
                               "sha256":  "fed68f1a359fb9dff6c52e60429aa7b5e60b783e15b947d598fa0d64d7cc29f6"
                           },
                           {
                               "path":  "game/assets/vertical_slice/aster/AST_Platform_TEX_AsterMoss.png.import",
+                              "mode":  "text_utf8_lf",
                               "size_bytes":  1010,
                               "sha256":  "cd74b75dde3a6c56097681503aa6261be2b1c1b22ddd722ffb228a25ac947b04"
                           },
                           {
                               "path":  "game/assets/vertical_slice/aster/AST_Platform_TEX_GardenGold.png",
+                              "mode":  "binary",
                               "size_bytes":  1407,
                               "sha256":  "78708e3ef7a7aebc1ae3a487a3c9413034d5cc887dd2d1ccbe1b4dc18ac1629c"
                           },
                           {
                               "path":  "game/assets/vertical_slice/aster/AST_Platform_TEX_GardenGold.png.import",
+                              "mode":  "text_utf8_lf",
                               "size_bytes":  1013,
                               "sha256":  "17333785b6b174e286c95f8baf9b23ee5d30a8d2f6dc14f9746d5aaf0aaa084e"
                           },
                           {
                               "path":  "game/assets/vertical_slice/characters/CHR_Virela.glb",
+                              "mode":  "binary",
                               "size_bytes":  27424,
                               "sha256":  "d345365c73eed2086e4847f521239336fc76ff440c6f7ed30f473369aaf61096"
                           },
                           {
                               "path":  "game/assets/vertical_slice/characters/CHR_Virela.glb.import",
+                              "mode":  "text_utf8_lf",
                               "size_bytes":  1069,
                               "sha256":  "c89e5c2729a6f3bb83bec3049024ced6e50ac5facb7b4c2e17730be26c43298d"
                           },
                           {
                               "path":  "game/assets/vertical_slice/characters/CHR_Virela_TEX_Cream.png",
+                              "mode":  "binary",
                               "size_bytes":  1170,
                               "sha256":  "97af3175387c2bf6967574cdbe9fb2ac08812d2939d3fe175c5572acfccb4a1b"
                           },
                           {
                               "path":  "game/assets/vertical_slice/characters/CHR_Virela_TEX_Cream.png.import",
+                              "mode":  "text_utf8_lf",
                               "size_bytes":  997,
                               "sha256":  "d1dbc9074ec3e436877f3c5f251c012312f83251981524073773bd8c6f33ffab"
                           },
                           {
                               "path":  "game/assets/vertical_slice/characters/CHR_Virela_TEX_VirelaTeal.png",
+                              "mode":  "binary",
                               "size_bytes":  1696,
                               "sha256":  "bd0399e3a882a6e5008427fe455f64f9c716332889a48f030ceb8711c1591397"
                           },
                           {
                               "path":  "game/assets/vertical_slice/characters/CHR_Virela_TEX_VirelaTeal.png.import",
+                              "mode":  "text_utf8_lf",
                               "size_bytes":  1012,
                               "sha256":  "1cf38c179cdab97a075073f819536069ad6548f3f355d07cedee39ed45475cad"
                           },
                           {
                               "path":  "game/assets/vertical_slice/devices/DEV_ImpulseRing.glb",
+                              "mode":  "binary",
                               "size_bytes":  29604,
                               "sha256":  "19d4f9ab77167950faa1360a9cae0f81736862f5ed8fe37b68d2971a07b3eb6b"
                           },
                           {
                               "path":  "game/assets/vertical_slice/devices/DEV_ImpulseRing.glb.import",
+                              "mode":  "text_utf8_lf",
                               "size_bytes":  1080,
                               "sha256":  "bc73c2823be2769909b297dcb9a4274c55df1117af1c8aa09f396bc16c4c83f2"
                           },
                           {
                               "path":  "game/assets/vertical_slice/devices/DEV_ImpulseRing_TEX_GardenGold.png",
+                              "mode":  "binary",
                               "size_bytes":  1407,
                               "sha256":  "78708e3ef7a7aebc1ae3a487a3c9413034d5cc887dd2d1ccbe1b4dc18ac1629c"
                           },
                           {
                               "path":  "game/assets/vertical_slice/devices/DEV_ImpulseRing_TEX_GardenGold.png.import",
+                              "mode":  "text_utf8_lf",
                               "size_bytes":  1023,
                               "sha256":  "fbb3b8b7a687793321fd04761dbf336c78a6c4342ad37c1f7a35775e4efa5307"
                           },
                           {
                               "path":  "game/assets/vertical_slice/devices/DEV_ImpulseRing_TEX_ImpulseTeal.png",
+                              "mode":  "binary",
                               "size_bytes":  1034,
                               "sha256":  "a89e6c4aff96121e619650528d9fca82c72a203b65c33c950f8ba571052fa587"
                           },
                           {
                               "path":  "game/assets/vertical_slice/devices/DEV_ImpulseRing_TEX_ImpulseTeal.png.import",
+                              "mode":  "text_utf8_lf",
                               "size_bytes":  1026,
                               "sha256":  "d281770ab2afceda1b3754505704e0176dc8d6e161b4e5a3eeeb409226fcbbd3"
                           },
                           {
                               "path":  "game/assets/vertical_slice/enemies/ENM_Anchor.glb",
+                              "mode":  "binary",
                               "size_bytes":  29136,
                               "sha256":  "8279cf92c384355644bafa43631e0e1ff1ff8ad0fe68d661d07b485f64b7c0d4"
                           },
                           {
                               "path":  "game/assets/vertical_slice/enemies/ENM_Anchor.glb.import",
+                              "mode":  "text_utf8_lf",
                               "size_bytes":  1066,
                               "sha256":  "c7fe0e03fb4d6b427bc0d542ad01b49b4727486cecf83a037c6fe4097277f00a"
                           },
                           {
                               "path":  "game/assets/vertical_slice/enemies/ENM_Anchor_TEX_AnchorPlum.png",
+                              "mode":  "binary",
                               "size_bytes":  1147,
                               "sha256":  "e967a4e1bf05be7a3565d6f9a926f2ff31edb12da15f91dcacda663028314482"
                           },
                           {
                               "path":  "game/assets/vertical_slice/enemies/ENM_Anchor_TEX_AnchorPlum.png.import",
+                              "mode":  "text_utf8_lf",
                               "size_bytes":  1009,
                               "sha256":  "63ba50e83be770ca3d0f92657f2b54e667d83a4c0182acf3be5e7173a3fedbf3"
                           },
                           {
                               "path":  "game/assets/vertical_slice/enemies/ENM_Anchor_TEX_Cream.png",
+                              "mode":  "binary",
                               "size_bytes":  1170,
                               "sha256":  "97af3175387c2bf6967574cdbe9fb2ac08812d2939d3fe175c5572acfccb4a1b"
                           },
                           {
                               "path":  "game/assets/vertical_slice/enemies/ENM_Anchor_TEX_Cream.png.import",
+                              "mode":  "text_utf8_lf",
                               "size_bytes":  994,
                               "sha256":  "1d934b64c596483a374677659ebf44020776573c66c5c7bf86dd4ce9977d54fb"
                           },
                           {
                               "path":  "game/assets/vertical_slice/kit/KIT_Brick_A.glb",
+                              "mode":  "binary",
                               "size_bytes":  10292,
                               "sha256":  "01a4475947b96ad760d247a1bd096ac92d0d7433b1feac991072089eb53100f4"
                           },
                           {
                               "path":  "game/assets/vertical_slice/kit/KIT_Brick_A.glb.import",
+                              "mode":  "text_utf8_lf",
                               "size_bytes":  1065,
                               "sha256":  "847af8e3dab5eaaceccbf0c11406d9ad238f9a4220883909d832bda3a6918b49"
                           },
                           {
                               "path":  "game/assets/vertical_slice/kit/KIT_Brick_A_TEX_Brick.png",
+                              "mode":  "binary",
                               "size_bytes":  854,
                               "sha256":  "babd8ff3806144dad1c2f674669661c04f808ae4b14c618ec8623c00df729b31"
                           },
                           {
                               "path":  "game/assets/vertical_slice/kit/KIT_Brick_A_TEX_Brick.png.import",
+                              "mode":  "text_utf8_lf",
                               "size_bytes":  993,
                               "sha256":  "05328ada98521370fec8914dcfbd7eb8c841ce3643f66dc0129deff293ac8001"
                           },
                           {
                               "path":  "game/assets/vertical_slice/kit/KIT_GlassPanel_A.glb",
+                              "mode":  "binary",
                               "size_bytes":  11044,
                               "sha256":  "fc9407632bee7b5365e585fffceb021b040fe644106b0841f36136600fbd34d0"
                           },
                           {
                               "path":  "game/assets/vertical_slice/kit/KIT_GlassPanel_A.glb.import",
+                              "mode":  "text_utf8_lf",
                               "size_bytes":  1080,
                               "sha256":  "7811d84761803cb8f4c97ab86d958351128370243d9605d7a5f3d370e7fe213c"
                           },
                           {
                               "path":  "game/assets/vertical_slice/kit/KIT_GlassPanel_A_TEX_Glass.png",
+                              "mode":  "binary",
                               "size_bytes":  1249,
                               "sha256":  "a0d5342bc73234b6bfc7eed384aacbbf897adf7aa8207f978f89b22b8529e5d4"
                           },
                           {
                               "path":  "game/assets/vertical_slice/kit/KIT_GlassPanel_A_TEX_Glass.png.import",
+                              "mode":  "text_utf8_lf",
                               "size_bytes":  1007,
                               "sha256":  "2a5e28a10d9a4c8b50f89092e2672bd8cc015108d2ae0fc056ca0125fdd91256"
                           },
                           {
                               "path":  "game/assets/vertical_slice/kit/KIT_PineBeam_A.glb",
+                              "mode":  "binary",
                               "size_bytes":  11060,
                               "sha256":  "455a7c343ca2ebd61c7c575a9b7a1d158cbdc49ef078ce7bbb4d58df82fea4cb"
                           },
                           {
                               "path":  "game/assets/vertical_slice/kit/KIT_PineBeam_A.glb.import",
+                              "mode":  "text_utf8_lf",
                               "size_bytes":  1074,
                               "sha256":  "901a7c339c3d9118dd13c5e65eedfa1905f22b029463a39c55a516f9fc71ce96"
                           },
                           {
                               "path":  "game/assets/vertical_slice/kit/KIT_PineBeam_A_TEX_Pine.png",
+                              "mode":  "binary",
                               "size_bytes":  1694,
                               "sha256":  "755bc558e1ae8b77b99d588ab519822518401290f1772cd13bcb2c6e13b0e8de"
                           },
                           {
                               "path":  "game/assets/vertical_slice/kit/KIT_PineBeam_A_TEX_Pine.png.import",
+                              "mode":  "text_utf8_lf",
                               "size_bytes":  999,
                               "sha256":  "7115d414bec18a058ff597dc8b683f7fa9cb89b9d9dab2332c896593b426ee32"
                           },
                           {
                               "path":  "game/assets/vertical_slice/kit/KIT_PineBrace_A.glb",
+                              "mode":  "binary",
                               "size_bytes":  11208,
                               "sha256":  "c7dcef4541e55f53f84a3be61ff8364cadf58a623165ac7a058852b474477e16"
                           },
                           {
                               "path":  "game/assets/vertical_slice/kit/KIT_PineBrace_A.glb.import",
+                              "mode":  "text_utf8_lf",
                               "size_bytes":  1077,
                               "sha256":  "390175a5d5a10958fd12a37c99b6725bb35760e8716085d845944514ddcd408d"
                           },
                           {
                               "path":  "game/assets/vertical_slice/kit/KIT_PineBrace_A_TEX_Pine.png",
+                              "mode":  "binary",
                               "size_bytes":  1694,
                               "sha256":  "755bc558e1ae8b77b99d588ab519822518401290f1772cd13bcb2c6e13b0e8de"
                           },
                           {
                               "path":  "game/assets/vertical_slice/kit/KIT_PineBrace_A_TEX_Pine.png.import",
+                              "mode":  "text_utf8_lf",
                               "size_bytes":  1002,
                               "sha256":  "6f9ce08e36049bdf2e5976b5116e8b5914b854c1308577ba789556be093bdb05"
                           },
                           {
                               "path":  "game/assets/vertical_slice/kit/KIT_PineLintel_A.glb",
+                              "mode":  "binary",
                               "size_bytes":  11148,
                               "sha256":  "d0ae6ed31d50c565e25957c5dcde38edc800dcb6cc91e1b8e5d265e0123175ee"
                           },
                           {
                               "path":  "game/assets/vertical_slice/kit/KIT_PineLintel_A.glb.import",
+                              "mode":  "text_utf8_lf",
                               "size_bytes":  1079,
                               "sha256":  "d2c676bbf1c112d1be80e23fd0076cdadfe6704b284afc0c83102eef86e33cdf"
                           },
                           {
                               "path":  "game/assets/vertical_slice/kit/KIT_PineLintel_A_TEX_Pine.png",
+                              "mode":  "binary",
                               "size_bytes":  1694,
                               "sha256":  "755bc558e1ae8b77b99d588ab519822518401290f1772cd13bcb2c6e13b0e8de"
                           },
                           {
                               "path":  "game/assets/vertical_slice/kit/KIT_PineLintel_A_TEX_Pine.png.import",
+                              "mode":  "text_utf8_lf",
                               "size_bytes":  1005,
                               "sha256":  "aabe030c53ae6b681ecab73a5f329f8d83d59d85bf9f2d34d4edce881a1e15f8"
                           },
                           {
                               "path":  "game/bin/ninho_physics.gdextension",
+                              "mode":  "text_utf8_lf",
                               "size_bytes":  291,
                               "sha256":  "53be609370ebb96d46eb647732b54daaf220d428020ca674180ce6744706adc7"
                           },
                           {
                               "path":  "game/bin/ninho_physics.gdextension.uid",
-                              "size_bytes":  21,
-                              "sha256":  "057dd2eceb1f1200d8e5495592b4d20aad411ca311a4fa850a83bc0afe0ec414"
+                              "mode":  "text_utf8_lf",
+                              "size_bytes":  20,
+                              "sha256":  "ae089a1f4c4c6dcfb82178ea626eace74b63092e233e0c797c12d1944f93a7b2"
                           },
                           {
                               "path":  "game/data/archetypes/vertical_slice.archetypes.json",
+                              "mode":  "text_utf8_lf",
                               "size_bytes":  1076,
                               "sha256":  "1b25b7e98eb3f9e8e8c0015f529474007a84dcbc1d28c55879c69ad9284c2560"
                           },
                           {
                               "path":  "game/data/feedback/vertical_slice.feedback.json",
+                              "mode":  "text_utf8_lf",
                               "size_bytes":  2623,
                               "sha256":  "fedd58487d833692557804694edd31cbcc7ba045cee97e9b9556b4e1edf9a9cb"
                           },
                           {
                               "path":  "game/data/levels/first_orbit.level.json",
+                              "mode":  "text_utf8_lf",
                               "size_bytes":  12170,
                               "sha256":  "f1a5031fe4ded68407265d56f1426f17e866a2dbba7033938ae3f0a3688a4632"
                           },
                           {
                               "path":  "game/data/materials/vertical_slice.materials.json",
+                              "mode":  "text_utf8_lf",
                               "size_bytes":  898,
                               "sha256":  "848c1928732fc455e6b935566aa216ac8e26812f93cb0aca811ab7948d7f43f8"
                           },
                           {
                               "path":  "game/export_presets.cfg",
+                              "mode":  "text_utf8_lf",
                               "size_bytes":  1370,
                               "sha256":  "7fe16f3a0e2efe223e7f0afd90d4a0ed95996916e229fa0e35ac4db6dec4f8f1"
                           },
                           {
                               "path":  "game/materials/brick.tres",
+                              "mode":  "text_utf8_lf",
                               "size_bytes":  132,
                               "sha256":  "b4f854de2bc7b640c96c143d1b00d77037b06935565bf4ac858c37f5c06c4bae"
                           },
                           {
                               "path":  "game/materials/glass.tres",
+                              "mode":  "text_utf8_lf",
                               "size_bytes":  633,
                               "sha256":  "1ec870d84204bbd8d16ab829df6d140f91aaca2aaecc48c5f0561d68678d9ab8"
                           },
                           {
                               "path":  "game/materials/pine.tres",
+                              "mode":  "text_utf8_lf",
                               "size_bytes":  133,
                               "sha256":  "bb93c324de6b4f3e062eb5b51eeb733ada31b917e406d851ceb63942f45dc480"
                           },
                           {
                               "path":  "game/project.godot",
-                              "size_bytes":  1702,
-                              "sha256":  "3211d065252294ae7f44ae928b0e3684c2a013643524403411234f798c3dca39"
+                              "mode":  "text_utf8_lf",
+                              "size_bytes":  1674,
+                              "sha256":  "decddaf0ec0fd17d19e6d49ffe5231c044bdb2bf23002aaaea6c84dfe9a88f02"
                           },
                           {
                               "path":  "game/scenes/physics_spike.tscn",
+                              "mode":  "text_utf8_lf",
                               "size_bytes":  5093,
                               "sha256":  "c722d99f787d0192b9a1634fc2d80f6cb755ccb1cb9057ade126c4495677b720"
                           },
                           {
                               "path":  "game/scenes/vertical_slice.tscn",
+                              "mode":  "text_utf8_lf",
                               "size_bytes":  4696,
                               "sha256":  "6d597aafe4e9a94630e532da240cb736ed36e66bf64e8ca05ce63113596c8775"
                           },
                           {
                               "path":  "game/scripts/audio/feedback_audio_pool.gd",
+                              "mode":  "text_utf8_lf",
                               "size_bytes":  3100,
                               "sha256":  "6fa05aff5914c6103f1c5317a994815cca6718e1c06d758bab8082e09a1e15ab"
                           },
                           {
                               "path":  "game/scripts/audio/feedback_audio_pool.gd.uid",
+                              "mode":  "text_utf8_lf",
                               "size_bytes":  19,
                               "sha256":  "2dd8fcad59080228e4ca08004af25b3bb70b8615df383b39625fb4c58aed36cb"
                           },
                           {
                               "path":  "game/scripts/camera/orbital_camera.gd",
+                              "mode":  "text_utf8_lf",
                               "size_bytes":  9641,
                               "sha256":  "a430dcde722b83d6dc6e8ba440ea2b3f22ca48bc40e7277f9d75b5febcfc8796"
                           },
                           {
                               "path":  "game/scripts/camera/orbital_camera.gd.uid",
+                              "mode":  "text_utf8_lf",
                               "size_bytes":  19,
                               "sha256":  "17cbba0593e24858a72d2bf5c83a0715006459ca13181c08ddd11dfee6b005f8"
                           },
                           {
                               "path":  "game/scripts/game/authored_asset_view.gd",
+                              "mode":  "text_utf8_lf",
                               "size_bytes":  751,
                               "sha256":  "c532a9353c0a7529ebc3444699c3e8a1916e2bd436f54132ecf4c6dae7fe0b84"
                           },
                           {
                               "path":  "game/scripts/game/authored_asset_view.gd.uid",
+                              "mode":  "text_utf8_lf",
                               "size_bytes":  19,
                               "sha256":  "360feb496dd05fa5ab77ad68780ce493d34cef584a8e1cbb098e2de38c96cb29"
                           },
                           {
                               "path":  "game/scripts/game/body_view_registry.gd",
+                              "mode":  "text_utf8_lf",
                               "size_bytes":  5346,
                               "sha256":  "5e9aff522b0ae7803c2a677e81b4dda5057355b591afeb5d2be875f32b9b3c6a"
                           },
                           {
                               "path":  "game/scripts/game/body_view_registry.gd.uid",
+                              "mode":  "text_utf8_lf",
                               "size_bytes":  20,
                               "sha256":  "821bc580d1d2e135ca52278797fbed065104599bcd38c40004593cf04cf0a911"
                           },
                           {
                               "path":  "game/scripts/game/launch_controller.gd",
+                              "mode":  "text_utf8_lf",
                               "size_bytes":  6450,
                               "sha256":  "5fc2ae375ce960d08b15968917b9f98535b922da598b31b8ce2de147b68396f9"
                           },
                           {
                               "path":  "game/scripts/game/launch_controller.gd.uid",
+                              "mode":  "text_utf8_lf",
                               "size_bytes":  20,
                               "sha256":  "da59aaee8b9cb34a180f8a2e815047ecaf15c56163f4031524e64943ecaa5fcb"
                           },
                           {
                               "path":  "game/scripts/game/vertical_slice_controller.gd",
+                              "mode":  "text_utf8_lf",
                               "size_bytes":  13770,
                               "sha256":  "cc75f76b1ea08a8150d9491b1c79f4d5ea765afb236e7d2a941c042974d87096"
                           },
                           {
                               "path":  "game/scripts/game/vertical_slice_controller.gd.uid",
+                              "mode":  "text_utf8_lf",
                               "size_bytes":  20,
                               "sha256":  "266cb83c477a4adf7dcd6f4d58fa938ab45adf9372d0f997b7562d30d8c2e90b"
                           },
                           {
                               "path":  "game/scripts/physics_spike_smoke.gd",
+                              "mode":  "text_utf8_lf",
                               "size_bytes":  2211,
                               "sha256":  "b7eeb9b9d7fde227d6b6f8e208ade66a488061410e614c597949b7db20602750"
                           },
                           {
                               "path":  "game/scripts/physics_spike_smoke.gd.uid",
-                              "size_bytes":  21,
-                              "sha256":  "1d864670c6e49ca33df2d17e4bbaa97894ad3880e81c0519f204d4ae2598c165"
+                              "mode":  "text_utf8_lf",
+                              "size_bytes":  20,
+                              "sha256":  "f68026180379a49daff1d2271bc0855fb7d926ca82d84ff88b93b1e2551be09c"
                           },
                           {
                               "path":  "game/scripts/physics_spike_view.gd",
+                              "mode":  "text_utf8_lf",
                               "size_bytes":  7359,
                               "sha256":  "adb580f4293d90f0e124eebb3a893eb46c4a1daa36954475b74eb77597901c60"
                           },
                           {
                               "path":  "game/scripts/physics_spike_view.gd.uid",
-                              "size_bytes":  21,
-                              "sha256":  "114c91024cc0da41a47f785a5834396d6ffb0482afc9e620fd8bba3e8d652b6c"
+                              "mode":  "text_utf8_lf",
+                              "size_bytes":  20,
+                              "sha256":  "b87290a36e68ef8eaba0b77a784782003d653b8e58007fcd0d76ab9a953f9e68"
                           },
                           {
                               "path":  "game/scripts/ui/vertical_slice_hud.gd",
+                              "mode":  "text_utf8_lf",
                               "size_bytes":  4510,
                               "sha256":  "1aa6316d86ec7aaa1cb072ebad3afd0f3e12dcf357ce39f36f220a446d071f30"
                           },
                           {
                               "path":  "game/scripts/ui/vertical_slice_hud.gd.uid",
+                              "mode":  "text_utf8_lf",
                               "size_bytes":  20,
                               "sha256":  "b232dd03fbb265567d489ffb55254b59699fa6c50e68ef3356ee2823384c4ef7"
                           },
                           {
                               "path":  "game/scripts/ui/vertical_slice_hud.tscn",
+                              "mode":  "text_utf8_lf",
                               "size_bytes":  3034,
                               "sha256":  "0546af85d4cacff1e2c88734bd66bc4365388a09bab6b60995d8f80cd3b9aa40"
                           },
                           {
                               "path":  "game/scripts/vfx/feedback_director.gd",
+                              "mode":  "text_utf8_lf",
                               "size_bytes":  24169,
                               "sha256":  "13828b7648fcf117479417ad36c0453d016663b79ad216aefac1f3a9380b5d18"
                           },
                           {
                               "path":  "game/scripts/vfx/feedback_director.gd.uid",
+                              "mode":  "text_utf8_lf",
                               "size_bytes":  20,
                               "sha256":  "82eb514fbe3d6682ce024d996fbda72b8a512fceebc69c20fdd15be157b63142"
                           },
                           {
                               "path":  "game/shaders/stylized_glass.gdshader",
+                              "mode":  "text_utf8_lf",
                               "size_bytes":  836,
                               "sha256":  "e40fe5ea4f10c7a614404570b6f750fa59472bc76e606126359a26b4ca834ba1"
                           },
                           {
                               "path":  "game/shaders/stylized_glass.gdshader.uid",
+                              "mode":  "text_utf8_lf",
                               "size_bytes":  20,
                               "sha256":  "e378af2029e093a7a11bba5e60d61489d8fd9a6eb117d2b895a42134579c57ea"
                           },
                           {
                               "path":  "game/tests/feedback_smoke.gd",
+                              "mode":  "text_utf8_lf",
                               "size_bytes":  21878,
                               "sha256":  "741a97c0ac378f4d6b17e653723579274e238dcb627fafff3baa6628fe645667"
                           },
                           {
                               "path":  "game/tests/feedback_smoke.gd.uid",
+                              "mode":  "text_utf8_lf",
                               "size_bytes":  20,
                               "sha256":  "e94818977332b3e7209c6af1ce83756487832a6c427f710806219aecc8f60188"
                           },
                           {
                               "path":  "game/tests/forbid_godot_physics.gd",
+                              "mode":  "text_utf8_lf",
                               "size_bytes":  2363,
                               "sha256":  "d22388cf59ad6150d5427eeff590de1fd7bc7a2b8d04eba1d3606fa593dd33de"
                           },
                           {
                               "path":  "game/tests/forbid_godot_physics.gd.uid",
+                              "mode":  "text_utf8_lf",
                               "size_bytes":  19,
                               "sha256":  "e28b1cabaed8c34db0dfaebbc489e9697df451d715d0a148b1324d067d608c17"
                           },
                           {
                               "path":  "game/tests/import_completeness_smoke.gd",
+                              "mode":  "text_utf8_lf",
                               "size_bytes":  1997,
                               "sha256":  "4657cd7e52c576b29e4d1385a3bb00310b07a2c3149d04ed17f3b457d76e084d"
                           },
                           {
                               "path":  "game/tests/import_completeness_smoke.gd.uid",
+                              "mode":  "text_utf8_lf",
                               "size_bytes":  20,
                               "sha256":  "d46c3791f1822d4cbf5169f71ef8b93710be83fd6e85e71c027eaf78076b5b36"
                           },
                           {
                               "path":  "game/tests/orbital_session_node_smoke.gd",
+                              "mode":  "text_utf8_lf",
                               "size_bytes":  4369,
                               "sha256":  "998c0a6ae2eef9b3248a11fd481b23da9270cd3f00e578211c1a3e52f747f5d3"
                           },
                           {
                               "path":  "game/tests/orbital_session_node_smoke.gd.uid",
+                              "mode":  "text_utf8_lf",
                               "size_bytes":  20,
                               "sha256":  "3c6f2f7a76777ce09c1ece56eb6e06565f4c9b16ad72c13637dd7663db381c9a"
                           },
                           {
                               "path":  "game/tests/vertical_slice_smoke.gd",
+                              "mode":  "text_utf8_lf",
                               "size_bytes":  18043,
                               "sha256":  "52231be80142f1a32d16dff84f6d06cd02a4e582777e9068fc19bec4d48f70dd"
                           },
                           {
                               "path":  "game/tests/vertical_slice_smoke.gd.uid",
+                              "mode":  "text_utf8_lf",
                               "size_bytes":  20,
                               "sha256":  "fd5a066eba24480bc59a8d1d744240eb94ddfa42eab58f863958b7e4dc4ef97f"
                           },
                           {
                               "path":  "native/extension/CMakeLists.txt",
-                              "size_bytes":  3715,
-                              "sha256":  "4631d94410af737ef4b32b97c3cc9fadf89eb4d95ae8b4533bc470a37737bf12"
+                              "mode":  "text_utf8_lf",
+                              "size_bytes":  3673,
+                              "sha256":  "bd6fd52a1d66078d89a6cdae6cafc6ef4a9ebd061a215424aabbebf0a4b6fdbe"
                           },
                           {
                               "path":  "native/extension/include/ninho/extension/adapter_helpers.hpp",
+                              "mode":  "text_utf8_lf",
                               "size_bytes":  9425,
                               "sha256":  "301e9c169bf19a63c3d987659fb4ee57fbb2c2cae8ed10a4e77107fff5a5cb91"
                           },
                           {
                               "path":  "native/extension/include/ninho/extension/box3d_world_node.hpp",
+                              "mode":  "text_utf8_lf",
                               "size_bytes":  1796,
                               "sha256":  "7b85101813d8137daa510b3febdd2846a4bb2989c3dc03447593f132f3bd37e9"
                           },
                           {
                               "path":  "native/extension/include/ninho/extension/orbital_session_node.hpp",
+                              "mode":  "text_utf8_lf",
                               "size_bytes":  6521,
                               "sha256":  "260ace6de3f3fe6246caa0a112c3529ccf025893670235dee00f564f11357c31"
                           },
                           {
                               "path":  "native/extension/include/ninho/extension/register_types.hpp",
+                              "mode":  "text_utf8_lf",
                               "size_bytes":  531,
                               "sha256":  "3177e4fe903ea362d3da888f09df187417c28dce67a7c1c6c7db621afafc40bb"
                           },
                           {
                               "path":  "native/extension/src/adapter_helpers.cpp",
+                              "mode":  "text_utf8_lf",
                               "size_bytes":  727,
                               "sha256":  "58ea1baea32f0fcec21002bd5c030382ba4475b350f29d4657e42adac390e9e3"
                           },
                           {
                               "path":  "native/extension/src/box3d_world_node.cpp",
+                              "mode":  "text_utf8_lf",
                               "size_bytes":  11710,
                               "sha256":  "e3d628fdcf6296d3763446197d82fdbb168511d7c8c1633b01ec0ff011ae1642"
                           },
                           {
                               "path":  "native/extension/src/orbital_session_node.cpp",
+                              "mode":  "text_utf8_lf",
                               "size_bytes":  30888,
                               "sha256":  "1fc6d1222969802709471788e70d74ab9869ab01b5fb142d96bd946a8e0333fd"
                           },
                           {
                               "path":  "native/extension/src/register_types.cpp",
+                              "mode":  "text_utf8_lf",
                               "size_bytes":  2314,
                               "sha256":  "779af837acf7f131da90b1906fe57540ede5c6ba1fcbf0aad759467bdad000c0"
                           },
                           {
                               "path":  "native/extension/tests/adapter_helpers_tests.cpp",
+                              "mode":  "text_utf8_lf",
                               "size_bytes":  10223,
                               "sha256":  "2ed3fe212d45e1bdab27304ecfea940bd65bd09833630123cef72ebe705ef53e"
                           },
                           {
                               "path":  "native/extension/tests/orbital_session_adapter_tests.cpp",
+                              "mode":  "text_utf8_lf",
                               "size_bytes":  6210,
                               "sha256":  "794f961574a26a55a2e6c2f0b969d852cab7c66a09a12821687ca1c1730a3068"
                           },
                           {
                               "path":  "native/extension/tests/registration_contract_tests.cpp",
+                              "mode":  "text_utf8_lf",
                               "size_bytes":  856,
                               "sha256":  "e4a69e3ab72e5b88e660740f5b3309be3e5f46cb14f02e2c08c6175a92715c4b"
                           },
                           {
                               "path":  "native/extension/tests/session_frame_batch_tests.cpp",
+                              "mode":  "text_utf8_lf",
                               "size_bytes":  7423,
                               "sha256":  "dea474ca3373a00eeab845ce026b6a8a59ba2259b184963e7743eb69900d7961"
                           },
                           {
                               "path":  "native/kernel/CMakeLists.txt",
-                              "size_bytes":  950,
-                              "sha256":  "0ed14a3bcfa1bec4f0ac97ab386e001a0f1c5aa74b6713f14f7facbf65fea4eb"
+                              "mode":  "text_utf8_lf",
+                              "size_bytes":  926,
+                              "sha256":  "6575fc0685faf074e7a19f83d3fabab62ab4db23875c3828612d7aa6aa6ef72b"
                           },
                           {
                               "path":  "native/kernel/include/ninho/physics/physics_types.hpp",
+                              "mode":  "text_utf8_lf",
                               "size_bytes":  2698,
                               "sha256":  "2c795c1c946675998cc41da2a80d909d04b06d14e4efdf222c630c3ede1cf4b3"
                           },
                           {
                               "path":  "native/kernel/include/ninho/physics/physics_world.hpp",
+                              "mode":  "text_utf8_lf",
                               "size_bytes":  6251,
                               "sha256":  "5ccce19a4fd45fc5c0d30475aa0045a1b3f3ef0de8f1cf77e88d319eff45c5ba"
                           },
                           {
                               "path":  "native/kernel/include/ninho/physics/radial_gravity.hpp",
+                              "mode":  "text_utf8_lf",
                               "size_bytes":  719,
                               "sha256":  "32e0ee1b4ea5ba7777858f4cd57dc2e5eb58daf341a3a66caff594842c39613d"
                           },
                           {
                               "path":  "native/kernel/include/ninho/physics/scenario.hpp",
+                              "mode":  "text_utf8_lf",
                               "size_bytes":  13444,
                               "sha256":  "db382b929b2653c867a0e433e57b58fcc93a789d342f1b46d2b8c75f013304a2"
                           },
                           {
                               "path":  "native/kernel/src/box3d_allocator_probe.cpp",
+                              "mode":  "text_utf8_lf",
                               "size_bytes":  213,
                               "sha256":  "3a408601664e8e8af5635fd141ee7c724e2c2458e5062aad0b7baf3941d152e2"
                           },
                           {
                               "path":  "native/kernel/src/box3d_allocator_probe.hpp",
+                              "mode":  "text_utf8_lf",
                               "size_bytes":  139,
                               "sha256":  "77ccde5ecb57c76409704a5c2c5f12b0b00d94a2ea6fcfc99ca4fa056c439e33"
                           },
                           {
                               "path":  "native/kernel/src/box3d_conversions.hpp",
+                              "mode":  "text_utf8_lf",
                               "size_bytes":  1216,
                               "sha256":  "563b1e1e9a33ab7a0bdbec198c97a0bc227221b4512d77d34fd8b14feae8a877"
                           },
                           {
                               "path":  "native/kernel/src/box3d_replay_conformance.cpp",
+                              "mode":  "text_utf8_lf",
                               "size_bytes":  3833,
                               "sha256":  "bc90cf1b14738b6dc897fa1b77f65b8d60530ecdbcde11d4753b29f4dfecb8cc"
                           },
                           {
                               "path":  "native/kernel/src/box3d_replay_conformance.hpp",
+                              "mode":  "text_utf8_lf",
                               "size_bytes":  403,
                               "sha256":  "607a01759002816a48ace7361ee82e26d2a6b20438dc32eac2dec306e110f8c3"
                           },
                           {
                               "path":  "native/kernel/src/physics_world.cpp",
+                              "mode":  "text_utf8_lf",
                               "size_bytes":  66376,
                               "sha256":  "3191a780e63060f3cca4d8dd6967e028af1c1157999a90a948b688ad131b8761"
                           },
                           {
                               "path":  "native/kernel/src/physics_world_test_facade.hpp",
+                              "mode":  "text_utf8_lf",
                               "size_bytes":  356,
                               "sha256":  "3fd5f3a5f09b53985f44648d41798f3ee7970f4a511d4de3bc0260a3dffa09ba"
                           },
                           {
                               "path":  "native/kernel/src/radial_gravity.cpp",
+                              "mode":  "text_utf8_lf",
                               "size_bytes":  1748,
                               "sha256":  "d47d0e64f07fcdcd6e8444864798150796a5373cb68dca6c194a1e1afd28242d"
                           },
                           {
                               "path":  "native/kernel/src/scenario.cpp",
+                              "mode":  "text_utf8_lf",
                               "size_bytes":  165652,
                               "sha256":  "75e49b4c988108d0e7b9d2da0396d32ffca64f1e5d31d6255e25312beb599982"
                           },
                           {
                               "path":  "native/kernel/src/scenario_configuration.hpp",
+                              "mode":  "text_utf8_lf",
                               "size_bytes":  1014,
                               "sha256":  "1dce7723604301a83b37349f8a42969bfea8baa3ebe4a7c5b8ac3e9445331f7c"
                           },
                           {
                               "path":  "native/simulation/CMakeLists.txt",
+                              "mode":  "text_utf8_lf",
                               "size_bytes":  4029,
                               "sha256":  "f12f04e7f0334b4ec929f59516a9a8d9f70bd46a3d5b194bc43e04faf4883c22"
                           },
                           {
                               "path":  "native/simulation/include/ninho/simulation/commands.hpp",
+                              "mode":  "text_utf8_lf",
                               "size_bytes":  906,
                               "sha256":  "be02293941c60d0e4d598a13bfb789a14515d77d0d977be83b1d657a5162537d"
                           },
                           {
                               "path":  "native/simulation/include/ninho/simulation/content.hpp",
+                              "mode":  "text_utf8_lf",
                               "size_bytes":  7629,
                               "sha256":  "575de7bd5a6a12a636197ba384cd22a3efc48e52069f496f148332ab3320b114"
                           },
                           {
                               "path":  "native/simulation/include/ninho/simulation/events.hpp",
+                              "mode":  "text_utf8_lf",
                               "size_bytes":  1505,
                               "sha256":  "7caf4611d035823db3ed6d1eeac04560c1e81726e54f2e5bf44eb5894641fd13"
                           },
                           {
                               "path":  "native/simulation/include/ninho/simulation/session.hpp",
+                              "mode":  "text_utf8_lf",
                               "size_bytes":  4921,
                               "sha256":  "e1c3b0403b2cb69e39e14f2209cf19c0cd9086279ccd4f14a8e120c7bd339238"
                           },
                           {
                               "path":  "native/simulation/src/canonical_state.cpp",
+                              "mode":  "text_utf8_lf",
                               "size_bytes":  20717,
                               "sha256":  "166d3c171b2b579e611a93bfa64918a382476f8ecccc1a767387bf52b6db2254"
                           },
                           {
                               "path":  "native/simulation/src/content.cpp",
+                              "mode":  "text_utf8_lf",
                               "size_bytes":  62929,
                               "sha256":  "177172395f751aac7d8f8a6d6d026cff0c0fe4a14dadf0374f76af7ddaadeea4"
                           },
                           {
                               "path":  "native/simulation/src/damage_system.cpp",
+                              "mode":  "text_utf8_lf",
                               "size_bytes":  12254,
                               "sha256":  "38102251c82dced5f52569a665651f285522a6d830417be44df45510664dba8a"
                           },
                           {
                               "path":  "native/simulation/src/damage_system.hpp",
+                              "mode":  "text_utf8_lf",
                               "size_bytes":  1939,
                               "sha256":  "0ad10dc49c9f74a9cb7a35fd93d58a65d8818b45908e5f9d78e21b02296696f8"
                           },
                           {
                               "path":  "native/simulation/src/fracture_system.cpp",
+                              "mode":  "text_utf8_lf",
                               "size_bytes":  15180,
                               "sha256":  "0d19385c9256476cdc2c3773eedbcce8663f07405997507c1fbc29c3649ee960"
                           },
                           {
                               "path":  "native/simulation/src/gravity_field_ability_system.cpp",
+                              "mode":  "text_utf8_lf",
                               "size_bytes":  6488,
                               "sha256":  "f49f549bea6f67065f78a7aca587b539e760e3f9b477ad3c8285eca155a61735"
                           },
                           {
                               "path":  "native/simulation/src/launch_system.cpp",
+                              "mode":  "text_utf8_lf",
                               "size_bytes":  24837,
                               "sha256":  "0dfb73058fbb02ec438d92b4c2a5575f55125661601dfaaeb168a9d1077ad835"
                           },
                           {
                               "path":  "native/simulation/src/material_mapping.hpp",
+                              "mode":  "text_utf8_lf",
                               "size_bytes":  609,
                               "sha256":  "bfc3f67e77dfec752fbf0f745a721475d0ed3f26dd4fcf865571306366542fcf"
                           },
                           {
                               "path":  "native/simulation/src/objective_system.cpp",
+                              "mode":  "text_utf8_lf",
                               "size_bytes":  899,
                               "sha256":  "82528ac4de52229c59b9d5773fbd6ae6de276692131f1a795d119c44c03e7356"
                           },
                           {
                               "path":  "native/simulation/src/session.cpp",
+                              "mode":  "text_utf8_lf",
                               "size_bytes":  14128,
                               "sha256":  "523e73030083f5c928ac1b970fb7aa0c14ad9dfa3380e59b0cbdf99fd1608865"
                           },
                           {
                               "path":  "native/simulation/src/session_builder.cpp",
+                              "mode":  "text_utf8_lf",
                               "size_bytes":  14598,
                               "sha256":  "506a1bb9e32f0f8fd1817a13e127c605b9747ce4d2976297f4dcc4b80bd5bfe0"
                           },
                           {
                               "path":  "native/simulation/src/session_internal.hpp",
+                              "mode":  "text_utf8_lf",
                               "size_bytes":  5285,
                               "sha256":  "bc7e0b4cf098eae0fd22231e5e0ba70ed3513a2d539f4104a2eb61fdcd4f2c7d"
                           },
                           {
                               "path":  "native/simulation/src/session_test_facade.hpp",
+                              "mode":  "text_utf8_lf",
                               "size_bytes":  2474,
                               "sha256":  "4ba14030c04847dae5019e0950be1dbc175d7305798de453eebff9c7d89930d6"
                           },
                           {
                               "path":  "native/simulation/tests/content_tests.cpp",
+                              "mode":  "text_utf8_lf",
                               "size_bytes":  34851,
                               "sha256":  "45e76fac43c2825cac1ec9a85fcff794d3f7c33e0c2f25d586871cd0e686808b"
                           },
                           {
                               "path":  "native/simulation/tests/damage_anchor_tests.cpp",
+                              "mode":  "text_utf8_lf",
                               "size_bytes":  18842,
                               "sha256":  "f578931cfca47720736c161dc4f6bc14e99edd8bee943de27683d02ba1f51e3d"
                           },
                           {
                               "path":  "native/simulation/tests/fracture_objective_tests.cpp",
+                              "mode":  "text_utf8_lf",
                               "size_bytes":  13161,
                               "sha256":  "215c55898dde48408ffaac0a567797c5db5e0e1b039ffb0c489bc621e4eac1a7"
                           },
                           {
                               "path":  "native/simulation/tests/gravity_field_ability_tests.cpp",
+                              "mode":  "text_utf8_lf",
                               "size_bytes":  23041,
                               "sha256":  "2fd285b6bad94f6eeb46962ff104b9e92ed0f7c21b090d5193ed9493bd82faa3"
                           },
                           {
                               "path":  "native/simulation/tests/kernel_contract_tests.cpp",
+                              "mode":  "text_utf8_lf",
                               "size_bytes":  2743,
                               "sha256":  "8882676ade374cdf8b76d1866e47e4adeeaf76c78f664002c5c5be093b5eae85"
                           },
                           {
                               "path":  "native/simulation/tests/launch_fsm_tests.cpp",
+                              "mode":  "text_utf8_lf",
                               "size_bytes":  33473,
                               "sha256":  "5ebf994eb4076ce7877746c66ed384d635c4ba72924c3fead2bed3fd214df27f"
                           },
                           {
                               "path":  "native/simulation/tests/playthrough_tests.cpp",
+                              "mode":  "text_utf8_lf",
                               "size_bytes":  20956,
                               "sha256":  "8dfdac510f66913892b8ce33e7b3bd66fe819cbbbb687bca037eb05eb4dd7a32"
                           },
                           {
                               "path":  "native/simulation/tests/session_tests.cpp",
+                              "mode":  "text_utf8_lf",
                               "size_bytes":  34192,
                               "sha256":  "f3f768dd5fb0a082ace51c843d09b067c65d7f4b1e24b4b5b2f4f32216a6be18"
                           },
                           {
                               "path":  "native/simulation/tests/test_framework.hpp",
+                              "mode":  "text_utf8_lf",
                               "size_bytes":  1870,
                               "sha256":  "a2dcdad0a827c7f557a891e8dbf2aa131f9f377f1176f14f1110ccc87079cc77"
                           },
                           {
                               "path":  "native/simulation/tests/test_main.cpp",
+                              "mode":  "text_utf8_lf",
                               "size_bytes":  1240,
                               "sha256":  "0fe1a9742c2b031787df553caa0d1d513decea1dd45c1ef3054eb23a640dddfb"
                           },
                           {
                               "path":  "native/spike/CMakeLists.txt",
-                              "size_bytes":  533,
-                              "sha256":  "a7aace1467a0db06d8cba1daf6fb84346ba337d83c0c2c4a0f7a73a6dfb7a826"
+                              "mode":  "text_utf8_lf",
+                              "size_bytes":  518,
+                              "sha256":  "4244861de1fc0f84e85e96d44cbd5e6f1eb9c877b31a743c7c6660c5b3fdf3bd"
                           },
                           {
                               "path":  "native/spike/main.cpp",
+                              "mode":  "text_utf8_lf",
                               "size_bytes":  13238,
                               "sha256":  "07a6f7e096972b123ebd356f629936de39c2231144fee062a774c3dbb483df0e"
                           },
                           {
                               "path":  "native/tests/capability_tests.cpp",
+                              "mode":  "text_utf8_lf",
                               "size_bytes":  26806,
                               "sha256":  "b9392cbc4231251c0d59f217281cdfe47958b714eb7583746e011ed8069a7dda"
                           },
                           {
                               "path":  "native/tests/CMakeLists.txt",
-                              "size_bytes":  3543,
-                              "sha256":  "7fe50ae330750dbb8fb4e18ab65fa146785efb00d27ad208d31f748a1dff4074"
+                              "mode":  "text_utf8_lf",
+                              "size_bytes":  3455,
+                              "sha256":  "a6e7302489fec5f895e523f84c79b60f884923ad8bb758731457f03cb4d79fe6"
                           },
                           {
                               "path":  "native/tests/determinism_tests.cpp",
+                              "mode":  "text_utf8_lf",
                               "size_bytes":  12918,
                               "sha256":  "6c4b60c6080c27b58732d63d8a13fae46b73f2246db6de7d5f5b369f1b280031"
                           },
                           {
                               "path":  "native/tests/json_smoke.py",
-                              "size_bytes":  18694,
-                              "sha256":  "d53e9a32bd44842a21f55e1cfa977f9100650f6e9e823ecf91473692d764fe66"
+                              "mode":  "text_utf8_lf",
+                              "size_bytes":  18266,
+                              "sha256":  "0ec7e8dcb533806ecafb810d25b5c68be8d22e964d76e676625b713d7204915b"
                           },
                           {
                               "path":  "native/tests/pile_stability_tests.cpp",
+                              "mode":  "text_utf8_lf",
                               "size_bytes":  19530,
                               "sha256":  "d37aa0e19bdb2cc0517feb62b664dd96b948e8f762499e11cb250e6271a01e5e"
                           },
                           {
                               "path":  "native/tests/projectile_ccd_tests.cpp",
+                              "mode":  "text_utf8_lf",
                               "size_bytes":  2384,
                               "sha256":  "c29c9707166b6adcaa6f18734f6318544bd7f7e94ae90cb1dda0b2ae6bd70e10"
                           },
                           {
                               "path":  "native/tests/radial_gravity_tests.cpp",
+                              "mode":  "text_utf8_lf",
                               "size_bytes":  5227,
                               "sha256":  "6b85c5be27e9c4a0aaef9ae29ddfb315483a4e682277156c2b3e360d938bc766"
                           },
                           {
                               "path":  "native/tests/scenario_capability_tests.cpp",
+                              "mode":  "text_utf8_lf",
                               "size_bytes":  12233,
                               "sha256":  "da0b07669a5499b56b758a7c3ae07150d9b83af1e375cf13d3f529ab63519191"
                           },
                           {
                               "path":  "native/tests/test_framework.hpp",
+                              "mode":  "text_utf8_lf",
                               "size_bytes":  3235,
                               "sha256":  "60f184b3974cff40f5c039b5c2be5391d06f1b9c5944fef6496b8ab1aa8bbe30"
                           },
                           {
                               "path":  "native/tests/test_main.cpp",
+                              "mode":  "text_utf8_lf",
                               "size_bytes":  1225,
                               "sha256":  "d4f8d38c198bd97c0ca9a246881c1733f610b0914e59712c471e772912d468fe"
                           },
                           {
                               "path":  "native/tests/world_lifecycle_tests.cpp",
+                              "mode":  "text_utf8_lf",
                               "size_bytes":  11434,
                               "sha256":  "b18b260e2622978ad79f155e800f8d0872592aa89e14f358296cbf4965f3be58"
                           },
                           {
                               "path":  "README.md",
+                              "mode":  "text_utf8_lf",
                               "size_bytes":  758,
                               "sha256":  "596749ee8bd18a44575755b710aa7196efb952ac28f0b142fd344194625514fa"
                           },
                           {
                               "path":  "third_party/box3d.LICENSE.txt",
-                              "size_bytes":  1088,
-                              "sha256":  "d8455e91cc46d72163cf58a3827c7983e1ffa5b8f2de1ceaa8d08d6a4956829a"
+                              "mode":  "text_utf8_lf",
+                              "size_bytes":  1067,
+                              "sha256":  "da5e31a26bf3cfd5ba5c96d6823e480128c81e76c107ef9d3ee5d94789184b90"
                           },
                           {
                               "path":  "third_party/godot.COPYRIGHT.txt",
+                              "mode":  "text_utf8_lf",
                               "size_bytes":  97253,
                               "sha256":  "2039020f520ebd55592070ede2ef38dfbc28a6550140008da004143872789e5d"
                           },
                           {
                               "path":  "third_party/godot.LICENSE.txt",
-                              "size_bytes":  1169,
-                              "sha256":  "0cc27400b8da8c06bb35350422c14715647cd2632c138921fd49caa6610a1ef6"
+                              "mode":  "text_utf8_lf",
+                              "size_bytes":  1149,
+                              "sha256":  "b0435e3b3e4e55238f05f4b306f30524a1b2e20147810d436eaa554fa6855c80"
                           },
                           {
                               "path":  "third_party/godot-cpp.LICENSE.txt",
-                              "size_bytes":  1114,
-                              "sha256":  "9b5300122460fe6253a12b303179fe0c6e9603c3106377f8800cc1e8baabcb45"
+                              "mode":  "text_utf8_lf",
+                              "size_bytes":  1093,
+                              "sha256":  "26a5b210d90760156ce886267ce9df235787dcc6cebfd7ecd95ef5b6fdcc95bf"
                           },
                           {
                               "path":  "third_party/godot-export-templates.LICENSE.txt",
+                              "mode":  "text_utf8_lf",
                               "size_bytes":  1149,
                               "sha256":  "b0435e3b3e4e55238f05f4b306f30524a1b2e20147810d436eaa554fa6855c80"
                           },
                           {
                               "path":  "third_party/nlohmann-json.LICENSE.txt",
+                              "mode":  "text_utf8_lf",
                               "size_bytes":  1076,
                               "sha256":  "86b998c792894ccb911a1cb7994f7a9652894e7a094c0b5e45be2f553f45cf14"
                           },
                           {
                               "path":  "third_party/README.md",
+                              "mode":  "text_utf8_lf",
                               "size_bytes":  2263,
                               "sha256":  "ffb38acc307a87d26227d80d30e81f9ec766e38b3dcf638cd2e03d23fdeb8583"
                           },
                           {
                               "path":  "third_party/sbom.spdx.json",
+                              "mode":  "text_utf8_lf",
                               "size_bytes":  7805,
                               "sha256":  "19f882486b1f9a9dd5771d90fa15898bf2cdad56027b9993f02d23725b78718e"
                           },
                           {
                               "path":  "THIRD_PARTY_NOTICES.md",
+                              "mode":  "text_utf8_lf",
                               "size_bytes":  5226,
                               "sha256":  "5e049e1df025d2fd1f5ceec4193596fbf216dacafab584efcae2dc2ccc8e732a"
                           },
                           {
                               "path":  "tools/art/build_assets.ps1",
+                              "mode":  "text_utf8_lf",
                               "size_bytes":  2081,
                               "sha256":  "d5c7bec2427f37028f21ef62a20a0122223691193b9071e1894ce653d1dd600e"
                           },
                           {
                               "path":  "tools/art/validate_assets.ps1",
+                              "mode":  "text_utf8_lf",
                               "size_bytes":  1043,
                               "sha256":  "a57baf09795618783faff0156f31ff37a242b292720d9a3a40317c1899f2fe03"
                           },
                           {
                               "path":  "tools/art/vertical_slice_asset_manifest.json",
+                              "mode":  "text_utf8_lf",
                               "size_bytes":  50148,
                               "sha256":  "6053efb12d341db4dffd5c60641bbb7fe95370093012807ec897bc22df88e4cf"
                           },
                           {
                               "path":  "tools/audio/audio_manifest.json",
+                              "mode":  "text_utf8_lf",
                               "size_bytes":  6695,
                               "sha256":  "6d01f7d52be202236987bf05a650b57120b4af5732233db14c9cb355a95570e0"
                           },
                           {
                               "path":  "tools/audio/build_audio.ps1",
+                              "mode":  "text_utf8_lf",
                               "size_bytes":  524,
                               "sha256":  "4ecdad631a414cfa469175746d81539a72ddddb7b5153201e00e4793a6f42f7c"
                           },
                           {
                               "path":  "tools/audio/generate_audio.py",
+                              "mode":  "text_utf8_lf",
                               "size_bytes":  19897,
                               "sha256":  "fb7026893a16af09b9c0baefce44f41907a96d624686ab6b4c8cd6e68c01d718"
                           },
                           {
                               "path":  "tools/audio/validate_audio.ps1",
+                              "mode":  "text_utf8_lf",
                               "size_bytes":  467,
                               "sha256":  "1a5ef8b6264725647a73448eeeae398e99318176d75ee8c2fe2c16f0246b4aec"
                           },
                           {
                               "path":  "tools/audio/vertical_slice_audio.json",
+                              "mode":  "text_utf8_lf",
                               "size_bytes":  2264,
                               "sha256":  "9919553274a5056360ce2f520091b3a236de9f2614a15972b7be536f1657abe2"
                           },
                           {
                               "path":  "tools/bootstrap.ps1",
-                              "size_bytes":  13300,
-                              "sha256":  "460106c9cf36f0220cb95bef81a5a314cc0b3a36f71fc82f4d4820e1fe7f9717"
+                              "mode":  "text_utf8_lf",
+                              "size_bytes":  13169,
+                              "sha256":  "293727b295ae0801912a875f8295f7581dc4723f209746c973f33359d7d7a9e0"
                           },
                           {
                               "path":  "tools/box3d-v0.1.0-compile-sources.txt",
-                              "size_bytes":  1415,
-                              "sha256":  "2334ad387fb3ec6e8721e5ea86d85e5ec3bbe29197d0d3e837a6b3b01d5a4288"
+                              "mode":  "text_utf8_lf",
+                              "size_bytes":  1339,
+                              "sha256":  "8bc4897fbc25895f75fab44e541c12d3b0e528e2692bbabbe9df632871a7d1f0"
                           },
                           {
                               "path":  "tools/build.ps1",
-                              "size_bytes":  839,
-                              "sha256":  "e5a6593c4baabb86aae54762a56704e450e375d381b475983d3c131d77eb00ee"
+                              "mode":  "text_utf8_lf",
+                              "size_bytes":  836,
+                              "sha256":  "064fdbd5fd3f734090cc8519d98311c6ca0d6edb31d76dec2b7d7c89c02ad310"
                           },
                           {
                               "path":  "tools/capture_vertical_slice.ps1",
+                              "mode":  "text_utf8_lf",
                               "size_bytes":  19650,
                               "sha256":  "ce2dd4781417715941b650aded5da047e0847d482c90adcbd2394a8a84901597"
                           },
                           {
                               "path":  "tools/check_vertical_slice_evidence.ps1",
+                              "mode":  "text_utf8_lf",
                               "size_bytes":  986,
                               "sha256":  "5a25fba2fcacad5de40d63a5205322b2094be255cfadd2da5d60320e037d5543"
                           },
                           {
                               "path":  "tools/FoundationEvidenceGate.psm1",
-                              "size_bytes":  9613,
-                              "sha256":  "2f68aa3dc7209012fa04d064542894a8d162cad5be7a00ce10abff988ac75aa4"
+                              "mode":  "text_utf8_lf",
+                              "size_bytes":  9410,
+                              "sha256":  "c69b87aa67275c53afe8f4755297dc7ece64d34bddb9897ca538d8ad2630812c"
                           },
                           {
                               "path":  "tools/generate_foundation_report.py",
-                              "size_bytes":  21400,
-                              "sha256":  "7cab7349f2c54a26636370fc612ace0d6e49f8321ec84d17e8e577fb7de24bc7"
+                              "mode":  "text_utf8_lf",
+                              "size_bytes":  20927,
+                              "sha256":  "33ef273a024263de9aeb3a6470bb33f363bd27b65d673a1d81785e356f6fab26"
                           },
                           {
                               "path":  "tools/generate_vertical_slice_report.py",
+                              "mode":  "text_utf8_lf",
                               "size_bytes":  7262,
                               "sha256":  "43d0e6865931b4deed3786123980fb1260f10f64d7cee55aa40b3c6933282f22"
                           },
                           {
                               "path":  "tools/GodotSpikeGate.psm1",
-                              "size_bytes":  11359,
-                              "sha256":  "521aa018d20f3eeb6f1e824af2087c4bfddf147d78c564ec2489a3467b2beb20"
+                              "mode":  "text_utf8_lf",
+                              "size_bytes":  11080,
+                              "sha256":  "f81ed257e02861aa6f84aace45d39f33d51ceef740d09f149d5c0363087f4b1c"
                           },
                           {
                               "path":  "tools/Invoke-Native.ps1",
-                              "size_bytes":  1350,
-                              "sha256":  "c7b2ed73a17f9a334a4ee04aea6bc32ee183e7fd3f2bd993d706875ea6b6eb84"
+                              "mode":  "text_utf8_lf",
+                              "size_bytes":  1325,
+                              "sha256":  "a0f1816edf931500c99e08026729030f80f5c18d98d662149b4b3593268f21ac"
                           },
                           {
                               "path":  "tools/package_windows.ps1",
+                              "mode":  "text_utf8_lf",
                               "size_bytes":  25693,
                               "sha256":  "7185df8797c169f6a9843ec9bcf3182e14fb9699af495f86bcbe44c554f074b7"
                           },
                           {
                               "path":  "tools/run_spike.ps1",
-                              "size_bytes":  2313,
-                              "sha256":  "410b634be755d9dfa42ccacf2a36b3b998ad1fb64ba36ee2e2856e42aff052ec"
+                              "mode":  "text_utf8_lf",
+                              "size_bytes":  2246,
+                              "sha256":  "329e329dd9d5dee8c47c10e64b5aa53940b97134fd5e830334ac40007f2ad49a"
                           },
                           {
                               "path":  "tools/SafePath.psm1",
-                              "size_bytes":  1888,
-                              "sha256":  "fc1db611410ef1603335757fc39bb1a40bc0487e1bfc078890f760bd80a4b0f5"
+                              "mode":  "text_utf8_lf",
+                              "size_bytes":  1841,
+                              "sha256":  "d6a5c2daeeb3ef4369daa35bf21d6dc60c3ec736ab8c932078b3e24bd32e4ffc"
                           },
                           {
                               "path":  "tools/SpikeEvidenceValidation.psm1",
-                              "size_bytes":  52233,
-                              "sha256":  "5e51e86549276b9b4b7a835aacc67f375eea9caef1136a916764614c73877155"
+                              "mode":  "text_utf8_lf",
+                              "size_bytes":  51353,
+                              "sha256":  "847f52d2501bf25b5136797e71600c4934bf1c03b9ba454f483e73422bd1ddd9"
                           },
                           {
                               "path":  "tools/SpikeReportGate.psm1",
-                              "size_bytes":  2462,
-                              "sha256":  "2ab640276b5329794266c2257e2b0a350acf7b26ad2be64af4a2977e58ffc62b"
+                              "mode":  "text_utf8_lf",
+                              "size_bytes":  2400,
+                              "sha256":  "762cc1cd1e6740f4eb5745511d9a565a11d7835bac863f71374e44ded9c11077"
                           },
                           {
                               "path":  "tools/test.ps1",
-                              "size_bytes":  21907,
-                              "sha256":  "62211555a86d30dc79aa857e122472d4f16900e4199e34059c2d709dd23620d1"
+                              "mode":  "text_utf8_lf",
+                              "size_bytes":  21515,
+                              "sha256":  "23a41d152d781b05c1a87fc5dd6ecad82484367989ac3fad72017011179f300f"
                           },
                           {
                               "path":  "tools/test_vertical_slice.ps1",
+                              "mode":  "text_utf8_lf",
                               "size_bytes":  9054,
-                              "sha256":  "da2a9bdc6950f349f0810985531ba43015490b7b4fb7ca462c50d6e3d8214a99"
+                              "sha256":  "dace97488bf9db9b9bfecbebb07d43e3c5438902c6015a9dbb52db749bb3c0f3"
                           },
                           {
                               "path":  "tools/tests/art-pipeline-tests.ps1",
+                              "mode":  "text_utf8_lf",
                               "size_bytes":  24945,
                               "sha256":  "d5a3abd1388930a2502df459928344d1b1f45e99195d86d98fca5074fb688a9d"
                           },
                           {
                               "path":  "tools/tests/audio-pipeline-tests.ps1",
+                              "mode":  "text_utf8_lf",
                               "size_bytes":  7426,
                               "sha256":  "949df33a347f1082a958b601c5f8327082727f84d2499cd7bcc4d3ec16fa78ad"
                           },
                           {
                               "path":  "tools/tests/bootstrap-behavior.ps1",
-                              "size_bytes":  4401,
-                              "sha256":  "5d2d7748f52a63ea52e4cccd595633cab822208d18bbe8a313fd3903b6ee2fc3"
+                              "mode":  "text_utf8_lf",
+                              "size_bytes":  4304,
+                              "sha256":  "c6c1e3572c929ce7ffb6d8442b432189557d5bd28380a0c8450b5d701381b82a"
                           },
                           {
                               "path":  "tools/tests/bootstrap-smoke.ps1",
-                              "size_bytes":  785,
-                              "sha256":  "36984543ccf8156e57818c234804961fde1aaf72d074d7fc681c9ac536ebfe38"
+                              "mode":  "text_utf8_lf",
+                              "size_bytes":  771,
+                              "sha256":  "f77327f5b96af56a71a1f2dc6383d8dc03f541b358f31af82c6e70972e01725b"
                           },
                           {
                               "path":  "tools/tests/foundation-evidence-gate-tests.ps1",
-                              "size_bytes":  17041,
-                              "sha256":  "a91ab61a176bce5b58165039417ae8054f859058ac2eb9ca5d94ca86be090705"
+                              "mode":  "text_utf8_lf",
+                              "size_bytes":  16701,
+                              "sha256":  "5c16692d3b1c11c7ac6e256331c057652753ff11aa0f1a3b75b299732bfc427f"
                           },
                           {
                               "path":  "tools/tests/godot-spike-gate-tests.ps1",
-                              "size_bytes":  16375,
-                              "sha256":  "060bd9fd5e543cbf920ff3975d68332ac2a5cd28d9f7ffad79b94dae0be6a39e"
+                              "mode":  "text_utf8_lf",
+                              "size_bytes":  16118,
+                              "sha256":  "fc056d3fac07cd8093eb8f84fdb68bb1e6bd12aeb1aed3106bbc6b0199177180"
                           },
                           {
                               "path":  "tools/tests/package-windows-tests.ps1",
+                              "mode":  "text_utf8_lf",
                               "size_bytes":  12587,
                               "sha256":  "cb74539dc6c855d58fbf572b7d03211923f12eebf69d502ab82e822999364dcc"
                           },
                           {
                               "path":  "tools/tests/spike-report-gate-tests.ps1",
-                              "size_bytes":  4245,
-                              "sha256":  "6a6642a2ff3e8738e0b87adc391331c26131b6157a60c3495f090e3b23c7d8b7"
+                              "mode":  "text_utf8_lf",
+                              "size_bytes":  4152,
+                              "sha256":  "bfdbb17fd2ad45a20df7afc45bae4794fa687a9ddba60198dd4c2e6a3a44a785"
                           },
                           {
                               "path":  "tools/tests/test_art_contracts.py",
+                              "mode":  "text_utf8_lf",
                               "size_bytes":  5951,
                               "sha256":  "99bbfe40fd8406601a854ee6723e31de1142a4844a1a5959a712a66d609e3f7f"
                           },
                           {
                               "path":  "tools/tests/test_audio_contracts.py",
+                              "mode":  "text_utf8_lf",
                               "size_bytes":  4664,
                               "sha256":  "baca923e1e0738d10c8f6d5be920a91f7c5417ca4ccd2d54b7231f14b65df832"
                           },
                           {
                               "path":  "tools/tests/test_generate_foundation_report.py",
-                              "size_bytes":  11370,
-                              "sha256":  "b4ce82156ec9edf1644dce61162509c619a92255bf68c4bf4951f2a7eaca1d36"
+                              "mode":  "text_utf8_lf",
+                              "size_bytes":  11095,
+                              "sha256":  "9d60205b3873c9571661d850f6481b26810c3f005049f13627ac24d6543ac997"
                           },
                           {
                               "path":  "tools/tests/test_generate_vertical_slice_report.py",
+                              "mode":  "text_utf8_lf",
                               "size_bytes":  4148,
                               "sha256":  "409abc9364fdbb0308bf01cd358c25fba3e16a674ddb7132af5eacff5bab62e1"
                           },
                           {
                               "path":  "tools/tests/test_vertical_slice_tooling_contracts.py",
+                              "mode":  "text_utf8_lf",
                               "size_bytes":  2541,
                               "sha256":  "48a25804f456091195bec60ad77d49fa303893fc604b8f62b9822f06dfb3a94c"
                           },
                           {
                               "path":  "tools/tests/upstream-box3d-gate-tests.ps1",
-                              "size_bytes":  9616,
-                              "sha256":  "fa890f6f5bdda1df540ecf3a97b7b6982da07a0916ff6dd0617af72e6c9762c6"
+                              "mode":  "text_utf8_lf",
+                              "size_bytes":  9414,
+                              "sha256":  "6616259316b750b3b38ed778f44e4f4e2a59b70a6899703eadbb8a491c333a16"
                           },
                           {
                               "path":  "tools/tests/vertical-slice-gate-tests.ps1",
-                              "size_bytes":  36716,
-                              "sha256":  "b864d246d06e3a07abafe8b9fd0a9bc0704bea7aef793489cadf3b475df972cb"
+                              "mode":  "text_utf8_lf",
+                              "size_bytes":  36763,
+                              "sha256":  "f0710ad34efd60bfa0e4704e4a75029f726669ef26e5cb7484d72808d81c7830"
                           },
                           {
                               "path":  "tools/tests/vertical-slice-identity-contract-tests.ps1",
-                              "size_bytes":  3354,
-                              "sha256":  "ea2df8fc95b2b25dd98c3899dd41324bb7463f1c536ff6f3ea27af825b152c38"
+                              "mode":  "text_utf8_lf",
+                              "size_bytes":  5350,
+                              "sha256":  "fa90aac430f7bdabb31357768c1bafc33570caa3aff3f9628d4c26b706b62680"
                           },
                           {
                               "path":  "tools/toolchain.lock.json",
+                              "mode":  "text_utf8_lf",
                               "size_bytes":  2507,
                               "sha256":  "6a9d05df510d74130a91e9ec1d5cc862fef0d6d3aca2b73fe3762b0b93de90ee"
                           },
                           {
                               "path":  "tools/UpstreamBox3DGate.psm1",
-                              "size_bytes":  7372,
-                              "sha256":  "0acf7a3e24d2623d2b866e54a70f58209323a938b13f9e7ea31173a74c829f04"
+                              "mode":  "text_utf8_lf",
+                              "size_bytes":  7219,
+                              "sha256":  "324fd58c0dcee1ea712e36df53390ee4deff6faac604e4f32894f57a756c7163"
                           },
                           {
                               "path":  "tools/VerticalSliceGate.psm1",
-                              "size_bytes":  47543,
-                              "sha256":  "82049c2b6c9d648930f3f0288b98121ee00e09a4f79c6dbcb55588e4df582e86"
+                              "mode":  "text_utf8_lf",
+                              "size_bytes":  48887,
+                              "sha256":  "9c89d313367a5e6a9cece014d7f3f4f29509532030a23b5855d31206da476add"
                           }
                       ],
-    "generated_utc":  "2026-07-12T10:10:52.6618744Z",
+    "generated_utc":  "2026-07-12T10:54:25.8296462Z",
     "hardware":  {
                      "cpu":  "11th Gen Intel(R) Core(TM) i7-11800H @ 2.30GHz",
                      "gpu":  "NVIDIA GeForce RTX 3070 Laptop GPU",
@@ -1391,7 +1658,7 @@
                        "box3d_only":  true
                    },
     "physics":  {
-                    "step_p95_ms":  1.9245,
+                    "step_p95_ms":  1.7503,
                     "limit_ms":  8
                 },
     "renderers":  [
@@ -1401,9 +1668,9 @@
                                          {
                                              "ui_scale":  100,
                                              "frame_p95_ms":  6.06060606060606,
-                                             "frame_p99_ms":  6.13790909090908,
-                                             "max_hitch_ms":  10.4506969696971,
-                                             "input_feedback_p95_ms":  5.732,
+                                             "frame_p99_ms":  6.181,
+                                             "max_hitch_ms":  9.14206060606077,
+                                             "input_feedback_p95_ms":  5.696,
                                              "input_feedback_samples":  3,
                                              "input_feedback_markers":  [
                                                                             {
@@ -1434,20 +1701,20 @@
                                                                                 "theta_degrees":  -2.0
                                                                             }
                                                                         ],
-                                             "physics_step_p95_ms":  1.624,
-                                             "frames_measured":  490,
+                                             "physics_step_p95_ms":  1.5561,
+                                             "frames_measured":  488,
                                              "rupture_observed":  true,
                                              "vfx_observed":  true,
                                              "post_vfx_frames":  35,
                                              "metrics_path":  "artifacts/vertical-slice/debug/metrics-vulkan-100.json",
-                                             "metrics_sha256":  "2913e8f4f41d5e2e30e4ed46d28c2546d846fc396a609aee68f92291e9630331"
+                                             "metrics_sha256":  "83b5216804bc86bf7daa63c567177747f8dcc276839d57763d418a7cb6d42d85"
                                          },
                                          {
                                              "ui_scale":  150,
-                                             "frame_p95_ms":  6.06060606060606,
-                                             "frame_p99_ms":  6.18,
-                                             "max_hitch_ms":  10.0763939393941,
-                                             "input_feedback_p95_ms":  6.024,
+                                             "frame_p95_ms":  6.06151515151515,
+                                             "frame_p99_ms":  8.33333333333333,
+                                             "max_hitch_ms":  10.6613939393939,
+                                             "input_feedback_p95_ms":  6.729,
                                              "input_feedback_samples":  3,
                                              "input_feedback_markers":  [
                                                                             {
@@ -1478,13 +1745,13 @@
                                                                                 "theta_degrees":  -2.0
                                                                             }
                                                                         ],
-                                             "physics_step_p95_ms":  1.5422,
-                                             "frames_measured":  490,
+                                             "physics_step_p95_ms":  1.5896,
+                                             "frames_measured":  485,
                                              "rupture_observed":  true,
                                              "vfx_observed":  true,
                                              "post_vfx_frames":  35,
                                              "metrics_path":  "artifacts/vertical-slice/debug/metrics-vulkan-150.json",
-                                             "metrics_sha256":  "a5a3a50b90b18d5cd58bd22236b1be5a61dd51e3577350dc6b5b6e6ce4b8307c"
+                                             "metrics_sha256":  "6e104787384a2e4dbd9f48692f8f6efa16466d6027b280cfe5175268ab829eee"
                                          }
                                      ],
                           "capture":  {
@@ -1492,12 +1759,12 @@
                                           "width":  1920,
                                           "height":  1080,
                                           "path":  "artifacts/vertical-slice/debug/vertical-slice-vulkan.avi",
-                                          "hash":  "5e2457f32f314dbd1fb2e41b269da09b7094d3580e34bf75353582319bc7e839",
+                                          "hash":  "0e78eb3a6a74d32eb141854d95084a0986f9079f794aa47a870a845816259606",
                                           "log_path":  "artifacts/vertical-slice/debug/capture-vulkan-attempt1.stdout.log",
-                                          "log_hash":  "ff7a5d473d7533eb40b7c732c3c22e06c9702a38d05e2c29393243938b5ae6af",
+                                          "log_hash":  "ec34085db41f345006b587d461373799679bb3905b82b90941ded00392af5434",
                                           "retry_count":  0,
                                           "source_path":  "artifacts/vertical-slice/debug/vertical-slice-vulkan-source.avi",
-                                          "source_hash":  "f5ffb03d9beb6fec1d4a1261140d3779bcb6249967d671ed80697c643f26af0d",
+                                          "source_hash":  "14ca2ca3b273a2bb2bf2be6a9a79b6f516fb127882959b635b4028d5760778e5",
                                           "source_frames":  2307,
                                           "downsample_source_frames":  [
                                                                            0,
@@ -1809,9 +2076,9 @@
                                          {
                                              "ui_scale":  100,
                                              "frame_p95_ms":  6.06060606060606,
-                                             "frame_p99_ms":  6.09472727272727,
-                                             "max_hitch_ms":  11.1540303030305,
-                                             "input_feedback_p95_ms":  3.71,
+                                             "frame_p99_ms":  6.06060606060606,
+                                             "max_hitch_ms":  6.159,
+                                             "input_feedback_p95_ms":  4.319,
                                              "input_feedback_samples":  3,
                                              "input_feedback_markers":  [
                                                                             {
@@ -1842,20 +2109,20 @@
                                                                                 "theta_degrees":  -2.0
                                                                             }
                                                                         ],
-                                             "physics_step_p95_ms":  1.9245,
-                                             "frames_measured":  483,
+                                             "physics_step_p95_ms":  1.7503,
+                                             "frames_measured":  479,
                                              "rupture_observed":  true,
                                              "vfx_observed":  true,
                                              "post_vfx_frames":  35,
                                              "metrics_path":  "artifacts/vertical-slice/debug/metrics-opengl-100.json",
-                                             "metrics_sha256":  "f0206a4107afa259fa39f056d0efbbdb3a4501c4c3960f9b95268de925679bb1"
+                                             "metrics_sha256":  "155b2a3fb9160bcd3477f1786cefc06eb7552a675fbcee9b57e977b8c08c49a5"
                                          },
                                          {
                                              "ui_scale":  150,
-                                             "frame_p95_ms":  6.06060606060606,
-                                             "frame_p99_ms":  8.33333333333333,
-                                             "max_hitch_ms":  11.1277272727274,
-                                             "input_feedback_p95_ms":  3.801,
+                                             "frame_p95_ms":  6.25,
+                                             "frame_p99_ms":  6.25,
+                                             "max_hitch_ms":  12.0808787878789,
+                                             "input_feedback_p95_ms":  3.76,
                                              "input_feedback_samples":  3,
                                              "input_feedback_markers":  [
                                                                             {
@@ -1886,13 +2153,13 @@
                                                                                 "theta_degrees":  -2.0
                                                                             }
                                                                         ],
-                                             "physics_step_p95_ms":  1.8506,
+                                             "physics_step_p95_ms":  1.5793,
                                              "frames_measured":  482,
                                              "rupture_observed":  true,
                                              "vfx_observed":  true,
                                              "post_vfx_frames":  35,
                                              "metrics_path":  "artifacts/vertical-slice/debug/metrics-opengl-150.json",
-                                             "metrics_sha256":  "3c5c4e2adc689d48bc3778557f5bbee24c9f078c9c70c783d90ed98bb946ec0b"
+                                             "metrics_sha256":  "a57ac270e0d0aee64c371229d6bfcd0f8a59e10fb59a4e9dc8aa212dda5051c5"
                                          }
                                      ],
                           "capture":  {
@@ -1900,12 +2167,12 @@
                                           "width":  1920,
                                           "height":  1080,
                                           "path":  "artifacts/vertical-slice/debug/vertical-slice-opengl.avi",
-                                          "hash":  "7ee86de50861109e4fd2f4bf2fec4cfe783d28bc0b0a0c3c2d6e642a660f51fe",
+                                          "hash":  "a20cd6856dfbe824d696063b585602f5ef3808305a9c769ae31384caedc80889",
                                           "log_path":  "artifacts/vertical-slice/debug/capture-opengl-attempt1.stdout.log",
-                                          "log_hash":  "7a9d417364ea13d1d99e9f5fb1df5253eefd0676aeeaf00a8c4119c2a4f4ddc3",
+                                          "log_hash":  "ab678533b2d01a8bb0a8b07c0e3c4f78fa46f27480c6aaf4c545b0e75c156695",
                                           "retry_count":  0,
                                           "source_path":  "artifacts/vertical-slice/debug/vertical-slice-opengl-source.avi",
-                                          "source_hash":  "962f5d356c9149dd2c112b96cac95b80e4c7800f4747ea5c15ad41ff822f5cc0",
+                                          "source_hash":  "5c4ec98e2c91fe927d0c887b807845e5e6438f5d3573d1674a0aa49945f7487f",
                                           "source_frames":  2307,
                                           "downsample_source_frames":  [
                                                                            0,
@@ -2278,7 +2545,7 @@
                                 "exposure":  1,
                                 "renderer":  "Vulkan",
                                 "path":  "docs/art/goldens/vertical-slice/debug/vulnerable_impact.png",
-                                "sha256":  "9cb45679d51a5e151a23e260ce7ea3b9dad3d0ae23b62c3777bb01f526577a4b"
+                                "sha256":  "d0aa23e13c6dc0bbd304e2c7e2003e94fa13ce21e740d0282d8826dc2b4b54ba"
                             },
                             {
                                 "name":  "result",
@@ -2293,7 +2560,7 @@
                                 "exposure":  1,
                                 "renderer":  "Vulkan",
                                 "path":  "docs/art/goldens/vertical-slice/debug/result.png",
-                                "sha256":  "2df2d7445778fae29678cfdfbfd6cbdaa664d4fd95f8c5f3316c1ac57a8707f1"
+                                "sha256":  "ca2f1d701dc55bb710f4f61d8d4c44406a551f37f4ac80ff9fb4d82bfc892fe5"
                             }
                         ],
     "rubric":  {
@@ -2331,11 +2598,11 @@
                    },
     "capture_manifest":  {
                              "path":  "artifacts/vertical-slice/debug/capture-manifest.json",
-                             "sha256":  "9b457ae4155f9b8d16b74c5f7a678d6a09871e2056ce07a09c5f44eb3a9264a4"
+                             "sha256":  "ce0efcc5e0daa91632d8ce37b3d1afb1321ecb087d0b294b9582050e60848720"
                          },
     "reviews_manifest":  {
                              "path":  "docs/gameplay/evidence/vertical-slice-reviews.json",
-                             "sha256":  "dd05419c0c3e4d2df36fda92e1f70c760a808bd6a3a1f2559c5329ab48ab165e"
+                             "sha256":  "816dec67eb18b77f97808d198dda468c96e2ec0709f1dc392bd8b30102f82ac9"
                          },
     "package":  {
                     "path":  "not_applicable_debug",
@@ -2345,7 +2612,7 @@
     "source_artifacts":  [
                              {
                                  "path":  "artifacts/vertical-slice/debug/capture-vulkan-attempt1.stdout.log",
-                                 "sha256":  "ff7a5d473d7533eb40b7c732c3c22e06c9702a38d05e2c29393243938b5ae6af"
+                                 "sha256":  "ec34085db41f345006b587d461373799679bb3905b82b90941ded00392af5434"
                              },
                              {
                                  "path":  "artifacts/vertical-slice/debug/capture-vulkan-attempt1.stderr.log",
@@ -2361,15 +2628,15 @@
                              },
                              {
                                  "path":  "artifacts/vertical-slice/debug/vertical-slice-vulkan-source.avi",
-                                 "sha256":  "f5ffb03d9beb6fec1d4a1261140d3779bcb6249967d671ed80697c643f26af0d"
+                                 "sha256":  "14ca2ca3b273a2bb2bf2be6a9a79b6f516fb127882959b635b4028d5760778e5"
                              },
                              {
                                  "path":  "artifacts/vertical-slice/debug/vertical-slice-vulkan.avi",
-                                 "sha256":  "5e2457f32f314dbd1fb2e41b269da09b7094d3580e34bf75353582319bc7e839"
+                                 "sha256":  "0e78eb3a6a74d32eb141854d95084a0986f9079f794aa47a870a845816259606"
                              },
                              {
                                  "path":  "artifacts/vertical-slice/debug/performance-vulkan-100-attempt1.stdout.log",
-                                 "sha256":  "8f16e8bdf11faa4d3ff28c654e4ac3fef91b29742657ac5ec2022d5a06bbc764"
+                                 "sha256":  "07b0b6f934fd502407b176541c8a0dcde84a46e94005c67014bc84e1071fca3c"
                              },
                              {
                                  "path":  "artifacts/vertical-slice/debug/performance-vulkan-100-attempt1.stderr.log",
@@ -2377,11 +2644,11 @@
                              },
                              {
                                  "path":  "artifacts/vertical-slice/debug/metrics-vulkan-100.json",
-                                 "sha256":  "2913e8f4f41d5e2e30e4ed46d28c2546d846fc396a609aee68f92291e9630331"
+                                 "sha256":  "83b5216804bc86bf7daa63c567177747f8dcc276839d57763d418a7cb6d42d85"
                              },
                              {
                                  "path":  "artifacts/vertical-slice/debug/performance-vulkan-150-attempt1.stdout.log",
-                                 "sha256":  "31caa1bb85cc9692fac351f6121e6f4d44ad8f57df85e9725ff0ed0947f942a2"
+                                 "sha256":  "16bc7da1e83b8a4af1fb37d3e942acd6f048509f58c9c2c018bce2e0a4515222"
                              },
                              {
                                  "path":  "artifacts/vertical-slice/debug/performance-vulkan-150-attempt1.stderr.log",
@@ -2389,11 +2656,11 @@
                              },
                              {
                                  "path":  "artifacts/vertical-slice/debug/metrics-vulkan-150.json",
-                                 "sha256":  "a5a3a50b90b18d5cd58bd22236b1be5a61dd51e3577350dc6b5b6e6ce4b8307c"
+                                 "sha256":  "6e104787384a2e4dbd9f48692f8f6efa16466d6027b280cfe5175268ab829eee"
                              },
                              {
                                  "path":  "artifacts/vertical-slice/debug/capture-opengl-attempt1.stdout.log",
-                                 "sha256":  "7a9d417364ea13d1d99e9f5fb1df5253eefd0676aeeaf00a8c4119c2a4f4ddc3"
+                                 "sha256":  "ab678533b2d01a8bb0a8b07c0e3c4f78fa46f27480c6aaf4c545b0e75c156695"
                              },
                              {
                                  "path":  "artifacts/vertical-slice/debug/capture-opengl-attempt1.stderr.log",
@@ -2409,15 +2676,15 @@
                              },
                              {
                                  "path":  "artifacts/vertical-slice/debug/vertical-slice-opengl-source.avi",
-                                 "sha256":  "962f5d356c9149dd2c112b96cac95b80e4c7800f4747ea5c15ad41ff822f5cc0"
+                                 "sha256":  "5c4ec98e2c91fe927d0c887b807845e5e6438f5d3573d1674a0aa49945f7487f"
                              },
                              {
                                  "path":  "artifacts/vertical-slice/debug/vertical-slice-opengl.avi",
-                                 "sha256":  "7ee86de50861109e4fd2f4bf2fec4cfe783d28bc0b0a0c3c2d6e642a660f51fe"
+                                 "sha256":  "a20cd6856dfbe824d696063b585602f5ef3808305a9c769ae31384caedc80889"
                              },
                              {
                                  "path":  "artifacts/vertical-slice/debug/performance-opengl-100-attempt1.stdout.log",
-                                 "sha256":  "063f0bb55ff06a0bf4e09d4f4ccd7523e24f1b54dbde6e8c792e6ff6402b7ad9"
+                                 "sha256":  "dd3328c8f7eff5311611581aec591ca0c155b6281f84de6b7a6c7ec10c1504a8"
                              },
                              {
                                  "path":  "artifacts/vertical-slice/debug/performance-opengl-100-attempt1.stderr.log",
@@ -2425,11 +2692,11 @@
                              },
                              {
                                  "path":  "artifacts/vertical-slice/debug/metrics-opengl-100.json",
-                                 "sha256":  "f0206a4107afa259fa39f056d0efbbdb3a4501c4c3960f9b95268de925679bb1"
+                                 "sha256":  "155b2a3fb9160bcd3477f1786cefc06eb7552a675fbcee9b57e977b8c08c49a5"
                              },
                              {
                                  "path":  "artifacts/vertical-slice/debug/performance-opengl-150-attempt1.stdout.log",
-                                 "sha256":  "74a70300d816bc4f381655ef9647341e1f5f98cfca9c6360ffbe25a66b9ebd99"
+                                 "sha256":  "4a1db2381785425dae037605eae4aa23ee135621a4865743baff6a00096f7913"
                              },
                              {
                                  "path":  "artifacts/vertical-slice/debug/performance-opengl-150-attempt1.stderr.log",
@@ -2437,7 +2704,7 @@
                              },
                              {
                                  "path":  "artifacts/vertical-slice/debug/metrics-opengl-150.json",
-                                 "sha256":  "3c5c4e2adc689d48bc3778557f5bbee24c9f078c9c70c783d90ed98bb946ec0b"
+                                 "sha256":  "a57ac270e0d0aee64c371229d6bfcd0f8a59e10fb59a4e9dc8aa212dda5051c5"
                              },
                              {
                                  "path":  "artifacts/vertical-slice/debug/route-determinism-raw.log",
@@ -2493,7 +2760,7 @@
                              },
                              {
                                  "path":  "docs/art/goldens/vertical-slice/debug/vulnerable_impact.png",
-                                 "sha256":  "9cb45679d51a5e151a23e260ce7ea3b9dad3d0ae23b62c3777bb01f526577a4b"
+                                 "sha256":  "d0aa23e13c6dc0bbd304e2c7e2003e94fa13ce21e740d0282d8826dc2b4b54ba"
                              },
                              {
                                  "path":  "artifacts/vertical-slice/debug/golden-result.stdout.log",
@@ -2505,7 +2772,7 @@
                              },
                              {
                                  "path":  "docs/art/goldens/vertical-slice/debug/result.png",
-                                 "sha256":  "2df2d7445778fae29678cfdfbfd6cbdaa664d4fd95f8c5f3316c1ac57a8707f1"
+                                 "sha256":  "ca2f1d701dc55bb710f4f61d8d4c44406a551f37f4ac80ff9fb4d82bfc892fe5"
                              }
                          ]
 }
