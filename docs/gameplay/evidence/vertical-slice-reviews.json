@@ -1,8 +1,8 @@
 {
   "schema": "ninho.vertical-slice.reviews.v1",
-  "source_revision": "4d3a958706c57d8c2010fe1d273199ec3ad19005",
-  "tested_inputs_schema": "ninho.tested-inputs.v1",
-  "tested_inputs_sha256": "707ae24fafcd15c3f1df3179d76110685d909e4d54e4466af703b1834811a4b8",
+  "source_revision": "3064815b6fa6e9c9a0d9b30d63d33abb4d2e75cf",
+  "tested_inputs_schema": "ninho.tested-inputs.v2",
+  "tested_inputs_sha256": "e1197ead992736ca5a328619ddc5716e86335460beb2f6e82a8c794fdb0aeb5d",
   "playtest": {
     "status": "unavailable",
     "substitute": "independent_agents",
