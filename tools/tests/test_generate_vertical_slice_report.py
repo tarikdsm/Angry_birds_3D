@@ -73,6 +73,18 @@ class VerticalSliceReportTests(unittest.TestCase):
             )
             self.assertEqual(crlf_write.returncode, 0, crlf_write.stderr)
             self.assertEqual(report.read_bytes(), original)
+            release_evidence = evidence_dir / "vertical-slice-release.json"
+            release_doc = json.loads(release_evidence.read_text(encoding="utf-8"))
+            release_doc["commit"] = "1" * 40
+            release_evidence.write_text(
+                json.dumps(release_doc, indent=2) + "\n", encoding="utf-8", newline="\r\n"
+            )
+            semantic_write = subprocess.run(
+                [sys.executable, str(SCRIPT), "--root", str(root), "--write"],
+                capture_output=True, text=True, encoding="utf-8"
+            )
+            self.assertEqual(semantic_write.returncode, 0, semantic_write.stderr)
+            self.assertNotEqual(report.read_bytes(), original)
             full_check = subprocess.run(
                 [sys.executable, str(SCRIPT), "--root", str(root), "--check"],
                 capture_output=True, text=True, encoding="utf-8"
