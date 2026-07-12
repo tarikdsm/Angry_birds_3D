@@ -31,9 +31,12 @@ foreach ($document in $normativeDocuments) {
     Assert-True ($inputs -ccontains $document) "normative fingerprint omits $document"
 }
 
-$lineEndingPath = Join-Path $Root 'tools\tests\.line-ending-contract.tmp'
-$binaryPath = Join-Path $Root 'art\.binary-contract.tmp'
+$canonicalizationSandbox = Join-Path ([IO.Path]::GetTempPath()) `
+    ('ninho-canonical-inputs-' + [Guid]::NewGuid().ToString('N'))
+$lineEndingPath = Join-Path $canonicalizationSandbox 'line-ending-contract.txt'
+$binaryPath = Join-Path $canonicalizationSandbox 'binary-contract.bin'
 try {
+    New-Item -ItemType Directory -Force -Path $canonicalizationSandbox | Out-Null
     [IO.File]::WriteAllBytes($lineEndingPath, [Text.UTF8Encoding]::new($false).GetBytes("alpha`nbeta`n"))
     $lf = Get-NinhoCanonicalTestedInputContent -Path $lineEndingPath -RelativePath 'tools/tests/.line-ending-contract.tmp'
     [IO.File]::WriteAllBytes($lineEndingPath, [Text.UTF8Encoding]::new($false).GetBytes("alpha`r`nbeta`r`n"))
@@ -51,7 +54,9 @@ try {
     Assert-True ([Convert]::ToBase64String($binaryA.bytes) -cne [Convert]::ToBase64String($binaryB.bytes)) `
         'binary inputs must remain sensitive to CRLF byte changes'
 } finally {
-    Remove-Item -LiteralPath $lineEndingPath,$binaryPath -Force -ErrorAction SilentlyContinue
+    if (Test-Path -LiteralPath $canonicalizationSandbox) {
+        Remove-Item -LiteralPath $canonicalizationSandbox -Recurse -Force
+    }
 }
 
 $sandbox = Join-Path ([IO.Path]::GetTempPath()) ('ninho-identity-' + [Guid]::NewGuid().ToString('N'))
