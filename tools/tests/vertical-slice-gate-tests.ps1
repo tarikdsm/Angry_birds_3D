@@ -121,15 +121,19 @@ $sandbox = Join-Path $Root "artifacts\vertical-slice-gate-test-$([guid]::NewGuid
 New-Item -ItemType Directory -Force -Path $sandbox | Out-Null
 try {
     New-Item -ItemType Directory -Force -Path (Join-Path $sandbox 'game') | Out-Null
+    New-Item -ItemType Directory -Force -Path (Join-Path $sandbox 'cmake') | Out-Null
     New-Item -ItemType Directory -Force -Path (Join-Path $sandbox 'tools\art') | Out-Null
     New-Item -ItemType Directory -Force -Path (Join-Path $sandbox 'tools\audio') | Out-Null
+    [IO.File]::WriteAllText((Join-Path $sandbox '.gitattributes'), '* text=auto')
+    [IO.File]::WriteAllText((Join-Path $sandbox '.gitignore'), 'artifacts/')
+    [IO.File]::WriteAllText((Join-Path $sandbox 'cmake\Dependencies.cmake'), 'include(FetchContent)')
     [IO.File]::WriteAllText((Join-Path $sandbox 'game\tested-input.txt'), 'fixture')
     [IO.File]::WriteAllText((Join-Path $sandbox 'tools\art\vertical_slice_asset_manifest.json'), '{"fixture":"art"}')
     [IO.File]::WriteAllText((Join-Path $sandbox 'tools\audio\audio_manifest.json'), '{"fixture":"audio"}')
     & git -C $sandbox init --quiet
     & git -c "safe.directory=$sandbox" -C $sandbox config user.email 'fixture@example.invalid'
     & git -c "safe.directory=$sandbox" -C $sandbox config user.name 'Fixture'
-    & git -c "safe.directory=$sandbox" -C $sandbox add -- game/tested-input.txt tools/art/vertical_slice_asset_manifest.json tools/audio/audio_manifest.json
+    & git -c "safe.directory=$sandbox" -C $sandbox add -- .gitattributes .gitignore cmake/Dependencies.cmake game/tested-input.txt tools/art/vertical_slice_asset_manifest.json tools/audio/audio_manifest.json
     & git -c "safe.directory=$sandbox" -C $sandbox commit --quiet -m fixture
     if ($LASTEXITCODE -ne 0) { throw 'failed to initialize evidence git fixture' }
     $artifact = Join-Path $sandbox 'capture.avi'
@@ -275,6 +279,14 @@ capture complete
     $validEvidenceText = [IO.File]::ReadAllText($evidencePath)
     $validCaptureManifestText = [IO.File]::ReadAllText($captureManifestPath)
     $validCaptureManifestBytes = [IO.File]::ReadAllBytes($captureManifestPath)
+    $cmakeInputPath = Join-Path $sandbox 'cmake\Dependencies.cmake'
+    $cmakeInputOriginal = [IO.File]::ReadAllText($cmakeInputPath)
+    [IO.File]::WriteAllText($cmakeInputPath, 'include(FetchContent)`n# stale mutation')
+    Assert-Throws {
+        Assert-NinhoVerticalSliceEvidence -EvidencePath $evidencePath `
+            -ArtifactRoot $sandbox -ExpectedConfiguration Debug -ExpectedCommit $commit
+    } 'tested inputs aggregate SHA-256 mismatch'
+    [IO.File]::WriteAllText($cmakeInputPath, $cmakeInputOriginal)
     $claimMutation = $validEvidenceText | ConvertFrom-Json
     $claimMutation.renderers[0].scales[0].frame_p95_ms = 0.001
     $claimMutation | ConvertTo-Json -Depth 30 | Set-Content -LiteralPath $evidencePath -Encoding utf8
