@@ -1,8 +1,8 @@
 {
   "schema": "ninho.vertical-slice.reviews.v1",
-  "source_revision": "82362d5681ca89e0f31143734a155a7eddf057ec",
+  "source_revision": "4d3a958706c57d8c2010fe1d273199ec3ad19005",
   "tested_inputs_schema": "ninho.tested-inputs.v1",
-  "tested_inputs_sha256": "af88a40f6f6cdf0df65dad7763d74d99246745fd2ae1f63e009f4ef53fc22904",
+  "tested_inputs_sha256": "707ae24fafcd15c3f1df3179d76110685d909e4d54e4466af703b1834811a4b8",
   "playtest": {
     "status": "unavailable",
     "substitute": "independent_agents",
@@ -11,39 +11,39 @@
   "reviews": [
     {
       "role": "code",
-      "reviewer": "/root/vertical_slice_task12_impl/code_review",
+      "reviewer_id": "/root/code_review_fc3ec43",
       "verdict": "approved",
       "critical": 0,
       "important": 0,
       "minor": 0,
-      "summary": "Fingerprint CMake, causalidade de juntas e marcadores de input foram revisados no range c0db5ea..1f7f0ae sem findings."
+      "summary": "Lifecycle, dano, estado autoritativo, preview, readiness, processos e contratos de build foram revisados no HEAD 4d3a958 sem findings."
     },
     {
       "role": "architecture",
-      "reviewer": "/root/vertical_slice_task12_impl/code_review",
+      "reviewer_id": "/root/arch_review_fc3ec43",
       "verdict": "approved",
       "critical": 0,
       "important": 0,
       "minor": 0,
-      "summary": "A identidade content-addressed cobre as entradas CMake consumidas e preserva o isolamento dos artefatos de evidencia."
+      "summary": "Kernel, solver, adapter, build de producao e identidade normativa content-addressed foram revisados sem findings."
     },
     {
       "role": "gameplay",
-      "reviewer": "/root/vertical_slice_task12_impl/code_review",
+      "reviewer_id": "/root/gameplay_review_fc3ec43",
       "verdict": "approved",
       "critical": 0,
       "important": 0,
       "minor": 0,
-      "summary": "JointBroken deriva de JointOverloaded e as tres amostras distintas exigem previews causais unicos antes do lancamento."
+      "summary": "Rotas, Virela, causalidade, tempo ate resultado, HUD autoritativo e feedback de habilidade foram revisados sem findings."
     },
     {
       "role": "art",
-      "reviewer": "/root/vertical_slice_task12_impl/art_review",
+      "reviewer_id": "/root/vertical_slice_final_review",
       "verdict": "approved",
       "critical": 0,
       "important": 0,
       "minor": 0,
-      "summary": "Visual hierarchy, material readability, causal impact, renderer parity, provenance, and clean-room criteria are approved."
+      "summary": "Os cinco frames 1920x1080, HUD, impacto, resultado, ausencia de preview stale e criterios clean-room foram aprovados."
     }
   ]
 }
