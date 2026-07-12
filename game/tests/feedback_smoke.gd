@@ -153,17 +153,81 @@ func _run() -> void:
 			or not bool(metrics.get("audio_all_streams_wav", false)):
 		_fail("all procedural cues must import before the smoke")
 		return
+	var joint_snapshot_position := Vector3(5.0, 12.0, 2.0)
+	var joint_live_event := _live_event("joint_broken", {"affected_entity_id": 901})
+	var joint_live_position: Vector3 = feedback.call("_event_position", joint_live_event, [{
+		"entity_id": 901,
+		"material_id": 1,
+		"transform": Transform3D(Basis.IDENTITY, joint_snapshot_position),
+	}])
+	if not joint_live_position.is_equal_approx(joint_snapshot_position):
+		_fail("live joint_broken zero position must resolve from affected snapshot")
+		return
+	var expected_particle_capacity := 24 * 96
+	if int(metrics.particle_capacity_runtime) != expected_particle_capacity:
+		_fail("fixed particle capacity must be 24 x 96")
+		return
+	for amount: int in _particle_amounts(feedback):
+		if amount != 96:
+			_fail("every GPUParticles3D slot must keep amount=96")
+			return
+	var feedback_config: Dictionary = JSON.parse_string(FileAccess.get_file_as_string(
+		"res://data/feedback/vertical_slice.feedback.json"))
+	var profile_names: Array = feedback_config.profiles.keys()
+	profile_names.sort()
+	for profile: String in profile_names:
+		feedback.call("_emit_profile", profile, Vector3(0.0, 12.0, 0.0), {})
+	if feedback.pooled_resource_ids() != resource_ids_before:
+		_fail("profile sweep changed preallocated resource identities")
+		return
+	for amount: int in _particle_amounts(feedback):
+		if amount != 96:
+			_fail("profile sweep mutated GPUParticles3D.amount")
+			return
+	metrics = feedback.feedback_metrics()
+	if int(metrics.particle_capacity_runtime) != expected_particle_capacity:
+		_fail("profile sweep changed fixed particle capacity")
+		return
 
 	var live_position := Vector3(4.0, 12.0, 2.0)
+	var affected_position := Vector3(5.0, 12.0, 2.0)
+	var anchor_position := Vector3(0.0, 12.0, 0.0)
+	var explicit_position := Vector3(6.0, 12.0, 2.0)
+	var live_snapshots := [
+		{"entity_id": 900, "transform": Transform3D(Basis.IDENTITY, live_position)},
+		{"entity_id": 901, "material_id": 1,
+			"transform": Transform3D(Basis.IDENTITY, affected_position)},
+		{"entity_id": 200, "enemy_archetype_id": 1,
+			"transform": Transform3D(Basis.IDENTITY, anchor_position)},
+	]
+	var live_position_cases := [
+		["bird_launched", {"entity_id": 900}, live_position],
+		["ability_activation_requested", {"entity_id": 900}, live_position],
+		["command_rejected", {}, anchor_position],
+		["ability_started", {"entity_id": 900}, live_position],
+		["ability_affected_body", {"entity_id": 900, "affected_entity_id": 901}, affected_position],
+		["ability_pulse", {"entity_id": 900}, live_position],
+		["ability_ended", {"entity_id": 900}, live_position],
+		["damage_applied", {"affected_entity_id": 901, "position": explicit_position}, explicit_position],
+		["entity_neutralized", {"affected_entity_id": 200, "position": explicit_position}, explicit_position],
+		["joint_overloaded", {"affected_entity_id": 901, "position": explicit_position}, explicit_position],
+		["piece_fracture_triggered", {"affected_entity_id": 901, "position": explicit_position}, explicit_position],
+		["joint_broken", {"affected_entity_id": 901}, affected_position],
+		["piece_fractured", {"affected_entity_id": 901, "position": explicit_position}, explicit_position],
+	]
+	for position_case: Array in live_position_cases:
+		var live_event := _live_event(str(position_case[0]), position_case[1])
+		var observed_position: Vector3 = feedback.call(
+			"_event_position", live_event, live_snapshots)
+		if not observed_position.is_equal_approx(position_case[2]):
+			_fail("live %s position expected %s, got %s" % [
+				position_case[0], position_case[2], observed_position])
+			return
+	var ability_started_event := _live_event("ability_started", {"entity_id": 900})
 	feedback.apply_frame({
 		"tick": 8, "phase": "flight_ability", "outcome": "none",
-		"snapshots": [{
-			"entity_id": 900, "transform": Transform3D(Basis.IDENTITY, live_position),
-		}],
-		"events": [{
-			"kind": "ability_started", "tick": 8, "entity_id": 900,
-			"affected_entity_id": 0, "position": Vector3.ZERO,
-		}],
+		"snapshots": live_snapshots,
+		"events": [ability_started_event],
 	})
 	metrics = feedback.feedback_metrics()
 	if not (metrics.get("last_emission_position", Vector3.ZERO) as Vector3).is_equal_approx(live_position):
@@ -174,6 +238,62 @@ func _run() -> void:
 			or int(metrics.get("audio_active_voices", 0)) <= 0 \
 			or int(metrics.get("feedback_fault_count", -1)) != 0:
 		_fail("feedback smoke must exercise successful imported audio playback")
+		return
+
+	feedback.reset_feedback()
+	var fracture_events := [
+		_live_event("piece_fractured", {"affected_entity_id": 901,
+			"material_id": 1, "position": Vector3(1.0, 12.0, 0.0)}),
+		_live_event("piece_fractured", {"affected_entity_id": 902,
+			"material_id": 9, "position": Vector3(2.0, 12.0, 0.0)}),
+		_live_event("piece_fractured", {"affected_entity_id": 903,
+			"material_id": 5, "position": Vector3(3.0, 12.0, 0.0)}),
+	]
+	feedback.apply_frame({
+		"tick": 20, "phase": "resolution", "outcome": "none",
+		"snapshots": live_snapshots, "events": fracture_events,
+	})
+	metrics = feedback.feedback_metrics()
+	var material_fragments: Dictionary = metrics.get("active_fragment_profiles", {})
+	if int(metrics.get("active_fragment_count", 0)) != 24 \
+			or int(material_fragments.get("pine", 0)) != 8 \
+			or int(material_fragments.get("glass", 0)) != 8 \
+			or int(material_fragments.get("brick", 0)) != 8:
+		_fail("same-batch pine/glass/brick fragments must coexist in the ring pool")
+		return
+	var saturation_events: Array[Dictionary] = []
+	for index in range(10):
+		saturation_events.append(_live_event("piece_fractured", {
+			"affected_entity_id": 901,
+			"material_id": [1, 9, 5][index % 3],
+			"position": Vector3(float(index), 12.0, 0.0),
+		}))
+	feedback.apply_frame({
+		"tick": 21, "phase": "resolution", "outcome": "none",
+		"snapshots": live_snapshots, "events": saturation_events,
+	})
+	metrics = feedback.feedback_metrics()
+	if int(metrics.get("active_fragment_count", 0)) != 48 \
+			or int(metrics.get("fragment_capacity_runtime", 0)) != 48:
+		_fail("fragment ring pool must saturate, never exceed, 48 slots")
+		return
+	if feedback.pooled_resource_ids() != resource_ids_before:
+		_fail("fragment saturation allocated new resources")
+		return
+	await create_timer(0.65).timeout
+	metrics = feedback.feedback_metrics()
+	if int(metrics.get("active_fragment_count", -1)) != 0:
+		_fail("fragment ring slots must expire and become reusable")
+		return
+	feedback.apply_frame({
+		"tick": 22, "phase": "resolution", "outcome": "none",
+		"snapshots": live_snapshots, "events": [fracture_events[0]],
+	})
+	metrics = feedback.feedback_metrics()
+	if int(metrics.get("active_fragment_count", 0)) != 8 \
+			or int((metrics.get("active_fragment_profiles", {}) as Dictionary).get("pine", 0)) != 8 \
+			or feedback.pooled_resource_ids() != resource_ids_before:
+		_fail("expired fragment slots must be reused without allocation")
 		return
 
 	var initial_nodes := _descendant_count(feedback)
@@ -283,6 +403,46 @@ func _descendant_count(node: Node) -> int:
 	for child: Node in node.get_children():
 		count += 1 + _descendant_count(child)
 	return count
+
+
+func _particle_amounts(node: Node) -> Array[int]:
+	var amounts: Array[int] = []
+	if node is GPUParticles3D:
+		amounts.append((node as GPUParticles3D).amount)
+	for child: Node in node.get_children():
+		amounts.append_array(_particle_amounts(child))
+	return amounts
+
+
+func _live_event(kind: String, overrides: Dictionary) -> Dictionary:
+	var event := {
+		"id": 1,
+		"tick": 1,
+		"kind": kind,
+		"entity_id": 0,
+		"bird_archetype_id": 0,
+		"rejection_reason": 0,
+		"ability_id": 0,
+		"affected_entity_id": 0,
+		"affected_part_id": 0,
+		"weight": 0.0,
+		"force": Vector3.ZERO,
+		"impulse": Vector3.ZERO,
+		"part_id": 0,
+		"position": Vector3.ZERO,
+		"normal": Vector3.ZERO,
+		"energy_j": 0.0,
+		"damage": 0.0,
+		"neutralization_cause": 0,
+		"cause_event_id": 0,
+		"joint_id": 0,
+		"material_id": 0,
+		"joint_load_ratio": 0.0,
+		"fracture_ratio": 0.0,
+	}
+	for key: Variant in overrides:
+		event[key] = overrides[key]
+	return event
 
 
 func _fail(message: String) -> void:

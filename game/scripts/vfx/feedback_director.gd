@@ -5,12 +5,15 @@ const ARCHETYPES_PATH := "res://data/archetypes/vertical_slice.archetypes.json"
 const DEFAULT_POSITION := Vector3(0.0, 12.0, 0.0)
 const SNAPSHOT_POSITION_KINDS := [
 	"bird_launched", "ability_activation_requested", "ability_started",
-	"ability_affected_body", "ability_pulse", "ability_ended",
+	"ability_affected_body", "ability_pulse", "ability_ended", "joint_broken",
 ]
 
 var _config: Dictionary = {}
 var _vfx_slots: Array[Dictionary] = []
 var _fragment_nodes: Array[MeshInstance3D] = []
+var _fragment_expiry_ms: Array[int] = []
+var _fragment_profiles: Array[String] = []
+var _fragment_cursor := 0
 var _profile_resources: Dictionary = {}
 var _directional_contract: Dictionary = {}
 var _expected_resource_ids: Array = []
@@ -69,11 +72,15 @@ func reset_feedback() -> void:
 		var marker := slot.marker as MeshInstance3D
 		marker.visible = false
 		slot.expires_at_ms = 0
-	for fragment: MeshInstance3D in _fragment_nodes:
+	for index in range(_fragment_nodes.size()):
+		var fragment := _fragment_nodes[index]
 		fragment.visible = false
+		_fragment_expiry_ms[index] = 0
+		_fragment_profiles[index] = ""
 	if _audio_pool != null and _audio_pool.has_method("reset_pool"):
 		_audio_pool.reset_pool()
 	_slot_cursor = 0
+	_fragment_cursor = 0
 	_last_tick = -1
 	_last_outcome = "none"
 	_last_profile = ""
@@ -151,12 +158,17 @@ func directional_anchor_contract() -> Dictionary:
 
 
 func feedback_metrics() -> Dictionary:
+	_expire_fragments(Time.get_ticks_msec())
 	var budgets: Dictionary = _config.get("budgets", {})
 	var particle_capacity := 0
 	for slot: Dictionary in _vfx_slots:
 		particle_capacity += (slot.particles as GPUParticles3D).amount
 	var audio_metrics := _audio_metrics()
 	var resource_ids := pooled_resource_ids()
+	var active_fragment_profiles := _active_fragment_profiles()
+	var active_fragment_count := 0
+	for count: int in active_fragment_profiles.values():
+		active_fragment_count += count
 	return {
 		"fixed_pools": _descendant_count(self) == _expected_descendants \
 			and resource_ids == _expected_resource_ids,
@@ -166,6 +178,9 @@ func feedback_metrics() -> Dictionary:
 		"particle_budget": particle_capacity,
 		"particle_capacity_runtime": particle_capacity,
 		"fragment_capacity_runtime": _fragment_nodes.size(),
+		"active_fragment_count": active_fragment_count,
+		"active_fragment_profiles": active_fragment_profiles,
+		"fragment_cursor": _fragment_cursor,
 		"audio_voice_capacity_runtime": int(audio_metrics.get("voice_capacity", 0)),
 		"audio_loaded_cues": int(audio_metrics.get("loaded_cues", 0)),
 		"audio_load_failures": int(audio_metrics.get("load_failures", 0)),
@@ -196,6 +211,7 @@ func _process(_delta: float) -> void:
 			var marker := slot.marker as MeshInstance3D
 			marker.visible = false
 			slot.expires_at_ms = 0
+	_expire_fragments(now)
 
 
 func _emit_profile(profile: String, position: Vector3, event: Dictionary) -> void:
@@ -273,6 +289,8 @@ func _build_fragment_pool() -> void:
 		fragment.mesh = mesh
 		add_child(fragment)
 		_fragment_nodes.append(fragment)
+		_fragment_expiry_ms.append(0)
+		_fragment_profiles.append("")
 
 
 func _build_profile_resources() -> void:
@@ -342,7 +360,8 @@ func _configure_particles(
 	var resources := _profile_resources[profile] as Dictionary
 	var budgets := _config.get("budgets", {}) as Dictionary
 	var requested := int(definition.get("particles", 24))
-	particles.amount = mini(requested, int(budgets.get("max_particles_per_slot", 96)))
+	var fixed_amount := int(budgets.get("max_particles_per_slot", 96))
+	particles.amount_ratio = clampf(float(requested) / float(fixed_amount), 0.0, 1.0)
 	particles.lifetime = float(definition.get("lifetime_s", 0.4))
 	particles.process_material = resources.process_reduced if _reduced_motion \
 		else resources.process_normal
@@ -352,14 +371,37 @@ func _configure_particles(
 func _show_fragments(position: Vector3, profile: String, count: int) -> void:
 	var fragment_material := (_profile_resources[profile] as Dictionary).fragment_material as Material
 	var safe_count := mini(count, _fragment_nodes.size())
-	for index in range(_fragment_nodes.size()):
+	var lifetime_ms := roundi(float(_profile(profile).get("lifetime_s", 0.4)) * 1000.0)
+	var expires_at := Time.get_ticks_msec() + maxi(1, lifetime_ms)
+	for offset in range(safe_count):
+		var index := _fragment_cursor
+		_fragment_cursor = (_fragment_cursor + 1) % _fragment_nodes.size()
 		var fragment := _fragment_nodes[index]
-		fragment.visible = index < safe_count
-		if index >= safe_count:
-			continue
-		var angle := float(index) * TAU / float(maxi(1, safe_count))
+		fragment.visible = true
+		var angle := float(offset) * TAU / float(maxi(1, safe_count))
 		fragment.global_position = position + Vector3(cos(angle), 0.25, sin(angle)) * 0.18
 		fragment.material_override = fragment_material
+		_fragment_expiry_ms[index] = expires_at
+		_fragment_profiles[index] = profile
+
+
+func _expire_fragments(now_ms: int) -> void:
+	for index in range(_fragment_nodes.size()):
+		if _fragment_expiry_ms[index] <= 0 or now_ms < _fragment_expiry_ms[index]:
+			continue
+		_fragment_nodes[index].visible = false
+		_fragment_expiry_ms[index] = 0
+		_fragment_profiles[index] = ""
+
+
+func _active_fragment_profiles() -> Dictionary:
+	var counts: Dictionary = {}
+	for index in range(_fragment_nodes.size()):
+		if not _fragment_nodes[index].visible or _fragment_profiles[index].is_empty():
+			continue
+		var profile := _fragment_profiles[index]
+		counts[profile] = int(counts.get(profile, 0)) + 1
+	return counts
 
 
 func _is_protected_anchor_hit(event: Dictionary, snapshots: Array) -> bool:
@@ -379,13 +421,17 @@ func _is_protected_anchor_hit(event: Dictionary, snapshots: Array) -> bool:
 
 
 func _event_position(event: Dictionary, snapshots: Array) -> Vector3:
+	var kind := str(event.get("kind", ""))
 	var affected_id := int(event.get("affected_entity_id", 0))
 	var preferred_id := affected_id if affected_id != 0 else int(event.get("entity_id", 0))
-	if str(event.get("kind", "")) in SNAPSHOT_POSITION_KINDS:
+	if kind in SNAPSHOT_POSITION_KINDS:
 		for snapshot: Dictionary in snapshots:
 			if int(snapshot.get("entity_id", 0)) == preferred_id:
 				var transform: Transform3D = snapshot.get("transform", Transform3D.IDENTITY)
 				return transform.origin
+		return _anchor_position(snapshots)
+	if kind == "command_rejected":
+		return _anchor_position(snapshots)
 	if event.has("position"):
 		return event.position
 	for snapshot: Dictionary in snapshots:
