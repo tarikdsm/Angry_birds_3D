@@ -1,8 +1,8 @@
 {
   "schema": "ninho.vertical-slice.reviews.v1",
-  "source_revision": "3064815b6fa6e9c9a0d9b30d63d33abb4d2e75cf",
+  "source_revision": "70942458d25bc928bc1761a2927b4766a2423b33",
   "tested_inputs_schema": "ninho.tested-inputs.v2",
-  "tested_inputs_sha256": "e1197ead992736ca5a328619ddc5716e86335460beb2f6e82a8c794fdb0aeb5d",
+  "tested_inputs_sha256": "5578688596dc6501cc7a080e6d412a09b75aa62578aec73793ffdcc111c09642",
   "playtest": {
     "status": "unavailable",
     "substitute": "independent_agents",
@@ -16,7 +16,7 @@
       "critical": 0,
       "important": 0,
       "minor": 0,
-      "summary": "Lifecycle, dano, estado autoritativo, preview, readiness, processos e contratos de build foram revisados no HEAD 4d3a958 sem findings."
+      "summary": "Lifecycle, dano, estado autoritativo, preview, readiness, processos, contratos de build e hashes portaveis do relatorio foram revisados sem findings."
     },
     {
       "role": "architecture",
