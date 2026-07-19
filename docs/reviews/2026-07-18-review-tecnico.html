@@ -1,0 +1,808 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Review Técnico — Ninho Orbital (Vertical Slice) — 2026-07-18</title>
+<style>
+    * { box-sizing: border-box; }
+    html { -webkit-text-size-adjust: 100%; }
+    body { margin: 0; background: #f5f6f8; color: #1f2933;
+           font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+           line-height: 1.55; }
+    .page { max-width: 1000px; margin: 0 auto; padding: 2rem 1.5rem 3rem; }
+    header.pagehead { border-bottom: 3px solid #1f2933; padding-bottom: 1rem; margin-bottom: 1.5rem; }
+    h1 { font-size: 1.55rem; margin: 0 0 .6rem; line-height: 1.25; }
+    .meta { margin: .2rem 0; color: #4b5563; font-size: .92rem; }
+    .meta .rotulo { color: #1f2933; font-weight: 700; }
+    h2 { font-size: 1.22rem; margin: 1.9rem 0 .7rem; }
+    h3 { font-size: 1.02rem; margin: 1.5rem 0 .55rem; color: #111827; }
+    a { color: #1d4ed8; text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    table.resumo { border-collapse: collapse; width: 100%; font-size: .87rem; background: #fff;
+                   border: 1px solid #d1d5db; }
+    .resumo th, .resumo td { border: 1px solid #d1d5db; padding: .45rem .6rem;
+                             text-align: left; vertical-align: top; }
+    .resumo th { background: #e5e7eb; font-size: .82rem; }
+    .resumo td.num { text-align: center; font-variant-numeric: tabular-nums; white-space: nowrap; }
+    .resumo tr.total td { font-weight: 700; background: #f3f4f6; }
+    .leitura { background: #fff; border: 1px solid #d1d5db; border-radius: 4px;
+               padding: .75rem 1rem; font-size: .93rem; }
+    .indice { background: #fff; border: 1px solid #d1d5db; border-radius: 4px;
+              padding: .8rem 1.2rem; font-size: .93rem; }
+    .indice h2 { margin-top: .2rem; }
+    .indice ol { margin: .4rem 0 .2rem; padding-left: 1.5rem; }
+    .indice li { margin: .22rem 0; }
+    section { margin: 0 0 2.2rem; }
+    section > h2 { border-bottom: 1px solid #d1d5db; padding-bottom: .35rem; }
+    .veredito { background: #fff; border: 1px solid #d1d5db; border-left: 5px solid #1f2933;
+                border-radius: 4px; padding: .7rem 1rem; font-size: .94rem; margin: .6rem 0 0; }
+    .veredito .rotulo { font-weight: 700; }
+    ul { margin: .4rem 0 .8rem; padding-left: 1.4rem; }
+    li { margin: .3rem 0; font-size: .92rem; }
+    .card { background: #fff; border: 1px solid #d1d5db; border-left: 5px solid #6b7280;
+            border-radius: 4px; padding: .75rem 1rem; margin: .7rem 0; }
+    .card.critico { border-left-color: #b91c1c; }
+    .card.alto { border-left-color: #ea580c; }
+    .card.medio { border-left-color: #d97706; }
+    .card.baixo { border-left-color: #2563eb; }
+    .card.obs { border-left-color: #6b7280; }
+    .card h4 { margin: 0 0 .45rem; font-size: .96rem; font-weight: 600; line-height: 1.4; }
+    .badge { display: inline-block; color: #fff; font-size: .7rem; font-weight: 700;
+             letter-spacing: .04em; padding: .14rem .5rem; border-radius: 3px;
+             margin-right: .55rem; vertical-align: .08em; }
+    .badge-critico { background: #b91c1c; }
+    .badge-alto { background: #ea580c; }
+    .badge-medio { background: #d97706; }
+    .badge-baixo { background: #2563eb; }
+    .badge-obs { background: #6b7280; }
+    .campo { margin: .35rem 0; font-size: .9rem; }
+    .campo .rotulo { font-weight: 700; color: #374151; }
+    code { background: #eceef1; padding: .05rem .32rem; border-radius: 3px;
+           font-family: ui-monospace, "Cascadia Mono", Consolas, "Liberation Mono", monospace;
+           font-size: .85em; }
+    footer.pagefoot { margin-top: 2.5rem; border-top: 1px solid #d1d5db; padding-top: 1rem;
+                      color: #4b5563; font-size: .85rem; }
+</style>
+</head>
+<body>
+<div class="page">
+<header class="pagehead">
+<h1>Review Técnico — Ninho Orbital (Vertical Slice)</h1>
+<p class="meta"><span class="rotulo">Data:</span> 2026-07-18 &nbsp;·&nbsp; <span class="rotulo">Commit:</span> <code>d2c2c85</code></p>
+<p class="meta"><span class="rotulo">Método:</span> Auditoria estática read-only executada por 8 agentes em paralelo (swarm), um por eixo; sem builds nem execução de scripts que escrevam artefatos.</p>
+</header>
+<div class="sumario">
+<h2>Sumário executivo</h2>
+<table class="resumo">
+<thead><tr><th>Eixo</th><th>C</th><th>A</th><th>M</th><th>B</th><th>O</th><th>Veredito</th></tr></thead>
+<tbody>
+<tr><td><a href="#eixo-1">Arquitetura e fronteiras entre módulos (kernel / simulation / extension / scripts)</a></td><td class="num">0</td><td class="num">0</td><td class="num">2</td><td class="num">2</td><td class="num">6</td><td>Arquitetura saudável e fiel aos specs — a direção de dependências <code>extension → simulation → kernel → Box3D</code> é estrita e verificada em CMake e includes, nenhuma lógica de simulação vaza para GDScript, e a GDExtension só expõe dados copiados; os achados são duplicações de dados/regra na camada de apresentação que hoje coincidem com o manifesto, mas quebrarão silenciosamente na expansão de conteúdo.</td></tr>
+<tr><td><a href="#eixo-2">Contrato GDExtension (godot-cpp vs Godot 4.5.1, binds/lifetimes, fronteira de erros C++/GDScript, gate anti-física-nativa)</a></td><td class="num">0</td><td class="num">0</td><td class="num">2</td><td class="num">2</td><td class="num">2</td><td>Eixo saudável — pin de versão exato e coerente com o host 4.5.1, ABI blindada contra exceções e inputs inválidos, ownership sem riscos de leak/double-free; o gate <code>forbid_godot_physics.gd</code> cumpre o escopo do design, mas tem brechas estruturais de cobertura (raiz de <code>res://scripts</code>, classes de query/physics-server, criação tardia de nós).</td></tr>
+<tr><td><a href="#eixo-3">Física e Determinismo (Box3D / kernel / simulation / testes de física)</a></td><td class="num">0</td><td class="num">0</td><td class="num">2</td><td class="num">3</td><td class="num">3</td><td>Eixo saudável e engineering-wise muito acima da média — timestep fixo ponta a ponta, stepping single-worker, ordenação determinística em todas as fronteiras, evidência rastreada debug==release bit a bit — com duas ressalvas concretas: a prova de repetibilidade do cenário de projétil é parcialmente circular (cache estático) e nenhum teste isola o efeito real do flag <code>bullet</code>/CCD.</td></tr>
+<tr><td><a href="#eixo-4">Dados, conteúdo e pipeline de arte</a></td><td class="num">0</td><td class="num">0</td><td class="num">2</td><td class="num">4</td><td class="num">2</td><td>Eixo saudável e acima da média — parser C++ estrito e exaustivamente testado contra os arquivos reais de produção, pipeline de arte reprodutível com hash de build e validação cruzada com o nível — com duas lacunas médias: o quarto JSON (<code>feedback</code>) vive fora do contrato de schema e sem validação estrita, e constantes de gameplay são duplicadas no GDScript sem verificação cruzada.</td></tr>
+<tr><td><a href="#eixo-5">Suíte de testes e gates de evidência</a></td><td class="num">0</td><td class="num">0</td><td class="num">2</td><td class="num">3</td><td class="num">8</td><td>Eixo excepcionalmente robusto — smokes GDScript assertam comportamento de verdade, os gates têm auto-teste negativo e a frescura dos artefatos foi verificada por recomputação de hashes (tudo confere com HEAD); as fraquezas são a ausência total de CI, a evidência de fundação não vinculada à revisão do código e alguns pontos auto-atestados.</td></tr>
+<tr><td><a href="#eixo-6">Build e empacotamento Windows (CMake, presets, scripts de toolchain/empacote, export presets)</a></td><td class="num">0</td><td class="num">2</td><td class="num">3</td><td class="num">2</td><td class="num">4</td><td>Eixo maduro e rigoroso — pins com SHA-256 em toda a toolchain, verificação em camadas e launch pós-empacote real — mas a promessa "mesmo commit → mesmo pacote" está quebrada por EOL não pinado nas licenças (que também derruba o gate Release com <code>core.autocrlf=true</code>) e pelo timestamp PE da DLL, e a etapa de compilação C++ dentro do empacotador perde todo o diagnóstico quando falha.</td></tr>
+<tr><td><a href="#eixo-7">Conformidade legal e documentação</a></td><td class="num">0</td><td class="num">1</td><td class="num">1</td><td class="num">1</td><td class="num">2</td><td>Eixo em bom estado — pins, SBOM, notices e docs batem com o código e com os dados em quase tudo — mas há um bug real de portabilidade no gate de testes (hash do <code>godot.COPYRIGHT.txt</code> sensível a CRLF) e uma lacuna declarada de inventário (Blender pinado fora do SBOM e dos notices).</td></tr>
+<tr><td><a href="#eixo-8">Performance (step de física, ponte C++/GDScript, loops quentes, custo GDScript por frame)</a></td><td class="num">0</td><td class="num">0</td><td class="num">3</td><td class="num">3</td><td class="num">3</td><td>Saudável para o conteúdo atual (22 corpos, step p95 medido ≈1,6 ms e frame p95 ≈6 ms contra budget de 16,6 ms); os riscos são estruturais — serialização canônica completa por tick, contagem de contatos O(n²) com alocação por tick e preview de trajetória sem early-out — e degradam conforme o conteúdo crescer.</td></tr>
+<tr class="total"><td>Total</td><td class="num">0</td><td class="num">3</td><td class="num">17</td><td class="num">20</td><td class="num">30</td><td>70 achados</td></tr>
+</tbody></table>
+<p class="leitura"><strong>Leitura geral.</strong> Os oito vereditos convergem: o vertical slice está em estado saudável a excepcionalmente robusto em todos os eixos, sem nenhum achado classificado como crítico. Os três achados de severidade alta concentram-se na reprodutibilidade do empacotamento Windows e na sensibilidade a EOL/CRLF do gate de testes — falhas de processo e de portabilidade, não de gameplay. A maior parte dos achados é de severidade média ou baixa e trata de duplicações de dados e regras entre o manifesto e a camada de apresentação, lacunas de cobertura em gates e testes, e custos estruturais que só pesarão com o crescimento do conteúdo. A performance atual tem folga confirmada por capturas reais (frame p95 em torno de 6 ms contra budget de 16,6 ms). O risco dominante apontado pelos vereditos é o drift silencioso futuro — dados dessincronizados, evidência não vinculada à revisão do código, ausência de CI — e não defeitos funcionais presentes.</p>
+</div>
+<nav class="indice">
+<h2>Índice</h2>
+<ol>
+<li><a href="#eixo-1">Arquitetura e fronteiras entre módulos (kernel / simulation / extension / scripts)</a></li>
+<li><a href="#eixo-2">Contrato GDExtension (godot-cpp vs Godot 4.5.1, binds/lifetimes, fronteira de erros C++/GDScript, gate anti-física-nativa)</a></li>
+<li><a href="#eixo-3">Física e Determinismo (Box3D / kernel / simulation / testes de física)</a></li>
+<li><a href="#eixo-4">Dados, conteúdo e pipeline de arte</a></li>
+<li><a href="#eixo-5">Suíte de testes e gates de evidência</a></li>
+<li><a href="#eixo-6">Build e empacotamento Windows (CMake, presets, scripts de toolchain/empacote, export presets)</a></li>
+<li><a href="#eixo-7">Conformidade legal e documentação</a></li>
+<li><a href="#eixo-8">Performance (step de física, ponte C++/GDScript, loops quentes, custo GDScript por frame)</a></li>
+</ol>
+</nav>
+<main>
+<section id="eixo-1">
+<h2>1. Arquitetura e fronteiras entre módulos (kernel / simulation / extension / scripts)</h2>
+<p class="veredito"><span class="rotulo">Veredito:</span> Arquitetura saudável e fiel aos specs — a direção de dependências <code>extension → simulation → kernel → Box3D</code> é estrita e verificada em CMake e includes, nenhuma lógica de simulação vaza para GDScript, e a GDExtension só expõe dados copiados; os achados são duplicações de dados/regra na camada de apresentação que hoje coincidem com o manifesto, mas quebrarão silenciosamente na expansão de conteúdo.</p>
+<h3>Verificações executadas</h3>
+<ul>
+<li>Li os specs <code>2026-07-10-ninho-orbital-design.md</code>, <code>2026-07-10-box3d-foundation-design.md</code> e <code>2026-07-11-vertical-slice-design.md</code> e confrontei cada cláusula arquitetural com o código.</li>
+<li>Mapeei o grafo de link/includes via <code>CMakeLists.txt</code> raiz e dos três módulos: kernel linka <code>box3d</code> PRIVATE (<code>native/kernel/CMakeLists.txt:13</code>), simulation linka <code>ninho::physics</code> PUBLIC e json PRIVATE (<code>native/simulation/CMakeLists.txt:17-20</code>), extension linka tudo PRIVATE (<code>native/extension/CMakeLists.txt:8</code>) — direção estrita, sem ciclos.</li>
+<li>Verifiquei que nenhum header público do kernel expõe <code>b3*</code> (grep em <code>native/kernel/include</code> — só nomes de structs de observação) e que kernel/simulation não incluem nada de Godot (único "godot" no kernel é string de versão no JSON de telemetria, <code>native/kernel/src/scenario.cpp:3332</code>).</li>
+<li>Confirmei que <code>native/simulation</code> não inclui <code>box3d</code> em <code>src/</code> (zero ocorrências; só testes incluem <code>box3d_allocator_probe.hpp</code>).</li>
+<li>Li todos os headers públicos dos três módulos e os <code>.cpp</code> da extension; conferi que só tipos Godot (Dictionary/Array/Variant) cruzam a ABI e que exceções são capturadas antes dela.</li>
+<li>Li todos os 11 scripts GDScript de produção e as duas cenas: nenhuma classe física Godot em <code>game/scenes/*.tscn</code> (grep RigidBody/CollisionShape/Area3D vazio) e nenhum uso de <code>PhysicsServer</code>/<code>PhysicsDirectSpaceState</code> em <code>game/</code>.</li>
+<li>Confrontei as constantes de mira do GDScript com <code>game/data/levels/first_orbit.level.json</code> e com a validação nativa em <code>native/simulation/src/launch_system.cpp:62-115</code>.</li>
+<li>Verifiquei a regra do cone de proteção no nativo (<code>native/simulation/src/damage_system.cpp:102-117</code>) e sua reimplementação no GDScript (<code>game/scripts/vfx/feedback_director.gd:413-426</code>), incluindo a convenção da normal publicada (<code>damage_system.cpp:232</code> publica <code>normal = cause_to_target</code>, coerente com o cálculo do GDScript hoje).</li>
+<li>Confirmei que o uso de <code>Box3DWorldNode</code> (spawn/impulse/step manual) está restrito aos scripts do spike; o gameplay usa apenas <code>OrbitalSessionNode</code>.</li>
+<li>Conferi <code>game/project.godot</code>: todas as ações de input referenciadas pelos scripts existem; <code>physics_ticks_per_second=60</code> casa com o passo fixo 1/60 do acumulador.</li>
+</ul>
+<h3>Achados</h3>
+<div class="card medio">
+<h4><span class="badge badge-medio">MÉDIO</span>Parâmetros autoritativos do manifesto duplicados como constantes hardcoded em GDScript</h4>
+<p class="campo"><span class="rotulo">Local:</span> <code>game/scripts/game/launch_controller.gd:7-11</code> (LAUNCH_RADIUS 13.0, theta ±50°, speed 8–16, default 10.5), <code>game/scripts/game/vertical_slice_controller.gd:202</code> (-13.0), <code>game/scripts/camera/orbital_camera.gd:13</code> (DEFAULT_RING_POINT -13,0,0); fonte autoritativa: <code>game/data/levels/first_orbit.level.json:4-13</code> (radius 10 + <code>shell_offset_m</code> 3, <code>theta_min/max_deg</code>, <code>phase_speed_min/max</code>, <code>default_speed_m_s</code>); revalidação nativa: <code>native/simulation/src/launch_system.cpp:84-109</code>.</p>
+<p class="campo"><span class="rotulo">Evidência:</span> os valores batem hoje, mas são cópias manuais sem fonte única. O clamp local do GDScript acontece antes do comando chegar à simulation.</p>
+<p class="campo"><span class="rotulo">Impacto:</span> ao adicionar a fase 2 com arco/casca/velocidade diferentes, o GDScript fica silenciosamente errado — ou bloqueia comandos válidos (clamp mais restrito), ou emite comandos que voltam como <code>command_rejected</code> sem feedback claro ao jogador. A correção física não quebra (a simulation revalida), mas a UX degrada sem nenhum erro explícito.</p>
+<p class="campo"><span class="rotulo">Recomendação:</span> publicar o envelope de mira no frame após <code>configure_session</code> (ex.: <code>frame.aim_envelope</code> com shell_radius, theta min/max, speed min/max/default vindos da simulation) e derivar o GDScript desse payload; alternativa mínima: centralizar num único const documentado como espelho do manifesto e coberto por teste de paridade.</p>
+</div>
+<div class="card medio">
+<h4><span class="badge badge-medio">MÉDIO</span>Regra de gameplay (cone de proteção do Javali-Âncora) reimplementada no script de VFX</h4>
+<p class="campo"><span class="rotulo">Local:</span> <code>game/scripts/vfx/feedback_director.gd:413-426</code> (<code>_is_protected_anchor_hit</code>); regra autoritativa: <code>native/simulation/src/damage_system.cpp:102-117</code> (<code>directional_multiplier</code>).</p>
+<p class="campo"><span class="rotulo">Evidência:</span> o GDScript recalcula <code>world_front · (-normal) &gt;= cos(cone)</code> para escolher o perfil "helmet"/"vulnerable". Os dados vêm do mesmo <code>vertical_slice.archetypes.json</code> (fonte única de dados OK, <code>feedback_director.gd:574-594</code>), mas o algoritmo é duplicado.</p>
+<p class="campo"><span class="rotulo">Impacto:</span> se a regra nativa evoluir (cone por arquétipo, outra convenção de normal, zona de transição), o feedback visual diverge do dano real — e o design (§7 mestre) exige que cada condição de dano tenha feedback distinto e legível; um "helmet" exibido num hit de dano cheio ensina a regra errada ao jogador.</p>
+<p class="campo"><span class="rotulo">Recomendação:</span> classificar no nativo e publicar no evento de domínio (ex.: campo <code>protected_hit</code>/<code>vulnerability_class</code> em <code>DomainEvent</code>), fazendo o GDScript apenas mapear perfil de VFX/áudio.</p>
+</div>
+<div class="card baixo">
+<h4><span class="badge badge-baixo">BAIXO</span>Magic numbers de conteúdo acoplando apresentação a IDs do manifesto</h4>
+<p class="campo"><span class="rotulo">Local:</span> <code>game/scripts/camera/orbital_camera.gd:86</code> (<code>surface_id == 1003</code> para achar o projétil), <code>game/scripts/vfx/feedback_director.gd:520-521</code> + <code>game/data/feedback/vertical_slice.feedback.json</code> (<code>directional_anchor.entity_id: 200</code>, com fallback hardcoded 200).</p>
+<p class="campo"><span class="rotulo">Evidência:</span> 1003 = <code>virela_body</code> e 200 = entity do Âncora batem com os dados atuais, mas nada no pipeline garante essa correspondência.</p>
+<p class="campo"><span class="rotulo">Impacto:</span> numa fase com outra ave/inimigo, a câmera deixa de seguir o projétil e o feedback direcional aponta para a entidade errada — falha silenciosa de apresentação.</p>
+<p class="campo"><span class="rotulo">Recomendação:</span> a simulation marcar papéis no frame (ex.: <code>snapshot.is_projectile</code>; alvos já existem em <code>objective_targets</code>) e o GDScript consumir esses marcadores.</p>
+</div>
+<div class="card baixo">
+<h4><span class="badge badge-baixo">BAIXO</span>Spec do slice desatualizado quanto à superfície do <code>OrbitalSessionNode</code></h4>
+<p class="campo"><span class="rotulo">Local:</span> <code>docs/superpowers/specs/2026-07-11-vertical-slice-design.md:274-288</code> (§10) vs. <code>native/extension/src/orbital_session_node.cpp:884-889</code> e bind em <code>orbital_session_node.cpp:785-786</code>.</p>
+<p class="campo"><span class="rotulo">Evidência:</span> o doc lista sete métodos e omite <code>queue_cancel_aim</code>, que existe no código e é exigido pelo próprio §4.2 do doc ("Esc cancela a mira").</p>
+<p class="campo"><span class="rotulo">Impacto:</span> contrato documental incompleto; quem implementar contra o doc perde um binding necessário.</p>
+<p class="campo"><span class="rotulo">Recomendação:</span> atualizar a §10 do spec incluindo <code>queue_cancel_aim</code>.</p>
+</div>
+<div class="card obs">
+<h4><span class="badge badge-obs">OBS</span>Guard anti-física-Godot não escaneia a raiz de <code>res://scripts/</code></h4>
+<p class="campo"><span class="rotulo">Local:</span> <code>game/tests/forbid_godot_physics.gd:5-8</code> (PRODUCTION_ROOTS omite <code>res://scripts</code>, cobrindo apenas subdiretórios e <code>res://scenes</code>).</p>
+<p class="campo"><span class="rotulo">Evidência:</span> <code>physics_spike_view.gd</code>/<code>physics_spike_smoke.gd</code> ficam fora do scan textual; a cena do spike é coberta só por estar em <code>res://scenes</code>. Um <code>RigidBody3D.new()</code> num script da raiz passaria.</p>
+<p class="campo"><span class="rotulo">Impacto:</span> brecha residual num gate que hoje é forte; os scripts raiz são do spike (regressão da fundação), então o risco prático é baixo.</p>
+<p class="campo"><span class="rotulo">Recomendação:</span> incluir <code>"res://scripts"</code> em PRODUCTION_ROOTS.</p>
+</div>
+<div class="card obs">
+<h4><span class="badge badge-obs">OBS</span><code>std::span</code> de buffers internos na API pública do kernel e da simulation</h4>
+<p class="campo"><span class="rotulo">Local:</span> <code>native/kernel/include/ninho/physics/physics_world.hpp:215,224-225</code> (<code>states()</code>, <code>contact_hits()</code>, <code>joint_reactions()</code>), <code>native/simulation/include/ninho/simulation/session.hpp:152-154</code>.</p>
+<p class="campo"><span class="rotulo">Evidência:</span> o design da fundação (§4) diz "A API não devolve ponteiros internos nem referências a eventos transitórios"; os spans são views do snapshot estável entre ticks (não de callbacks do solver), e a extension copia tudo por tick no <code>SessionFrameBatch</code> (<code>orbital_session_node.cpp:106-146</code>). Nada inválido atravessa a ABI Godot.</p>
+<p class="campo"><span class="rotulo">Impacto:</span> tensão doc↔código sem bug atual; um consumidor que guardasse o span além do <code>step()</code>/<code>tick()</code> leria dados mutados.</p>
+<p class="campo"><span class="rotulo">Recomendação:</span> esclarecer no doc que spans referenciam o snapshot publicado (válido até o próximo tick) ou endurecer o contrato com cópias.</p>
+</div>
+<div class="card obs">
+<h4><span class="badge badge-obs">OBS</span>Sessão inteira trava (fault latched) após input não finito no <code>queue_aim</code></h4>
+<p class="campo"><span class="rotulo">Local:</span> <code>native/extension/src/orbital_session_node.cpp:858-864</code> + <code>OrbitalSessionAdapter::fail</code> (<code>orbital_session_node.cpp:246-254</code>); contrato testado em <code>game/tests/orbital_session_node_smoke.gd:94-112</code>.</p>
+<p class="campo"><span class="rotulo">Evidência:</span> NaN/Inf na mira gera <code>gameplay_fault</code> latched; <code>advance()</code> e <code>enqueue()</code> rejeitam tudo até <code>restart_level()</code>. Hoje o GDScript não emite NaN (proteções em <code>solve_aim_from_screen</code>, <code>launch_controller.gd:79-96</code>).</p>
+<p class="campo"><span class="rotulo">Impacto:</span> fail-fast deliberado e testado, mas um único input degenerado futuro derruba a sessão jogável em vez de produzir <code>CommandRejected(InvalidAim)</code>.</p>
+<p class="campo"><span class="rotulo">Recomendação:</span> manter consciente — documentar no spec que input não finito é falta de sessão, ou rebaixar para rejeição de comando.</p>
+</div>
+<div class="card obs">
+<h4><span class="badge badge-obs">OBS</span>Identificação do planeta por "massa ≈ 0" na view do spike</h4>
+<p class="campo"><span class="rotulo">Local:</span> <code>game/scripts/physics_spike_view.gd:84</code> (<code>is_zero_approx(float(state.mass))</code> → mapeia para <code>planet_view</code>).</p>
+<p class="campo"><span class="rotulo">Evidência:</span> heurística implícita (estático ⇒ planeta); correta no spike, que tem um único corpo estático.</p>
+<p class="campo"><span class="rotulo">Impacto:</span> frágil se o spike ganhar outro estático; contido na cena de regressão da fundação.</p>
+<p class="campo"><span class="rotulo">Recomendação:</span> opcional — marcar o planeta explicitamente (ex.: handle reservado ou flag no state).</p>
+</div>
+<div class="card obs">
+<h4><span class="badge badge-obs">OBS</span>Teste de cena invoca método "privado" da câmera</h4>
+<p class="campo"><span class="rotulo">Local:</span> <code>game/tests/vertical_slice_smoke.gd:53-58</code> chama <code>camera._safe_camera_position(...)</code> diretamente.</p>
+<p class="campo"><span class="rotulo">Evidência:</span> convenção <code>_</code> violada apenas em teste, para validar o clamp de 24 m.</p>
+<p class="campo"><span class="rotulo">Impacto:</span> nenhum em produção; acoplamento teste↔implementação.</p>
+<p class="campo"><span class="rotulo">Recomendação:</span> aceitável; se doer, expor um helper de verificação sem o underscore.</p>
+</div>
+<div class="card obs">
+<h4><span class="badge badge-obs">OBS</span>Testes da simulation incluem header interno do kernel via include path de <code>src/</code></h4>
+<p class="campo"><span class="rotulo">Local:</span> <code>native/simulation/CMakeLists.txt:45-49</code> + <code>native/simulation/tests/session_tests.cpp:3</code> (<code>box3d_allocator_probe.hpp</code>).</p>
+<p class="campo"><span class="rotulo">Evidência:</span> é o seam de diagnóstico de alocador previsto no slice (§14: "exposto somente ao target de testes por uma façade interna"); ocorre só em targets de teste, nunca na biblioteca.</p>
+<p class="campo"><span class="rotulo">Impacto:</span> include cruzado de <code>src/</code> entre módulos, mas alinhado ao design e restrito a testes.</p>
+<p class="campo"><span class="rotulo">Recomendação:</span> nenhuma ação urgente; se crescer, promover a façade a um header de teste explícito no kernel.</p>
+</div>
+<h3>Pontos positivos verificados</h3>
+<ul>
+<li>Direção de dependências estrita e sem ciclos, confirmada em CMake e includes: <code>extension → simulation → kernel → box3d</code>; Box3D linkado PRIVATE no kernel (<code>native/kernel/CMakeLists.txt:13</code>).</li>
+<li>Camada anticorrupção do kernel íntegra: PIMPL, <code>Status</code>/<code>Result</code>, handles geracionais próprios (<code>physics_types.hpp:98-120</code>), nenhum <code>b3*</code> em headers públicos.</li>
+<li>Kernel e simulation compilam sem nenhuma dependência de Godot — requisito central do design (§10.2 mestre) verificado por grep.</li>
+<li>Toda a lógica de jogo está no nativo: ordem do tick em <code>session.cpp:42-100</code> (comandos → FSM → habilidade → step → dano → fraturas → objetivos) casa com §9.2 do slice; validação de mira autoritativa em <code>launch_system.cpp:62-115</code> com os mesmos números do contrato §4.3.</li>
+<li>GDScript não calcula dano, habilidade, objetivo ou vitória — HUD/VFX/câmera só consomem o frame (confirmado em <code>vertical_slice_hud.gd</code>, <code>vertical_slice_controller.gd</code>, <code>orbital_camera.gd</code>).</li>
+<li>GDExtension como fronteira disciplinada: só Dictionary/Variant/Arrays na ABI, exceções capturadas antes dela e convertidas em <code>gameplay_fault</code>/<code>physics_fault</code> (<code>orbital_session_node.cpp</code>, <code>box3d_world_node.cpp:70-106</code>), comentário de <code>/EHsc</code> no CMake (<code>native/extension/CMakeLists.txt:35-37</code>).</li>
+<li>IDs de domínio (<code>EntityId</code>/<code>PartId</code>/<code>JointId</code>/<code>EventId</code>) em vez de handles físicos nos snapshots/eventos; <code>BodyHandle</code> só aparece empacotado (geração&lt;&lt;32|índice) para a API do spike (<code>adapter_helpers.hpp:158-179</code>).</li>
+<li>Godot sem física própria no gameplay: cenas sem <code>RigidBody3D</code>/<code>CollisionShape3D</code>/<code>Area3D</code>, guard automatizado <code>forbid_godot_physics.gd</code> cobrindo texto e árvore runtime, e nenhum uso de <code>PhysicsServer</code> — raycast de mira feito por projeção de câmera + interseção analítica, exatamente como o design prevê ("câmera resolve ray–sphere apenas para autoria; o kernel revalida").</li>
+<li>Protocolo de frame conforme §10/§11 do slice: <code>consume_frame()</code> como única leitura por <code>_physics_process</code>, <code>OrbitalSessionNode</code> com prioridade -100 e controller 0, acumulador 1/60 com teto de 4 ticks e descarte de atraso (<code>orbital_session_node.cpp:21-53</code>).</li>
+<li>Previsão de trajetória calculada no nativo (<code>SimulationSession::preview</code>, <code>launch_system.cpp:167</code>) e apenas desenhada no GDScript (<code>body_view_registry.gd:122-145</code>).</li>
+<li><code>Box3DWorldNode</code> preservado como regressão da fundação e isolado do gameplay: spike usa-o; o vertical slice usa só <code>OrbitalSessionNode</code> (cena + grep de <code>spawn_*</code>/<code>step_fixed</code> confinados aos scripts do spike).</li>
+<li>Smokes cobrindo o contrato da fronteira ponta a ponta: bindings, prioridade, chaves do frame, fault latching com bloqueio e recuperação via restart (<code>orbital_session_node_smoke.gd</code>), e queda do projétil headless (<code>physics_spike_smoke.gd</code>).</li>
+</ul>
+</section>
+<section id="eixo-2">
+<h2>2. Contrato GDExtension (godot-cpp vs Godot 4.5.1, binds/lifetimes, fronteira de erros C++/GDScript, gate anti-física-nativa)</h2>
+<p class="veredito"><span class="rotulo">Veredito:</span> Eixo saudável — pin de versão exato e coerente com o host 4.5.1, ABI blindada contra exceções e inputs inválidos, ownership sem riscos de leak/double-free; o gate <code>forbid_godot_physics.gd</code> cumpre o escopo do design, mas tem brechas estruturais de cobertura (raiz de <code>res://scripts</code>, classes de query/physics-server, criação tardia de nós).</p>
+<h3>Verificações executadas</h3>
+<ul>
+<li><code>cmake/Dependencies.cmake</code> — godot-cpp pinado no commit <code>e83fd0904c13356ed1d4c3d09f8bb9132bdc6b77</code> (linha 63); confirmado via GitHub que esse commit <strong>é a tag <code>godot-4.5-stable</code></strong>; não existe tag 4.5.1-stable no godot-cpp (compatibilidade GDExtension é por minor → 4.5 cobre 4.5.1).</li>
+<li><code>game/bin/ninho_physics.gdextension</code> — <code>entry_symbol</code> correto, <code>compatibility_minimum = "4.5"</code>, mapeamento debug/release x86_64 coerente com <code>VerifyGDExtension.cmake</code> e com os testes de descriptor.</li>
+<li><code>cmake/VerifyGDExtension.cmake</code> + <code>WriteGDExtensionStamp.cmake</code> — verificação ponta a ponta: token aleatório por configure, config/target/path/nome/SHA256 da DLL e <code>dumpbin /exports</code> do símbolo de entrada.</li>
+<li><code>native/extension/src/{register_types,box3d_world_node,orbital_session_node,adapter_helpers}.cpp</code> + headers — leitura integral de binds, ownership, tratamento de exceções e validação de argumentos.</li>
+<li><code>native/extension/CMakeLists.txt</code> — exceções habilitadas coerentes (<code>GODOTCPP_DISABLE_EXCEPTIONS=OFF</code>, <code>/EHsc</code>), saída da DLL em <code>game/bin</code>, stamp pós-build; testes Godot-dependentes condicionais à presença do executável.</li>
+<li><code>game/tests/forbid_godot_physics.gd</code> — leitura integral; cruzamento com todos os <code>.gd</code>/<code>.tscn</code>/<code>.tres</code> do projeto (glob) e grep por 20+ classes de física (<code>RigidBody3D|StaticBody3D|...|PhysicsServer3D|RayCast3D|...</code>) → zero ocorrências em <code>game/</code>.</li>
+<li><code>tools/test.ps1:474-481</code> — gate é bloqueante no pipeline; <code>tools/tests/godot-spike-gate-tests.ps1:53-104</code> valida o descriptor com parser estrito case-sensitive.</li>
+<li>Escopo pretendido do gate confirmado no design: <code>docs/superpowers/plans/2026-07-11-vertical-slice-implementation.md:332</code> (exatamente as 6 classes implementadas).</li>
+<li><code>game/export_presets.cfg</code> + <code>tools/package_windows.ps1:182,192</code> — pacote exige a DLL release e rejeita vazamento da debug.</li>
+<li>Tipo de <code>AimState.speed_m_s</code> (<code>double</code>, <code>native/simulation/include/ninho/simulation/commands.hpp:12</code>) e validação de faixa 8–40 na simulação (<code>native/simulation/src/launch_system.cpp:104</code>).</li>
+</ul>
+<h3>Achados</h3>
+<div class="card medio">
+<h4><span class="badge badge-medio">MÉDIO</span>Gate não cobre a raiz <code>res://scripts</code></h4>
+<p class="campo"><span class="rotulo">Local:</span> <code>game/tests/forbid_godot_physics.gd:5-8</code>; arquivos fora do scan: <code>game/scripts/physics_spike_view.gd</code>, <code>game/scripts/physics_spike_smoke.gd</code></p>
+<p class="campo"><span class="rotulo">Evidência:</span> <code>PRODUCTION_ROOTS</code> lista apenas subpastas (<code>res://scripts/game</code>, <code>camera</code>, <code>ui</code>, <code>vfx</code>, <code>audio</code>); os dois scripts da fundação vivem na raiz de <code>res://scripts</code> e não são varridos pelo scan estático nem pelo runtime (o gate só instancia <code>res://scenes/vertical_slice.tscn</code>, linha 3). Verifiquei que hoje ambos estão limpos (usam apenas <code>Box3DWorldNode</code>).</p>
+<p class="campo"><span class="rotulo">Impacto:</span> uma regressão futura (ex.: alguém adiciona <code>CollisionShape3D</code>/<code>RayCast3D</code> para debug no spike visual) passaria despercebida pelo gate e pelo pipeline.</p>
+<p class="campo"><span class="rotulo">Recomendação:</span> trocar as raízes por <code>"res://scripts"</code> (a varredura já é recursiva) ou adicionar <code>"res://scripts"</code> como raiz adicional com dedup; alternativamente instanciar também <code>physics_spike.tscn</code> no runtime scan.</p>
+</div>
+<div class="card medio">
+<h4><span class="badge badge-medio">MÉDIO</span>Classes de física fora da lista proibida escapam dos dois scans</h4>
+<p class="campo"><span class="rotulo">Local:</span> <code>game/tests/forbid_godot_physics.gd:9-16,67-75</code></p>
+<p class="campo"><span class="rotulo">Evidência:</span> a lista cobre as 6 classes do design, mas <code>RayCast3D</code>/<code>ShapeCast3D</code> derivam de <code>Node3D</code> — não casam no scan estático (strings ausentes) nem no runtime (<code>is_class("CollisionObject3D")</code> não as alcança). Uso direto de <code>PhysicsServer3D</code> ou <code>get_world_3d().direct_space_state.intersect_ray()</code> em GDScript não cria nó algum e é invisível ao gate. Também escapam do estático: <code>AnimatableBody3D</code>, <code>VehicleBody3D</code>, <code>PhysicalBone3D</code>, <code>SoftBody3D</code>, <code>CollisionPolygon3D</code> e joints 3D (o runtime pegaria os corpos, mas só na cena instanciada).</p>
+<p class="campo"><span class="rotulo">Impacto:</span> o princípio "toda física é Box3D" fica com brecha para queries espaciais e corpos exóticos. Atenuante: sem nenhum <code>CollisionObject3D</code> no space, essas queries retornariam vazio — viraria bug silencioso, não física paralela funcional.</p>
+<p class="campo"><span class="rotulo">Recomendação:</span> adicionar <code>RayCast3D</code>, <code>ShapeCast3D</code>, <code>CollisionPolygon3D</code>, <code>PhysicsServer3D</code>, <code>direct_space_state</code> (e idealmente as demais classes <code>*Body3D</code>/<code>*Joint3D</code>) à lista; para cobrir derivadas genéricas no estático, bastam os sufixos <code>"Body3D"</code>, <code>"Joint3D"</code>, <code>"Cast3D"</code> com whitelist explícita se algum dia houver exceção.</p>
+</div>
+<div class="card baixo">
+<h4><span class="badge badge-baixo">BAIXO</span>Runtime scan limitado a uma cena e um único physics frame</h4>
+<p class="campo"><span class="rotulo">Local:</span> <code>game/tests/forbid_godot_physics.gd:32-42</code></p>
+<p class="campo"><span class="rotulo">Evidência:</span> só <code>vertical_slice.tscn</code> é instanciada e o scan roda após um <code>await physics_frame</code>; nós de física criados tardiamente por script (pós-frame) ou presentes em <code>physics_spike.tscn</code> não são inspecionados em runtime.</p>
+<p class="campo"><span class="rotulo">Impacto:</span> residual — o scan estático cobre <code>.gd</code>/<code>.tscn</code> dos roots, então a criação tardia só escaparia via string dinâmica (<code>ClassDB.instantiate("Rigid"+"Body3D")</code>), cenário de evasão deliberada.</p>
+<p class="campo"><span class="rotulo">Recomendação:</span> instanciar <code>physics_spike.tscn</code> no mesmo passo e aguardar 2–3 frames antes do scan; documentar que o gate é guardrail, não sandbox.</p>
+</div>
+<div class="card baixo">
+<h4><span class="badge badge-baixo">BAIXO</span>Scan estático restrito a <code>.gd</code>/<code>.tscn</code></h4>
+<p class="campo"><span class="rotulo">Local:</span> <code>game/tests/forbid_godot_physics.gd:52-53</code></p>
+<p class="campo"><span class="rotulo">Evidência:</span> recursos <code>.tres</code>/<code>.res</code> (um <code>BoxShape3D</code>/<code>PhysicsMaterial</code> solto) e cenas binárias <code>.scn</code> não são inspecionados. Hoje existem apenas 3 <code>.tres</code>, todos materiais visuais (<code>game/materials/*.tres</code> — verificados), e nenhum <code>.scn</code>.</p>
+<p class="campo"><span class="rotulo">Impacto:</span> baixo — um <code>Shape3D</code> solto sem <code>CollisionShape3D</code> é inerte, e GLBs instanciados na cena principal são cobertos pelo runtime scan.</p>
+<p class="campo"><span class="rotulo">Recomendação:</span> incluir <code>.tres</code>/<code>.res</code>/<code>.scn</code> na varredura textual (são texto ou contêm cabeçalhos com nomes de classe) ou documentar a exclusão.</p>
+</div>
+<div class="card obs">
+<h4><span class="badge badge-obs">OBS</span>godot-cpp pinado em <code>godot-4.5-stable</code> com host 4.5.1</h4>
+<p class="campo"><span class="rotulo">Local:</span> <code>cmake/Dependencies.cmake:61-67</code>, <code>game/bin/ninho_physics.gdextension:3</code></p>
+<p class="campo"><span class="rotulo">Evidência:</span> o commit pinado é a tag <code>godot-4.5-stable</code>; o godot-cpp não publica tags por patch release; <code>compatibility_minimum = "4.5"</code> garante ABI no 4.5.1; decisão registrada em <code>docs/superpowers/specs/2026-07-10-box3d-foundation-design.md:24,206</code> com smoke de ABI no 4.5.1.</p>
+<p class="campo"><span class="rotulo">Impacto:</span> nenhum funcional; o branch 4.5 pode ter recebido syncs posteriores com correções que o pin não captura.</p>
+<p class="campo"><span class="rotulo">Recomendação:</span> opcional — avaliar periodicamente um bump para o sync mais recente do branch 4.5, mantendo pin por hash.</p>
+</div>
+<div class="card obs">
+<h4><span class="badge badge-obs">OBS</span>Testes CTest que exigem o Godot são condicionais à presença do executável</h4>
+<p class="campo"><span class="rotulo">Local:</span> <code>native/extension/CMakeLists.txt:75-97</code></p>
+<p class="campo"><span class="rotulo">Evidência:</span> <code>gdextension_project_import</code>/<code>gdextension_vertical_slice</code> só são registrados se <code>.tools/godot/Godot_v4.5.1-stable_win64.exe</code> existir — ausente neste clone (<code>.tools/</code> é gitignored, baixado pelo bootstrap).</p>
+<p class="campo"><span class="rotulo">Impacto:</span> num checkout sem bootstrap, o CTest não valida o carregamento real da extensão; a proteção restante é <code>gdextension_binary_exists</code> + <code>tools/test.ps1</code>.</p>
+<p class="campo"><span class="rotulo">Recomendação:</span> aceitável como está; se quiser fail-loud, registrar um teste que falha quando o executável está ausente e <code>NINHO_BUILD_GDEXTENSION=ON</code>.</p>
+</div>
+<h3>Pontos positivos verificados</h3>
+<ul>
+<li>Pin por hash exato do godot-cpp correspondente à tag <code>godot-4.5-stable</code> (confirmado no repositório upstream), coerente com Godot 4.5.1 e documentado; <code>.gdextension</code> com <code>compatibility_minimum = "4.5"</code> e entry symbol validado por <code>dumpbin</code> no CTest (<code>cmake/VerifyGDExtension.cmake:72-83</code>).</li>
+<li>Verificação anti-stale robusta: token aleatório por configure + SHA256 real da DLL no stamp (<code>cmake/WriteGDExtensionStamp.cmake:11-18</code>), rejeitando DLL de build/config anterior.</li>
+<li>Fronteira de exceções exemplar: <code>GODOTCPP_DISABLE_EXCEPTIONS=OFF</code> com justificativa (<code>cmake/Dependencies.cmake:56-59</code>), <code>/EHsc</code>, todos os métodos bound envelopados em <code>try/catch(std::exception)+catch(...)</code>, entry point C retorna <code>false</code> em exceção (<code>register_types.cpp:59-78</code>), <code>static_assert</code>s de <code>noexcept</code> no contrato (<code>native/extension/tests/registration_contract_tests.cpp:11-19</code>).</li>
+<li>Validação de argumentos vindos do GDScript rigorosa: <code>checked_finite_float</code> rejeita NaN/inf/overflow de float (<code>adapter_helpers.cpp:8-16</code>); <code>Transform3D</code> validado por ortonormalidade, determinante e quaternion unitário (<code>adapter_helpers.hpp:56-135</code>); handles packed com geração e reservado <code>0</code> inválido (<code>adapter_helpers.hpp:158-179</code>); <code>speed</code> checado na fronteira e na faixa 8–40 pela simulação.</li>
+<li>Lifetimes limpos: apenas <code>Node</code>/<code>Node3D</code> com ownership do Godot, membros por valor/<code>unique_ptr</code>, nenhum <code>RefCounted</code>/<code>memnew</code>/raw <code>new</code> na extensão, retornos por valor, destrutores <code>= default</code> (<code>native/kernel/src/physics_world.cpp:1448</code>).</li>
+<li>Diagnósticos sem alocação e sem exceção: <code>FaultInfo</code> com storage fixo, fault latched até reconfiguração e dedup por geração (<code>orbital_session_node.cpp:187-254,798-813</code>); GDScript consome frames com <code>.get()</code> defensivo (<code>vertical_slice_controller.gd:86-87,150</code>).</li>
+<li>Gate fail-closed (qualquer violação ou falta de diretório → exit 1), bloqueante no pipeline (<code>tools/test.ps1:474-481</code>), usa concatenação de strings para não se auto-flagrar, e <code>is_class</code> no runtime cobre classes derivadas das 6 proibidas; lista idêntica ao escopo aprovado no design.</li>
+<li>Nenhuma classe de física nativa presente hoje em <code>game/</code> (grep abrangente com zero ocorrências); cenas usam só <code>Node3D</code>/visuais + <code>OrbitalSessionNode</code>/<code>Box3DWorldNode</code>.</li>
+<li>Descriptor commitado e DLLs fora do git (<code>.gitignore:9-11</code>); parser estrito case-sensitive do <code>.gdextension</code> testado com mutações (<code>tools/tests/godot-spike-gate-tests.ps1:53-104</code>); pacote exige a DLL release e falha se a debug vazar (<code>tools/package_windows.ps1:182,192</code>).</li>
+</ul>
+</section>
+<section id="eixo-3">
+<h2>3. Física e Determinismo (Box3D / kernel / simulation / testes de física)</h2>
+<p class="veredito"><span class="rotulo">Veredito:</span> Eixo saudável e engineering-wise muito acima da média — timestep fixo ponta a ponta, stepping single-worker, ordenação determinística em todas as fronteiras, evidência rastreada debug==release bit a bit — com duas ressalvas concretas: a prova de repetibilidade do cenário de projétil é parcialmente circular (cache estático) e nenhum teste isola o efeito real do flag <code>bullet</code>/CCD.</p>
+<h3>Verificações executadas</h3>
+<ul>
+<li>Lidos na íntegra <code>native/kernel/src/physics_world.cpp</code> (1788 linhas), <code>radial_gravity.cpp</code>, <code>box3d_conversions.hpp</code>, <code>box3d_allocator_probe.cpp</code> e os headers públicos — ciclo de vida do mundo, slots com geração, fila de comandos, gravidade radial, ejeção e remoção 6R confirmados no código.</li>
+<li>Lidos os 7 arquivos de teste do eixo (<code>determinism</code>, <code>projectile_ccd</code>, <code>radial_gravity</code>, <code>pile_stability</code>, <code>world_lifecycle</code>, <code>capability</code>, <code>scenario_capability</code>) mais <code>test_main</code>/framework e <code>json_smoke.py</code> (428 linhas) — cada asserção confrontada com o que o cenário realmente executa.</li>
+<li>Lidos os trechos relevantes de <code>scenario.cpp</code> (3954 linhas): fixtures <code>simulate_projectile</code>/<code>run_stability_pile</code>/<code>run_radial_fall</code>, gate CCD com fallback, <code>hash_states</code> (FNV-1a + quantização), <code>validate_body_state</code>, watchdog, repeats.</li>
+<li>Verificado determinismo da camada de simulação: <code>canonical_state.cpp</code> serializa apenas vetores/deques ordenados; <code>grep</code> por RNG em <code>native/</code> encontra apenas <code>XorShift64</code> (inteiro, portátil) nos fixtures; <code>EjectionTracker</code> usa <code>unordered_map</code> só com acesso por chave (sem iteração).</li>
+<li>Verificada fixação de timestep: <code>WorldConfig</code> 1/60 + 4 substeps (<code>physics_world.hpp:99-105</code>), session só sobrescreve planeta (<code>session_builder.cpp:136-137</code>), acumulador Godot com clamp e descarte contabilizado (<code>orbital_session_node.cpp:21-53</code>), <code>project.godot:61</code> = 60 ticks/s.</li>
+<li>Verificado estado global: dois <code>static const ProjectileGate</code> (caches), <code>active_watchdog</code> thread_local e <code>emergency_json_path</code> com mutex (ambos só diagnóstico), contador global do alocador Box3D (<code>b3GetByteCount</code>).</li>
+<li>Verificada cadeia de evidência: SHA256 dos dois JSONs rastreados bate exatamente com o cabeçalho do spike report (sem drift); <code>--check</code> existe em <code>tools/generate_foundation_report.py:387</code>; hashes de fixture debug == release idênticos nos 8 capabilities.</li>
+<li>Verificado que <code>tools/test.ps1:182-222</code> compila o Box3D upstream com <code>BOX3D_UNIT_TESTS=ON</code> e exige 20/20 "test passed"; <code>UpstreamBox3DGate.psm1:113-124</code> rejeita <code>/MD[d]</code> e <code>/fp:fast</code> no compile database.</li>
+<li>Conferido conteúdo real do jogo: <code>first_orbit.level.json:4</code> usa raio 10 / gravidade 9, idêntico aos defaults do kernel e fixtures.</li>
+<li><code>build/</code> e <code>artifacts/physics/</code> estão vazios — nenhum binário pré-compilado existia, portanto nada foi executado; análise 100% estática conforme as regras.</li>
+</ul>
+<h3>Achados</h3>
+<div class="card medio">
+<h4><span class="badge badge-medio">MÉDIO</span>Prova de repetibilidade do cenário de projétil é circular (cache estático do gate)</h4>
+<p class="campo"><span class="rotulo">Local:</span> <code>native/kernel/src/scenario.cpp:700</code> (<code>static const ProjectileGate gate = run_projectile_gate();</code>) e <code>:1813</code> (segundo cache idêntico em <code>prove_ccd_capability</code>)</p>
+<p class="campo"><span class="rotulo">Evidência:</span> para seeds 1–20, <code>run_projectile_pile</code> apenas copia o <code>ProjectileOutcome</code> cacheado (<code>scenario.cpp:727-736</code>). No protocolo de repeat do spike (<code>native/spike/main.cpp:273-327</code>) e na asserção de hashes iguais do smoke (<code>native/tests/json_smoke.py:372</code>), o segundo "repeat" de <code>projectile_pile</code> compara o valor cacheado com ele mesmo — igualdade trivialmente garantida, sem re-simular. O relatório exibe <code>/hashes/0 == /hashes/1</code> como se fossem duas execuções independentes.</p>
+<p class="campo"><span class="rotulo">Impacto:</span> a evidência de determinismo *in-process por repetição* para o cenário CCD é vacuosa; uma regressão de determinismo introduzida *após* a primeira computação do gate no processo não seria detectada por esse cenário. Mitigado parcialmente: os 20 fixture hashes são computados de mundos frescos na primeira chamada e os snapshots debug/release (processos separados) batem bit a bit.</p>
+<p class="campo"><span class="rotulo">Recomendação:</span> re-executar <code>simulate_projectile(seed, ...)</code> em cada repeat em vez de ler o cache (ou guardar o gate em membro de <code>ScenarioRunner</code> recriado por <code>run</code>), mantendo o cache apenas para os limites do gate.</p>
+</div>
+<div class="card medio">
+<h4><span class="badge badge-medio">MÉDIO</span>Nenhum teste isola o efeito do flag <code>bullet</code>/CCD — a fixture não consegue falhar sem CCD</h4>
+<p class="campo"><span class="rotulo">Local:</span> <code>native/kernel/src/scenario.cpp:555-665</code> (fixture), <code>native/tests/projectile_ccd_tests.cpp:10-18</code>, mapeamento em <code>native/kernel/src/physics_world.cpp:825</code> (<code>body_def.isBullet = desc.bullet</code>)</p>
+<p class="campo"><span class="rotulo">Evidência:</span> a 35 m/s com 4 substeps o projétil desloca ~0,146 m por substep; os blocos têm 0,60 m em x e o projétil raio 0,45 m — mesmo com CCD desligado, o contato especulativo padrão do Box3D pegaria a colisão. Idem nos testes de capability (15–20 m/s contra alvos de 0,5–1 m). Se <code>isBullet</code> deixasse de ser propagado num refactor, toda a suíte continuaria verde.</p>
+<p class="campo"><span class="rotulo">Impacto:</span> a capability nomeada <code>ccd_dynamic_dynamic</code> prova integração/comportamento agregado (contato ocorre, estados válidos), não que CCD é o mecanismo que evita tunneling — exatamente o caso de borda "tunneling em alta velocidade" que a auditoria pede. Os testes upstream do Box3D (rodados por <code>tools/test.ps1</code>) cobrem CCD no upstream, mas não o *mapeamento* do ninho.</p>
+<p class="campo"><span class="rotulo">Recomendação:</span> adicionar controle negativo fino — alvo estreito (ex.: parede de 0,05 m) a velocidade cuja varredura por substep supere a espessura (ex.: ≥ 150 m/s, dentro do teto de 100 m/s do invariante ajustado), provando contato com <code>bullet=true</code> e/ou tunneling sem ele.</p>
+</div>
+<div class="card baixo">
+<h4><span class="badge badge-baixo">BAIXO</span>Gravidade de superfície &gt; 18 m/s² é silenciosamente ceifada</h4>
+<p class="campo"><span class="rotulo">Local:</span> <code>native/kernel/src/radial_gravity.cpp:10</code> (<code>maximum_acceleration = 18.0f</code>) vs validação em <code>native/kernel/src/physics_world.cpp:213-240</code> (aceita qualquer <code>surface_gravity</code> finita não-negativa)</p>
+<p class="campo"><span class="rotulo">Evidência:</span> para <code>surface_gravity &gt; 18</code>, a aceleração *na superfície* já sairia limitada a 18, divergindo do contrato do <code>WorldConfig</code>. O conteúdo atual usa 9 (<code>first_orbit.level.json:4</code>), então é latente.</p>
+<p class="campo"><span class="rotulo">Impacto:</span> configuração futura com gravidade alta teria comportamento errado sem erro.</p>
+<p class="campo"><span class="rotulo">Recomendação:</span> rejeitar <code>surface_gravity &gt; maximum_acceleration</code> em <code>validated_config</code> ou documentar o teto no contrato.</p>
+</div>
+<div class="card baixo">
+<h4><span class="badge badge-baixo">BAIXO</span><code>EjectionTracker::update</code> não trata entradas NaN</h4>
+<p class="campo"><span class="rotulo">Local:</span> <code>native/kernel/src/radial_gravity.cpp:39-55</code></p>
+<p class="campo"><span class="rotulo">Evidência:</span> com <code>radius</code>/<code>radial_speed</code>/<code>dt</code> NaN, ambas as comparações são falsas e o ramo acumula <code>elapsed += NaN</code>, nunca ejetando nem resetando.</p>
+<p class="campo"><span class="rotulo">Impacto:</span> baixo — posições NaN seriam flagradas pelo scan de invariantes dos cenários — mas o rastreador falha em silêncio.</p>
+<p class="campo"><span class="rotulo">Recomendação:</span> tratar não-finitos como reset (mesmo ramo de "dentro do limite").</p>
+</div>
+<div class="card baixo">
+<h4><span class="badge badge-baixo">BAIXO</span>Nada fixa <code>workerCount = 1</code> nem as flags FP do Box3D compilado in-tree</h4>
+<p class="campo"><span class="rotulo">Local:</span> <code>native/kernel/src/physics_world.cpp:429</code> (<code>world_def.workerCount = 1</code>), <code>cmake/Dependencies.cmake:34-41</code></p>
+<p class="campo"><span class="rotulo">Evidência:</span> <code>/fp:precise</code> é aplicado aos alvos ninho (<code>native/kernel/CMakeLists.txt:28</code>), mas o Box3D (FetchContent) compila com as flags do próprio CMakeLists — o gate <code>/fp:fast</code> cobre apenas o build upstream separado (<code>tools/UpstreamBox3DGate.psm1:122</code>). Não há teste que trave <code>workerCount</code>.</p>
+<p class="campo"><span class="rotulo">Impacto:</span> uma mudança de default do Box3D (FP flags, threading) poderia comprometer determinismo sem falha imediata; a evidência debug==release mostra que hoje está coerente.</p>
+<p class="campo"><span class="rotulo">Recomendação:</span> assertion de configuração em tempo de compilação/teste (ex.: verificar flags via compile database do build principal, como já se faz no upstream) e um teste que leia <code>b3World_GetWorkerCount</code> == 1.</p>
+</div>
+<div class="card obs">
+<h4><span class="badge badge-obs">OBS</span>Determinismo de floats é provado apenas dentro da mesma toolchain</h4>
+<p class="campo"><span class="rotulo">Local:</span> <code>docs/physics/box3d-spike-report.md:16-28</code>, <code>native/tests/determinism_tests.cpp:101-108</code></p>
+<p class="campo"><span class="rotulo">Evidência:</span> os testes de determinismo são same-process/same-binary (MassRatio×2; repeats do spike); a prova cruzada existente é Debug vs Release MSVC na mesma máquina (hashes idênticos). Não há evidência cross-compiler/cross-arch — aceitável para empacotamento Windows único, mas deve constar como limite do "reprodutível".</p>
+<p class="campo"><span class="rotulo">Recomendação:</span> registrar explicitamente no relatório de fundação que a reprodutibilidade garantida é "mesma toolchain MSVC x64", já que os hashes canônicos convidam à comparação entre máquinas.</p>
+</div>
+<div class="card obs">
+<h4><span class="badge badge-obs">OBS</span><code>determinism_tests.cpp</code> testa, na maioria, plumbing de hash/JSON — não física</h4>
+<p class="campo"><span class="rotulo">Local:</span> <code>native/tests/determinism_tests.cpp</code> (14 dos 16 testes são hash/JSON/exit-code/watchdog)</p>
+<p class="campo"><span class="rotulo">Evidência:</span> a única prova física de re-execução no binário de testes é <code>same scenario has exact canonical hash</code> (linhas 101-108); o protocolo de repetição amplo vive no spike via <code>spike_json_smoke</code>. O nome do arquivo super-promete cobertura.</p>
+<p class="campo"><span class="rotulo">Recomendação:</span> renomear ou reforçar com repeats de <code>RadialPile</code>/<code>ProjectilePile</code> re-simulados (ver achado MÉDIO #1).</p>
+</div>
+<div class="card obs">
+<h4><span class="badge badge-obs">OBS</span>Sonda de alocador é global de processo — testes de cenário precisam rodar serializados por processo</h4>
+<p class="campo"><span class="rotulo">Local:</span> <code>native/kernel/src/box3d_allocator_probe.cpp:7-11</code> (<code>b3GetByteCount</code> process-wide)</p>
+<p class="campo"><span class="rotulo">Evidência:</span> os gates de "exact return to zero" assumem um único mundo ativo por vez no processo; dois <code>PhysicsWorld</code> simultâneos (não testado) ou cenários concorrentes invalidariam a métrica. Hoje os filtros CTest criam processos separados e o spike roda serial — correto, mas é uma invariante implícita.</p>
+<p class="campo"><span class="rotulo">Recomendação:</span> documentar a invariante perto da sonda (ou numerar mundos) para evitar uso futuro concorrente inadvertido.</p>
+</div>
+<h3>Pontos positivos verificados</h3>
+<ul>
+<li>Timestep fixo de ponta a ponta: kernel 1/60 + 4 substeps, acumulador Godot com tolerância, clamp <code>max_ticks_per_frame</code> e <code>discarded_seconds</code> explícito (<code>orbital_session_node.cpp:21-53</code>); simulação nunca usa <code>delta</code> variável por dentro (<code>physics_world.cpp:1623</code>).</li>
+<li>Stepping single-thread fixo (<code>physics_world.cpp:429</code>) e iteração de corpos sempre por índice de slot (gravidade, snapshots, métricas) — ordem estável.</li>
+<li>Ordenação total nas fronteiras: contatos ordenados por par de handles com dedup por maior <code>approach_speed</code> (<code>physics_world.cpp:1076-1090</code>), overlap/cast ordenados com desempate por handle público e quantização de fração (<code>:1313-1321</code>, <code>:1349-1365</code>), <code>hash_states</code> ordena por handle (<code>scenario.cpp:3852</code>), capability rows/valores/fixtures ordenados antes do hash (<code>:3803-3844</code>).</li>
+<li>RNG dos fixtures é <code>XorShift64</code> inteiro, independente de plataforma (<code>scenario.cpp:493-517</code>); nenhum <code>rand</code>/tempo no kernel/simulation.</li>
+<li>Handles com geração: reuse LIFO, invalidação de handle velho, rollback em falha de alocação e capacidade explícita — tudo coberto por testes (<code>world_lifecycle_tests.cpp:17-29</code>, <code>:189-208</code>, <code>capability_tests.cpp:554-579</code>).</li>
+<li>Sleep provado de verdade: <code>sleep_ratio &gt;= 0.90/0.80</code> com p95 de velocidades ≈ 0 e penetração medida por SAT próprio (não confiando no solver) em <code>run_stability_pile</code> (<code>scenario.cpp:1048-1077</code>); capability <code>radial_sleep</code> passa com <code>energy_growth = 0</code>.</li>
+<li>Lifecycle de mundo: cada cenário constrói/destrói mundos com corpos vivos; retorno exato do alocador a zero verificado por cenário, por repeat e por processo (<code>spike/main.cpp:333-353</code>, <code>json_smoke.py:207-213</code>); <code>batch_lifecycle</code> com 10.000 ciclos create/destroy sem crescimento nem handles inválidos.</li>
+<li>Ejeção/remoção: ejeção "grudenta" após 0,5 s além de 4R a ≥ 2 m/s, remoção em 6R com invalidação de juntas anexadas — cobertas inclusive com resets de geração e impulsos intermediários (<code>world_lifecycle_tests.cpp:229-293</code>, <code>capability_tests.cpp:450-480</code>, <code>radial_gravity_tests.cpp:84-114</code>).</li>
+<li>Validação defensiva ampla e testada (config, corpos, hulls via <code>b3CreateHull</code> real, juntas, queries, forças não-finitas), com commit inicial de falha única e <code>step()</code> que se recusa a rodar mundo parcialmente falho (<code>physics_world.cpp:1557-1631</code>), exercitado via façade (<code>session_tests.cpp:233</code>).</li>
+<li>Cadeia de evidência íntegra: SHA256 dos JSONs rastreados bate com o relatório; hashes de fixture Debug == Release nos 8 capabilities (forte evidência de determinismo de float entre níveis de otimização MSVC); testes upstream do Box3D executados com gate 20/20 (<code>tools/test.ps1:216-222</code>).</li>
+</ul>
+</section>
+<section id="eixo-4">
+<h2>4. Dados, conteúdo e pipeline de arte</h2>
+<p class="veredito"><span class="rotulo">Veredito:</span> Eixo saudável e acima da média — parser C++ estrito e exaustivamente testado contra os arquivos reais de produção, pipeline de arte reprodutível com hash de build e validação cruzada com o nível — com duas lacunas médias: o quarto JSON (<code>feedback</code>) vive fora do contrato de schema e sem validação estrita, e constantes de gameplay são duplicadas no GDScript sem verificação cruzada.</p>
+<h3>Verificações executadas</h3>
+<ul>
+<li>Li <code>docs/gameplay/vertical-slice-content-schema.md</code> e confrontei cada regra com o parser <code>native/simulation/src/content.cpp</code> (1256 linhas, leitura integral): budgets, faixas, enums, RFC 6901, rejeição de duplicatas — tudo confere.</li>
+<li>Validei numericamente os 3 JSONs de produção contra a tabela do schema: tijolo 138.240 kg, vidro 61.740 kg, bird 140 kg = 4/3·π·0.45³·366.76, inimigo 480 kg = 1.105 m³×434.39, joints 7000/1200, 3000/500, 7×1400/160 + 1×950/160 — todos exatos.</li>
+<li>Auditei <code>native/simulation/tests/content_tests.cpp</code> (758 linhas): ~25 testes, incluindo parse dos arquivos reais e dezenas de casos negativos (chaves ausentes/desconhecidas/duplicadas, tipos errados, <code>1e400</code>, <code>1e-300</code>, grafos desconexos, budgets no limite e limite+1).</li>
+<li>Auditei o parse GDScript: <code>vertical_slice_controller.gd</code> (3 JSONs → C++) e <code>feedback_director.gd</code> (feedback JSON parseado em GDScript com <code>.get(chave, default)</code>).</li>
+<li>Auditei o pipeline <code>art/source</code> → <code>art/config</code>/<code>art/scripts</code> → <code>game/assets</code>: <code>build_vertical_slice.py</code> (659 linhas, integral), <code>build_assets.ps1</code>/<code>validate_assets.ps1</code>, manifesto commitado, e <code>tools/tests/art-pipeline-tests.ps1</code> (exige dois builds limpos com <code>build_hash</code> idêntico).</li>
+<li>Varri todas as 47 referências <code>res://</code> únicas em <code>.gd</code>/<code>.tscn</code>/<code>.tres</code>/<code>.gdshader</code>: as 39 que são arquivos existem; as 8 restantes são diretórios (constantes de varredura). Nenhuma referência quebrada.</li>
+<li>Verifiquei os 10 GLBs: todos referenciados (9 em <code>body_view_registry.gd:4-15</code> + <code>DEV_ImpulseRing.glb</code> na cena, <code>vertical_slice.tscn:9,104</code>); 33 <code>.import</code> commitados e o gate rejeita <code>valid=false</code> (<code>tools/test.ps1:400-407</code>).</li>
+<li>Confrontei materiais/shader com o pipeline: <code>.tres</code>/<code>.gdshader</code> são gerados por <code>write_runtime_materials</code> e validados semanticamente (<code>ninho_blender/materials.py:54-97</code>); os 7 uniforms do shader são todos usados em <code>fragment()</code>.</li>
+<li>Avaliei a cobertura de <code>import_completeness_smoke.gd</code> e sua integração no gate (<code>tools/test.ps1:408-426</code>).</li>
+<li>Confirmei timestamps: config <code>2026-07-12 07:31:18</code>, todos os artefatos gerados <code>07:31:20</code> — uma única execução coerente do pipeline.</li>
+</ul>
+<h3>Achados</h3>
+<div class="card medio">
+<h4><span class="badge badge-medio">MÉDIO</span><code>vertical_slice.feedback.json</code> não tem schema documentado nem validação estrita</h4>
+<p class="campo"><span class="rotulo">Local:</span> <code>docs/gameplay/vertical-slice-content-schema.md:3</code>, <code>game/scripts/vfx/feedback_director.gd:566-571</code>, <code>game/data/feedback/vertical_slice.feedback.json</code></p>
+<p class="campo"><span class="rotulo">Evidência:</span> o contrato declara "Os três documentos JSON", mas o runtime consome um quarto (<code>res://data/feedback/vertical_slice.feedback.json</code>, <code>feedback_director.gd:3</code>). O documento de schema não o menciona (nem <code>vertical-slice-report.md</code>), e o parse em GDScript é apenas <code>JSON.parse_string</code> + acesso tolerante com <code>.get(chave, default)</code> em todo o arquivo — campos ausentes e tipos errados viram defaults silenciosos, chaves desconhecidas são ignoradas, contrariando o princípio "rejeita chaves desconhecidas / nenhum valor ausente recebe default" do schema v1. Se um <code>event_profiles</code> apontar para um perfil inexistente em <code>profiles</code>, <code>_emit_profile</code> retorna silenciosamente (<code>feedback_director.gd:225-227</code>) — VFX some sem erro.</p>
+<p class="campo"><span class="rotulo">Impacto:</span> drift de dados de feedback sem falha visível; o <code>feedback_smoke.gd</code> valida a semântica nominal (mapeamentos exercitados, cores, budgets), mas não rejeita conteúdo extra/errado e não exercita todos os perfis mapeados (<code>constellation</code>, <code>virela_release</code>, <code>neutralized</code>, <code>victory</code>, <code>defeat</code>, <code>rejected</code>).</p>
+<p class="campo"><span class="rotulo">Recomendação:</span> documentar o schema do feedback JSON (mesmo doc ou anexo) e adicionar validação no carregamento ou no smoke: rejeitar chaves desconhecidas e verificar que todo alvo de <code>event_profiles</code>/<code>outcome_profiles</code>/<code>material_profiles</code> existe em <code>profiles</code>.</p>
+</div>
+<div class="card medio">
+<h4><span class="badge badge-medio">MÉDIO</span>Constantes de gameplay duplicadas no GDScript sem verificação cruzada com o level JSON</h4>
+<p class="campo"><span class="rotulo">Local:</span> <code>game/scripts/game/launch_controller.gd:6-10</code> vs <code>game/data/levels/first_orbit.level.json:5-14</code></p>
+<p class="campo"><span class="rotulo">Evidência:</span> <code>LAUNCH_RADIUS := 13.0</code> (= <code>planet.radius_m</code> 10 + <code>shell_offset_m</code> 3), <code>MIN/MAX_THETA_DEGREES := -50/50</code> (= <code>theta_min/max_deg</code>), <code>MIN/MAX_SPEED := 8/16</code> e <code>_speed := 10.5</code> são hardcoded; o C++ usa os valores do JSON. O projeto protege duplicações análogas com teste cruzado (raios do anel em <code>tools/tests/art-pipeline-tests.ps1:90-94</code>, alias <code>CHR_LaunchBird</code> em <code>:301</code>), mas nenhum teste em <code>tools/</code> referencia <code>LAUNCH_RADIUS</code>/<code>MIN_THETA</code>/<code>MAX_SPEED</code> (grep confirmou).</p>
+<p class="campo"><span class="rotulo">Impacto:</span> rebalancear o anel de lançamento no JSON deixa o GDScript dessincronizado — comandos de mira fora do novo range seriam rejeitados pelo C++ após aceitos localmente, com falha silenciosa de input se os novos ranges ainda cobrirem os valores usados pelos smokes.</p>
+<p class="campo"><span class="rotulo">Recomendação:</span> estender o guarda existente em <code>art-pipeline-tests.ps1</code> para conferir essas 5 constantes contra <code>first_orbit.level.json</code>, ou expor os valores no frame da sessão e lê-los.</p>
+</div>
+<div class="card baixo">
+<h4><span class="badge badge-baixo">BAIXO</span>Sub-recursos órfãos na cena (placeholders pré-GLB)</h4>
+<p class="campo"><span class="rotulo">Local:</span> <code>game/scenes/vertical_slice.tscn:22-56</code></p>
+<p class="campo"><span class="rotulo">Evidência:</span> <code>Material_planet</code>/<code>Mesh_planet</code>, <code>Material_ring</code>/<code>Mesh_ring</code>, <code>Material_garden</code>/<code>Mesh_garden</code> não são referenciados por nenhum node (grep confirma que os materiais só aparecem nos próprios meshes órfãos); o anel real vem de <code>DEV_ImpulseRing.glb</code> e planeta/plataforma do <code>body_view_registry</code>.</p>
+<p class="campo"><span class="rotulo">Impacto:</span> conteúdo morto que confunde leitura da cena e infla o arquivo.</p>
+<p class="campo"><span class="rotulo">Recomendação:</span> remover os 6 sub-recursos.</p>
+</div>
+<div class="card baixo">
+<h4><span class="badge badge-baixo">BAIXO</span><code>@export var glass_material</code> nunca configurado — caminho morto em <code>authored_asset_view.gd</code></h4>
+<p class="campo"><span class="rotulo">Local:</span> <code>game/scripts/game/authored_asset_view.gd:3,23-24</code>, <code>game/scenes/vertical_slice.tscn:99-102</code></p>
+<p class="campo"><span class="rotulo">Evidência:</span> o único node com esse script (<code>ImpulseRingVisual</code>) não define <code>glass_material</code>, então o <code>material_override</code> nunca executa; se fosse definido, o override seria aplicado a todos os <code>GeometryInstance3D</code> do GLB, não só ao vidro (a lógica correta e usada de fato está em <code>body_view_registry.gd:105-106</code>).</p>
+<p class="campo"><span class="rotulo">Impacto:</span> código morto com semântica incorreta latente.</p>
+<p class="campo"><span class="rotulo">Recomendação:</span> remover o export e o ramo, ou filtrar por asset de vidro.</p>
+</div>
+<div class="card baixo">
+<h4><span class="badge badge-baixo">BAIXO</span><code>FileAccess.get_file_as_string</code> sem verificação de erro de abertura mascara causa raiz</h4>
+<p class="campo"><span class="rotulo">Local:</span> <code>game/scripts/game/vertical_slice_controller.gd:59-61</code>, <code>game/scripts/vfx/feedback_director.gd:567,575</code></p>
+<p class="campo"><span class="rotulo">Evidência:</span> arquivo ausente no PCK retorna <code>""</code> silenciosamente; no controller isso vira <code>invalid_json</code>/"malformed JSON document" do parser C++; no feedback vira "could not be parsed". A falha é visível (sinal <code>gameplay_fault</code> → HUD, e <code>session_configured</code> é checado pelo smoke em <code>vertical_slice_smoke.gd:80</code>), mas o diagnóstico aponta a causa errada.</p>
+<p class="campo"><span class="rotulo">Impacto:</span> depuração mais lenta de empacotamento quebrado.</p>
+<p class="campo"><span class="rotulo">Recomendação:</span> checar <code>FileAccess.get_open_error()</code> antes e reportar "arquivo ausente" distinto de "JSON malformado".</p>
+</div>
+<div class="card baixo">
+<h4><span class="badge badge-baixo">BAIXO</span>Caminho latente de erro de runtime em <code>_is_protected_anchor_hit</code> com contrato vazio</h4>
+<p class="campo"><span class="rotulo">Local:</span> <code>game/scripts/vfx/feedback_director.gd:419-421,574-594</code></p>
+<p class="campo"><span class="rotulo">Evidência:</span> se <code>_load_directional_contract()</code> retorna <code>{}</code> (ex.: typo em <code>directional_anchor.enemy_archetype_id</code> no feedback.json — arquivo sem validação, ver achado 1), <code>_directional_contract.local_protected_direction</code> é <code>null</code> e <code>direction_values[0]</code> dispara "Invalid get index '0' (on base: 'Nil')" no primeiro evento <code>damage_applied</code> contra o Âncora. O C++ não protege porque não conhece o feedback.json.</p>
+<p class="campo"><span class="rotulo">Impacto:</span> erro de script em runtime por dessincronia de dados de feedback.</p>
+<p class="campo"><span class="rotulo">Recomendação:</span> falhar cedo — tratar contrato vazio como falta fatal no <code>_ready</code> (o <code>push_error</code> já existe; falta não prosseguir), ou validar <code>direction_values.size() == 3</code> antes de indexar.</p>
+</div>
+<div class="card obs">
+<h4><span class="badge badge-obs">OBS</span>13 dos 14 PNGs de <code>game/assets/vertical_slice/**</code> não são referenciados por recursos Godot e vão para o pacote</h4>
+<p class="campo"><span class="rotulo">Local:</span> <code>game/export_presets.cfg:8</code> (<code>export_filter="all_resources"</code>); único consumido é <code>KIT_GlassPanel_A_TEX_Glass.png</code> via <code>game/materials/glass.tres:5</code></p>
+<p class="campo"><span class="rotulo">Evidência:</span> os PNGs externos são artefatos normativos do pipeline (comparados byte a byte com a fonte procedural, <code>build_vertical_slice.py:192-213</code>); os GLBs embutem as mesmas texturas (<code>gltf/embedded_image_handling=1</code> nos <code>.import</code>).</p>
+<p class="campo"><span class="rotulo">Impacto:</span> mínimo — 32×32 px cada; apenas peso morto no PCK.</p>
+<p class="campo"><span class="rotulo">Recomendação:</span> se desejado, <code>exclude_filter</code> para <code>assets/vertical_slice/**/*_TEX_*.png</code> exceto o de vidro; caso contrário, registrar como intencional.</p>
+</div>
+<div class="card obs">
+<h4><span class="badge badge-obs">OBS</span><code>import_completeness_smoke.gd</code> não cobre JSONs diretamente — cobertura efetiva é indireta</h4>
+<p class="campo"><span class="rotulo">Local:</span> <code>game/tests/import_completeness_smoke.gd:4-16</code></p>
+<p class="campo"><span class="rotulo">Evidência:</span> cobre recursivamente <code>glb</code>/<code>png</code>/<code>wav</code> sob <code>res://assets</code> + entrypoints (<code>vertical_slice.tscn</code>, que puxa scripts/HUD/anel; <code>body_view_registry.gd</code>, que faz preload dos 9 GLBs; os 3 <code>.tres</code>, e <code>glass.tres</code> puxa o <code>.gdshader</code>). Os 3 JSONs de dados não são recursos importados, mas são cobertos por <code>orbital_session_node_smoke.gd:51-56</code> e pelos testes C++. Tipos relevantes existentes ficam todos cobertos na prática.</p>
+<p class="campo"><span class="rotulo">Impacto:</span> nenhum hoje; fragilidade apenas se novos tipos de asset surgirem fora de <code>res://assets</code> sem entrypoint.</p>
+<p class="campo"><span class="rotulo">Recomendação:</span> opcional — incluir <code>res://data/**/*.json</code> na varredura com <code>FileAccess.file_exists</code>.</p>
+</div>
+<h3>Pontos positivos verificados</h3>
+<ul>
+<li>Parser C++ <code>noexcept</code> e estrito conforme o schema: chaves desconhecidas/ausentes, chaves JSON duplicadas via guarda SAX (<code>content.cpp:70-129</code>), tipos, ranges, finitude, colapso para <code>float</code> (<code>:227-233</code>), budgets de bytes/nesting/coleções exatamente como o doc (<code>:26-28</code>), pointers RFC 6901 com escape <code>~0</code>/<code>~1</code> e índice real de array (<code>:49-68</code>), mensagens &lt;256 chars sem eco da entrada.</li>
+<li><code>make_content_bundle</code> faz toda a validação cruzada documentada: densidade com tolerância 1e-9, massa do bird = 4/3·π·r³·ρ a 0,1%, inimigo com archetype/surface únicos e massa agregada, ownership exclusivo, endpoints internos, grafo conexo por BFS, objetivo resolvendo para entidade inimiga única (<code>content.cpp:860-1154</code>).</li>
+<li>Os 3 JSONs de produção batem em todos os números com a tabela de proxies e a calibração do schema (verificado por conta própria e também assertado em <code>content_tests.cpp:95-202</code>).</li>
+<li>Pipeline de arte reprodutível: Blender 5.1.2 pinado com hash de executável (<code>toolchain.lock.json</code> verificado em <code>art-pipeline-tests.ps1:39-47</code>), build→validate com <code>build_hash</code>, exigência de dois builds limpos idênticos (<code>:106-116</code>), proxies conferidos contra o level JSON (<code>build_vertical_slice.py:77-101</code>), texturas procedurais byte-exatas, contrato PBR dos GLBs validado, manifesto commitado.</li>
+<li>Alias <code>CHR_LaunchBird</code> → <code>CHR_Virela.glb</code> coerente entre simulação (<code>launch_system.cpp:339</code>) e registry (<code>body_view_registry.gd:8</code>), protegido por teste (<code>art-pipeline-tests.ps1:301</code>).</li>
+<li>Áudio: 9 cues do <code>feedback.json</code> ↔ 9 wavs ↔ <code>CUE_PATHS</code> consistentes; falhas de carga contadas com <code>push_error</code> (<code>feedback_audio_pool.gd:35-46</code>); manifesto de hashes + README autoral commitados.</li>
+<li>Nenhuma referência quebrada: as 39 referências <code>res://</code> a arquivos existem; os 10 GLBs são todos consumidos.</li>
+<li><code>glass.tres</code> e o shader são gerados pelo pipeline e revalidados semanticamente contra o config (<code>ninho_blender/materials.py:54-97</code>); todos os 7 uniforms do shader são usados; o <code>vertical_slice_smoke.gd:69-79</code> confere os parâmetros efetivos (0.18/0.0/0.78/0.24) em runtime.</li>
+<li>O gate <code>tools/test.ps1</code> executa <code>--import</code> completo, rejeita <code>.import</code> com <code>valid=false</code> e roda o smoke de completude antes dos demais smokes.</li>
+</ul>
+</section>
+<section id="eixo-5">
+<h2>5. Suíte de testes e gates de evidência</h2>
+<p class="veredito"><span class="rotulo">Veredito:</span> Eixo excepcionalmente robusto — smokes GDScript assertam comportamento de verdade, os gates têm auto-teste negativo e a frescura dos artefatos foi verificada por recomputação de hashes (tudo confere com HEAD); as fraquezas são a ausência total de CI, a evidência de fundação não vinculada à revisão do código e alguns pontos auto-atestados.</p>
+<h3>Verificações executadas</h3>
+<ul>
+<li>Lidos os 5 smokes GDScript de <code>game/tests/</code> na íntegra: <code>vertical_slice_smoke.gd</code> (445 linhas) joga a rota completa de vitória (3 tiros) <strong>e</strong> a de derrota (3 tiros de erro), cruzando HUD com estado autoritativo do kernel; <code>feedback_smoke.gd</code> (586 linhas) valida mapeamento evento→perfil, budgets, latência p95, contraste 4.5:1, reduced motion, saturação/reuso de pools; <code>forbid_godot_physics.gd</code> faz varredura estática + runtime; <code>import_completeness_smoke.gd</code> carrega cada recurso importado; <code>orbital_session_node_smoke.gd</code> valida contrato do dicionário, prioridade -100 e caminho de falha — todos assertam de verdade, não só instanciam nós.</li>
+<li>Lidos <code>native/tests/test_framework.hpp</code> + <code>test_main.cpp</code> + <code>CMakeLists.txt</code>: 81 casos na suíte de física; runner retorna exit 2 para mau uso e exit 1 para filtro sem match, com 5 testes <code>WILL_FAIL</code> cobrindo isso (<code>native/tests/CMakeLists.txt:49-67</code>).</li>
+<li>Contados casos nativos: 81 (física) + 100 (simulação, macro <code>NINHO_SIM_TEST</code>) + 23 (extensão; <code>registration_contract_tests.cpp</code> é contrato em tempo de compilação via <code>static_assert</code>).</li>
+<li>Lido <code>native/tests/json_smoke.py</code> na íntegra: valida topologia exata dos 6 cenários, determinismo de repeats, contadores de memória, commits pinados de box3d/godot/godot-cpp (<code>json_smoke.py:340-345</code>), exit 2 para 8 CLIs inválidas e exit 1 para falha de escrita de JSON.</li>
+<li>Lidos <code>tools/FoundationEvidenceGate.psm1</code>, <code>tools/VerticalSliceGate.psm1</code> (868 linhas), <code>tools/check_vertical_slice_evidence.ps1</code>, <code>tools/capture_vertical_slice.ps1</code>, <code>tools/test_vertical_slice.ps1</code>, <code>tools/test.ps1</code> (553 linhas).</li>
+<li>Frescura verificada empiricamente (read-only): recomputado <code>Get-NinhoTestedInputs</code> via PowerShell → <code>e2bfea17…</code> <strong>idêntico</strong> ao <code>tested_inputs_sha256</code> das evidências Debug e Release (267 arquivos); commit da evidência <code>2312994</code> é ancestral de HEAD (<code>d2c2c85</code> só tocou evidências/goldens/relatório, que são excluídos do conjunto testado — <code>VerticalSliceGate.psm1:146-150</code>).</li>
+<li>Hashes de artefatos conferidos: <code>artifacts/package/windows-release/manifest.sha256.json</code> bate com <code>package.manifest_sha256</code> da evidência; <code>result.png</code> (golden), <code>capture-manifest.json</code> e <code>vertical-slice-reviews.json</code> batem com os SHA-256 declarados em <code>docs/gameplay/evidence/vertical-slice-release.json</code>.</li>
+<li>Conferido <code>git log</code>/<code>git status</code>: árvore limpa; <code>artifacts/</code> é gitignored e nunca commitado; mtimes dos artefatos (12/jul 09:44–09:57) coerentes com <code>generated_utc</code> da evidência (12:59Z).</li>
+<li>Confirmado que os gates têm auto-teste com fixtures negativos (<code>Assert-Throws</code>): <code>vertical-slice-gate-tests.ps1</code> (17 asserções de falha esperada), <code>foundation-evidence-gate-tests.ps1</code>, <code>spike-report-gate-tests.ps1</code>, <code>godot-spike-gate-tests.ps1</code>, <code>upstream-box3d-gate-tests.ps1</code>, <code>vertical-slice-identity-contract-tests.ps1</code> (testa canonicalização LF/CRLF/binário do fingerprint).</li>
+<li><code>build/</code> está vazio — não havia binários de teste pré-compilados para executar; nenhum build foi rodado (regra do review).</li>
+<li>Confirmado que nenhum diretório <code>.github/</code>, pipeline ou hook existe no repositório.</li>
+</ul>
+<h3>Achados</h3>
+<div class="card medio">
+<h4><span class="badge badge-medio">MÉDIO</span>Nenhuma automação de CI: todos os gates são manuais</h4>
+<p class="campo"><span class="rotulo">Local:</span> ausência de <code>.github/workflows</code>, hooks ou pipelines; orquestração em <code>tools/test.ps1:1</code> e <code>tools/test_vertical_slice.ps1:1</code></p>
+<p class="campo"><span class="rotulo">Evidência:</span> todo o arsenal (ctest, smokes, gates, verificação de evidência) só executa quando alguém roda os scripts localmente. Nada bloqueia um commit/push sem execução dos gates.</p>
+<p class="campo"><span class="rotulo">Impacto:</span> a proteção depende de disciplina; uma regressão só seria detectada na próxima execução manual — o mecanismo content-addressed garante detecção *na checagem*, mas não *no commit*.</p>
+<p class="campo"><span class="rotulo">Recomendação:</span> adicionar um workflow mínimo que rode <code>tools/test.ps1</code> (ou ao menos <code>ctest</code> + <code>check_vertical_slice_evidence.ps1</code>) por push.</p>
+</div>
+<div class="card medio">
+<h4><span class="badge badge-medio">MÉDIO</span>Evidência de fundação (physics) não vinculada à revisão do código</h4>
+<p class="campo"><span class="rotulo">Local:</span> <code>docs/physics/evidence/foundation-report-release.json</code> (sem campo <code>commit</code>/<code>source_revision</code> — verificado); <code>tools/FoundationEvidenceGate.psm1:69-201</code></p>
+<p class="campo"><span class="rotulo">Evidência:</span> o gate valida coerência interna (hashes do relatório↔JSONs, cenários, repeats, git-tracked) e re-executa apenas o *gerador do relatório* (<code>--check</code>), nunca o spike. Diferente do gate do slice, não há <code>merge-base</code> nem fingerprint de inputs. Os JSONs são de 11/jul 02:57.</p>
+<p class="campo"><span class="rotulo">Impacto:</span> se <code>native/kernel</code> mudar de forma que invalide as conclusões do spike, nenhum gate falha — os JSONs continuam "válidos". Mitigação parcial: <code>ctest</code> roda fresco no pipeline e os determinism tests assertam igualdade entre repeats (mas não contra valores fixados).</p>
+<p class="campo"><span class="rotulo">Recomendação:</span> embutir <code>source_revision</code> + <code>tested_inputs_sha256</code> (escopo <code>native/</code>) nos JSONs de fundação e exigir ancestralidade/fingerprint como o gate do slice faz.</p>
+</div>
+<div class="card baixo">
+<h4><span class="badge badge-baixo">BAIXO</span>Bloco <code>acceptance</code> da evidência é literal fixo, não derivado</h4>
+<p class="campo"><span class="rotulo">Local:</span> <code>tools/test_vertical_slice.ps1:118-121</code>; consumido em <code>tools/VerticalSliceGate.psm1:386-390</code></p>
+<p class="campo"><span class="rotulo">Evidência:</span> os 8 flags (<code>foundation</code>, <code>slice_tests</code>, <code>restart_20</code>, <code>abi</code>, <code>scanner</code>, <code>assets</code>, <code>smokes</code>, <code>box3d_only</code>) são escritos como <code>$true</code> hardcoded; o gate só exige que sejam <code>$true</code>.</p>
+<p class="campo"><span class="rotulo">Impacto:</span> hoje é honesto — o script aborta antes se qualquer etapa falhar (test.ps1 com exit não-zero interrompe) —, mas o mapeamento flag↔checagem real é puramente convencional; um refactor futuro pode manter o flag sem a checagem.</p>
+<p class="campo"><span class="rotulo">Recomendação:</span> derivar cada flag do resultado real da etapa correspondente (ou remover os flags e deixar o gate consultar artefatos concretos).</p>
+</div>
+<div class="card baixo">
+<h4><span class="badge badge-baixo">BAIXO</span>Testes de bootstrap órfãos</h4>
+<p class="campo"><span class="rotulo">Local:</span> <code>tools/tests/bootstrap-behavior.ps1</code>, <code>tools/tests/bootstrap-smoke.ps1</code></p>
+<p class="campo"><span class="rotulo">Evidência:</span> grep por <code>bootstrap-behavior|bootstrap-smoke</code> em <code>tools/</code> não retorna nenhum invocador — não estão em <code>test.ps1</code>, <code>test_vertical_slice.ps1</code> nem <code>bootstrap.ps1</code>.</p>
+<p class="campo"><span class="rotulo">Impacto:</span> regressões no bootstrap só seriam pegas se alguém lembrar de rodá-los manualmente.</p>
+<p class="campo"><span class="rotulo">Recomendação:</span> conectar ao início de <code>test.ps1</code> (ou removê-los).</p>
+</div>
+<div class="card baixo">
+<h4><span class="badge badge-baixo">BAIXO</span>Scanner de física Godot não cobre <code>res://scripts/</code> (raiz) nem <code>res://tests/</code></h4>
+<p class="campo"><span class="rotulo">Local:</span> <code>game/tests/forbid_godot_physics.gd:5-8</code></p>
+<p class="campo"><span class="rotulo">Evidência:</span> <code>PRODUCTION_ROOTS</code> lista <code>res://scenes</code> e os subdiretórios <code>scripts/{game,camera,ui,vfx,audio}</code>, mas <code>game/scripts/physics_spike_smoke.gd</code> e <code>physics_spike_view.gd</code> ficam de fora da varredura estática. Verifiquei por grep: atualmente nenhum dos dois usa classes proibidas.</p>
+<p class="campo"><span class="rotulo">Impacto:</span> um <code>RigidBody3D</code> futuro nesses arquivos soltos (ou em qualquer novo subdir de scripts não listado) passaria despercebido pela varredura estática (a varredura runtime só cobre a cena do slice).</p>
+<p class="campo"><span class="rotulo">Recomendação:</span> varrer <code>res://scripts</code> recursivamente em vez de enumerar subdiretórios.</p>
+</div>
+<div class="card obs">
+<h4><span class="badge badge-obs">OBS</span>Parâmetro de estaleness do checker é tautológico (mas compensado)</h4>
+<p class="campo"><span class="rotulo">Local:</span> <code>tools/check_vertical_slice_evidence.ps1:15-19</code> vs. <code>tools/VerticalSliceGate.psm1:336-351</code></p>
+<p class="campo"><span class="rotulo">Evidência:</span> o script passa o <code>commit</code> do próprio documento como <code>ExpectedCommit</code>, tornando a checagem "stale" da linha 337 sempre verdadeira. A frescura real vem de <code>merge-base --is-ancestor</code> + recomputação do <code>tested_inputs_sha256</code> — que verifiquei funcionando (recomputação bate).</p>
+<p class="campo"><span class="rotulo">Impacto:</span> nenhum hoje; apenas não contar com a mensagem "evidence is stale" nesse caminho.</p>
+</div>
+<div class="card obs">
+<h4><span class="badge badge-obs">OBS</span>O gate de verificação não é read-only e exige ffmpeg/ffprobe</h4>
+<p class="campo"><span class="rotulo">Local:</span> <code>tools/VerticalSliceGate.psm1:745-772</code> (cria/apaga <code>artifacts/vertical-slice-golden-verification</code>), <code>:707-728</code> (ffprobe/ffmpeg no PATH)</p>
+<p class="campo"><span class="rotulo">Evidência:</span> verificar a evidência deriva os 5 goldens do vídeo-fonte com ffmpeg e compara SHA-256 — excelente prova causal, mas a "checagem" escreve na árvore de artefatos e falha sem ffmpeg instalado.</p>
+<p class="campo"><span class="rotulo">Impacto:</span> não pode rodar em paralelo com outros processos sobre <code>artifacts/</code> nem em máquina sem as ferramentas.</p>
+</div>
+<div class="card obs">
+<h4><span class="badge badge-obs">OBS</span>Hashes canônicos não são fixados em valor absoluto entre commits</h4>
+<p class="campo"><span class="rotulo">Local:</span> <code>native/tests/determinism_tests.cpp:107</code> (<code>first.final_hash == second.final_hash</code>); <code>tools/VerticalSliceGate.psm1:643-649</code> (evidência↔manifest, ambos frescos)</p>
+<p class="campo"><span class="rotulo">Evidência:</span> nenhum teste/gate compara o hash canônico com um valor esperado fixo; evidência e captura são regeneradas juntas, então uma mudança determinística de comportamento físico seria "certificada" — visível apenas como diff dos JSONs de evidência no git.</p>
+<p class="campo"><span class="rotulo">Impacto:</span> mitigado pelos smokes, que fixam outcomes (vitória em 3 tiros, derrota em 3 erros) e integridade do HUD; deriva sutil de trajetória exigiria revisão humana do diff da evidência.</p>
+</div>
+<div class="card obs">
+<h4><span class="badge badge-obs">OBS</span>Reviews "independentes" e playtest são auto-atestados</h4>
+<p class="campo"><span class="rotulo">Local:</span> <code>docs/gameplay/evidence/vertical-slice-reviews.json</code>; <code>tools/VerticalSliceGate.psm1:454-458</code></p>
+<p class="campo"><span class="rotulo">Evidência:</span> os 4 reviews são JSON com <code>reviewer_id</code> sintéticos (<code>/root/code_review_fc3ec43</code>, …) e o próprio gate codifica <code>playtest.status == 'unavailable'</code> com substituto <code>independent_agents</code> como contrato aceito.</p>
+<p class="campo"><span class="rotulo">Impacto:</span> é uma decisão de processo registrada e consistente, mas o gate valida estrutura, não autenticidade da revisão.</p>
+</div>
+<div class="card obs">
+<h4><span class="badge badge-obs">OBS</span>Smokes GDScript acoplados a métodos privados</h4>
+<p class="campo"><span class="rotulo">Local:</span> <code>game/tests/vertical_slice_smoke.gd:54</code> (<code>camera._safe_camera_position</code>), <code>:112</code> (<code>_controller._preview_matches_input_sample</code>), <code>game/tests/feedback_smoke.gd:166,187</code> (<code>_event_position</code>, <code>_emit_profile</code>)</p>
+<p class="campo"><span class="rotulo">Evidência:</span> os testes chamam APIs com prefixo <code>_</code> diretamente. Deliberado (verificação profunda), mas qualquer rename interno quebra o smoke.</p>
+</div>
+<div class="card obs">
+<h4><span class="badge badge-obs">OBS</span>Micro-framework de testes duplicado</h4>
+<p class="campo"><span class="rotulo">Local:</span> <code>native/tests/test_framework.hpp</code> vs. <code>native/simulation/tests/test_framework.hpp</code> (cópia renomeada <code>NINHO_SIM_*</code>, sem <code>require_near</code>)</p>
+</div>
+<div class="card obs">
+<h4><span class="badge badge-obs">OBS</span>Sem auto-descoberta de smokes</h4>
+<p class="campo"><span class="rotulo">Local:</span> <code>tools/test.ps1:408-481</code> — os 5 smokes estão fixados; um novo arquivo em <code>game/tests/</code> não rodaria até ser registrado manualmente. Hoje todos os 5 existentes estão conectados.</p>
+</div>
+<div class="card obs">
+<h4><span class="badge badge-obs">OBS</span><code>artifacts/physics/</code> está vazio</h4>
+<p class="campo"><span class="rotulo">Local:</span> <code>artifacts/physics/</code> (mtime 12/jul 09:14) — logs/filmes dos smokes de fundação não persistem; apenas <code>docs/physics/evidence/*.json</code> (commitados) permanecem. Nada na evidência do slice referencia esses arquivos.</p>
+</div>
+<h3>Pontos positivos verificados</h3>
+<ul>
+<li><strong>Frescura comprovada por recomputação</strong>: <code>tested_inputs_sha256</code> recomputado da árvore atual = valor declarado nas evidências Debug/Release; commit da evidência é ancestral de HEAD; hashes de pacote, goldens, capture-manifest e reviews-manifest todos conferem com os arquivos em disco.</li>
+<li><strong>Gate do slice com prova causal de goldens</strong>: deriva cada PNG do vídeo-fonte bruto via ffmpeg e exige SHA-256 idêntico (<code>VerticalSliceGate.psm1:750-768</code>), cruza evidência↔capture-manifest↔métricas↔ffprobe (frames/dimensões reais dos AVIs).</li>
+<li><strong>Pacote é realmente executado</strong>: <code>package_windows.ps1:441-474</code> lança o <code>NinhoOrbital.exe</code> empacotado e exige o marcador <code>VERTICAL_SLICE_SMOKE_OK</code> sem ERROR/WARNING no log.</li>
+<li><strong>Smokes GDScript de alta qualidade</strong>: rota completa de vitória e de derrota, HUD cruzado com estado autoritativo frame a frame, probes causais de input, 3 aspect ratios, restart autoritativo, budgets de partículas/fragmentos, saturação e expiração de ring pool, contraste WCAG, reduced motion — nada é "só instanciar nó".</li>
+<li><strong>Auto-teste de gates com fixtures negativos</strong> em todas as camadas (<code>Assert-Throws</code> em 6 arquivos de teste de gate; <code>WILL_FAIL</code> no runner C++; CLIs inválidas no <code>json_smoke.py</code>), incluindo teste da canonicalização do fingerprint (LF/CRLF/binário).</li>
+<li><strong>Runner nativo bem comportado</strong>: exit codes distintos para mau uso (2), filtro sem match (1) e falhas (N); <code>require_near</code> rejeita epsilon negativo/não-finito (<code>test_framework.hpp:46-56</code>).</li>
+<li><strong><code>forbid_godot_physics</code> em duas camadas</strong>: varredura estática de <code>.gd</code>/<code>.tscn</code> + instanciação da cena com varredura runtime da árvore; grep confirma zero classes proibidas em <code>game/scripts/</code>.</li>
+<li><strong>Cobertura em camadas coerente</strong>: física (81 casos), simulação/gameplay (100), adapter GDExtension (23 + static_asserts), integração Godot (5 smokes), pipelines de arte/áudio/empacote (testes Python+PS), rotas determinísticas com hash canônico + SHA-256 de eventos ordenados.</li>
+</ul>
+</section>
+<section id="eixo-6">
+<h2>6. Build e empacotamento Windows (CMake, presets, scripts de toolchain/empacote, export presets)</h2>
+<p class="veredito"><span class="rotulo">Veredito:</span> Eixo maduro e rigoroso — pins com SHA-256 em toda a toolchain, verificação em camadas e launch pós-empacote real — mas a promessa "mesmo commit → mesmo pacote" está quebrada por EOL não pinado nas licenças (que também derruba o gate Release com <code>core.autocrlf=true</code>) e pelo timestamp PE da DLL, e a etapa de compilação C++ dentro do empacotador perde todo o diagnóstico quando falha.</p>
+<h3>Verificações executadas</h3>
+<ul>
+<li><code>CMakeLists.txt</code> raiz (73 linhas), <code>CMakePresets.json</code>, <code>cmake/Dependencies.cmake</code>, <code>PrepareGDExtensionTest.cmake</code>, <code>VerifyGDExtension.cmake</code>, <code>WriteGDExtensionStamp.cmake</code> — lidos integralmente.</li>
+<li><code>native/{kernel,simulation,spike,tests,extension}/CMakeLists.txt</code> — coerência de <code>cxx_std_20</code> e flags MSVC em todos os targets: confirmada.</li>
+<li><code>tools/bootstrap.ps1</code>, <code>tools/build.ps1</code>, <code>tools/Invoke-Native.ps1</code>, <code>tools/package_windows.ps1</code>, <code>tools/SafePath.psm1</code>, <code>tools/toolchain.lock.json</code>, <code>tools/test.ps1</code>, <code>tools/test_vertical_slice.ps1</code>, <code>tools/tests/package-windows-tests.ps1</code> — lidos integralmente.</li>
+<li><code>game/export_presets.cfg</code>, <code>game/project.godot</code>, <code>game/bin/ninho_physics.gdextension</code>, <code>game/tests/vertical_slice_smoke.gd</code> — conferidos contra o que o empacotador invoca.</li>
+<li>Pacote existente: re-hashing independente das 13 entradas do manifesto → 13/13 OK; cabeçalho PE da DLL e do exe lidos (timestamps extraídos); <code>manifest_sha256</code> registrado em <code>docs/gameplay/evidence/vertical-slice-release.json</code> confere byte a byte com o manifesto em disco.</li>
+<li>EOL: <code>git ls-files --eol third_party/</code>, <code>git config core.autocrlf</code> (= <code>true</code>), blobs <code>HEAD:</code> vs working tree comparados por SHA-256; pacote × fontes atuais comparados por hash.</li>
+<li>Grep por <code>/Brepro</code>, <code>target_link_options</code>, <code>CMAKE_*_LINKER_FLAGS</code> em todo o repo: zero ocorrências.</li>
+<li><code>git status --porcelain</code>: árvore limpa; <code>.tools/</code>, <code>build/</code>, <code>.fetchcontent-cache/</code> ausentes nesta máquina (estado pós-limpeza).</li>
+</ul>
+<h3>Achados</h3>
+<div class="card alto">
+<h4><span class="badge badge-alto">ALTO</span>Gate Release falha com <code>core.autocrlf=true</code>: hash de <code>godot.COPYRIGHT.txt</code> sem normalização de EOL</h4>
+<p class="campo"><span class="rotulo">Local:</span> <code>tools/tests/package-windows-tests.ps1:52-54</code> (invocado por <code>tools/test_vertical_slice.ps1:34-36</code>); causa-raiz em <code>.gitattributes:1</code> (<code>* text=auto</code> sem exceção para os <code>.txt</code> de <code>third_party/</code> — apenas <code>nlohmann-json.LICENSE.txt</code> tem <code>eol=lf</code> em <code>.gitattributes:11</code>).</p>
+<p class="campo"><span class="rotulo">Evidência:</span> <code>git ls-files --eol</code> mostra <code>i/lf w/crlf</code> para <code>third_party/godot.COPYRIGHT.txt</code>; <code>git config core.autocrlf</code> = <code>true</code> nesta máquina. O hash do working tree (CRLF) é <code>ddfbf4fc1a00…</code>, mas a asserção exige <code>copyright_sha256</code> = <code>2039020f520e…</code> (hash do blob LF/upstream, confirmado via <code>git show HEAD:...</code>). O próprio arquivo de teste normaliza <code>\r\n</code>→<code>\n</code> ao comparar o *texto* da licença duas linhas antes (<code>package-windows-tests.ps1:49-51</code>), mas hasheia os bytes crus na linha 54 — tratamento internamente inconsistente. A falha ocorre antes de qualquer compilação/empacotamento.</p>
+<p class="campo"><span class="rotulo">Impacto:</span> <code>test_vertical_slice.ps1 -Configuration Release</code> (o gate que certifica o pacote) fica vermelho dependendo da config global de git de cada máquina — falha intermitente entre desenvolvedores/CI, hoje reproduzível nesta máquina.</p>
+<p class="campo"><span class="rotulo">Recomendação:</span> fixar <code>eol=lf</code> para todos os textos de <code>third_party/</code> no <code>.gitattributes</code> (estendendo o padrão já usado na linha 11) e renormalizar o checkout (<code>git add --renormalize third_party/</code>); como defesa adicional, normalizar EOL antes do hash na asserção.</p>
+</div>
+<div class="card alto">
+<h4><span class="badge badge-alto">ALTO</span>Pacote não é bit-reprodutível: licenças copiadas do working tree herdam o EOL do checkout</h4>
+<p class="campo"><span class="rotulo">Local:</span> <code>tools/package_windows.ps1:335-351</code> (<code>Copy-Item</code> dos <code>.txt</code> de <code>third_party/</code> para <code>licenses/</code>).</p>
+<p class="campo"><span class="rotulo">Evidência:</span> o pacote atual mistura EOLs no mesmo manifesto — <code>licenses/box3d.LICENSE.txt</code> foi empacotado com o hash da versão CRLF (<code>d8455e91cc46…</code>, igual ao worktree CRLF de hoje) enquanto <code>licenses/godot.COPYRIGHT.txt</code> foi empacotado com o hash da versão LF (<code>2039020f520e…</code>, igual ao blob LF); <code>licenses/godot-export-templates.LICENSE.txt</code> empacotado é LF mas a fonte atual é CRLF (<code>file</code> confirma). Um rebuild hoje mudaria os hashes de 2–4 entradas do manifesto sem nenhuma mudança de conteúdo.</p>
+<p class="campo"><span class="rotulo">Impacto:</span> o "manifesto SHA-256 canônico" diverge entre máquinas/checkouts para o mesmo commit, quebrando comparação de pacotes e a cadeia de evidência que registra <code>package.manifest_sha256</code> em <code>docs/gameplay/evidence/vertical-slice-release.json</code>.</p>
+<p class="campo"><span class="rotulo">Recomendação:</span> a mesma correção do achado anterior (pinar <code>eol=lf</code> nos textos empacotados) resolve ambos; alternativamente, copiar as licenças a partir do blob git (<code>git show HEAD:...</code>) em vez do working tree.</p>
+</div>
+<div class="card medio">
+<h4><span class="badge badge-medio">MÉDIO</span>DLL da GDExtension embute timestamp real de link (sem <code>/Brepro</code>)</h4>
+<p class="campo"><span class="rotulo">Local:</span> <code>native/extension/CMakeLists.txt:15-32</code> (nenhuma opção de link); grep por <code>Brepro</code>/<code>target_link_options</code>/<code>*_LINKER_FLAGS</code> no repo inteiro: zero ocorrências.</p>
+<p class="campo"><span class="rotulo">Evidência:</span> o <code>TimeDateStamp</code> do PE de <code>artifacts/package/windows-release/ninho_physics.windows.template_release.x86_64.dll</code> é <code>0x6a538f2b</code> = 2026-07-12 12:57:15 UTC — exatamente o horário do build (mtime 09:57 local, UTC-3). Já <code>NinhoOrbital.exe</code> é cópia byte-idêntica do template pinado (timestamp 2025-10-13, data do release oficial Godot), portanto determinístico.</p>
+<p class="campo"><span class="rotulo">Impacto:</span> cada rebuild do mesmo commit produz <code>runtime_extension.source_sha256</code> e manifesto diferentes; a reprodutibilidade do pacote fica limitada a "proveniência registrada", nunca "rebuild idêntico".</p>
+<p class="campo"><span class="rotulo">Recomendação:</span> adicionar <code>target_link_options(ninho_physics_extension PRIVATE "$&lt;$&lt;CXX_COMPILER_ID:MSVC&gt;:/Brepro&gt;")</code> (o Release já não gera PDB por padrão, então <code>/Brepro</code> basta para tornar a DLL determinística).</p>
+</div>
+<div class="card medio">
+<h4><span class="badge badge-medio">MÉDIO</span>Falha da compilação nativa dentro do empacotador perde todo o diagnóstico</h4>
+<p class="campo"><span class="rotulo">Local:</span> <code>tools/package_windows.ps1:205-217</code>.</p>
+<p class="campo"><span class="rotulo">Evidência:</span> o build é lançado com <code>Start-Process powershell -File build.ps1 ... -WindowStyle Hidden</code> <strong>sem</strong> <code>-RedirectStandardOutput</code>/<code>-RedirectStandardError</code>; em falha, o erro é apenas "Release GDExtension build failed with exit code N". As etapas seguintes do mesmo script (bootstrap, export e launch) redirecionam logs para arquivos GUID e embutem o conteúdo no <code>throw</code> (<code>tools/package_windows.ps1:241-268, 303-310, 462-473</code>) — a etapa mais propensa a falhar (compilação C++) é a única sem log.</p>
+<p class="campo"><span class="rotulo">Impacto:</span> qualquer erro de compilador/linker no fluxo de pacote exige reexecutar <code>build.ps1</code> manualmente fora do empacotador para obter o diagnóstico.</p>
+<p class="campo"><span class="rotulo">Recomendação:</span> redirecionar stdout/stderr do processo de build para arquivos temporários (mesmo padrão GUID + cleanup do script) e anexar o conteúdo à mensagem de erro.</p>
+</div>
+<div class="card medio">
+<h4><span class="badge badge-medio">MÉDIO</span>README omite o pré-requisito de Visual Studio pinado (e Python para testes)</h4>
+<p class="campo"><span class="rotulo">Local:</span> <code>README.md:8-13</code> vs <code>tools/Invoke-Native.ps1:7-10</code> e <code>tools/bootstrap.ps1:6-7,240-242</code>.</p>
+<p class="campo"><span class="rotulo">Evidência:</span> o fluxo documentado é <code>bootstrap.ps1 -InstallPortable</code> + <code>package_windows.ps1</code>. Porém <code>Invoke-Native.ps1</code> exige o VS 18.7.3 exato (via <code>vswhere</code>, build 11925.98) e <code>-InstallPortable</code> não instala VS — em máquina limpa o segundo comando do README falha (com mensagem autocorretiva: "run tools/bootstrap.ps1 -InstallVisualStudio"). Python 3.11+ também é exigido pelos testes nativos (<code>native/tests/CMakeLists.txt:42</code>).</p>
+<p class="campo"><span class="rotulo">Impacto:</span> onboarding quebra na primeira tentativa em máquina sem o VS exato; o documento promete dois comandos.</p>
+<p class="campo"><span class="rotulo">Recomendação:</span> incluir <code>.\tools\bootstrap.ps1 -InstallVisualStudio</code> no fluxo do README e citar Python 3.11+ como pré-requisito dos testes.</p>
+</div>
+<div class="card baixo">
+<h4><span class="badge badge-baixo">BAIXO</span>Caminhos do lock duplicados como strings hard-coded</h4>
+<p class="campo"><span class="rotulo">Local:</span> <code>tools/Invoke-Native.ps1:21-22</code> (hard-coda <code>.tools\cmake\cmake-4.3.3-windows-x86_64\bin\cmake.exe</code> e <code>.tools\ninja\ninja.exe</code> em vez de usar <code>$check.cmake.path</code>/<code>$check.ninja.path</code> do JSON do bootstrap validado em <code>:5-6</code>); idem <code>native/extension/CMakeLists.txt:75-76</code> (caminho do Godot 4.5.1 hard-coded, duplicando <code>toolchain.lock.json</code>).</p>
+<p class="campo"><span class="rotulo">Evidência/impacto:</span> um bump de versão no lock deixa o bootstrap verde mas o build/ctest quebrado até alguém sincronizar as strings manualmente.</p>
+<p class="campo"><span class="rotulo">Recomendação:</span> consumir os caminhos do JSON do bootstrap no <code>Invoke-Native.ps1</code> e parametrizar o caminho do Godot no CMake (ex.: cache var derivada do lock).</p>
+</div>
+<div class="card baixo">
+<h4><span class="badge badge-baixo">BAIXO</span><code>export_presets.cfg</code> diverge do fluxo scriptado e contém metadados inertes</h4>
+<p class="campo"><span class="rotulo">Local:</span> <code>game/export_presets.cfg:11</code> (<code>export_path="../artifacts/package/windows/NinhoOrbital.exe"</code> — diretório diferente do <code>artifacts\package\windows-release</code> usado pelo empacotador em <code>tools/package_windows.ps1:31</code>); <code>:30</code> (<code>application/modify_resources=false</code>) torna inertes <code>file_version</code>, <code>product_version</code>, <code>company_name</code>, <code>copyright</code> (<code>:34-39</code>), pois o Godot só os embute via rcedit quando <code>modify_resources=true</code>.</p>
+<p class="campo"><span class="rotulo">Impacto:</span> export manual pelo editor grava em outro diretório que não passa pela verificação/launch; os campos de versão sugerem metadados que nunca chegam ao exe.</p>
+<p class="campo"><span class="rotulo">Recomendação:</span> alinhar <code>export_path</code> ao diretório real (ou comentar que o preset é só veículo do CLI, que sempre passa o caminho explícito); decidir entre embutir os metadados (modify_resources=true) ou removê-los.</p>
+</div>
+<div class="card obs">
+<h4><span class="badge badge-obs">OBS</span><code>exit</code> em scripts invocados com <code>&amp;</code> encerra a sessão do host</h4>
+<p class="campo"><span class="rotulo">Local:</span> <code>tools/bootstrap.ps1:260</code>, <code>tools/Invoke-Native.ps1:14,25</code>, <code>tools/build.ps1:19</code>. Correto quando chamados via <code>powershell -File</code> (como o empacotador faz em <code>tools/package_windows.ps1:207-210</code>), mas um dev que execute <code>./tools/build.ps1</code> numa sessão interativa tem a sessão fechada em caso de erro. Propagação de códigos de saída em si está correta em todos os caminhos.</p>
+</div>
+<div class="card obs">
+<h4><span class="badge badge-obs">OBS</span>Hash do Godot portátil não é revalidado pelo empacotador</h4>
+<p class="campo"><span class="rotulo">Local:</span> <code>tools/package_windows.ps1:270-278</code> verifica só existência; a verificação de hash do exe ocorre apenas em <code>-CheckOnly</code>/<code>-InstallPortable</code> (<code>tools/bootstrap.ps1:202-206</code>). O fluxo do README passa por <code>-InstallPortable</code>, então na prática o hash é validado antes — defesa em profundidade possível, não defeito.</p>
+</div>
+<div class="card obs">
+<h4><span class="badge badge-obs">OBS</span>Launch empacotado não fixa <code>--fixed-fps 60</code></h4>
+<p class="campo"><span class="rotulo">Local:</span> <code>tools/package_windows.ps1:442-445</code> vs <code>tools/test.ps1:454-459</code> (que usa <code>--fixed-fps 60</code> para o mesmo script). A física roda a 60 tps fixos (<code>game/project.godot:61</code>), então o resultado é equivalente — e o pacote atual passou — mas a invocação diverge do smoke de desenvolvimento.</p>
+</div>
+<div class="card obs">
+<h4><span class="badge badge-obs">OBS</span><code>package-content.json</code> inventaria as fontes, não o conteúdo do PCK</h4>
+<p class="campo"><span class="rotulo">Local:</span> <code>tools/package_windows.ps1:354-393</code>. O inventário enumera <code>game/data</code>, <code>game/assets/vertical_slice</code> e <code>game/assets/audio/generated</code> no working tree; a própria nota embutida no JSON (linha 385) declara que a validação de carga ocorre no launch. Um recurso omitido do PCK pelo export só seria detectado pelo smoke, não pelo inventário.</p>
+</div>
+<h3>Pontos positivos verificados</h3>
+<ul>
+<li>C++20 coerente de ponta a ponta: <code>CMAKE_CXX_STANDARD 20</code> + <code>CXX_EXTENSIONS OFF</code> (<code>CMakeLists.txt:6-8</code>) e <code>target_compile_features(... cxx_std_20)</code> em todos os targets (<code>native/kernel/CMakeLists.txt:14</code>, <code>native/simulation/CMakeLists.txt:21,58</code>, <code>native/spike/CMakeLists.txt:6</code>, <code>native/tests/CMakeLists.txt:17</code>, <code>native/extension/CMakeLists.txt:9,67</code>); flags MSVC uniformes <code>/W4 /permissive- /fp:precise /utf-8</code> (<code>/EHsc</code> só na extensão, com justificativa em comentário).</li>
+<li>Toolchain 100% pinada com SHA-256 de arquivo e de exe, URLs https e verificação de versão pós-instalação (<code>tools/toolchain.lock.json</code>, <code>tools/bootstrap.ps1:202-228</code>); SDK <code>10.0.26100.0</code> coerente entre preset (<code>CMakePresets.json:11</code>), lock (<code>Windows11SDK.26100</code>) e <code>VsDevCmd -winsdk</code> (<code>tools/Invoke-Native.ps1:10</code>); idem VC 14.44.</li>
+<li>Extração do TPZ de export templates com rejeição de <code>../</code>, caminhos rooted e symlinks, instalação em diretório temporário GUID + move atômico (<code>tools/bootstrap.ps1:99-148</code>); Godot em modo self-contained (<code>_sc_</code>, <code>:82-84</code>) — sem dependência de <code>%APPDATA%</code>.</li>
+<li>Mecanismo anti-DLL-stale robusto: token aleatório por configure + stamp com SHA-256 pós-build + teste <code>gdextension_binary_exists</code> validando token/config/target/path/nome/hash, descritor e entry symbol via <code>dumpbin</code> (<code>CMakeLists.txt:43-68</code>, <code>cmake/VerifyGDExtension.cmake:1-83</code>).</li>
+<li>Empacotamento em staging GUID com verificação completa antes e depois do move (<code>tools/package_windows.ps1:431,439</code>), guarda anti-reparse-point em todas as operações destrutivas (<code>tools/SafePath.psm1</code>), e teste dedicado de caminho com espaços (<code>tools/tests/package-windows-tests.ps1:93</code>).</li>
+<li>Manifesto canônico de fato: JSON compacto UTF-8 sem BOM com <code>\n</code> final, ordenação ordinal dupla (entradas vs disco), auto-exclusão do manifesto, roles/tamanhos/hashes por arquivo; minha verificação independente: 13/13 entradas batem com o pacote em disco.</li>
+<li>Launch pós-empacote a partir do próprio diretório de saída, com handle nativo + <code>GetExitCodeProcess</code> + checagem de <code>STILL_ACTIVE</code>, timeout de 120 s, marcador <code>VERTICAL_SLICE_SMOKE_OK</code> e rejeição de <code>ERROR</code>/<code>WARNING</code> (<code>tools/package_windows.ps1:441-474</code>); <code>-VerifyOnly</code> revalida tudo sem rebuild (<code>:198-201</code>).</li>
+<li>Contrato de build de produção verificado em triplo (arquivo, manifesto e content inventory): <code>ninho-build-contract.json</code> exigido com <code>build_testing=false</code>/<code>test_facades=false</code> (<code>CMakeLists.txt:34-35</code>, <code>tools/package_windows.ps1:112-129</code>); DLL debug explicitamente proibida no pacote Release (<code>:192-194</code>).</li>
+<li>Cadeia de evidência íntegra: <code>docs/gameplay/evidence/vertical-slice-release.json</code> (commit <code>2312994</code>) registra <code>manifest_sha256=1140297d…</code>, idêntico ao hash do manifesto atual em disco.</li>
+<li>README corresponde fielmente ao comportamento do empacotador (local do pacote, PCK separado — <code>binary_format/embed_pck=false</code> em <code>game/export_presets.cfg:25</code> — manifesto canônico, launch, <code>-VerifyOnly</code>), com a única lacuna do pré-requisito de VS (achado MÉDIO).</li>
+<li>Sem caminhos absolutos de máquina nos presets/CMake; <code>FetchContent</code> confinado ao diretório do projeto com <code>safe.directory</code> process-local e restaurado ao final (<code>cmake/Dependencies.cmake:2,10-32,70-85</code>).</li>
+</ul>
+</section>
+<section id="eixo-7">
+<h2>7. Conformidade legal e documentação</h2>
+<p class="veredito"><span class="rotulo">Veredito:</span> Eixo em bom estado — pins, SBOM, notices e docs batem com o código e com os dados em quase tudo — mas há um bug real de portabilidade no gate de testes (hash do <code>godot.COPYRIGHT.txt</code> sensível a CRLF) e uma lacuna declarada de inventário (Blender pinado fora do SBOM e dos notices).</p>
+<h3>Verificações executadas</h3>
+<ul>
+<li><code>third_party/sbom.spdx.json</code> × <code>cmake/Dependencies.cmake</code>: commits Box3D <code>8441b4a</code>, nlohmann/json <code>9cca280</code> + SHA-256 do tarball e godot-cpp <code>e83fd09</code> idênticos nos dois lados.</li>
+<li>SBOM × <code>tools/toolchain.lock.json</code>: Godot 4.5.1 (zip SHA-256), export templates (<code>.tpz</code> SHA-256), CMake 4.3.3, Ninja 1.13.2, VS Build Tools 18.7.3/11925.98 — todos os hashes e URLs conferem.</li>
+<li>Blob git de <code>third_party/godot.COPYRIGHT.txt</code> tem exatamente o SHA-256 pinado <code>2039020f…</code>; o working tree, porém, está em CRLF (<code>w/crlf</code>, hash <code>ddfbf4fc…</code>) com <code>core.autocrlf=true</code>.</li>
+<li><code>tools/package_windows.ps1</code> lido por completo: copia as 8 licenças + notices + SBOM para <code>licenses/</code>, gera manifest canônico SHA-256 e o valida duas vezes; pacote real em <code>artifacts/package/windows-release/licenses/</code> contém os 8 arquivos esperados.</li>
+<li>Manifest do pacote atual (<code>1140297d…</code>), evidências debug/release/reviews e os 5 goldens Release — todos os SHA-256 batem byte a byte com <code>docs/gameplay/vertical-slice-report.md</code>; o mesmo para as duas evidências do <code>docs/physics/box3d-spike-report.md</code>.</li>
+<li><code>THIRD_PARTY_NOTICES.md</code>, <code>third_party/README.md</code>, <code>README.md</code> lidos e cruzados com scripts — precisos.</li>
+<li><code>.gitignore</code> cobre <code>build/</code>, <code>artifacts/</code>, <code>.tools/</code>, <code>.fetchcontent-cache/</code>, <code>.godot/</code>, worktrees e DLLs/PDBs; <code>git ls-files</code> não mostra nenhum <code>.exe</code>/<code>.dll</code>/<code>.pck</code> rastreado; <code>export_presets.cfg</code> sem credenciais.</li>
+<li>Specs (<code>2026-07-11-vertical-slice-design.md</code>, balance-correction, content-schema) cruzados com <code>game/data/*.json</code>: materiais 1/5/9, Virela (9/75 ticks, 4 m, 150 kg, 20 corpos, 12 m/s², 4 m/s), Âncora (480 kg, 100, teto 55, 2.5 J/kg), 18 joints com limites exatos (7000/1200, 3000/500, 1400/160, 950/160), posições dos 9 tijolos (incl. body 18 em X=0.299), Âncora em <code>[-0.28,10.95,0.75]</code> rotacionado 90° em +Z, plataforma 6.4×0.30×3.6 — tudo confere.</li>
+<li>Dependências nativas reais (<code>target_link_libraries</code>): apenas box3d, godot-cpp, nlohmann_json e <code>Psapi</code> (Windows SDK); scripts Python usam só stdlib.</li>
+</ul>
+<h3>Achados</h3>
+<div class="card alto">
+<h4><span class="badge badge-alto">ALTO</span>Teste do hash do <code>godot.COPYRIGHT.txt</code> falha em checkout Windows padrão (CRLF)</h4>
+<p class="campo"><span class="rotulo">Local:</span> <code>tools/tests/package-windows-tests.ps1:54</code>; <code>.gitattributes:1</code>; chamado via <code>tools/test_vertical_slice.ps1:35</code></p>
+<p class="campo"><span class="rotulo">Evidência:</span> o teste exige <code>Get-FileHash</code> do working tree igual ao pin upstream LF <code>2039020f…</code>. Com <code>core.autocrlf=true</code> (configuração efetiva desta máquina) o arquivo tem CRLF no working tree (<code>git ls-files --eol</code> → <code>w/crlf</code>; hash medido <code>ddfbf4fc…</code>). As linhas 49–50 do mesmo teste normalizam CRLF com <code>-replace</code> para comparar os LICENSEs, mas a linha 54 não — só o COPYRIGHT é verificado por hash de bytes brutos.</p>
+<p class="campo"><span class="rotulo">Impacto:</span> o gate de testes do vertical slice quebra em qualquer checkout Windows com autocrlf ativo mesmo com o conteúdo correto — fragilidade fora do controle do repositório, num gate que se apresenta como portátil ("identidade portável" nos commits recentes).</p>
+<p class="campo"><span class="rotulo">Recomendação:</span> fixar <code>third_party/godot.COPYRIGHT.txt text eol=lf</code> no <code>.gitattributes</code> (padrão já usado na linha 11 para <code>nlohmann-json.LICENSE.txt</code>) e/ou normalizar CRLF antes do hash no teste.</p>
+</div>
+<div class="card medio">
+<h4><span class="badge badge-medio">MÉDIO</span>Blender 5.1.2 (ferramenta pinada da toolchain) ausente do SBOM e do <code>THIRD_PARTY_NOTICES.md</code></h4>
+<p class="campo"><span class="rotulo">Local:</span> <code>tools/toolchain.lock.json:31-37</code>; <code>tools/bootstrap.ps1:21,154-176,223-225</code>; ausente em <code>third_party/sbom.spdx.json:100-147</code> e <code>THIRD_PARTY_NOTICES.md:60-83</code></p>
+<p class="campo"><span class="rotulo">Evidência:</span> <code>third_party/README.md:3</code> promete "the complete toolchain inventory" e <code>THIRD_PARTY_NOTICES.md:3</code> "its reproducible Windows build toolchain"; o SBOM lista CMake/Ninja/VS Build Tools como <code>BUILD_TOOL_OF</code>, mas omite o Blender, que gera os GLBs vendados no pacote (<code>art/source/vertical_slice/*.blend</code> → <code>game/assets/vertical_slice/</code>). O plano de implementação (<code>docs/superpowers/plans/2026-07-11-vertical-slice-implementation.md:26</code>) exige "Toda dependência, asset e ferramenta nova recebe licença, versão, hash e caminho de reprodução". Python (≥3.11, exigido pelo bootstrap e gerador dos WAVs) também não é mencionado.</p>
+<p class="campo"><span class="rotulo">Impacto:</span> inventário de supply-chain incompleto contra requisito declarado do próprio repo; Blender é GPL e, embora a ferramenta não seja redistribuída, sua omissão enfraquece a rastreabilidade dos assets gerados.</p>
+<p class="campo"><span class="rotulo">Recomendação:</span> adicionar pacote SPDX para Blender 5.1.2 (<code>BUILD_TOOL_OF</code>, com URL/SHA-256 do lock) e seção correspondente no <code>THIRD_PARTY_NOTICES.md</code>; registrar Python como ferramenta de build (mínimo documental).</p>
+</div>
+<div class="card baixo">
+<h4><span class="badge badge-baixo">BAIXO</span>SBOM marca <code>licenseConcluded: NOASSERTION</code> para Godot Engine e Export Templates</h4>
+<p class="campo"><span class="rotulo">Local:</span> <code>third_party/sbom.spdx.json:50,67</code></p>
+<p class="campo"><span class="rotulo">Evidência:</span> ambos têm <code>licenseDeclared: MIT</code> e o texto MIT exato está pinado em <code>third_party/godot.LICENSE.txt</code> e <code>godot-export-templates.LICENSE.txt</code> (idênticos, verificado); Box3D/nlohmann/godot-cpp usam <code>licenseConcluded: MIT</code>.</p>
+<p class="campo"><span class="rotulo">Impacto:</span> inconsistência interna; consumidores automatizados do SBOM lerão "licença não concluída" para componentes cuja licença o próprio projeto já determinou e redistribui.</p>
+<p class="campo"><span class="rotulo">Recomendação:</span> promover <code>licenseConcluded</code> a <code>MIT</code> nos dois pacotes Godot (ou justificar o NOASSERTION em nota).</p>
+</div>
+<div class="card obs">
+<h4><span class="badge badge-obs">OBS</span>Binários rastreados sem regras explícitas <code>binary</code> no <code>.gitattributes</code></h4>
+<p class="campo"><span class="rotulo">Local:</span> <code>.gitattributes:1-11</code>; <code>art/source/**/*.blend</code>, <code>game/assets/**/*.glb/.png/.wav</code>, <code>docs/art/goldens/**/*.png</code></p>
+<p class="campo"><span class="rotulo">Evidência:</span> <code>git ls-files --eol</code> mostra <code>i/-text</code> — hoje a heurística do git os trata como binários e nada é convertido; mas nenhuma regra por extensão garante isso.</p>
+<p class="campo"><span class="rotulo">Impacto:</span> risco latente de conversão EOL corromper assets/goldens (que são verificados por SHA-256) se algum arquivo futuro "parecer texto".</p>
+<p class="campo"><span class="rotulo">Recomendação:</span> declarar <code>*.blend binary</code>, <code>*.glb binary</code>, <code>*.png binary</code>, <code>*.wav binary</code> no <code>.gitattributes</code>.</p>
+</div>
+<div class="card obs">
+<h4><span class="badge badge-obs">OBS</span>Projeto sem licença própria</h4>
+<p class="campo"><span class="rotulo">Local:</span> ausência de <code>LICENSE</code> na raiz; <code>THIRD_PARTY_NOTICES.md:85</code></p>
+<p class="campo"><span class="rotulo">Evidência:</span> decisão explícita e documentada ("no declared repository license at this milestone", SPDX <code>NOASSERTION</code> intencional).</p>
+<p class="campo"><span class="rotulo">Impacto:</span> nenhum sobre build/empacote; bloqueia reuso legal do código por terceiros até escolha futura.</p>
+<p class="campo"><span class="rotulo">Recomendação:</span> apenas registrar a pendência para o marco de publicação.</p>
+</div>
+<h3>Pontos positivos verificados</h3>
+<ul>
+<li>Pins SBOM = <code>Dependencies.cmake</code> = <code>toolchain.lock.json</code> em todos os componentes, incluindo hashes de arquivos e URLs.</li>
+<li>Blob git do <code>godot.COPYRIGHT.txt</code> bate exatamente com o pin SHA-256 upstream declarado.</li>
+<li>Pacote vendado inclui notices, SBOM e os 6 textos de licença, com manifest canônico SHA-256 verificado duas vezes pelo empacotador (<code>tools/package_windows.ps1:431,439</code>) e revalidado pelo gate (<code>tools/VerticalSliceGate.psm1:505-511</code>).</li>
+<li><code>docs/gameplay/vertical-slice-report.md</code> está íntegro: hashes das evidências, dos 5 goldens Release e do manifest do pacote batem com os arquivos atuais; o gate recomputa <code>tested_inputs_sha256</code> da árvore (<code>tools/VerticalSliceGate.psm1:348-352</code>), tornando real a identidade "content-addressed".</li>
+<li><code>docs/physics/box3d-spike-report.md</code>: hashes das evidências Debug/Release e versões citadas (Box3D, Godot, godot-cpp, VS, CMake, Ninja) conferem.</li>
+<li>Specs de gameplay e content-schema refletem os dados atuais com precisão total nos pontos auditados (materiais, habilidade, inimigo, joints, transforms, envelopes).</li>
+<li><code>README.md</code> descreve corretamente bootstrap, empacotamento, saída, manifesto e <code>-VerifyOnly</code>.</li>
+<li><code>.gitignore</code> cobre todos os artefatos de build; nenhum binário de build rastreado; <code>export_presets.cfg</code> sem segredos.</li>
+<li>Nenhuma dependência nativa ou Python fora do inventário documentado (links nativos limitam-se a box3d/godot-cpp/nlohmann_json/Windows SDK; scripts Python só stdlib).</li>
+</ul>
+</section>
+<section id="eixo-8">
+<h2>8. Performance (step de física, ponte C++/GDScript, loops quentes, custo GDScript por frame)</h2>
+<p class="veredito"><span class="rotulo">Veredito:</span> Saudável para o conteúdo atual (22 corpos, step p95 medido ≈1,6 ms e frame p95 ≈6 ms contra budget de 16,6 ms); os riscos são estruturais — serialização canônica completa por tick, contagem de contatos O(n²) com alocação por tick e preview de trajetória sem early-out — e degradam conforme o conteúdo crescer.</p>
+<h3>Verificações executadas</h3>
+<ul>
+<li><code>native/kernel/src/physics_world.cpp</code> (1788 linhas, lido integralmente): <code>step()</code> aplica comandos, gravidade radial por corpo acordado, <code>b3World_Step</code> com <code>substeps=4</code> @ 1/60 s; <code>WorldConfig</code> default em <code>native/kernel/include/ninho/physics/physics_world.hpp:99-104</code> (<code>max_bodies=500</code>); <code>workerCount=1</code> (<code>physics_world.cpp:429</code>); CCD via <code>isBullet</code> no projétil (<code>adapter_helpers.hpp:208</code>).</li>
+<li>Nível real contado: 22 corpos (1 estático, 21 dinâmicos), 18 joints, 1 objetivo em <code>game/data/levels/first_orbit.level.json</code>; catálogos mínimos (3 materiais, 4 superfícies, 1 pássaro/inimigo/habilidade).</li>
+<li>Dados de captura reais lidos: <code>artifacts/vertical-slice/{debug,release}/metrics-*.json</code> (8 arquivos): <code>frame_p95</code> 6,06–7,41 ms, <code>frame_p99</code> 6,05–11,74 ms, <code>max_hitch</code> 10,4–14,7 ms, <code>physics_step_p95</code> 1,58–1,73 ms, <code>input_feedback_p95</code> 3,6–6,0 ms.</li>
+<li>Ponte ABI: <code>orbital_session_node.cpp</code> lido integralmente — 1 chamada ABI por frame (<code>consume_frame</code>), batch com <code>peek</code>+<code>acknowledge</code> sem cópia.</li>
+<li>Loops quentes: <code>session.cpp</code>, <code>session_builder.cpp</code>, <code>canonical_state.cpp</code>, <code>damage_system.cpp</code>, <code>fracture_system.cpp</code>, <code>gravity_field_ability_system.cpp</code>, <code>objective_system.cpp</code>, <code>radial_gravity.cpp</code> lidos integralmente.</li>
+<li>GDScript: todos os 10 scripts lidos; cena principal tem 15 nós (<code>game/scenes/vertical_slice.tscn:82-142</code>), sem nós do spike; <code>physics_ticks_per_second=60</code> em <code>project.godot</code>.</li>
+</ul>
+<h3>Achados</h3>
+<div class="card medio">
+<h4><span class="badge badge-medio">MÉDIO</span><code>refresh_canonical_state()</code> resserializa todo o conteúdo estático a cada tick e a cada comando</h4>
+<p class="campo"><span class="rotulo">Local:</span> <code>native/simulation/src/canonical_state.cpp:343-363</code> (blobs), chamadas em <code>native/simulation/src/session.cpp:82</code> e <code>native/simulation/src/launch_system.cpp:145</code></p>
+<p class="campo"><span class="rotulo">Evidência:</span> por tick, o writer resserializa <code>canonical_material_catalog</code>, <code>canonical_archetype_catalog</code> e <code>canonical_level_manifest</code> — cada um com <code>ordered_by</code> (alocação + sort) e escrita byte a byte via <code>push_back</code> sem <code>reserve</code> (<code>canonical_state.cpp:44-53</code>) — seguido de <code>fnv1a64</code> sobre tudo. Os três blobs são função pura do conteúdo (imutável após <code>configure</code>), mas são recomputados 60×/s e mais uma vez por comando enfileirado (cada <code>queue_aim</code> dispara <code>enqueue</code> → refresh completo).</p>
+<p class="campo"><span class="rotulo">Impacto:</span> com os ~15 KB de manifests atuais são dezenas de alocações e 3 sorts por tick (estimativa estática: dezenas de µs/tick — não aparece isolado nas métricas, que medem só <code>b3World_Step</code>); o custo cresce linearmente com o tamanho do nível/catálogos, e por comando de input (tecla de aim pressionada = 1 comando/frame).</p>
+<p class="campo"><span class="rotulo">Recomendação:</span> computar os três blobs de conteúdo uma única vez por bundle (cache em <code>Impl</code>, invalidado em <code>build()</code>/<code>reconfigure</code>) e só resserializar o estado dinâmico por tick; adicionar <code>reserve</code> estimado no <code>CanonicalWriter</code>.</p>
+</div>
+<div class="card medio">
+<h4><span class="badge badge-medio">MÉDIO</span><code>metrics()</code>/<code>live_contact_count()</code> aloca heap por corpo a cada tick para um campo de diagnóstico</h4>
+<p class="campo"><span class="rotulo">Local:</span> <code>native/kernel/src/physics_world.cpp:1118-1156</code> (alocação em <code>:1131</code> dentro do loop), <code>:1744-1748</code>; acionado por tick via <code>capture_session_tick</code> em <code>native/extension/src/orbital_session_node.cpp:218</code> e <code>:476-482</code></p>
+<p class="campo"><span class="rotulo">Evidência:</span> <code>live_contact_count()</code> cria <code>std::vector&lt;b3ContactData&gt; contacts(capacity)</code> <strong>por corpo</strong> mais um vetor de chaves global, e ainda resolve cada contato por <code>find_shape_binding</code> linear (<code>physics_world.cpp:500-508</code>) — O(corpos × contatos) com alocações. É executado a cada tick (até 4× por frame em catch-up) só para preencher <code>metrics.contact_count</code>.</p>
+<p class="campo"><span class="rotulo">Impacto:</span> desperdício de alocações no caminho quente; hoje (22 corpos) é barato, mas escala quadraticamente com corpos/contatos e polui o perfil de alocação por frame.</p>
+<p class="campo"><span class="rotulo">Recomendação:</span> computar <code>contact_count</code> sob demanda (apenas quando o frame é consumido pelo GDScript) ou derivá-lo dos eventos de contato já coletados; substituir <code>find_shape_binding</code> por <code>unordered_map</code> se o número de shapes crescer.</p>
+</div>
+<div class="card medio">
+<h4><span class="badge badge-medio">MÉDIO</span>Preview de trajetória sem early-out, disparado múltiplas vezes por frame durante a mira</h4>
+<p class="campo"><span class="rotulo">Local:</span> <code>native/simulation/src/launch_system.cpp:202-232</code> (loop de até 600 iterações × <code>cast_sphere</code>, sem saída por distância); gatilhos em <code>game/scripts/game/launch_controller.gd:167-174</code> e <code>:184-188</code>; custo extra de <code>enqueue</code> → <code>refresh_canonical_state</code> em <code>launch_system.cpp:145</code></p>
+<p class="campo"><span class="rotulo">Evidência:</span> cada <code>set_aim_degrees</code> chama <code>queue_aim</code> → <code>session_-&gt;preview(aim)</code> (<code>orbital_session_node.cpp:373</code>), que integra até <code>projectile_lifetime_ticks = 600</code> passos com um <code>b3World_CastShape</code> por passo (mais <code>reserve</code> + sort de candidatos por cast, <code>physics_world.cpp:1333-1369</code>). Teclas simultâneas (ex.: arco + potência) geram 2 previews completos no mesmo frame; mouse-motion gera 1 por evento. Cada <code>enqueue</code> ainda dispara a serialização canônica do achado anterior.</p>
+<p class="campo"><span class="rotulo">Impacto:</span> é o maior custo por interação medido — <code>input_feedback_p95</code> 3,6–6,0 ms nas capturas (aceitável hoje, mas visível); trajetórias orbitais sem hit percorrem os 600 casts integrais, e o custo cresce com o número de shapes no broadphase.</p>
+<p class="campo"><span class="rotulo">Recomendação:</span> early-out no loop quando <code>|position| &gt; 6R</code> (mesmo envelope de remoção do mundo) ou após atingir apoapse/escape; coalescer as 4 ações de aim por frame aplicando uma única chamada com o valor final; opcionalmente memoizar o preview pelo aim quantizado.</p>
+</div>
+<div class="card baixo">
+<h4><span class="badge badge-baixo">BAIXO</span><code>rebuild_snapshots()</code> roda 2× por tick, é O(n²) e copia <code>std::string</code> por entidade</h4>
+<p class="campo"><span class="rotulo">Local:</span> <code>native/simulation/src/session_builder.cpp:297-329</code>; chamadas duplas em <code>native/simulation/src/session.cpp:71</code> e <code>:74</code>; <code>physics.state()</code> linear em <code>native/kernel/src/physics_world.cpp:1633-1644</code></p>
+<p class="campo"><span class="rotulo">Evidência:</span> cada rebuild itera <code>body_records</code> chamando <code>physics.state(handle)</code>, que faz <code>find_if</code> linear nos snapshots do mundo (O(n²) total), e copia <code>record.visual_id</code> (string heap) por snapshot; o tick chama o rebuild duas vezes (a segunda só para refletir destruições do FSM).</p>
+<p class="campo"><span class="rotulo">Impacto:</span> com 22 corpos é desprezível, mas o padrão é quadraticamente escalável e aloca strings por tick.</p>
+<p class="campo"><span class="rotulo">Recomendação:</span> manter índice handle→posição (ou iterar <code>physics.states()</code> uma vez e casar por handle) e consolidar para um único rebuild ao final do tick.</p>
+</div>
+<div class="card baixo">
+<h4><span class="badge badge-baixo">BAIXO</span>HUD reatribui textos de 5 labels a cada physics frame sem checar mudança</h4>
+<p class="campo"><span class="rotulo">Local:</span> <code>game/scripts/ui/vertical_slice_hud.gd:35-45</code></p>
+<p class="campo"><span class="rotulo">Evidência:</span> <code>phase_label.text</code>, <code>birds_label.text</code>, <code>integrity_label.text</code>, <code>controls_label.text</code> e <code>result_label.text</code> são reatribuídos a 60 Hz mesmo com valores idênticos (o estado <code>_last_phase</code> existe mas não é usado para pular a escrita); <code>Label.text</code> marca reflow/redraw a cada atribuição.</p>
+<p class="campo"><span class="rotulo">Impacto:</span> redraw/reflow de texto 300×/s desnecessário — pequeno, porém evitável e contínuo.</p>
+<p class="campo"><span class="rotulo">Recomendação:</span> comparar com o último valor antes de atribuir (ou reagir a mudanças de fase/eventos).</p>
+</div>
+<div class="card baixo">
+<h4><span class="badge badge-baixo">BAIXO</span>Frame payload reenvia dados estáticos por entidade a cada frame (Strings/Dictionaries por frame)</h4>
+<p class="campo"><span class="rotulo">Local:</span> <code>native/extension/src/orbital_session_node.cpp:624-658</code> (<code>snapshot_dictionary</code>), <code>:717-726</code> (<code>frame_dictionary</code>)</p>
+<p class="campo"><span class="rotulo">Evidência:</span> por snapshot, a cada frame, alocam-se 2 <code>godot::Dictionary</code>, uma <code>godot::String</code> de <code>visual_id</code> e strings de tipo ("box"/"sphere"/"static"/"dynamic"), além de <code>shape</code>, <code>mass_kg</code> e IDs — todos imutáveis após o spawn (~22 entidades → ~45 dictionaries + ~25 strings por frame a 60 Hz).</p>
+<p class="campo"><span class="rotulo">Impacto:</span> alocação contínua na fronteira ABI e tráfego desnecessário; hoje é absorvido (frame p95 ≈6 ms), mas é o principal gerador de garbage por frame na ponte.</p>
+<p class="campo"><span class="rotulo">Recomendação:</span> enviar a descrição estática (visual_id, shape, massa, ids) uma vez no <code>configure_session</code>/spawn e limitar o frame a transform/velocidades/flags; exigiria evolução do contrato — registrar para a próxima revisão de contrato.</p>
+</div>
+<div class="card obs">
+<h4><span class="badge badge-obs">OBS</span>Captura por tick dentro do loop recopia snapshots/metrics quando <code>tick_count &gt; 1</code></h4>
+<p class="campo"><span class="rotulo">Local:</span> <code>native/extension/src/orbital_session_node.cpp:476-482</code> e <code>:127-146</code></p>
+<p class="campo"><span class="rotulo">Evidência:</span> <code>capture_tick</code> faz <code>pending_.snapshots.assign(...)</code> e coleta <code>objective_target_statuses()</code> + <code>physics_metrics()</code> por tick; em catch-up (até 4 ticks/frame) só a última cópia é aproveitada (eventos corretamente acumulam via <code>insert</code>).</p>
+<p class="campo"><span class="rotulo">Impacto:</span> trabalho redundante exatamente nos frames mais caros (catch-up); amplifica o custo do achado <code>live_contact_count</code>.</p>
+<p class="campo"><span class="rotulo">Recomendação:</span> acumular eventos por tick, mas chamar <code>capture_latest</code> uma única vez após o loop.</p>
+</div>
+<div class="card obs">
+<h4><span class="badge badge-obs">OBS</span>Escolhas conscientes de solver: single-worker e 4 substeps @ 60 Hz</h4>
+<p class="campo"><span class="rotulo">Local:</span> <code>native/kernel/src/physics_world.cpp:429</code>, <code>native/kernel/include/ninho/physics/physics_world.hpp:100-101</code></p>
+<p class="campo"><span class="rotulo">Evidência:</span> <code>workerCount = 1</code> (Box3D sem task scheduler) e <code>substeps = 4</code> (solver efetivo a 240 Hz); sleep habilitado por padrão (<code>physics_world.hpp:88</code>).</p>
+<p class="campo"><span class="rotulo">Impacto:</span> coerente com o requisito de determinismo do projeto e com o conteúdo atual — step p95 medido 1,58–1,73 ms; apenas registrar que scaling de corpos exigirá reavaliar workers/substeps.</p>
+<p class="campo"><span class="rotulo">Recomendação:</span> nenhuma ação; revisit quando o nível ultrapassar ~100 corpos dinâmicos ativos.</p>
+</div>
+<div class="card obs">
+<h4><span class="badge badge-obs">OBS</span>Micro-alocação por frame em <code>_views.keys()</code> na interpolação visual</h4>
+<p class="campo"><span class="rotulo">Local:</span> <code>game/scripts/game/body_view_registry.gd:61-66</code></p>
+<p class="campo"><span class="rotulo">Evidência:</span> <code>_process</code> chama <code>_views.keys()</code> (aloca um Array novo) a cada render frame para iterar as views; a interpolação em si é correta e necessária.</p>
+<p class="campo"><span class="rotulo">Impacto:</span> desprezível com ~22 views.</p>
+<p class="campo"><span class="rotulo">Recomendação:</span> iterar <code>for view in _views.values()</code> ou manter array paralelo de chaves; opcional.</p>
+</div>
+<h3>Pontos positivos verificados</h3>
+<ul>
+<li>Pools fixos sem alocação de nós em runtime: VFX slots, fragmentos e 12 vozes de áudio pré-criados, com validação de budgets em <code>_ready</code> (<code>feedback_director.gd:258-299</code>, <code>:539-559</code>; <code>feedback_audio_pool.gd:25-46</code>).</li>
+<li>Uma única travessia ABI por frame: <code>consume_frame</code> usa <code>peek_frame</code> + <code>acknowledge_frame</code> sem copiar <code>SessionFrameData</code> (<code>orbital_session_node.cpp:898-912</code>); signals de falha só disparam em mudança de <code>fault_generation</code> (<code>:798-813</code>).</li>
+<li>Acumuladores de passo fixo com teto (4 ticks/frame, descarte de excesso) — proteção contra spiral-of-death (<code>adapter_helpers.hpp:244-268</code>; <code>orbital_session_node.cpp:21-53</code>).</li>
+<li>Interpolação visual no render frame desacoplada do tick de 60 Hz (<code>body_view_registry.gd:61-66</code>).</li>
+<li>Coalescing de <code>SetAimCommand</code> na fila — só o último aim é processado por tick (<code>launch_system.cpp:377-384</code>).</li>
+<li>Reservas de capacidade e reutilização de buffers no kernel (<code>physics_world.cpp:413-425</code>; <code>snapshots.clear()</code> preserva capacidade em <code>:1371-1391</code>).</li>
+<li>Cena principal enxuta (15 nós, sem nós de spike; <code>game/scenes/vertical_slice.tscn:82-142</code>).</li>
+<li>Evidência empírica de folga: 8 capturas com <code>frame_p95</code> 6,06–7,41 ms e <code>physics_step_p95</code> 1,58–1,73 ms (<code>artifacts/vertical-slice/{debug,release}/metrics-*.json</code>).</li>
+</ul>
+</section>
+</main>
+<footer class="pagefoot">
+<p><strong>Metodologia e limitações.</strong> Achados baseados em análise estática; itens marcados como inferência pelos agentes devem ser validados com execução. Relatório gerado automaticamente a partir dos relatórios dos agentes; fonte bruta preservada no histórico da sessão.</p>
+</footer>
+</div>
+</body>
+</html>
