@@ -401,4 +401,12 @@ Matriz mínima de rastreabilidade:
 6. **Conteúdo e arte:** seis fases, modelos Blender, shaders, áudio, VFX e tutorial.
 7. **Polimento e entrega:** acessibilidade, profiling, regressão, export, licenças e pacote Windows.
 
+**Gate de publicação — licença do projeto:** o marco 7 pode gerar pacotes para
+verificação técnica, mas a publicação pública ou comercial permanece bloqueada
+até uma decisão explícita do proprietário sobre a licença própria ou outros
+termos de distribuição, registrada no repositório e submetida à revisão jurídica
+adequada. `THIRD_PARTY_NOTICES.md`, o SBOM e os textos em `third_party/`
+documentam componentes de terceiros; eles não substituem a licença ou os termos
+próprios do projeto.
+
 Cada marco só avança após build, testes, playtest e revisão de código proporcionais ao risco.

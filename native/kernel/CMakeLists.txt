@@ -14,6 +14,7 @@ target_link_libraries(ninho_physics_kernel PRIVATE box3d::box3d)
 target_compile_features(ninho_physics_kernel PUBLIC cxx_std_20)
 target_compile_definitions(ninho_physics_kernel PRIVATE
   NINHO_BUILD_TYPE="${CMAKE_BUILD_TYPE}"
+  NINHO_STRESS_WATCHDOG_TIMEOUT_SECONDS=${NINHO_STRESS_WATCHDOG_TIMEOUT_SECONDS}
 )
 if(NINHO_ENABLE_TEST_FACADES)
   target_compile_definitions(ninho_physics_kernel PRIVATE NINHO_ENABLE_TEST_FACADES=1)

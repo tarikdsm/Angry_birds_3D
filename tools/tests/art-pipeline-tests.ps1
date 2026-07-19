@@ -303,8 +303,8 @@ Assert-True (($sceneText + $registryText) -notmatch '(CollisionShape3D|StaticBod
 Assert-True ($glassShaderText -match 'depth_prepass_alpha') 'glass shader must use the Godot 4.5 depth prepass render mode'
 Assert-True ($glassShaderText -notmatch 'depth_draw_alpha_prepass') 'obsolete glass shader render mode is forbidden'
 Assert-True ($glassShaderText -match 'texture\(albedo_texture, UV\)') 'glass override must sample its authored texture'
-Assert-True ($glassShaderText -match '(?m)^\s*ALBEDO = texel\.rgb;$') 'glass shader must not reapply authored base color'
-Assert-True ($glassShaderText -match '(?m)^\s*ALPHA = texel\.a;$') 'glass shader must not reapply authored alpha'
+Assert-True ($glassShaderText -match '(?m)^\s*ALBEDO = texel\.rgb;\r?$') 'glass shader must not reapply authored base color'
+Assert-True ($glassShaderText -match '(?m)^\s*ALPHA = texel\.a;\r?$') 'glass shader must not reapply authored alpha'
 Assert-True ($glassShaderText -notmatch 'glass_tint|authored_alpha|texel\.rgb\s*\*') 'glass shader reapplies baked texture semantics'
 foreach ($uniform in 'authored_roughness','authored_metallic','transmission_weight','coat_weight') {
     Assert-True ($glassShaderText -match "uniform float $uniform") "glass shader lacks effective $uniform semantics"

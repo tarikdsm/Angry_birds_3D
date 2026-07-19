@@ -58,6 +58,17 @@ private:
     std::size_t message_size_{};
 };
 
+struct AimEnvelope {
+    double shell_radius_m{};
+    double theta_min_deg{};
+    double theta_max_deg{};
+    double speed_min_m_s{};
+    double speed_max_m_s{};
+    double default_speed_m_s{};
+
+    bool operator==(const AimEnvelope&) const = default;
+};
+
 struct SessionFrameData {
     simulation::SessionState state;
     int ticks_executed{};
@@ -69,23 +80,14 @@ struct SessionFrameData {
     simulation::AbilityReadiness ability_readiness{
         simulation::AbilityReadiness::Unavailable};
     std::optional<simulation::TrajectoryPreview> preview;
+    AimEnvelope aim_envelope;
     physics::WorldMetrics metrics;
     double discarded_time_seconds{};
 };
 
 class SessionFrameBatch {
 public:
-    void capture_tick(
-        std::span<const simulation::DomainEvent> events,
-        std::span<const simulation::EntitySnapshot> snapshots,
-        const simulation::SessionState& state,
-        std::uint32_t birds_remaining,
-        bool objectives_complete,
-        const physics::WorldMetrics& metrics,
-        std::optional<simulation::TrajectoryPreview> preview = std::nullopt,
-        std::span<const simulation::ObjectiveTargetStatus> objective_targets = {},
-        simulation::AbilityReadiness ability_readiness =
-            simulation::AbilityReadiness::Unavailable);
+    void capture_events(std::span<const simulation::DomainEvent> events);
     void capture_latest(
         std::span<const simulation::EntitySnapshot> snapshots,
         const simulation::SessionState& state,
@@ -96,6 +98,7 @@ public:
         simulation::AbilityReadiness ability_readiness =
             simulation::AbilityReadiness::Unavailable);
     void set_preview(simulation::TrajectoryPreview preview);
+    void set_aim_envelope(AimEnvelope envelope) noexcept;
     void add_discarded_time(double seconds) noexcept;
     [[nodiscard]] SessionFrameData consume();
     [[nodiscard]] const SessionFrameData& peek() const noexcept;
@@ -111,7 +114,7 @@ private:
     std::optional<FaultInfo> fault_;
 };
 
-void capture_session_tick(
+void capture_session_events(
     SessionFrameBatch& batch,
     const simulation::SimulationSession& session);
 

@@ -11,7 +11,6 @@
     "first_impact_limit_ms": 150.0
   },
   "directional_anchor": {
-    "entity_id": 200,
     "enemy_archetype_id": 1
   },
   "material_profiles": {

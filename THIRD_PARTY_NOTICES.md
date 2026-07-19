@@ -2,6 +2,18 @@
 
 This inventory covers the pinned physics foundation and its reproducible Windows build toolchain. The `.tools` directory and FetchContent source caches are local build inputs and are not committed to or redistributed with this repository.
 
+## Project licensing status
+
+Ninho Orbital has no declared project license at this milestone, so its SPDX
+`licenseDeclared` and `licenseConcluded` fields remain `NOASSERTION`.
+Third-party license texts and notices in this file and under `third_party/`
+apply only to the corresponding third-party components; they do not declare a
+license for project-authored code, assets, or other materials.
+
+Public or commercial publication remains blocked until the owner explicitly
+selects and records a project license or other approved distribution terms.
+Generating a package for technical verification does not satisfy that gate.
+
 ## Runtime and linked dependencies
 
 ### Box3D 3D v0.1.0
@@ -75,6 +87,42 @@ to the generated Godot runtime, including non-MIT bundled components.
 - Executable SHA-256: `e52a7ad9538d9618c67a0bd777964e2eec8a30f68b810a2f6adce1f2daf847b8`
 - License: Apache-2.0; exact source text: https://github.com/ninja-build/ninja/blob/v1.13.2/COPYING
 
+### Blender 5.1.2
+
+- Windows x64 archive: https://download.blender.org/release/Blender5.1/blender-5.1.2-windows-x64.zip
+- Archive SHA-256: `345bedea7b0acf7cc9666423d8553f9129622aea34ded65c23e8cb70f83f14ff`
+- Executable SHA-256: `a7d09b04df8f78d432bc45d32c08f25387a78c76d12d2a6f5de07d8e1066e8f8`
+- Declared license: GPL-3.0-or-later; the binary distribution contains dependencies under other licenses, so the SPDX concluded license is `NOASSERTION`
+- Complete distribution license inventory: `.tools/blender/blender-5.1.2-windows-x64/license/license.md`
+
+Blender generates the project-authored `.blend`, GLB and texture assets. The
+tool and its bundled libraries are local build inputs and are not redistributed
+with the repository or game package.
+
+### FFmpeg 8.1.2 essentials build
+
+- Upstream: https://ffmpeg.org/
+- Windows build provider: https://www.gyan.dev/ffmpeg/builds/
+- Windows x64 archive: https://github.com/GyanD/codexffmpeg/releases/download/8.1.2/ffmpeg-8.1.2-essentials_build.zip
+- Archive SHA-256: `db580001caa24ac104c8cb856cd113a87b0a443f7bdf47d8c12b1d740584a2ec`
+- `ffmpeg.exe` SHA-256: `1326dde4c84ff1f96fe6b8916c5bed29e163e9b5dccf995f6f3db069d143ec5e`
+- `ffprobe.exe` SHA-256: `b49ccc7c6547b141ad5a2f6ec69cc04323d7133d7704d70b331b904c63eecb07`
+- Declared license: GPL-3.0-or-later; the static distribution contains bundled libraries under additional compatible licenses, so the SPDX concluded license is `NOASSERTION`
+- Complete distribution license and build inventory: `.tools/ffmpeg/ffmpeg-8.1.2-essentials_build/LICENSE`, `.tools/ffmpeg/ffmpeg-8.1.2-essentials_build/README.txt`
+
+FFmpeg and FFprobe validate and transform local test captures. The tool and its
+bundled libraries are local test/build inputs and are not redistributed with
+the repository or game package.
+
+### Python >= 3.11.0
+
+- Command: `python`
+- Source: environment-provided build tool
+- Integrity and license: the toolchain lock requires version 3.11.0 or later but does not pin a Python distribution, download URL, checksum or license; the SPDX fields remain `NOASSERTION`
+
+The selected Python interpreter runs repository build, generation and test
+scripts. It is not downloaded or redistributed by this repository.
+
 ### Microsoft Visual Studio Build Tools 2026 18.7.3 (build 11925.98)
 
 - Installer: https://download.visualstudio.microsoft.com/download/pr/4037ccca-d103-412b-a678-bc0aa164315e/07b09afd416dc05c781f171c881c23e42907eeb8d812fa1d2993dffb9323c869/vs_BuildTools.exe
@@ -82,4 +130,4 @@ to the generated Godot runtime, including non-MIT bundled components.
 - Pinned components: `Microsoft.VisualStudio.Component.VC.14.44.17.14.x86.x64`, `Microsoft.VisualStudio.Component.Windows11SDK.26100`
 - License: governed by the Microsoft terms presented by the official installer. No Microsoft binaries or license terms are redistributed by this repository; the SPDX declaration is therefore `NOASSERTION`.
 
-The SPDX 2.3 inventory is [`third_party/sbom.spdx.json`](third_party/sbom.spdx.json). The Ninho Orbital project itself has no declared repository license at this milestone, so its SPDX license fields are intentionally `NOASSERTION`.
+The SPDX 2.3 inventory is [`third_party/sbom.spdx.json`](third_party/sbom.spdx.json).

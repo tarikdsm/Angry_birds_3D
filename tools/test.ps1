@@ -19,13 +19,41 @@ Import-Module (Join-Path $PSScriptRoot 'GodotSpikeGate.psm1') -Force
 Import-Module (Join-Path $PSScriptRoot 'UpstreamBox3DGate.psm1') -Force
 Import-Module (Join-Path $PSScriptRoot 'FoundationEvidenceGate.psm1') -Force
 Import-Module (Join-Path $PSScriptRoot 'VerticalSliceGate.psm1') -Force
+Import-Module (Join-Path $PSScriptRoot 'GodotSmokeRegistry.psm1') -Force
 Import-Module (Join-Path $PSScriptRoot 'SafePath.psm1') -Force
+& (Join-Path $PSScriptRoot 'tests\ci-workflow-tests.ps1')
+& (Join-Path $PSScriptRoot 'tests\bootstrap-test-integration-contract.ps1')
+& (Join-Path $PSScriptRoot 'tests\godot-smoke-registry-tests.ps1') -Root $root
+& (Join-Path $PSScriptRoot 'tests\bootstrap-smoke.ps1')
+& (Join-Path $PSScriptRoot 'tests\bootstrap-behavior.ps1')
+& (Join-Path $PSScriptRoot 'tests\binary-gitattributes-contract-tests.ps1') -Root $root
+& (Join-Path $PSScriptRoot 'tests\captured-process-tests.ps1')
+& (Join-Path $PSScriptRoot 'tests\godot-runtime-cmake-contract-tests.ps1') -Root $root
+& (Join-Path $PSScriptRoot 'tests\toolchain-lock-path-contract-tests.ps1') -Root $root
+& (Join-Path $PSScriptRoot 'tests\toolchain-integrity-tests.ps1')
+& (Join-Path $PSScriptRoot 'tests\toolchain-parent-scope-regression.ps1')
+& (Join-Path $PSScriptRoot 'tests\export-preset-contract-tests.ps1') -Root $root
+& (Join-Path $PSScriptRoot 'tests\godot-copyright-eol-contract-tests.ps1') -Root $root
+& (Join-Path $PSScriptRoot 'tests\package-launch-cadence-contract-tests.ps1') -Root $root
+& (Join-Path $PSScriptRoot 'tests\watchdog-timeout-contract-tests.ps1') `
+    -Root $root -Configuration $Configuration
+& (Join-Path $PSScriptRoot 'tests\vertical-slice-verification-contract.ps1')
+& (Join-Path $PSScriptRoot 'tests\vertical-slice-evidence-api-contract.ps1')
+$godotSmokeRegistry = @(Get-NinhoGodotSmokeRegistry)
+Assert-NinhoGodotSmokeRegistry -Root $root -Registry $godotSmokeRegistry
 $foundationReportTests = Join-Path $PSScriptRoot `
     'tests\test_generate_foundation_report.py'
 & python $foundationReportTests
 $foundationReportTestExitCode = $LASTEXITCODE
 if ($foundationReportTestExitCode -ne 0) {
     exit $foundationReportTestExitCode
+}
+$thirdPartyInventoryTests = Join-Path $PSScriptRoot `
+    'tests\test_third_party_inventory.py'
+& python $thirdPartyInventoryTests
+$thirdPartyInventoryExitCode = $LASTEXITCODE
+if ($thirdPartyInventoryExitCode -ne 0) {
+    exit $thirdPartyInventoryExitCode
 }
 & (Join-Path $PSScriptRoot 'tests\spike-report-gate-tests.ps1') -Root $root
 & (Join-Path $PSScriptRoot 'tests\upstream-box3d-gate-tests.ps1') -Root $root
@@ -257,12 +285,11 @@ if (-not (Test-Path -LiteralPath $godot -PathType Leaf)) {
     [Console]::Error.WriteLine("Pinned Godot executable not found: $godot")
     exit 1
 }
-$ffprobeCommand = Get-Command 'ffprobe.exe' -ErrorAction SilentlyContinue
-if ($null -eq $ffprobeCommand) {
-    [Console]::Error.WriteLine('ffprobe.exe is required to validate Godot movie captures')
-    exit 1
-}
-$ffprobe = $ffprobeCommand.Source
+Import-Module (Join-Path $PSScriptRoot 'ToolchainIntegrity.psm1') -Force -Scope Local
+$ffprobe = ToolchainIntegrity\Resolve-NinhoPinnedToolchainExecutable `
+    -Root $root -ToolName 'ffmpeg' `
+    -ExecutableProperty 'ffprobe_exe' -HashProperty 'ffprobe_exe_sha256' `
+    -Name 'FFprobe'
 $visualCompletionMarker = 'NINHO_VISUAL_CAPTURE_COMPLETE frame=300'
 $verticalSliceCompletionMarker = 'VERTICAL_SLICE_CAPTURE_COMPLETE frame=300'
 
@@ -392,6 +419,29 @@ function Invoke-GodotSmoke {
     return 0
 }
 
+function Invoke-NinhoRegisteredGodotSmoke {
+    [CmdletBinding()]
+    param([Parameter(Mandatory)]$Spec)
+
+    $arguments = @('--headless', '--path', 'game')
+    if ([int]$Spec.FixedFps -gt 0) {
+        $arguments += @('--fixed-fps', [string]$Spec.FixedFps)
+    }
+    $arguments += @('--script', [string]$Spec.ResourcePath)
+    $invokeParameters = @{
+        Name = [string]$Spec.Name
+        GodotArguments = $arguments
+    }
+    if (-not [string]::IsNullOrEmpty([string]$Spec.RequiredCompletionMarker)) {
+        $invokeParameters.RequiredCompletionMarker =
+            [string]$Spec.RequiredCompletionMarker
+    }
+    if (-not [string]::IsNullOrEmpty([string]$Spec.RequiredLogText)) {
+        $invokeParameters.RequiredLogText = [string]$Spec.RequiredLogText
+    }
+    return Invoke-GodotSmoke @invokeParameters
+}
+
 # `--quit`/short `--quit-after` only waits for an editor iteration and can
 # return while imported GLB artifacts are still unavailable. The pinned
 # editor's `--import` mode waits for every pending resource import and quits.
@@ -413,14 +463,7 @@ if ($godotExitCode -ne 0) {
     exit $godotExitCode
 }
 
-$godotExitCode = Invoke-GodotSmoke `
-    -Name 'import-completeness' `
-    -RequiredCompletionMarker 'NINHO_IMPORT_COMPLETENESS_OK' `
-    -GodotArguments @(
-        '--headless',
-        '--path', 'game',
-        '--script', 'res://tests/import_completeness_smoke.gd'
-    )
+$godotExitCode = Invoke-NinhoRegisteredGodotSmoke -Spec $godotSmokeRegistry[0]
 if ($godotExitCode -ne 0) {
     exit $godotExitCode
 }
@@ -442,42 +485,11 @@ if ($godotExitCode -ne 0) {
     exit $godotExitCode
 }
 
-$godotExitCode = Invoke-GodotSmoke -Name 'orbital-session-smoke' -GodotArguments @(
-    '--headless',
-    '--path', 'game',
-    '--script', 'res://tests/orbital_session_node_smoke.gd'
-)
-if ($godotExitCode -ne 0) {
-    exit $godotExitCode
-}
-
-$godotExitCode = Invoke-GodotSmoke -Name 'vertical-slice-smoke' -GodotArguments @(
-    '--headless',
-    '--path', 'game',
-    '--fixed-fps', '60',
-    '--script', 'res://tests/vertical_slice_smoke.gd'
-)
-if ($godotExitCode -ne 0) {
-    exit $godotExitCode
-}
-
-$godotExitCode = Invoke-GodotSmoke -Name 'feedback-smoke' -GodotArguments @(
-    '--headless',
-    '--path', 'game',
-    '--fixed-fps', '60',
-    '--script', 'res://tests/feedback_smoke.gd'
-)
-if ($godotExitCode -ne 0) {
-    exit $godotExitCode
-}
-
-$godotExitCode = Invoke-GodotSmoke -Name 'forbid-godot-physics' -GodotArguments @(
-    '--headless',
-    '--path', 'game',
-    '--script', 'res://tests/forbid_godot_physics.gd'
-)
-if ($godotExitCode -ne 0) {
-    exit $godotExitCode
+foreach ($spec in @($godotSmokeRegistry | Select-Object -Skip 1)) {
+    $godotExitCode = Invoke-NinhoRegisteredGodotSmoke -Spec $spec
+    if ($godotExitCode -ne 0) {
+        exit $godotExitCode
+    }
 }
 
 $mobileMoviePath = Join-Path $artifactDirectory "godot-scene-$preset.avi"

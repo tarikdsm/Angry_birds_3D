@@ -9,10 +9,12 @@
 
 #include <algorithm>
 #include <array>
+#include <chrono>
 #include <cmath>
 #include <cstdint>
 #include <filesystem>
 #include <fstream>
+#include <iostream>
 #include <limits>
 #include <numbers>
 #include <sstream>
@@ -60,6 +62,16 @@ std::unique_ptr<SimulationSession> create_real_session()
     NINHO_SIM_REQUIRE(result.ok());
     NINHO_SIM_REQUIRE(result.value != nullptr);
     return std::move(result.value);
+}
+
+std::uint64_t fnv1a64(std::span<const std::uint8_t> bytes) noexcept
+{
+    std::uint64_t hash = 14695981039346656037ULL;
+    for (const std::uint8_t byte : bytes) {
+        hash ^= byte;
+        hash *= 1099511628211ULL;
+    }
+    return hash;
 }
 
 double position_distance(
@@ -281,6 +293,7 @@ NINHO_SIM_TEST("session bootstrap creates ordered domain snapshots and weld regi
     NINHO_SIM_REQUIRE(planet.shape.type == ShapeType::Sphere);
     NINHO_SIM_REQUIRE(std::abs(planet.shape.radius_m - 10.0) <= 1.0e-9);
     NINHO_SIM_REQUIRE(planet.visual_id == "AST_AsterPlanet");
+    NINHO_SIM_REQUIRE(!planet.is_projectile);
 
     const auto platform = std::ranges::find(
         session->snapshots(), EntityId{10}, &EntitySnapshot::entity_id);
@@ -347,7 +360,7 @@ NINHO_SIM_TEST("session bootstrap globally orders planet and level bodies by dom
         auto second = SimulationSession::create(
             bundle.materials, bundle.archetypes, bundle.level);
         NINHO_SIM_REQUIRE(first.ok() && second.ok());
-        NINHO_SIM_REQUIRE(first.value->canonical_hash_v1() == second.value->canonical_hash_v1());
+        NINHO_SIM_REQUIRE(first.value->canonical_hash_v2() == second.value->canonical_hash_v2());
         NINHO_SIM_REQUIRE(std::ranges::equal(
             first.value->snapshots(), second.value->snapshots()));
         NINHO_SIM_REQUIRE(std::ranges::is_sorted(
@@ -411,8 +424,8 @@ NINHO_SIM_TEST("session bootstrap weld frames preserve manifest poses on first i
 NINHO_SIM_TEST("session reconfigure failure preserves canonical state byte for byte")
 {
     auto session = create_real_session();
-    const auto bytes_before = session->canonical_state_v1();
-    const auto hash_before = session->canonical_hash_v1();
+    const auto bytes_before = session->canonical_state_v2();
+    const auto hash_before = session->canonical_hash_v2();
     const auto snapshots_before = std::vector<EntitySnapshot>{
         session->snapshots().begin(), session->snapshots().end()};
 
@@ -421,8 +434,8 @@ NINHO_SIM_TEST("session reconfigure failure preserves canonical state byte for b
     const SessionStatus status = session->reconfigure(
         invalid.materials, invalid.archetypes, invalid.level);
     NINHO_SIM_REQUIRE(!status.ok());
-    NINHO_SIM_REQUIRE(session->canonical_state_v1() == bytes_before);
-    NINHO_SIM_REQUIRE(session->canonical_hash_v1() == hash_before);
+    NINHO_SIM_REQUIRE(session->canonical_state_v2() == bytes_before);
+    NINHO_SIM_REQUIRE(session->canonical_hash_v2() == hash_before);
     NINHO_SIM_REQUIRE(std::ranges::equal(session->snapshots(), snapshots_before));
     NINHO_SIM_REQUIRE(session->events().empty());
 }
@@ -430,17 +443,17 @@ NINHO_SIM_TEST("session reconfigure failure preserves canonical state byte for b
 NINHO_SIM_TEST("session reconfigure valid content swaps the complete immutable configuration")
 {
     auto session = create_real_session();
-    const auto original_hash = session->canonical_hash_v1();
+    const auto original_hash = session->canonical_hash_v2();
     ContentBundle replacement = load_real_bundle();
     replacement.level.id = "first_orbit_reconfigured";
     replacement.level.planet.surface_gravity_m_s2 = 8.75;
     NINHO_SIM_REQUIRE(session->reconfigure(
         replacement.materials, replacement.archetypes, replacement.level).ok());
-    NINHO_SIM_REQUIRE(session->canonical_hash_v1() != original_hash);
-    const auto configured_hash = session->canonical_hash_v1();
+    NINHO_SIM_REQUIRE(session->canonical_hash_v2() != original_hash);
+    const auto configured_hash = session->canonical_hash_v2();
     NINHO_SIM_REQUIRE(session->tick().ok());
     NINHO_SIM_REQUIRE(session->restart().ok());
-    NINHO_SIM_REQUIRE(session->canonical_hash_v1() == configured_hash);
+    NINHO_SIM_REQUIRE(session->canonical_hash_v2() == configured_hash);
 }
 
 NINHO_SIM_TEST("session fault latches exact canonical diagnostic without throwing and restart recovers")
@@ -457,7 +470,7 @@ NINHO_SIM_TEST("session fault latches exact canonical diagnostic without throwin
         std::declval<const LevelManifest&>())));
 
     auto session = create_real_session();
-    const auto canonical_before_fault = session->canonical_state_v1();
+    const auto canonical_before_fault = session->canonical_state_v2();
     ninho::simulation::detail::SessionTestFacade::fail_next_canonical_refresh(
         *session, "injected canonical tick failure");
     const SessionStatus first = session->tick();
@@ -466,7 +479,7 @@ NINHO_SIM_TEST("session fault latches exact canonical diagnostic without throwin
     NINHO_SIM_REQUIRE(first.error.message == "injected canonical tick failure");
     NINHO_SIM_REQUIRE(session->state().phase == SessionPhase::Faulted);
     NINHO_SIM_REQUIRE(session->state().outcome == Outcome::None);
-    NINHO_SIM_REQUIRE(session->canonical_state_v1() == canonical_before_fault);
+    NINHO_SIM_REQUIRE(session->canonical_state_v2() == canonical_before_fault);
 
     const SessionStatus repeated = session->tick();
     NINHO_SIM_REQUIRE(!repeated.ok());
@@ -491,7 +504,7 @@ NINHO_SIM_TEST("session fault latches exact canonical diagnostic without throwin
     NINHO_SIM_REQUIRE(session->tick().ok());
 }
 
-NINHO_SIM_TEST("session canonical state v1 has explicit little endian fixed point and UTF8 layout")
+NINHO_SIM_TEST("session canonical state v2 has explicit little endian fixed point and UTF8 layout")
 {
     ContentBundle bundle = load_real_bundle();
     bundle.level.id = std::string{"\xC3\xB3rbita_\xCE\xB2"};
@@ -499,13 +512,13 @@ NINHO_SIM_TEST("session canonical state v1 has explicit little endian fixed poin
     const auto created = SimulationSession::create(
         bundle.materials, bundle.archetypes, bundle.level);
     NINHO_SIM_REQUIRE(created.ok());
-    const auto& bytes = created.value->canonical_state_v1();
+    const auto& bytes = created.value->canonical_state_v2();
     NINHO_SIM_REQUIRE(bytes.size() > 32U);
     NINHO_SIM_REQUIRE(bytes[0] == 18U);
     NINHO_SIM_REQUIRE(bytes[1] == 0U && bytes[2] == 0U && bytes[3] == 0U);
 
     CanonicalReader reader{bytes};
-    NINHO_SIM_REQUIRE(reader.text() == "canonical_state_v1");
+    NINHO_SIM_REQUIRE(reader.text() == "canonical_state_v2");
     NINHO_SIM_REQUIRE(reader.u64() == 0U);
     NINHO_SIM_REQUIRE(reader.u8() == static_cast<std::uint8_t>(SessionPhase::Inspection));
     NINHO_SIM_REQUIRE(reader.u8() == static_cast<std::uint8_t>(Outcome::None));
@@ -549,6 +562,7 @@ NINHO_SIM_TEST("session canonical state v1 has explicit little endian fixed poin
         static_cast<void>(reader.i64());
         static_cast<void>(reader.u8());
         static_cast<void>(reader.u8());
+        NINHO_SIM_REQUIRE(reader.u8() == 0U);
         if (entity == 10U) {
             found_platform = true;
             NINHO_SIM_REQUIRE(x == std::llround(
@@ -561,19 +575,162 @@ NINHO_SIM_TEST("session canonical state v1 has explicit little endian fixed poin
     NINHO_SIM_REQUIRE(found_platform);
 }
 
+NINHO_SIM_TEST("session canonical state contract is explicitly versioned as v2")
+{
+    auto session = create_real_session();
+    NINHO_SIM_REQUIRE(session->enqueue(BeginAimCommand{}).ok());
+    NINHO_SIM_REQUIRE(session->tick().ok());
+    NINHO_SIM_REQUIRE(session->enqueue(SetAimCommand{AimState{
+        {-13.0F, 0.0F, 0.0F}, {0.0F, 1.0F, 0.0F}, 10.5}}).ok());
+    NINHO_SIM_REQUIRE(session->enqueue(LaunchCommand{}).ok());
+    NINHO_SIM_REQUIRE(session->tick().ok());
+    const auto& bytes = session->canonical_state_v2();
+    CanonicalReader reader{bytes};
+    NINHO_SIM_REQUIRE(reader.text() == "canonical_state_v2");
+    NINHO_SIM_REQUIRE(fnv1a64(bytes) == session->canonical_hash_v2());
+    constexpr std::uint64_t canonical_state_v2_golden = 16778877272428821006ULL;
+    if (session->canonical_hash_v2() != canonical_state_v2_golden) {
+        test::fail(__FILE__, __LINE__,
+            "canonical_state_v2 golden mismatch: actual="
+                + std::to_string(session->canonical_hash_v2()));
+    }
+}
+
+NINHO_SIM_TEST("session canonical cache preserves v2 bytes and reuses immutable bundle blobs")
+{
+    using detail::SessionTestFacade;
+    auto session = create_real_session();
+    const auto reference = SessionTestFacade::canonical_state_uncached(*session);
+    NINHO_SIM_REQUIRE(reference == session->canonical_state_v2());
+    NINHO_SIM_REQUIRE(fnv1a64(reference) == session->canonical_hash_v2());
+    NINHO_SIM_REQUIRE(
+        SessionTestFacade::canonical_static_content_build_count(*session) == 1U);
+
+    for (std::size_t refresh = 0; refresh < 64U; ++refresh) {
+        SessionTestFacade::refresh_canonical_state(*session);
+        NINHO_SIM_REQUIRE(reference == session->canonical_state_v2());
+        NINHO_SIM_REQUIRE(
+            SessionTestFacade::canonical_static_content_build_count(*session) == 1U);
+    }
+
+    ContentBundle replacement = load_real_bundle();
+    replacement.level.id += "_canonical_cache_reconfigured";
+    replacement.level.planet.surface_gravity_m_s2 = 8.75;
+    NINHO_SIM_REQUIRE(session->reconfigure(
+        replacement.materials, replacement.archetypes, replacement.level).ok());
+    const auto reconfigured_reference =
+        SessionTestFacade::canonical_state_uncached(*session);
+    NINHO_SIM_REQUIRE(reconfigured_reference == session->canonical_state_v2());
+    NINHO_SIM_REQUIRE(fnv1a64(reconfigured_reference) == session->canonical_hash_v2());
+    NINHO_SIM_REQUIRE(
+        SessionTestFacade::canonical_static_content_build_count(*session) == 1U);
+    NINHO_SIM_REQUIRE(reconfigured_reference != reference);
+}
+
+NINHO_SIM_TEST("session canonical cache focal benchmark avoids static reserialization")
+{
+    using detail::SessionTestFacade;
+    using Clock = std::chrono::steady_clock;
+    constexpr std::size_t iterations = 256U;
+    auto session = create_real_session();
+    SessionTestFacade::refresh_canonical_state(*session);
+    static_cast<void>(SessionTestFacade::canonical_state_uncached(*session));
+
+    std::uint64_t cached_checksum{};
+    const auto cached_start = Clock::now();
+    for (std::size_t iteration = 0; iteration < iterations; ++iteration) {
+        SessionTestFacade::refresh_canonical_state(*session);
+        cached_checksum += session->canonical_hash_v2();
+    }
+    const auto cached_elapsed = Clock::now() - cached_start;
+
+    std::uint64_t uncached_checksum{};
+    const auto uncached_start = Clock::now();
+    for (std::size_t iteration = 0; iteration < iterations; ++iteration) {
+        const auto bytes = SessionTestFacade::canonical_state_uncached(*session);
+        uncached_checksum += fnv1a64(bytes);
+    }
+    const auto uncached_elapsed = Clock::now() - uncached_start;
+
+    const auto cached_us = std::chrono::duration_cast<std::chrono::microseconds>(
+        cached_elapsed).count();
+    const auto uncached_us = std::chrono::duration_cast<std::chrono::microseconds>(
+        uncached_elapsed).count();
+    std::cout << "[BENCH] canonical_cache iterations=" << iterations
+              << " cached_us=" << cached_us
+              << " uncached_us=" << uncached_us << '\n';
+    NINHO_SIM_REQUIRE(cached_checksum == uncached_checksum);
+    NINHO_SIM_REQUIRE(cached_us > 0 && uncached_us > 0);
+    NINHO_SIM_REQUIRE(
+        SessionTestFacade::canonical_static_content_build_count(*session) == 1U);
+}
+
+NINHO_SIM_TEST("session publishes snapshots once per tick with linear metadata reuse")
+{
+    using detail::SessionTestFacade;
+    auto session = create_real_session();
+    const auto initial_hash = session->canonical_hash_v2();
+    const auto rebuilds_before = SessionTestFacade::snapshot_rebuild_count(*session);
+    const auto visual_copies_before =
+        SessionTestFacade::snapshot_visual_copy_count(*session);
+
+    NINHO_SIM_REQUIRE(session->tick().ok());
+    NINHO_SIM_REQUIRE(
+        SessionTestFacade::snapshot_rebuild_count(*session) == rebuilds_before + 1U);
+    NINHO_SIM_REQUIRE(
+        SessionTestFacade::snapshot_visual_copy_count(*session) == visual_copies_before);
+    NINHO_SIM_REQUIRE(std::ranges::equal(
+        session->snapshots(), SessionTestFacade::snapshots_uncached(*session)));
+    NINHO_SIM_REQUIRE(session->canonical_hash_v2() != initial_hash);
+    NINHO_SIM_REQUIRE(fnv1a64(session->canonical_state_v2()) == session->canonical_hash_v2());
+}
+
+NINHO_SIM_TEST("session snapshot rebuild focal benchmark compares uncached quadratic reference")
+{
+    using detail::SessionTestFacade;
+    using Clock = std::chrono::steady_clock;
+    constexpr std::size_t iterations = 256U;
+    auto session = create_real_session();
+
+    const auto cached_start = Clock::now();
+    for (std::size_t iteration = 0; iteration < iterations; ++iteration) {
+        SessionTestFacade::rebuild_snapshots(*session);
+    }
+    const auto cached_elapsed = Clock::now() - cached_start;
+
+    std::size_t uncached_checksum{};
+    const auto uncached_start = Clock::now();
+    for (std::size_t iteration = 0; iteration < iterations; ++iteration) {
+        uncached_checksum += SessionTestFacade::snapshots_uncached(*session).size();
+    }
+    const auto uncached_elapsed = Clock::now() - uncached_start;
+
+    const auto cached_us = std::chrono::duration_cast<std::chrono::microseconds>(
+        cached_elapsed).count();
+    const auto uncached_us = std::chrono::duration_cast<std::chrono::microseconds>(
+        uncached_elapsed).count();
+    std::cout << "[BENCH] snapshot_rebuild iterations=" << iterations
+              << " cached_us=" << cached_us
+              << " uncached_us=" << uncached_us << '\n';
+    NINHO_SIM_REQUIRE(uncached_checksum == iterations * session->snapshots().size());
+    NINHO_SIM_REQUIRE(std::ranges::equal(
+        session->snapshots(), SessionTestFacade::snapshots_uncached(*session)));
+    NINHO_SIM_REQUIRE(cached_us > 0 && uncached_us > 0);
+}
+
 NINHO_SIM_TEST("session canonical hash includes every immutable physical content document")
 {
     const ContentBundle base = load_real_bundle();
     const auto base_session = SimulationSession::create(
         base.materials, base.archetypes, base.level);
     NINHO_SIM_REQUIRE(base_session.ok());
-    const auto base_hash = base_session.value->canonical_hash_v1();
+    const auto base_hash = base_session.value->canonical_hash_v2();
 
     auto require_distinct = [&](ContentBundle changed) {
         const auto session = SimulationSession::create(
             changed.materials, changed.archetypes, changed.level);
         NINHO_SIM_REQUIRE(session.ok());
-        NINHO_SIM_REQUIRE(session.value->canonical_hash_v1() != base_hash);
+        NINHO_SIM_REQUIRE(session.value->canonical_hash_v2() != base_hash);
     };
 
     ContentBundle friction = base;
@@ -599,8 +756,8 @@ NINHO_SIM_TEST("session canonical configuration is structural ordered and quantu
     const auto base_session = SimulationSession::create(
         base.materials, base.archetypes, base.level);
     NINHO_SIM_REQUIRE(base_session.ok());
-    const auto base_bytes = base_session.value->canonical_state_v1();
-    const auto base_hash = base_session.value->canonical_hash_v1();
+    const auto base_bytes = base_session.value->canonical_state_v2();
+    const auto base_hash = base_session.value->canonical_hash_v2();
 
     ContentBundle shuffled = base;
     std::ranges::reverse(shuffled.materials.materials);
@@ -622,22 +779,22 @@ NINHO_SIM_TEST("session canonical configuration is structural ordered and quantu
     const auto shuffled_session = SimulationSession::create(
         shuffled.materials, shuffled.archetypes, shuffled.level);
     NINHO_SIM_REQUIRE(shuffled_session.ok());
-    NINHO_SIM_REQUIRE(shuffled_session.value->canonical_state_v1() == base_bytes);
-    NINHO_SIM_REQUIRE(shuffled_session.value->canonical_hash_v1() == base_hash);
+    NINHO_SIM_REQUIRE(shuffled_session.value->canonical_state_v2() == base_bytes);
+    NINHO_SIM_REQUIRE(shuffled_session.value->canonical_hash_v2() == base_hash);
 
     ContentBundle below_quantum = base;
     below_quantum.materials.materials.front().toughness += 0.000004;
     const auto below = SimulationSession::create(
         below_quantum.materials, below_quantum.archetypes, below_quantum.level);
     NINHO_SIM_REQUIRE(below.ok());
-    NINHO_SIM_REQUIRE(below.value->canonical_state_v1() == base_bytes);
+    NINHO_SIM_REQUIRE(below.value->canonical_state_v2() == base_bytes);
 
     ContentBundle above_quantum = base;
     above_quantum.materials.materials.front().toughness += 0.000006;
     const auto above = SimulationSession::create(
         above_quantum.materials, above_quantum.archetypes, above_quantum.level);
     NINHO_SIM_REQUIRE(above.ok());
-    NINHO_SIM_REQUIRE(above.value->canonical_hash_v1() != base_hash);
+    NINHO_SIM_REQUIRE(above.value->canonical_hash_v2() != base_hash);
 }
 
 NINHO_SIM_TEST("session canonical quantizer validates finite range boundary and one quantum")
@@ -690,8 +847,8 @@ NINHO_SIM_TEST("session canonical quantizer validates finite range boundary and 
 NINHO_SIM_TEST("session restart reproduces canonical state and allocator usage twenty times")
 {
     auto session = create_real_session();
-    const auto initial_bytes = session->canonical_state_v1();
-    const auto initial_hash = session->canonical_hash_v1();
+    const auto initial_bytes = session->canonical_state_v2();
+    const auto initial_hash = session->canonical_hash_v2();
     const auto initial_snapshots = std::vector<EntitySnapshot>{
         session->snapshots().begin(), session->snapshots().end()};
     const auto initial_joints = std::vector<StructuralJointSnapshot>{
@@ -703,8 +860,8 @@ NINHO_SIM_TEST("session restart reproduces canonical state and allocator usage t
         NINHO_SIM_REQUIRE(session->restart().ok());
         NINHO_SIM_REQUIRE(session->state().tick == TickIndex{0});
         NINHO_SIM_REQUIRE(session->events().empty());
-        NINHO_SIM_REQUIRE(session->canonical_state_v1() == initial_bytes);
-        NINHO_SIM_REQUIRE(session->canonical_hash_v1() == initial_hash);
+        NINHO_SIM_REQUIRE(session->canonical_state_v2() == initial_bytes);
+        NINHO_SIM_REQUIRE(session->canonical_hash_v2() == initial_hash);
         NINHO_SIM_REQUIRE(std::ranges::equal(session->snapshots(), initial_snapshots));
         NINHO_SIM_REQUIRE(std::ranges::equal(session->structural_joints(), initial_joints));
         NINHO_SIM_REQUIRE(session->physics_metrics().body_count == 23);
@@ -729,6 +886,13 @@ NINHO_SIM_TEST("session exposes authoritative objective integrity and ability re
     NINHO_SIM_REQUIRE(session->tick().ok());
     NINHO_SIM_REQUIRE(session->enqueue(LaunchCommand{}).ok());
     NINHO_SIM_REQUIRE(session->tick().ok());
+    NINHO_SIM_REQUIRE(std::ranges::count(
+                          session->snapshots(), true, &EntitySnapshot::is_projectile)
+        == 1);
+    const auto projectile = std::ranges::find(
+        session->snapshots(), true, &EntitySnapshot::is_projectile);
+    NINHO_SIM_REQUIRE(projectile != session->snapshots().end());
+    NINHO_SIM_REQUIRE(projectile->entity_id.value() >= 0x80000000U);
     const TickIndex launched = detail::SessionTestFacade::projectile_launch_tick(*session);
     NINHO_SIM_REQUIRE(session->ability_readiness() == AbilityReadiness::Arming);
     while (session->state().tick < TickIndex{launched.value() + 9U}) {

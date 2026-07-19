@@ -32,8 +32,17 @@
     "version": "5.1.2",
     "url": "https://download.blender.org/release/Blender5.1/blender-5.1.2-windows-x64.zip",
     "sha256": "345bedea7b0acf7cc9666423d8553f9129622aea34ded65c23e8cb70f83f14ff",
-    "exe_sha256": "1e6624af112b3c936f4b038b025ebd2bf00ae72c4b62881a6787166d71c58fa5",
+    "exe_sha256": "a7d09b04df8f78d432bc45d32c08f25387a78c76d12d2a6f5de07d8e1066e8f8",
     "exe": "blender-5.1.2-windows-x64/blender.exe"
+  },
+  "ffmpeg": {
+    "version": "8.1.2",
+    "url": "https://github.com/GyanD/codexffmpeg/releases/download/8.1.2/ffmpeg-8.1.2-essentials_build.zip",
+    "sha256": "db580001caa24ac104c8cb856cd113a87b0a443f7bdf47d8c12b1d740584a2ec",
+    "exe_sha256": "1326dde4c84ff1f96fe6b8916c5bed29e163e9b5dccf995f6f3db069d143ec5e",
+    "exe": "ffmpeg-8.1.2-essentials_build/bin/ffmpeg.exe",
+    "ffprobe_exe_sha256": "b49ccc7c6547b141ad5a2f6ec69cc04323d7133d7704d70b331b904c63eecb07",
+    "ffprobe_exe": "ffmpeg-8.1.2-essentials_build/bin/ffprobe.exe"
   },
   "python": {
     "minimum_version": "3.11.0",

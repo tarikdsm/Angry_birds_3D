@@ -39,6 +39,11 @@ namespace {
 
 class CanonicalWriter {
 public:
+    explicit CanonicalWriter(std::size_t reserve_bytes = 0U)
+    {
+        bytes.reserve(reserve_bytes);
+    }
+
     template <typename Integer>
         requires std::is_integral_v<Integer>
     void integer(Integer value)
@@ -340,17 +345,26 @@ std::uint64_t fnv1a64(const std::vector<std::uint8_t>& bytes) noexcept
 
 }
 
-void SimulationSession::Impl::refresh_canonical_state()
+void SimulationSession::Impl::rebuild_canonical_static_content()
 {
+    auto material_blob = canonical_material_catalog(bundle.materials);
+    auto archetype_blob = canonical_archetype_catalog(bundle.archetypes);
+    auto level_blob = canonical_level_manifest(bundle.level);
+    canonical_material_blob = std::move(material_blob);
+    canonical_archetype_blob = std::move(archetype_blob);
+    canonical_level_blob = std::move(level_blob);
 #if defined(NINHO_ENABLE_TEST_FACADES)
-    if (canonical_refresh_failure_for_testing) {
-        std::string message = std::move(*canonical_refresh_failure_for_testing);
-        canonical_refresh_failure_for_testing.reset();
-        throw std::runtime_error(message);
-    }
+    ++canonical_static_content_builds;
 #endif
-    CanonicalWriter writer;
-    writer.text("canonical_state_v1");
+}
+
+std::vector<std::uint8_t> SimulationSession::Impl::serialize_canonical_state(
+    const std::vector<std::uint8_t>& material_blob,
+    const std::vector<std::uint8_t>& archetype_blob,
+    const std::vector<std::uint8_t>& level_blob) const
+{
+    CanonicalWriter writer{canonical_bytes.size()};
+    writer.text("canonical_state_v2");
     identifier(writer, session_state.tick);
     writer.integer(static_cast<std::uint8_t>(session_state.phase));
     writer.integer(static_cast<std::uint8_t>(session_state.outcome));
@@ -358,9 +372,9 @@ void SimulationSession::Impl::refresh_canonical_state()
     writer.integer(next_command_sequence);
     writer.integer(next_event_sequence);
     writer.text(bundle.level.id);
-    writer.blob(canonical_material_catalog(bundle.materials));
-    writer.blob(canonical_archetype_catalog(bundle.archetypes));
-    writer.blob(canonical_level_manifest(bundle.level));
+    writer.blob(material_blob);
+    writer.blob(archetype_blob);
+    writer.blob(level_blob);
 
     writer.integer<std::uint32_t>(static_cast<std::uint32_t>(entity_snapshots.size()));
     for (const EntitySnapshot& snapshot : entity_snapshots) {
@@ -378,6 +392,7 @@ void SimulationSession::Impl::refresh_canonical_state()
         writer.quantized(snapshot.mass_kg);
         writer.boolean(snapshot.awake);
         writer.boolean(snapshot.ejected);
+        writer.boolean(snapshot.is_projectile);
     }
 
     writer.integer<std::uint32_t>(static_cast<std::uint32_t>(joint_snapshots.size()));
@@ -414,6 +429,7 @@ void SimulationSession::Impl::refresh_canonical_state()
         writer.vector(event.normal);
         writer.quantized(event.energy_j);
         writer.quantized(event.damage);
+        writer.integer(static_cast<std::uint8_t>(event.damage_classification));
         writer.integer(static_cast<std::uint8_t>(event.neutralization_cause));
         identifier(writer, event.cause_event_id);
         identifier(writer, event.joint_id);
@@ -510,7 +526,30 @@ void SimulationSession::Impl::refresh_canonical_state()
         identifier(writer, joint.snapshot.id);
         writer.integer(joint.consecutive_overload_ticks);
     }
-    std::vector<std::uint8_t> next_bytes = std::move(writer.bytes);
+    return std::move(writer.bytes);
+}
+
+#if defined(NINHO_ENABLE_TEST_FACADES)
+std::vector<std::uint8_t> SimulationSession::Impl::canonical_state_uncached_for_testing() const
+{
+    return serialize_canonical_state(
+        canonical_material_catalog(bundle.materials),
+        canonical_archetype_catalog(bundle.archetypes),
+        canonical_level_manifest(bundle.level));
+}
+#endif
+
+void SimulationSession::Impl::refresh_canonical_state()
+{
+#if defined(NINHO_ENABLE_TEST_FACADES)
+    if (canonical_refresh_failure_for_testing) {
+        std::string message = std::move(*canonical_refresh_failure_for_testing);
+        canonical_refresh_failure_for_testing.reset();
+        throw std::runtime_error(message);
+    }
+#endif
+    std::vector<std::uint8_t> next_bytes = serialize_canonical_state(
+        canonical_material_blob, canonical_archetype_blob, canonical_level_blob);
     const std::uint64_t next_hash = fnv1a64(next_bytes);
     canonical_bytes = std::move(next_bytes);
     canonical_hash = next_hash;

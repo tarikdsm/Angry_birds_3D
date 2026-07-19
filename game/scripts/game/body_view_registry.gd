@@ -60,7 +60,7 @@ func apply_frame(frame: Dictionary) -> void:
 
 func _process(delta: float) -> void:
 	var weight := 1.0 - exp(-INTERPOLATION_SPEED * delta)
-	for key: String in _views.keys():
+	for key: String in _views:
 		var view: Node3D = _views[key]
 		var target: Transform3D = _targets.get(key, view.transform)
 		view.transform = view.transform.interpolate_with(target, weight)

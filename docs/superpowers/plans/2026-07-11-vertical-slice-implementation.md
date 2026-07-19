@@ -428,10 +428,10 @@ python -c "import json; json.load(open('third_party/sbom.spdx.json', encoding='u
 3. Executar Debug e Release com upstream Box3D, playthroughs, determinismo, 20 reinícios, ABI, scene scanner, assets e smokes.
 4. Capturar 300 frames e goldens de overview, mira, Virela, impacto e resultado em Vulkan/OpenGL; registrar tick/evento/câmera/exposição/hash e aprovar rubric editorial bloqueante.
 5. Medir p95 físico `<=8 ms`; em hardware registrado exigir 1080p médio p95 de frame `<=16,67 ms`, p99 `<=25 ms`, nenhum hitch `>50 ms` durante ruptura/VFX e input-engine->feedback p95 `<=33,4 ms`, nos dois renderers e UI 100%/150%.
-6. Executar playtest com cinco pessoas novas quando disponível usando as métricas da especificação; até lá, usar agentes independentes com a mesma rubric e bloquear findings graves de legibilidade.
+6. Registrar o playtest com cinco pessoas novas como pendente até existirem participantes e observações para as métricas da especificação; reviews técnicos por agentes bloqueiam findings graves, mas não substituem nem satisfazem o playtest humano, obrigatório antes do marco Produto/lançamento.
 7. Executar checklist clean-room, proveniência de assets e revisão comparativa de nomes/silhuetas/sons/UI; manter Virela/Nox/Talo como codenames até clearance e registrar que isso não substitui parecer jurídico.
 8. Fixar export templates Godot 4.5.1 por URL/SHA-256 no lock/bootstrap/licenças, atualizar NOTICE/SBOM/README com versão, URL, hash, licença e `DEPENDS_ON`, validar SPDX semanticamente, criar `game/export_presets.cfg` e gerar pacote Windows com executável, DLL correta, dados, licenças e manifesto de hashes; iniciar a partir de caminho com espaços.
-9. Rodar revisão de código, arquitetura, gameplay e arte com agentes distintos; corrigir Critical/Important e registrar findings restantes aceitos.
+9. Rodar reviews técnicos de código, arquitetura, gameplay e arte; corrigir Critical/Important e registrar findings restantes aceitos. Os IDs dos agentes são rótulos de atribuição, não prova de identidade humana ou independência autenticada.
 10. Executar gates finais frescos:
 
 ```powershell

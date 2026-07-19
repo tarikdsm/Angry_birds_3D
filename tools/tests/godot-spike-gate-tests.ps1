@@ -10,6 +10,7 @@ if ($null -eq (Get-Command 'Assert-NinhoNoReparseAncestors' -ErrorAction Silentl
     throw 'Importing GodotSpikeGate must not remove the caller SafePath commands'
 }
 Import-Module (Join-Path $PSScriptRoot '..\VerticalSliceGate.psm1') -Force
+Import-Module (Join-Path $PSScriptRoot '..\GodotSmokeRegistry.psm1') -Force
 Import-Module (Join-Path $PSScriptRoot '..\SafePath.psm1') -Force
 
 function Assert-Throws {
@@ -29,7 +30,8 @@ function Assert-Throws {
     throw "Expected action to throw an error matching '$Pattern'"
 }
 
-$fakeImportFixture = Join-Path $Root 'artifacts\fake-godot-import-timeout'
+$fakeImportFixture = Join-Path $Root (
+    'artifacts\fake-godot-import-timeout-' + [Guid]::NewGuid().ToString('N'))
 New-Item -ItemType Directory -Force -Path $fakeImportFixture | Out-Null
 try {
     $fakeImportStdout = Join-Path $fakeImportFixture 'stdout.log'
@@ -43,6 +45,54 @@ try {
     if (-not ([IO.File]::ReadAllText($fakeImportStderr)).Contains(
             'NINHO_GODOT_FATAL name=fake-import reason=timeout')) {
         throw 'fake hanging importer did not persist its fatal timeout marker'
+    }
+
+    $lockedStdout = Join-Path $fakeImportFixture 'locked.stdout.log'
+    $lockedStderr = Join-Path $fakeImportFixture 'locked.stderr.log'
+    $lockerReady = Join-Path $fakeImportFixture 'locker.ready'
+    $lockerScript = Join-Path $fakeImportFixture 'locker.ps1'
+    [IO.File]::WriteAllText($lockerScript, @'
+param(
+    [Parameter(Mandatory)][string]$LockedPath,
+    [Parameter(Mandatory)][string]$ReadyPath
+)
+while (-not (Test-Path -LiteralPath $LockedPath)) {
+    Start-Sleep -Milliseconds 5
+}
+$stream = [IO.File]::Open(
+    $LockedPath, [IO.FileMode]::Open, [IO.FileAccess]::Read, [IO.FileShare]::Read)
+try {
+    [IO.File]::WriteAllText($ReadyPath, 'ready')
+    Start-Sleep -Milliseconds 1800
+} finally {
+    $stream.Dispose()
+}
+'@, [Text.UTF8Encoding]::new($false))
+    $locker = Start-Process -FilePath 'powershell.exe' -ArgumentList @(
+        '-NoProfile', '-File', ('"' + $lockerScript + '"'),
+        '-LockedPath', ('"' + $lockedStderr + '"'),
+        '-ReadyPath', ('"' + $lockerReady + '"')
+    ) -PassThru -WindowStyle Hidden
+    try {
+        Assert-Throws -Pattern 'timed out' -Action {
+            Invoke-NinhoTimedProcess -FilePath 'powershell.exe' -ArgumentList @(
+                '-NoProfile', '-Command', 'Start-Sleep -Seconds 5'
+            ) -TimeoutMs 900 -StdoutPath $lockedStdout -StderrPath $lockedStderr `
+                -FatalMarker 'NINHO_GODOT_FATAL name=locked-import reason=timeout'
+        }
+        if (-not (Test-Path -LiteralPath $lockerReady -PathType Leaf)) {
+            throw 'stderr lock fixture did not acquire its file handle'
+        }
+        if (-not ([IO.File]::ReadAllText($lockedStderr)).Contains(
+                'NINHO_GODOT_FATAL name=locked-import reason=timeout')) {
+            throw 'locked timeout did not persist its fatal marker after handle release'
+        }
+    } finally {
+        if (-not $locker.WaitForExit(5000)) {
+            Stop-Process -Id $locker.Id -Force -ErrorAction SilentlyContinue
+            $locker.WaitForExit()
+        }
+        $locker.Dispose()
     }
 } finally {
     if (Test-Path -LiteralPath $fakeImportFixture) {
@@ -257,6 +307,38 @@ if (-not [regex]::IsMatch(
     throw 'Godot smoke must read back the effective OpenGL fallback project setting'
 }
 
+$physicsGuardText = [System.IO.File]::ReadAllText(
+    (Join-Path $Root 'game\tests\forbid_godot_physics.gd'))
+if (-not [regex]::IsMatch(
+        $physicsGuardText,
+        '(?s)const PRODUCTION_ROOTS := \[\s*"res://scenes",\s*"res://scripts",?\s*\]')) {
+    throw 'Godot physics guard must recursively scan the complete production scripts root'
+}
+if (-not [regex]::IsMatch(
+        $physicsGuardText,
+        '(?s)const RUNTIME_SCENE_PATHS := \[\s*"res://scenes/vertical_slice\.tscn",\s*"res://scenes/physics_spike\.tscn",?\s*\]')) {
+    throw 'Godot physics guard must runtime-scan the playable and foundation scenes'
+}
+foreach ($runtimeScanContract in @(
+        'const RUNTIME_SCAN_PHYSICS_FRAMES := 3',
+        'for scene_path: String in RUNTIME_SCENE_PATHS:',
+        'for _frame in range(RUNTIME_SCAN_PHYSICS_FRAMES):'
+    )) {
+    if (-not $physicsGuardText.Contains($runtimeScanContract)) {
+        throw "Godot physics guard is missing multi-frame runtime contract: $runtimeScanContract"
+    }
+}
+
+$smokeRegistry = @(Get-NinhoGodotSmokeRegistry)
+Assert-NinhoGodotSmokeRegistry -Root $Root -Registry $smokeRegistry
+$smokeNames = @($smokeRegistry | ForEach-Object { [string]$_.Name })
+$importCompletenessIndex = [Array]::IndexOf($smokeNames, 'import-completeness')
+$verticalSliceSmokeIndex = [Array]::IndexOf($smokeNames, 'vertical-slice-smoke')
+if ($importCompletenessIndex -ne 0 -or
+        $verticalSliceSmokeIndex -le $importCompletenessIndex) {
+    throw 'Godot smoke registry must run import completeness before the vertical slice smoke'
+}
+
 $runnerText = [System.IO.File]::ReadAllText((Join-Path $Root 'tools\test.ps1'))
 foreach ($runnerContract in @(
         'return [int]$process.ExitCode',
@@ -267,7 +349,13 @@ foreach ($runnerContract in @(
         '-RequiredCompletionMarker $visualCompletionMarker',
         "'--fixed-fps', '60'",
         "'--headless', '--path', 'game', '--import'",
-        "'--script', 'res://tests/import_completeness_smoke.gd'",
+        'GodotSmokeRegistry.psm1',
+        '$godotSmokeRegistry = @(Get-NinhoGodotSmokeRegistry)',
+        'Assert-NinhoGodotSmokeRegistry -Root $root -Registry $godotSmokeRegistry',
+        'function Invoke-NinhoRegisteredGodotSmoke',
+        "`$arguments += @('--script', [string]`$Spec.ResourcePath)",
+        'Invoke-NinhoRegisteredGodotSmoke -Spec $godotSmokeRegistry[0]',
+        'Select-Object -Skip 1',
         "Get-ChildItem -LiteralPath `$assetRoot -Recurse -File -Filter '*.import'",
         "Contains('valid=false')",
         'Godot import metadata is invalid',
@@ -275,8 +363,6 @@ foreach ($runnerContract in @(
         '-TimeoutMs 180000',
         "'--', '--ninho-capture-300'",
         "'--path', 'game', '--editor', '--quit', 'res://scenes/physics_spike.tscn'",
-        "'--script', 'res://tests/vertical_slice_smoke.gd'",
-        "'--script', 'res://tests/forbid_godot_physics.gd'",
         "'res://scenes/vertical_slice.tscn'",
         "'--', '--vertical-slice-capture'"
     )) {
@@ -285,11 +371,20 @@ foreach ($runnerContract in @(
     }
 }
 $importCommandIndex = $runnerText.IndexOf("'--headless', '--path', 'game', '--import'", [StringComparison]::Ordinal)
-$importSmokeIndex = $runnerText.IndexOf("'--script', 'res://tests/import_completeness_smoke.gd'", [StringComparison]::Ordinal)
-$verticalSmokeIndex = $runnerText.IndexOf("'--script', 'res://tests/vertical_slice_smoke.gd'", [StringComparison]::Ordinal)
-if ($importCommandIndex -lt 0 -or $importSmokeIndex -le $importCommandIndex -or
-        $verticalSmokeIndex -le $importSmokeIndex) {
+$importSmokeRunIndex = $runnerText.IndexOf(
+    'Invoke-NinhoRegisteredGodotSmoke -Spec $godotSmokeRegistry[0]',
+    [StringComparison]::Ordinal)
+$remainingSmokesRunIndex = $runnerText.IndexOf(
+    'foreach ($spec in @($godotSmokeRegistry | Select-Object -Skip 1))',
+    [StringComparison]::Ordinal)
+if ($importCommandIndex -lt 0 -or $importSmokeRunIndex -le $importCommandIndex -or
+        $remainingSmokesRunIndex -le $importSmokeRunIndex) {
     throw 'full import and import-completeness smoke must precede the vertical slice smoke'
+}
+foreach ($spec in $smokeRegistry) {
+    if ($runnerText.Contains([string]$spec.ResourcePath)) {
+        throw "tools/test.ps1 duplicates registered smoke path: $($spec.ResourcePath)"
+    }
 }
 if ($runnerText.Contains("'--quit-after'")) {
     throw 'tools/test.ps1 must let the visual scene finish frame 300 itself'
@@ -299,7 +394,11 @@ if ([regex]::Matches(
         [regex]::Escape('-RequiredCompletionMarker $visualCompletionMarker')).Count -ne 2) {
     throw 'Both Vulkan and OpenGL movie gates must require the frame-300 marker'
 }
-if ([regex]::Matches($runnerText, [regex]::Escape("'--fixed-fps', '60'")).Count -ne 6) {
+$inlineFixedFpsCount = [regex]::Matches(
+    $runnerText,
+    [regex]::Escape("'--fixed-fps', '60'")).Count
+$registeredFixedFpsCount = @($smokeRegistry | Where-Object { [int]$_.FixedFps -eq 60 }).Count
+if (($inlineFixedFpsCount + $registeredFixedFpsCount) -ne 6) {
     throw 'Logical and feedback smokes plus foundation and playable captures must use fixed 60 FPS'
 }
 if ([regex]::Matches(

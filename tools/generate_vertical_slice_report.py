@@ -38,6 +38,32 @@ def load(root: Path) -> list[tuple[str, Path, bytes, dict]]:
     return result
 
 
+def human_playtest_summary(playtest: dict) -> str:
+    if (
+        playtest.get("status") == "not_performed"
+        and playtest.get("participants") == 0
+        and playtest.get("substitute") == "none"
+        and playtest.get("gate_status") == "pending"
+        and playtest.get("required_before") == "product_release"
+        and playtest.get("legal_limit") == "not_legal_advice"
+    ):
+        record = "not performed; 0 participants"
+    elif (
+        playtest.get("status") == "unavailable"
+        and playtest.get("substitute") == "independent_agents"
+        and "participants" not in playtest
+        and "gate_status" not in playtest
+        and playtest.get("legal_limit") == "not_legal_advice"
+    ):
+        record = "legacy record: unavailable; no participant evidence recorded"
+    else:
+        raise ValueError("human playtest record is not an accepted pending state")
+    return (
+        f"- Human playtest: `pending` ({record}). Agent reviews are technical controls "
+        "and do not substitute for human usability observations."
+    )
+
+
 def render(entries: list[tuple[str, Path, bytes, dict]]) -> str:
     lines = [
         "# First Orbit Vertical Slice Certification", "",
@@ -82,7 +108,8 @@ def render(entries: list[tuple[str, Path, bytes, dict]]) -> str:
     ]
     lines += [
         "", "## Review and clean-room", "",
-        f"- Independent substitute review: `{release['playtest']['substitute']}`; five new human players were `{release['playtest']['status']}`.",
+        human_playtest_summary(release["playtest"]),
+        "- Four recorded agent-review roles cover code, architecture, gameplay, and art; their labels are not authenticated human identities.",
         "- The comparative clean-room review covers names, logos, silhouettes, sounds, UI, layouts, and promotional material.",
         "- Virela, Nox, and Talo remain codenames pending clearance.",
         "- This engineering review is not a legal opinion and does not replace legal counsel before commercial publication.",
@@ -91,7 +118,8 @@ def render(entries: list[tuple[str, Path, bytes, dict]]) -> str:
         f"- Path: `{release['package']['path']}`",
         f"- Manifest SHA-256: `{release['package']['manifest_sha256']}`",
         f"- Launch from path containing spaces: `{release['package']['launch_from_space_path']}`",
-        "", "## Verdict", "", "All recorded blocking gates passed for the certified vertical slice.", "",
+        "", "## Verdict", "",
+        "All recorded technical gates passed for the certified vertical slice. Human playtest remains pending and is required before product release.", "",
     ]
     return "\n".join(lines)
 

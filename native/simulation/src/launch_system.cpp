@@ -189,6 +189,7 @@ TrajectoryPreview SimulationSession::preview(const AimState& source) const
     try {
         const auto& world_config = impl_->physics.config();
         const float dt = world_config.time_step;
+        const float removal_radius = 6.0f * world_config.planet_radius;
         if (!std::isfinite(dt) || dt <= 0.0f) {
             result.status.error = error(ContentErrorCode::InternalError, "/preview",
                 "current physics timestep is not representable");
@@ -229,6 +230,9 @@ TrajectoryPreview SimulationSession::preview(const AimState& source) const
             }
             position = position + translation;
             result.samples.push_back(position);
+            if (ninho::physics::length(position) >= removal_radius) {
+                break;
+            }
         }
         for (const auto sample : result.samples) {
             hash = fnv_mix(hash, std::llround(static_cast<double>(sample.x) * 100000.0));
@@ -347,10 +351,14 @@ SessionStatus SimulationSession::Impl::create_projectile()
 
     const EntityId entity{runtime_entity_bit | launch_count};
     ++launch_count;
-    body_records.push_back({0U, entity, PartId{1}, BodyType::Dynamic, std::nullopt,
-        bird->surface_id, std::nullopt,
-        {.type = ShapeType::Sphere, .radius_m = bird->radius_m},
-        "CHR_LaunchBird", created.value});
+    body_records.push_back({.entity_id = entity,
+        .part_id = PartId{1},
+        .body_type = BodyType::Dynamic,
+        .surface_id = bird->surface_id,
+        .shape = {.type = ShapeType::Sphere, .radius_m = bird->radius_m},
+        .visual_id = "CHR_LaunchBird",
+        .physics_handle = created.value,
+        .is_projectile = true});
     projectile = ProjectileState{.entity_id = entity,
         .archetype_id = bird->id,
         .ability_id = ability->id,
@@ -551,11 +559,11 @@ void SimulationSession::Impl::update_fsm_after_step()
     }
     if (session_state.phase == SessionPhase::Resolution) {
         bool settled = true;
-        for (const EntitySnapshot& snapshot : entity_snapshots) {
-            if (snapshot.body_type == BodyType::Dynamic
-                && (ninho::physics::length(snapshot.linear_velocity_m_s) >= linear_rest_speed
-                    || ninho::physics::length(snapshot.angular_velocity_rad_s)
-                        >= angular_rest_speed)) {
+        for (const ninho::physics::BodyState& state : physics.states()) {
+            // Static bodies cannot carry velocity, so scanning the authoritative
+            // physics states is equivalent to filtering the published snapshots.
+            if (ninho::physics::length(state.linear_velocity) >= linear_rest_speed
+                || ninho::physics::length(state.angular_velocity) >= angular_rest_speed) {
                 settled = false;
                 break;
             }

@@ -42,9 +42,13 @@ if(BUILD_TESTING)
     tests/playthrough_tests.cpp
   )
 
+  # The local test framework is intentionally isolated; see native/tests/CMakeLists.txt
+  # for the objective trigger that would justify extracting shared test support.
   target_include_directories(ninho_simulation_tests PRIVATE
     "${CMAKE_CURRENT_SOURCE_DIR}/tests"
     "${CMAKE_CURRENT_SOURCE_DIR}/src"
+    # Deliberate test-only seam: session_tests consumes the allocator probe and
+    # guarded PhysicsWorldTestFacade. This path is never propagated by the library.
     "${PROJECT_SOURCE_DIR}/native/kernel/src"
   )
   target_link_libraries(ninho_simulation_tests PRIVATE

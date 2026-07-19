@@ -1,6 +1,62 @@
 # Contrato de conteúdo do vertical slice (schema v1)
 
-Os três documentos JSON são carregados separadamente e só formam um `ContentBundle` depois da validação cruzada. A carga é atômica. Todo objeto rejeita chaves desconhecidas, todo campo listado é obrigatório e nenhum valor ausente recebe default. Uma ausência intencional é representada por `null` explícito.
+Os três documentos JSON de simulação são carregados separadamente e só formam um `ContentBundle` depois da validação cruzada. O quarto documento, de feedback audiovisual, é validado pelo `FeedbackDirector` antes da criação dos pools. O quinto documento contém o catálogo pt-BR do HUD. Todo objeto rejeita chaves desconhecidas, todo campo listado é obrigatório e nenhum valor ausente recebe default. Uma ausência intencional é representada por `null` explícito, exceto pelo texto vazio canônico de `hud.outcome.none`.
+
+## Feedback audiovisual
+
+Documento: `game/data/feedback/vertical_slice.feedback.json`.
+
+Raiz: `schema_version`, `budgets`, `directional_anchor`, `material_profiles`,
+`event_profiles`, `outcome_profiles`, `profiles`.
+
+- `schema_version` é o inteiro `1`.
+- `budgets` exige `vfx_pool_size`, `audio_voice_pool_size`, `fragment_pool_size`,
+  `max_particles_per_slot`, `max_particles_total`, `max_fragments_total`,
+  `glass_screen_coverage_limit` e `first_impact_limit_ms`. Contagens são inteiros
+  positivos; limites são números finitos positivos. As capacidades totais não
+  podem ser menores que os pools configurados e a cobertura pertence a `(0, 1]`.
+- `directional_anchor` exige os inteiros positivos `entity_id` e
+  `enemy_archetype_id`.
+- `material_profiles` tem exatamente as chaves `1`, `5`, `9`;
+  `event_profiles`, os treze eventos canônicos do slice; `outcome_profiles`,
+  `victory` e `defeat`. Todo valor é o nome não vazio de um item existente em
+  `profiles`. Em `event_profiles`, `damage_applied` também aceita o seletor
+  `material_or_anchor`; `joint_overloaded`, `piece_fracture_triggered`,
+  `joint_broken` e `piece_fractured` também aceitam `material`. Esses seletores
+  resolvem o perfil por material ou pelo estado do Âncora antes da emissão e são
+  inválidos nos demais eventos.
+- Cada entrada de `profiles` exige exatamente `color`, `particles`, `lifetime_s`,
+  `size_m` e `audio`. `color` é uma cor HTML válida, `particles` é inteiro
+  positivo, tempos e tamanhos são finitos e positivos, e `audio` é string (vazia
+  representa ausência intencional de cue).
+
+Falha de parse ou de validação rejeita o documento inteiro antes de qualquer pool
+ser criado; não há preenchimento por defaults.
+
+## Catálogo de textos do HUD
+
+Documento: `game/data/ui/vertical_slice.pt-BR.json`.
+
+Raiz: `schema_version`, `locale`, `messages`.
+
+- `schema_version` é o inteiro `1` e `locale` é exatamente `pt-BR`.
+- `messages` contém o conjunto exato e fechado de IDs `hud.phase.*`,
+  `hud.controls.*`, `hud.outcome.*`, `hud.format.*` e `hud.accessibility.*`
+  consumidos pelo vertical slice. Os IDs de fase e resultado continuam sendo os
+  IDs canônicos da simulação; somente sua apresentação é resolvida pelo catálogo.
+- Todas as mensagens são strings. Somente `hud.outcome.none` pode ser vazia.
+  Templates preservam seus tokens tipados: `%s`, `%d` ou `%03d`, conforme o ID.
+- O HUD carrega e valida o documento uma única vez em `_ready()`. Arquivo ausente,
+  JSON malformado, chave desconhecida, chave obrigatória ausente, tipo incorreto
+  ou token incompatível rejeitam o documento inteiro. Nesse caso, nenhuma
+  tradução parcial é usada: o HUD apresenta IDs técnicos seguros entre colchetes
+  e mantém os controles de recuperação identificáveis para diagnóstico.
+- Fase ou outcome desconhecido em runtime resolve exclusivamente para
+  `hud.phase.unknown`, `hud.controls.unknown` e `hud.outcome.unknown`; nunca é
+  interpolado como um novo ID de catálogo.
+- Os estados canônicos de habilidade `unavailable`, `arming`, `armed`, `active`
+  e `spent`, mais rejeição antecipada `not_armed`, possuem mensagens próprias;
+  readiness desconhecida resolve para `hud.controls.flight_ability.unknown`.
 
 ## Catálogo de materiais
 

@@ -289,11 +289,13 @@ int main(int argc, char** argv)
             const double elapsed = std::chrono::duration<double>(
                                        std::chrono::steady_clock::now() - started)
                                        .count();
-            if (elapsed > 60.0) {
+            const int watchdog_timeout_seconds =
+                ScenarioRunner::watchdog_timeout_seconds(kind);
+            if (elapsed > static_cast<double>(watchdog_timeout_seconds)) {
                 current.violations.push_back({
                     .scenario = current.name,
                     .code = "scenario_timeout",
-                    .message = "scenario exceeded the fixed 60 second timeout",
+                    .message = "scenario exceeded the configured watchdog timeout",
                     .tick = current.ticks,
                     .values = {{"elapsed", elapsed, "s"}},
                 });

@@ -38,6 +38,11 @@ FetchContent_Declare(box3d
   BINARY_DIR "${CMAKE_BINARY_DIR}/_deps/box3d-build"
   GIT_SHALLOW FALSE)
 FetchContent_MakeAvailable(box3d)
+if(MSVC)
+  # Determinism is part of the integration contract. Apply the mode to the
+  # fetched C target itself; options on ninho consumers do not propagate here.
+  target_compile_options(box3d PRIVATE /fp:precise)
+endif()
 message(STATUS "Box3D 0.1.0 pinned at 8441b4a06d6d09dcfb0b0f704df4d847d1437b92")
 
 set(JSON_BuildTests OFF CACHE BOOL "Build nlohmann/json tests" FORCE)

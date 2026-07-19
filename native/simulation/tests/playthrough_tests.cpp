@@ -130,7 +130,7 @@ Trace virela_sequence_script(const std::array<double, 3>& theta_by_shot,
         if (activate_ability) activate_after(*session, trace, ability_delay_ticks);
         resolve_shot(*session, trace);
     }
-    trace.state = session->canonical_state_v1();
+    trace.state = session->canonical_state_v2();
     trace.outcome = session->state().outcome;
     return trace;
 }
@@ -154,7 +154,7 @@ Trace structural_victory_script()
         launch(*session, trace, value);
         resolve_shot(*session, trace);
     }
-    trace.state = session->canonical_state_v1();
+    trace.state = session->canonical_state_v2();
     trace.outcome = session->state().outcome;
     return trace;
 }
@@ -167,7 +167,7 @@ Trace defeat_script()
         launch(*session, trace, miss_aim());
         resolve_shot(*session, trace);
     }
-    trace.state = session->canonical_state_v1();
+    trace.state = session->canonical_state_v2();
     trace.outcome = session->state().outcome;
     return trace;
 }
@@ -246,62 +246,7 @@ std::int64_t local_canonical_quantize(double value)
     return fixed == 0 ? std::int64_t{0} : fixed;
 }
 
-std::uint64_t canonical_signature(const Trace& trace)
-{
-    const auto event_order_bytes = [&]() {
-        std::vector<std::uint8_t> bytes;
-        const auto byte = [&](std::uint8_t value) { bytes.push_back(value); };
-        const auto integer = [&](std::uint64_t value) {
-            for (int shift = 0; shift < 64; shift += 8) {
-                byte(static_cast<std::uint8_t>(value >> shift));
-            }
-        };
-        const auto quantized = [&](double value) {
-            integer(static_cast<std::uint64_t>(local_canonical_quantize(value)));
-        };
-        const auto vector = [&](ninho::physics::Vec3 value) {
-            quantized(value.x);
-            quantized(value.y);
-            quantized(value.z);
-        };
-        for (const DomainEvent& event : trace.events) {
-            integer(event.id.value());
-            integer(event.tick.value());
-            integer(static_cast<std::uint8_t>(event.kind));
-            integer(event.entity_id.value());
-            integer(event.bird_archetype_id.value());
-            integer(static_cast<std::uint8_t>(event.rejection_reason));
-            integer(event.ability_id.value());
-            integer(event.affected_entity_id.value());
-            integer(event.affected_part_id.value());
-            quantized(event.weight);
-            vector(event.force_n);
-            vector(event.impulse_n_s);
-            integer(event.part_id.value());
-            vector(event.position_m);
-            vector(event.normal);
-            quantized(event.energy_j);
-            quantized(event.damage);
-            integer(static_cast<std::uint8_t>(event.neutralization_cause));
-            integer(event.cause_event_id.value());
-            integer(event.joint_id.value());
-            integer(event.material_id.value());
-            quantized(event.joint_load_ratio);
-            quantized(event.fracture_ratio);
-        }
-        return bytes;
-    }();
-    std::uint64_t hash = 14695981039346656037ULL;
-    const auto hash_byte = [&](std::uint8_t value) {
-        hash ^= value;
-        hash *= 1099511628211ULL;
-    };
-    for (const std::uint8_t value : trace.state) hash_byte(value);
-    for (const std::uint8_t value : event_order_bytes) hash_byte(value);
-    return hash;
-}
-
-std::string ordered_events_hex(const Trace& trace)
+std::vector<std::uint8_t> ordered_event_bytes(const Trace& trace)
 {
     std::vector<std::uint8_t> bytes;
     const auto integer = [&](std::uint64_t value) {
@@ -335,6 +280,7 @@ std::string ordered_events_hex(const Trace& trace)
         vector(event.normal);
         quantized(event.energy_j);
         quantized(event.damage);
+        integer(static_cast<std::uint8_t>(event.damage_classification));
         integer(static_cast<std::uint8_t>(event.neutralization_cause));
         integer(event.cause_event_id.value());
         integer(event.joint_id.value());
@@ -342,6 +288,25 @@ std::string ordered_events_hex(const Trace& trace)
         quantized(event.joint_load_ratio);
         quantized(event.fracture_ratio);
     }
+    return bytes;
+}
+
+std::uint64_t canonical_signature(const Trace& trace)
+{
+    const auto event_order_bytes = ordered_event_bytes(trace);
+    std::uint64_t hash = 14695981039346656037ULL;
+    const auto hash_byte = [&](std::uint8_t value) {
+        hash ^= value;
+        hash *= 1099511628211ULL;
+    };
+    for (const std::uint8_t value : trace.state) hash_byte(value);
+    for (const std::uint8_t value : event_order_bytes) hash_byte(value);
+    return hash;
+}
+
+std::string ordered_events_hex(const Trace& trace)
+{
+    const auto bytes = ordered_event_bytes(trace);
     std::ostringstream output;
     output << std::hex << std::setfill('0');
     for (const std::uint8_t value : bytes) {
@@ -452,6 +417,31 @@ NINHO_SIM_TEST("playthrough production tuple remains intact for 120 idle ticks")
         &StructuralJointSnapshot::active));
 }
 
+NINHO_SIM_TEST("playthrough canonical contracts distinguish damage classification")
+{
+    Trace protected_trace;
+    DomainEvent damage_event{
+        .id = EventId{1},
+        .tick = TickIndex{2},
+        .kind = DomainEventKind::DamageApplied,
+        .entity_id = EntityId{100},
+        .affected_entity_id = EntityId{200},
+        .energy_j = 12.0,
+        .damage = 3.0,
+        .damage_classification = DamageClassification::Protected,
+    };
+    protected_trace.events.push_back(damage_event);
+
+    Trace vulnerable_trace = protected_trace;
+    vulnerable_trace.events.front().damage_classification =
+        DamageClassification::Vulnerable;
+
+    NINHO_SIM_REQUIRE(ordered_events_hex(protected_trace)
+        != ordered_events_hex(vulnerable_trace));
+    NINHO_SIM_REQUIRE(canonical_signature(protected_trace)
+        != canonical_signature(vulnerable_trace));
+}
+
 NINHO_SIM_TEST("playthrough local canonical quantizer enforces fixed point boundaries")
 {
     NINHO_SIM_REQUIRE(local_canonical_quantize(0.0) == 0);
@@ -503,16 +493,16 @@ NINHO_SIM_TEST("vertical slice determinism compares quantized canonical signatur
         NINHO_SIM_REQUIRE(repeated_structural == structural);
         NINHO_SIM_REQUIRE(repeated_defeat == defeat);
     }
-    std::cout << "[TRACE] canonical_playthrough_v3 "
+    std::cout << "[TRACE] canonical_playthrough_v4 "
               << virela << ' ' << structural << ' ' << defeat << '\n';
-    std::cout << "[TRACE] canonical_playthrough_v3_repeat "
+    std::cout << "[TRACE] canonical_playthrough_v4_repeat "
               << repeated_virela << ' ' << repeated_structural << ' ' << repeated_defeat << '\n';
-    std::cout << "[TRACE] ordered_events_v1 virela_win baseline " << ordered_events_hex(virela_trace) << '\n';
-    std::cout << "[TRACE] ordered_events_v1 virela_win repeat " << ordered_events_hex(repeated_virela_trace) << '\n';
-    std::cout << "[TRACE] ordered_events_v1 structural_win baseline " << ordered_events_hex(structural_trace) << '\n';
-    std::cout << "[TRACE] ordered_events_v1 structural_win repeat " << ordered_events_hex(repeated_structural_trace) << '\n';
-    std::cout << "[TRACE] ordered_events_v1 no_ability_loss baseline " << ordered_events_hex(defeat_trace) << '\n';
-    std::cout << "[TRACE] ordered_events_v1 no_ability_loss repeat " << ordered_events_hex(repeated_defeat_trace) << '\n';
+    std::cout << "[TRACE] ordered_events_v2 virela_win baseline " << ordered_events_hex(virela_trace) << '\n';
+    std::cout << "[TRACE] ordered_events_v2 virela_win repeat " << ordered_events_hex(repeated_virela_trace) << '\n';
+    std::cout << "[TRACE] ordered_events_v2 structural_win baseline " << ordered_events_hex(structural_trace) << '\n';
+    std::cout << "[TRACE] ordered_events_v2 structural_win repeat " << ordered_events_hex(repeated_structural_trace) << '\n';
+    std::cout << "[TRACE] ordered_events_v2 no_ability_loss baseline " << ordered_events_hex(defeat_trace) << '\n';
+    std::cout << "[TRACE] ordered_events_v2 no_ability_loss repeat " << ordered_events_hex(repeated_defeat_trace) << '\n';
 }
 
 }

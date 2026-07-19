@@ -5,6 +5,7 @@
 #include "physics_world_test_facade.hpp"
 #endif
 
+#include <ninho/physics/physics_limits.hpp>
 #include <ninho/physics/radial_gravity.hpp>
 
 #include <box3d/box3d.h>
@@ -224,6 +225,9 @@ namespace {
     if (!nonnegative_finite(config.surface_gravity)) {
         throw std::invalid_argument("surface_gravity must be finite and non-negative");
     }
+    if (config.surface_gravity > maximum_radial_acceleration) {
+        throw std::invalid_argument("surface_gravity exceeds the radial acceleration ceiling");
+    }
     const double gravity_scale = static_cast<double>(config.surface_gravity)
         * static_cast<double>(config.planet_radius) * static_cast<double>(config.planet_radius);
     const double ejection_radius = 6.0 * static_cast<double>(config.planet_radius);
@@ -422,6 +426,7 @@ struct PhysicsWorld::Impl {
         joint_slots.emplace_back();
         shape_bindings.reserve(initial_body_capacity);
         contact_storage.reserve(initial_body_capacity);
+        live_contact_id_scratch.reserve(initial_body_capacity);
         joint_reaction_storage.reserve(max_joints);
 
         b3WorldDef world_def = b3DefaultWorldDef();
@@ -1117,7 +1122,7 @@ struct PhysicsWorld::Impl {
 
     [[nodiscard]] int live_contact_count() const
     {
-        std::vector<std::array<std::uint32_t, 3>> contact_ids;
+        live_contact_id_scratch.clear();
         for (std::uint32_t index = 1; index < slots.size(); ++index) {
             const Slot& slot = slots[index];
             if (slot.state != SlotState::Live || B3_IS_NULL(slot.native)
@@ -1128,10 +1133,13 @@ struct PhysicsWorld::Impl {
             if (capacity <= 0) {
                 continue;
             }
-            std::vector<b3ContactData> contacts(static_cast<std::size_t>(capacity));
-            const int count = b3Body_GetContactData(slot.native, contacts.data(), capacity);
+            if (live_contact_data_scratch.size() < static_cast<std::size_t>(capacity)) {
+                live_contact_data_scratch.resize(static_cast<std::size_t>(capacity));
+            }
+            const int count = b3Body_GetContactData(
+                slot.native, live_contact_data_scratch.data(), capacity);
             for (int contact_index = 0; contact_index < count; ++contact_index) {
-                const b3ContactData& contact = contacts[contact_index];
+                const b3ContactData& contact = live_contact_data_scratch[contact_index];
                 if (!b3Contact_IsValid(contact.contactId)) {
                     continue;
                 }
@@ -1148,11 +1156,13 @@ struct PhysicsWorld::Impl {
                 }
                 std::array<std::uint32_t, 3> key{};
                 b3StoreContactId(contact.contactId, key.data());
-                contact_ids.push_back(key);
+                live_contact_id_scratch.push_back(key);
             }
         }
-        std::ranges::sort(contact_ids);
-        return static_cast<int>(std::ranges::unique(contact_ids).begin() - contact_ids.begin());
+        std::ranges::sort(live_contact_id_scratch);
+        return static_cast<int>(
+            std::ranges::unique(live_contact_id_scratch).begin()
+            - live_contact_id_scratch.begin());
     }
 
     struct QueryProxyStorage {
@@ -1427,6 +1437,8 @@ struct PhysicsWorld::Impl {
     std::vector<Command> commands;
     std::vector<BodyState> snapshots;
     std::vector<ContactHit> contact_storage;
+    mutable std::vector<b3ContactData> live_contact_data_scratch;
+    mutable std::vector<std::array<std::uint32_t, 3>> live_contact_id_scratch;
     std::vector<JointReaction> joint_reaction_storage;
     std::size_t reserved_body_count{};
     std::size_t reserved_joint_count{};
@@ -1778,6 +1790,11 @@ const WorldConfig& PhysicsWorld::config() const
 }
 
 #if defined(NINHO_ENABLE_TEST_FACADES)
+int detail::PhysicsWorldTestFacade::worker_count(const PhysicsWorld& world)
+{
+    return b3World_GetWorkerCount(world.impl_->world);
+}
+
 void detail::PhysicsWorldTestFacade::fail_initial_commit_after(
     PhysicsWorld& world, std::size_t applied_command_count)
 {

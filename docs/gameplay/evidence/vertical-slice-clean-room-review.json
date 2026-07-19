@@ -1,0 +1,31 @@
+{
+  "schema": "ninho.vertical-slice.clean-room-review.v1",
+  "schema_version": 1,
+  "result": "approved_no_confusing_similarity",
+  "reviewed_utc": "2026-07-19T22:26:04.281Z",
+  "reviewer": {
+    "type": "agent",
+    "id": "/root/finding_018#certified-clean-room-review"
+  },
+  "scope": [
+    "names",
+    "logos",
+    "silhouettes",
+    "sounds",
+    "ui",
+    "layouts",
+    "promotional_material"
+  ],
+  "manifests": {
+    "assets": {
+      "path": "tools/art/vertical_slice_asset_manifest.json",
+      "sha256": "97060e28e622b03d500aea2d933e2d673291d390c5a5addf236af1076c20c3bd"
+    },
+    "audio": {
+      "path": "tools/audio/audio_manifest.json",
+      "sha256": "81a0da120342fef596ce03d3dd622575e462f47ebfd354a94f5430c5176a5b2e"
+    }
+  },
+  "legal_limit": "not_legal_advice",
+  "summary": "Independent clean-room review found no material confusing similarity in the reviewed names, logos, silhouettes, sounds, UI, layouts or available promotional material. Ordinary commercial name clearance remains recommended before publication."
+}

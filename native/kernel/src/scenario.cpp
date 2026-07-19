@@ -3,6 +3,9 @@
 #include "box3d_replay_conformance.hpp"
 #include "box3d_allocator_probe.hpp"
 #include "scenario_configuration.hpp"
+#if defined(NINHO_ENABLE_TEST_FACADES)
+#include "scenario_test_facade.hpp"
+#endif
 
 #include <algorithm>
 #include <array>
@@ -43,6 +46,10 @@
 namespace ninho::physics {
 namespace {
 
+#if defined(NINHO_ENABLE_TEST_FACADES)
+std::size_t projectile_simulation_count_value{};
+#endif
+
 [[nodiscard]] std::string_view name_of(ScenarioKind kind)
 {
     switch (kind) {
@@ -70,9 +77,10 @@ public:
     ScenarioWatchdog(ScenarioKind kind, std::uint64_t seed)
         : scenario_(name_of(kind))
         , seed_(seed)
+        , timeout_seconds_(ScenarioRunner::watchdog_timeout_seconds(kind))
         , deadline_(
               std::chrono::steady_clock::now()
-              + std::chrono::seconds(ScenarioRunner::watchdog_timeout_seconds()))
+              + std::chrono::seconds(timeout_seconds_))
     {
         {
             const std::scoped_lock lock(emergency_json_mutex);
@@ -127,7 +135,7 @@ private:
             scenario_.data(),
             static_cast<unsigned long long>(seed_),
             tick,
-            ScenarioRunner::watchdog_timeout_seconds());
+            timeout_seconds_);
         std::fflush(stderr);
         write_emergency_json(tick);
 #ifdef _WIN32
@@ -156,11 +164,10 @@ private:
             }
             stream << "{\"watchdog\":{\"scenario\":\"" << scenario_
                    << "\",\"seed\":" << seed_ << ",\"tick\":" << tick
-                   << ",\"timeout_seconds\":"
-                   << ScenarioRunner::watchdog_timeout_seconds()
+                   << ",\"timeout_seconds\":" << timeout_seconds_
                    << "},\"violations\":[{\"scenario\":\"" << scenario_
                    << "\",\"code\":\"scenario_timeout\",\"message\":\"scenario "
-                      "exceeded the fixed 60 second timeout\",\"tick\":"
+                      "exceeded the configured watchdog timeout\",\"tick\":"
                    << tick << ",\"fatal\":true}]}";
             stream.flush();
         } catch (...) {
@@ -169,6 +176,7 @@ private:
 
     std::string_view scenario_;
     std::uint64_t seed_{};
+    int timeout_seconds_{};
     std::chrono::steady_clock::time_point deadline_;
     std::optional<std::string> path_;
     std::atomic<int> tick_{0};
@@ -555,6 +563,9 @@ void merge_capability_metrics(CapabilityRow& row, const ProjectileOutcome& outco
 [[nodiscard]] ProjectileOutcome simulate_projectile(
     std::uint64_t seed, float speed, int substeps)
 {
+#if defined(NINHO_ENABLE_TEST_FACADES)
+    ++projectile_simulation_count_value;
+#endif
     constexpr float planet_radius = 10.0f;
     constexpr float platform_half_height = 0.25f;
     constexpr int block_count = 120;
@@ -724,13 +735,7 @@ struct ProjectileGate {
         result.fallback = "speed30_substeps6";
     }
 
-    ProjectileOutcome outcome{};
-    if (seed >= 1 && seed <= 20) {
-        const std::size_t index = static_cast<std::size_t>(seed - 1);
-        outcome = use_fallback_outcome ? gate.fallback[index] : gate.primary[index];
-    } else {
-        outcome = simulate_projectile(seed, speed, substeps);
-    }
+    const ProjectileOutcome outcome = simulate_projectile(seed, speed, substeps);
     result.contact_before_pile_exit = outcome.contact_before_exit;
     result.ticks = outcome.ticks;
     result.final_hash = outcome.final_hash;
@@ -1647,7 +1652,10 @@ struct CrtStressProbeResult {
         const double elapsed_seconds = std::chrono::duration<double>(
                                            std::chrono::steady_clock::now() - protocol_start)
                                            .count();
-        if (elapsed_seconds > 60.0) {
+        if (ScenarioRunner::watchdog_timeout_seconds(ScenarioKind::Stress)
+                == ScenarioRunner::watchdog_timeout_seconds()
+            && elapsed_seconds
+                > static_cast<double>(ScenarioRunner::watchdog_timeout_seconds())) {
             add_violation(
                 result,
                 "stress_timeout",
@@ -1810,7 +1818,7 @@ struct CrtStressProbeResult {
 
 [[nodiscard]] CapabilityRow prove_ccd_capability()
 {
-    static const ProjectileGate gate = run_projectile_gate();
+    const ProjectileGate gate = run_projectile_gate();
     CapabilityRow row{.capability = "ccd_dynamic_dynamic"};
     row.values = {
         {"primary_passes", static_cast<double>(gate.primary_pass_count), "seeds"},
@@ -3254,6 +3262,18 @@ void append_scenario_result(std::string& output, const ScenarioResult& result)
 
 }
 
+#if defined(NINHO_ENABLE_TEST_FACADES)
+void detail::ScenarioTestFacade::reset_projectile_simulation_count() noexcept
+{
+    projectile_simulation_count_value = 0;
+}
+
+std::size_t detail::ScenarioTestFacade::projectile_simulation_count() noexcept
+{
+    return projectile_simulation_count_value;
+}
+#endif
+
 void ScenarioRunner::set_emergency_json_path(std::optional<std::string> path)
 {
     const std::scoped_lock lock(emergency_json_mutex);
@@ -3889,6 +3909,14 @@ std::uint64_t hash_states(std::span<const BodyState> states)
         mix(state.ejected);
     }
     return hash;
+}
+
+int ScenarioRunner::watchdog_timeout_seconds(ScenarioKind kind) noexcept
+{
+    if (kind == ScenarioKind::Stress) {
+        return NINHO_STRESS_WATCHDOG_TIMEOUT_SECONDS;
+    }
+    return watchdog_timeout_seconds();
 }
 
 ScenarioResult ScenarioRunner::run(

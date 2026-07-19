@@ -9,11 +9,16 @@ add_executable(ninho_physics_tests
   scenario_capability_tests.cpp
 )
 
+# Deliberate test-only boundary: physics and extension share this local framework,
+# while simulation keeps its namespaced framework private. Extract common support
+# only when a third native runner appears or the same behavioral fix must be made
+# in both frameworks; either event makes the extra shared include boundary pay off.
 target_include_directories(ninho_physics_tests PRIVATE
   "${CMAKE_CURRENT_SOURCE_DIR}"
   "${PROJECT_SOURCE_DIR}/native/kernel/src"
 )
 target_link_libraries(ninho_physics_tests PRIVATE ninho::physics)
+target_compile_definitions(ninho_physics_tests PRIVATE NINHO_ENABLE_TEST_FACADES=1)
 target_compile_features(ninho_physics_tests PRIVATE cxx_std_20)
 
 if(MSVC)
@@ -26,6 +31,7 @@ add_test(NAME radial COMMAND ninho_physics_tests --filter radial)
 add_test(NAME world COMMAND ninho_physics_tests --filter world)
 add_test(NAME contracts COMMAND ninho_physics_tests --filter contract)
 add_test(NAME capability COMMAND ninho_physics_tests --filter capability)
+add_test(NAME projectile_ccd_flag COMMAND ninho_physics_tests --filter "bullet flag isolates")
 add_test(NAME projectile_ccd COMMAND ninho_physics_tests --filter "bullet contacts pile")
 add_test(NAME projectile_gate COMMAND ninho_physics_tests --filter "projectile gate")
 add_test(NAME radial_fall_scenario COMMAND ninho_physics_tests --filter "radial fall")
@@ -72,7 +78,6 @@ set_tests_properties(
   radial_fall_scenario
   pile_stability
   mass_ratio_scenario
-  stress_protocol
   determinism
   canonical_hash
   scenario_json
@@ -82,7 +87,13 @@ set_tests_properties(
   PROPERTIES TIMEOUT 65
 )
 
-# This is one real process containing six scenarios repeated twice. The internal
-# watchdog still enforces 60 seconds per scenario; this aggregate timeout only
-# bounds the complete 12-run CLI protocol.
-set_tests_properties(spike_json_smoke PROPERTIES TIMEOUT 150)
+set_tests_properties(stress_protocol PROPERTIES
+  TIMEOUT ${NINHO_STRESS_CTEST_TIMEOUT_SECONDS}
+)
+
+# This smoke adds two Stress runs to a 150 second baseline. Debug receives the
+# exact extra budget introduced by its longer Stress watchdog; Release therefore
+# remains at 150 seconds. Every scenario is still bounded by its internal watchdog.
+set_tests_properties(spike_json_smoke PROPERTIES
+  TIMEOUT ${NINHO_SPIKE_JSON_SMOKE_CTEST_TIMEOUT_SECONDS}
+)

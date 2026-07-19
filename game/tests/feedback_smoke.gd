@@ -1,6 +1,8 @@
 extends SceneTree
 
 const SCENE_PATH := "res://scenes/vertical_slice.tscn"
+const HUD_TEXT_CATALOG := preload("res://scripts/data/hud_text_catalog.gd")
+const HUD_TEXT_PATH := "res://data/ui/vertical_slice.pt-BR.json"
 const SUCCESS_MARKER := "FEEDBACK_SMOKE_OK"
 const EXPECTED_AUDIO := [
 	"launch", "vortex", "pine", "glass", "brick",
@@ -67,54 +69,36 @@ func _run() -> void:
 		"enemy_archetype_id": 1,
 		"transform": Transform3D.IDENTITY,
 	}]
-	var cases := [
+	var profile_cases := [
 		[{"kind": "bird_launched"}, "launch"],
 		[{"kind": "ability_started"}, "vortex"],
+		[{"kind": "ability_affected_body"}, "constellation"],
 		[{"kind": "ability_pulse"}, "virela_pulse"],
+		[{"kind": "ability_ended"}, "virela_release"],
+		[{"kind": "command_rejected"}, "rejected"],
+		[{"kind": "entity_neutralized"}, "neutralized"],
 		[{"kind": "piece_fractured", "material_id": 1}, "pine"],
 		[{"kind": "piece_fractured", "material_id": 9}, "glass"],
 		[{"kind": "piece_fractured", "material_id": 5}, "brick"],
 		[{
 			"kind": "damage_applied", "affected_entity_id": 200,
-			"normal": Vector3(0.0, 0.0, 1.0),
+			"damage_classification": "protected",
 		}, "helmet"],
 		[{
 			"kind": "damage_applied", "affected_entity_id": 200,
-			"normal": Vector3(1.0, 0.0, 0.0),
+			"damage_classification": "vulnerable",
 		}, "vulnerable"],
 	]
-	for pair: Array in cases:
+	for pair: Array in profile_cases:
 		var actual := str(feedback.profile_for_event(pair[0], snapshots))
 		if actual != pair[1]:
 			_fail("event profile expected %s, got %s" % [pair[1], actual])
 			return
-	var archetypes: Dictionary = JSON.parse_string(FileAccess.get_file_as_string(
-		"res://data/archetypes/vertical_slice.archetypes.json"))
-	var weakpoint: Dictionary = archetypes.weakpoints[0]
 	var directional: Dictionary = feedback.directional_anchor_contract()
-	if directional.local_protected_direction != weakpoint.protected_direction \
-			or not is_equal_approx(
-				float(directional.protected_cone_degrees), float(weakpoint.protected_cone_deg)):
-		_fail("feedback directional contract drifted from authored weakpoint")
+	if directional.has("entity_id") \
+			or int(directional.get("enemy_archetype_id", 0)) != 1:
+		_fail("feedback directional Anchor reference drifted from authored content")
 		return
-	var rotated_transform := Transform3D(Basis(Vector3.UP, deg_to_rad(90.0)), Vector3.ZERO)
-	var rotated_front := (rotated_transform.basis * Vector3(0.0, 0.0, -1.0)).normalized()
-	if str(feedback.profile_for_event({
-		"kind": "damage_applied", "affected_entity_id": 200,
-		"normal": -rotated_front,
-	}, [{"entity_id": 200, "transform": rotated_transform}])) != "helmet":
-		_fail("rotated Anchor front must remain protected")
-		return
-	for angle_case: Array in [[45.0, "helmet"], [46.0, "vulnerable"]]:
-		var source_direction := Vector3(
-			sin(deg_to_rad(float(angle_case[0]))), 0.0,
-			-cos(deg_to_rad(float(angle_case[0]))))
-		if str(feedback.profile_for_event({
-			"kind": "damage_applied", "affected_entity_id": 200,
-			"normal": -source_direction,
-		}, snapshots)) != angle_case[1]:
-			_fail("Anchor cone boundary %.1f must map to %s" % angle_case)
-			return
 
 	var pine: Color = feedback.profile_color("pine")
 	var glass: Color = feedback.profile_color("glass")
@@ -161,16 +145,6 @@ func _run() -> void:
 			or not bool(metrics.get("audio_all_streams_wav", false)):
 		_fail("all procedural cues must import before the smoke")
 		return
-	var joint_snapshot_position := Vector3(5.0, 12.0, 2.0)
-	var joint_live_event := _live_event("joint_broken", {"affected_entity_id": 901})
-	var joint_live_position: Vector3 = feedback.call("_event_position", joint_live_event, [{
-		"entity_id": 901,
-		"material_id": 1,
-		"transform": Transform3D(Basis.IDENTITY, joint_snapshot_position),
-	}])
-	if not joint_live_position.is_equal_approx(joint_snapshot_position):
-		_fail("live joint_broken zero position must resolve from affected snapshot")
-		return
 	var expected_particle_capacity := 24 * 96
 	if int(metrics.particle_capacity_runtime) != expected_particle_capacity:
 		_fail("fixed particle capacity must be 24 x 96")
@@ -183,31 +157,65 @@ func _run() -> void:
 		"res://data/feedback/vertical_slice.feedback.json"))
 	var profile_names: Array = feedback_config.profiles.keys()
 	profile_names.sort()
-	for profile: String in profile_names:
-		feedback.call("_emit_profile", profile, Vector3(0.0, 12.0, 0.0), {})
+	var exercised_profiles: Array[String] = []
+	var sweep_tick := 1
+	for pair: Array in profile_cases:
+		var event_data := pair[0] as Dictionary
+		feedback.apply_frame({
+			"tick": sweep_tick,
+			"phase": "flight_ability",
+			"outcome": "none",
+			"snapshots": snapshots,
+			"events": [_live_event(str(event_data.kind), event_data)],
+		})
+		var expected_profile := str(pair[1])
+		if str(feedback.feedback_metrics().get("last_profile", "")) != expected_profile:
+			_fail("public feedback path did not emit profile %s" % expected_profile)
+			return
+		if expected_profile not in exercised_profiles:
+			exercised_profiles.append(expected_profile)
+		sweep_tick += 1
+	for outcome: String in ["victory", "defeat"]:
+		feedback.apply_frame({
+			"tick": sweep_tick,
+			"phase": "result",
+			"outcome": outcome,
+			"snapshots": snapshots,
+			"events": [],
+		})
+		if str(feedback.feedback_metrics().get("last_profile", "")) != outcome:
+			_fail("public feedback path did not emit profile %s" % outcome)
+			return
+		exercised_profiles.append(outcome)
+		sweep_tick += 1
+	exercised_profiles.sort()
+	if exercised_profiles != profile_names:
+		_fail("public feedback cases do not cover every authored profile")
+		return
 	if feedback.pooled_resource_ids() != resource_ids_before:
-		_fail("profile sweep changed preallocated resource identities")
+		_fail("public profile sweep changed preallocated resource identities")
 		return
 	for amount: int in _particle_amounts(feedback):
 		if amount != 96:
-			_fail("profile sweep mutated GPUParticles3D.amount")
+			_fail("public profile sweep mutated GPUParticles3D.amount")
 			return
 	metrics = feedback.feedback_metrics()
 	if int(metrics.particle_capacity_runtime) != expected_particle_capacity:
-		_fail("profile sweep changed fixed particle capacity")
+		_fail("public profile sweep changed fixed particle capacity")
 		return
 
 	var live_position := Vector3(4.0, 12.0, 2.0)
 	var affected_position := Vector3(5.0, 12.0, 2.0)
-	var anchor_position := Vector3(0.0, 12.0, 0.0)
+	var anchor_position := Vector3(3.0, 12.0, 4.0)
 	var explicit_position := Vector3(6.0, 12.0, 2.0)
 	var live_snapshots := [
 		{"entity_id": 900, "transform": Transform3D(Basis.IDENTITY, live_position)},
 		{"entity_id": 901, "material_id": 1,
 			"transform": Transform3D(Basis.IDENTITY, affected_position)},
-		{"entity_id": 200, "enemy_archetype_id": 1,
+		{"entity_id": 777, "enemy_archetype_id": 1,
 			"transform": Transform3D(Basis.IDENTITY, anchor_position)},
 	]
+	var live_objective_targets := [{"entity_id": 777}]
 	var live_position_cases := [
 		["bird_launched", {"entity_id": 900}, live_position],
 		["ability_activation_requested", {"entity_id": 900}, live_position],
@@ -223,17 +231,33 @@ func _run() -> void:
 		["joint_broken", {"affected_entity_id": 901}, affected_position],
 		["piece_fractured", {"affected_entity_id": 901, "position": explicit_position}, explicit_position],
 	]
+	feedback.reset_feedback()
+	var position_tick := 1
 	for position_case: Array in live_position_cases:
 		var live_event := _live_event(str(position_case[0]), position_case[1])
-		var observed_position: Vector3 = feedback.call(
-			"_event_position", live_event, live_snapshots)
+		feedback.apply_frame({
+			"tick": position_tick,
+			"phase": "flight_ability",
+			"outcome": "none",
+			"snapshots": live_snapshots,
+			"objective_targets": live_objective_targets,
+			"events": [live_event],
+		})
+		var observed_position: Vector3 = feedback.feedback_metrics().get(
+			"last_emission_position", Vector3.ZERO)
 		if not observed_position.is_equal_approx(position_case[2]):
 			_fail("live %s position expected %s, got %s" % [
 				position_case[0], position_case[2], observed_position])
 			return
+		position_tick += 1
+	var missing_target_position: Vector3 = feedback.call(
+		"_anchor_position", live_snapshots, [])
+	if missing_target_position.is_equal_approx(anchor_position):
+		_fail("feedback target position must not fall back to a content entity id")
+		return
 	var ability_started_event := _live_event("ability_started", {"entity_id": 900})
 	feedback.apply_frame({
-		"tick": 8, "phase": "flight_ability", "outcome": "none",
+		"tick": position_tick, "phase": "flight_ability", "outcome": "none",
 		"snapshots": live_snapshots,
 		"events": [ability_started_event],
 	})
@@ -313,7 +337,7 @@ func _run() -> void:
 			"snapshots": snapshots,
 			"events": [{
 				"kind": "damage_applied", "tick": 100,
-				"affected_entity_id": 200, "normal": Vector3.RIGHT,
+				"affected_entity_id": 200, "damage_classification": "vulnerable",
 				"position": Vector3(0.0, 12.0, 0.0),
 			}],
 		})
@@ -336,7 +360,7 @@ func _run() -> void:
 		"snapshots": snapshots,
 		"events": [{
 			"kind": "damage_applied", "tick": 100,
-			"affected_entity_id": 200, "normal": Vector3.RIGHT,
+			"affected_entity_id": 200, "damage_classification": "vulnerable",
 			"position": Vector3(0.0, 12.0, 0.0),
 		}],
 	})
@@ -367,7 +391,7 @@ func _run() -> void:
 		"snapshots": snapshots,
 		"events": [{
 			"kind": "damage_applied", "tick": 101,
-			"affected_entity_id": 200, "normal": Vector3.RIGHT,
+			"affected_entity_id": 200, "damage_classification": "vulnerable",
 			"position": Vector3(0.0, 12.0, 0.0),
 		}],
 	})
@@ -411,8 +435,104 @@ func _run() -> void:
 
 
 func _test_authoritative_hud(hud: Node) -> void:
+	var phase_label := hud.get_node("Root/TopBar/Margin/Readout/PhaseLabel") as Label
 	var integrity := hud.get_node("Root/TopBar/Margin/Readout/IntegrityLabel") as Label
+	var birds := hud.get_node("Root/TopBar/Margin/Readout/BirdsLabel") as Label
 	var controls := hud.get_node("Root/ControlsLabel") as Label
+	var result := hud.get_node("Root/ResultLabel") as Label
+	if not hud.has_method("label_write_count"):
+		_fail("HUD must expose its label-write probe")
+		return
+	if not hud.has_method("text_catalog_load_count") \
+			or int(hud.text_catalog_load_count()) != 1:
+		_fail("HUD text catalog must load exactly once")
+		return
+	if not hud.has_method("text_catalog_status") \
+			or not bool(hud.text_catalog_status().get("ok", false)):
+		_fail("canonical HUD text catalog must be active")
+		return
+	var catalog_result: Dictionary = HUD_TEXT_CATALOG.load_catalog(HUD_TEXT_PATH)
+	if not bool(catalog_result.get("ok", false)):
+		_fail("HUD smoke could not load the canonical text catalog")
+		return
+	var messages := (catalog_result.get("document", {}) as Dictionary).get(
+		"messages", {}) as Dictionary
+	var phase_label_cases := [
+		["loading", "hud.phase.loading"],
+		["inspection", "hud.phase.inspection"],
+		["aim", "hud.phase.aim"],
+		["flight_ability", "hud.phase.flight_ability"],
+		["resolution", "hud.phase.resolution"],
+		["evaluation", "hud.phase.evaluation"],
+		["result", "hud.phase.result"],
+		["faulted", "hud.phase.faulted"],
+	]
+	for phase_case: Array in phase_label_cases:
+		hud.apply_frame({"phase": phase_case[0], "events": []})
+		var expected_phase := str(messages["hud.format.phase"]) % str(messages[phase_case[1]])
+		if phase_label.text != expected_phase:
+			_fail("HUD phase label is not localized for %s: %s" % [
+				phase_case[0], phase_label.text,
+			])
+			return
+	hud.apply_frame({"phase": "future_phase", "events": []})
+	var unknown_phase := str(messages["hud.format.phase"]) % str(messages["hud.phase.unknown"])
+	if phase_label.text != unknown_phase:
+		_fail("HUD must fail closed for unknown phase IDs: %s" % phase_label.text)
+		return
+	var control_cases := [
+		[{"phase": "loading"}, "hud.controls.loading"],
+		[{"phase": "inspection"}, "hud.controls.inspection"],
+		[{"phase": "aim"}, "hud.controls.aim"],
+		[{"phase": "flight_ability", "ability_readiness": "unavailable"},
+			"hud.controls.flight_ability.unavailable"],
+		[{"phase": "flight_ability", "ability_readiness": "arming"},
+			"hud.controls.flight_ability.arming"],
+		[{
+			"phase": "flight_ability", "ability_readiness": "arming",
+			"events": [{"kind": "command_rejected", "rejection_reason_name": "not_armed"}],
+		}, "hud.controls.flight_ability.rejected_not_armed"],
+		[{
+			"phase": "flight_ability", "ability_readiness": "armed", "ability_armed": true,
+		}, "hud.controls.flight_ability.armed"],
+		[{"phase": "flight_ability", "ability_readiness": "active"},
+			"hud.controls.flight_ability.active"],
+		[{"phase": "flight_ability", "ability_readiness": "spent"},
+			"hud.controls.flight_ability.spent"],
+		[{"phase": "flight_ability", "ability_readiness": "future_readiness"},
+			"hud.controls.flight_ability.unknown"],
+		[{"phase": "resolution"}, "hud.controls.resolution"],
+		[{"phase": "evaluation"}, "hud.controls.evaluation"],
+		[{"phase": "result"}, "hud.controls.result"],
+		[{"phase": "faulted"}, "hud.controls.faulted"],
+		[{"phase": "future_phase"}, "hud.controls.unknown"],
+	]
+	for control_case: Array in control_cases:
+		var control_frame := (control_case[0] as Dictionary).duplicate(true)
+		control_frame["events"] = control_frame.get("events", [])
+		hud.apply_frame(control_frame)
+		var expected_controls := str(messages["hud.accessibility.format"]) % [
+			str(messages[control_case[1]]), str(messages["hud.accessibility.full"]),
+		]
+		if controls.text != expected_controls:
+			_fail("HUD controls are not catalog-driven for %s: %s" % [
+				control_frame.get("phase", ""), controls.text,
+			])
+			return
+	for outcome_case: Array in [
+		["none", "hud.outcome.none"],
+		["victory", "hud.outcome.victory"],
+		["defeat", "hud.outcome.defeat"],
+		["future_outcome", "hud.outcome.unknown"],
+	]:
+		hud.apply_frame({
+			"phase": "inspection", "outcome": outcome_case[0], "events": [],
+		})
+		if result.text != str(messages[outcome_case[1]]):
+			_fail("HUD outcome is not catalog-driven for %s: %s" % [
+				outcome_case[0], result.text,
+			])
+			return
 	var target := {
 		"entity_id": 701,
 		"current_integrity": 30.0,
@@ -437,6 +557,36 @@ func _test_authoritative_hud(hud: Node) -> void:
 		return
 	if "ATIVAR VIRELA" in controls.text:
 		_fail("ability activation prompt must stay hidden before L+9")
+		return
+	var stable_frame := {
+		"tick": 1000,
+		"phase": "inspection",
+		"outcome": "none",
+		"birds_remaining": 3,
+		"objective_targets": [target],
+		"ability_readiness": "unavailable",
+		"ability_armed": false,
+		"events": [],
+	}
+	hud.apply_frame(stable_frame)
+	var writes_before_stable_frames := int(hud.label_write_count())
+	for tick_offset: int in range(60):
+		var next_frame := stable_frame.duplicate(true)
+		next_frame.tick = 1001 + tick_offset
+		hud.apply_frame(next_frame)
+	var writes_after_stable_frames := int(hud.label_write_count())
+	if writes_after_stable_frames != writes_before_stable_frames:
+		_fail("60 semantically identical HUD frames must perform zero label writes")
+		return
+	var birds_changed_frame := stable_frame.duplicate(true)
+	birds_changed_frame.tick = 1061
+	birds_changed_frame.birds_remaining = 2
+	hud.apply_frame(birds_changed_frame)
+	if int(hud.label_write_count()) != writes_after_stable_frames + 1:
+		_fail("changing only birds_remaining must perform exactly one label write")
+		return
+	if birds.text != "VIRELAS  2":
+		_fail("birds label locale drifted: %s" % birds.text)
 		return
 	hud.apply_frame({
 		"tick": 51,

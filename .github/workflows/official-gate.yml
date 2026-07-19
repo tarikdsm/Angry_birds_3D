@@ -1,0 +1,43 @@
+name: Official gate
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: official-gate-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  gate:
+    name: tools/test.ps1 (Debug)
+    runs-on: windows-2025-vs2026
+    timeout-minutes: 60
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Restore pinned portable toolchain
+        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+        with:
+          path: |
+            .tools
+            .fetchcontent-cache
+          key: ${{ runner.os }}-ninho-ci-${{ hashFiles('tools/toolchain.lock.json', 'cmake/Dependencies.cmake') }}
+
+      - name: Install pinned portable toolchain
+        shell: powershell
+        run: .\tools\bootstrap.ps1 -InstallPortable
+
+      - name: Run official gate
+        shell: powershell
+        run: .\tools\test.ps1 -Configuration Debug

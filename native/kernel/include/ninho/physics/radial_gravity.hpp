@@ -1,5 +1,6 @@
 #pragma once
 
+#include <ninho/physics/physics_limits.hpp>
 #include <ninho/physics/physics_types.hpp>
 
 #include <cstdint>

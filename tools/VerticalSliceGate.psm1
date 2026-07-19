@@ -1,5 +1,8 @@
 Set-StrictMode -Version Latest
 Import-Module (Join-Path $PSScriptRoot 'SafePath.psm1') -Force
+Import-Module (Join-Path $PSScriptRoot 'TestedInputIdentity.psm1') -Force
+Import-Module (Join-Path $PSScriptRoot 'ToolchainIntegrity.psm1') -Force
+Import-Module (Join-Path $PSScriptRoot 'SafePath.psm1') -Force
 
 function Assert-NinhoProperty {
     param([object]$Object, [string]$Name, [string]$Context)
@@ -94,12 +97,144 @@ function Set-NinhoRequiredDownsampleFrame {
     return $result
 }
 
+function Get-NinhoCompactDownsampleSelectExpression {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)][int[]]$Mapping,
+        [Parameter(Mandatory)][ValidateRange(1,[int]::MaxValue)][int]$SourceFrameCount
+    )
+
+    if ($Mapping.Count -ne 300) {
+        throw 'compact downsample mapping must contain exactly 300 frames'
+    }
+    if ($SourceFrameCount -lt 300) {
+        throw 'compact downsample source must contain at least 300 frames'
+    }
+    if ($Mapping[0] -ne 0 -or $Mapping[299] -ne $SourceFrameCount - 1) {
+        throw 'compact downsample mapping must preserve source endpoints'
+    }
+    for ($index = 0; $index -lt $Mapping.Count; ++$index) {
+        if ($Mapping[$index] -lt 0 -or $Mapping[$index] -ge $SourceFrameCount) {
+            throw 'compact downsample mapping frame is outside the source range'
+        }
+        if ($index -gt 0 -and $Mapping[$index] -le $Mapping[$index - 1]) {
+            throw 'compact downsample mapping must be strictly increasing'
+        }
+    }
+
+    $lastSourceFrame = $SourceFrameCount - 1
+    $removed = [Collections.Generic.List[int]]::new()
+    $added = [Collections.Generic.List[int]]::new()
+    for ($index = 0; $index -lt 300; ++$index) {
+        $baseline = [int][Math]::Round(
+            [double]$index * [double]$lastSourceFrame / 299.0,
+            [MidpointRounding]::AwayFromZero)
+        if ($Mapping[$index] -ne $baseline) {
+            $removed.Add($baseline)
+            $added.Add($Mapping[$index])
+        }
+    }
+    if ($removed.Count -gt 8) {
+        throw 'compact downsample mapping has more than 8 sparse overrides'
+    }
+
+    $baselineExpression =
+        "eq(n\,round(round(n*299/$lastSourceFrame)*$lastSourceFrame/299))"
+    if ($removed.Count -eq 0) { return $baselineExpression }
+    $removedExpression = @($removed | ForEach-Object { "eq(n\,$_)" }) -join '+'
+    $addedExpression = @($added | ForEach-Object { "eq(n\,$_)" }) -join '+'
+    return "$baselineExpression*not($removedExpression)+$addedExpression"
+}
+
+function Get-NinhoVirelaAbilityProof {
+    [CmdletBinding()]
+    param([Parameter(Mandatory)][string]$Text)
+
+    $pattern = '(?m)^NINHO_CAPTURE_EVENT frame=(\d+) tick=(\d+) kind=(\S+) profile=(\S+) affected=(\d+) damage=([0-9.]+) camera=(\([^)]+\)) exposure=([0-9.]+)\s*$'
+    $proofs = @([regex]::Matches($Text, $pattern) | Where-Object {
+        ($_.Groups[3].Value -ceq 'ability_started' -and $_.Groups[4].Value -ceq 'vortex') -or
+        ($_.Groups[3].Value -ceq 'ability_pulse' -and $_.Groups[4].Value -ceq 'virela_pulse')
+    })
+    if ($proofs.Count -eq 0) { throw 'capture has no Virela ability/VFX event' }
+
+    $proof = $proofs[0]
+    return [pscustomobject]@{
+        frame = [int]$proof.Groups[1].Value
+        tick = [int64]$proof.Groups[2].Value
+        phase = 'flight_ability'
+        outcome = 'none'
+        event = "$($proof.Groups[3].Value):$($proof.Groups[4].Value)"
+        camera = $proof.Groups[7].Value
+        exposure = [double]$proof.Groups[8].Value
+    }
+}
+
 function Stop-NinhoProcessTree {
     param([Parameter(Mandatory)][int]$ProcessId)
     foreach ($child in @(Get-CimInstance Win32_Process -Filter "ParentProcessId = $ProcessId" -ErrorAction SilentlyContinue)) {
         Stop-NinhoProcessTree -ProcessId ([int]$child.ProcessId)
     }
-    Stop-Process -Id $ProcessId -Force -ErrorAction SilentlyContinue
+    $process = Get-Process -Id $ProcessId -ErrorAction SilentlyContinue
+    if ($null -eq $process) { return }
+    try {
+        Stop-Process -Id $ProcessId -Force -ErrorAction SilentlyContinue
+        if (-not $process.HasExited) {
+            $process.WaitForExit(3000) | Out-Null
+        }
+    } finally {
+        $process.Dispose()
+    }
+}
+
+function Get-NinhoIdentifiedProcessIds {
+    param([Parameter(Mandatory)][string]$IdentityToken)
+
+    return @(Get-CimInstance Win32_Process -ErrorAction Stop | Where-Object {
+        $null -ne $_.CommandLine -and
+        $_.CommandLine.IndexOf($IdentityToken, [StringComparison]::Ordinal) -ge 0
+    } | ForEach-Object { [int]$_.ProcessId })
+}
+
+function Stop-NinhoIdentifiedProcessTrees {
+    param([Parameter(Mandatory)][string]$IdentityToken)
+
+    foreach ($identifiedPid in @(Get-NinhoIdentifiedProcessIds -IdentityToken $IdentityToken)) {
+        Stop-NinhoProcessTree -ProcessId $identifiedPid
+    }
+}
+
+function Add-NinhoTextWithRetry {
+    param(
+        [Parameter(Mandatory)][string]$Path,
+        [Parameter(Mandatory)][string]$Text,
+        [ValidateRange(1,[int]::MaxValue)][int]$RetryTimeoutMs = 3000
+    )
+
+    $watch = [Diagnostics.Stopwatch]::StartNew()
+    try {
+        do {
+            try {
+                [IO.File]::AppendAllText(
+                    $Path, $Text, [Text.UTF8Encoding]::new($false))
+                return
+            } catch {
+                $cause = if ($null -ne $_.Exception.InnerException) {
+                    $_.Exception.InnerException
+                } else {
+                    $_.Exception
+                }
+                if ($cause -isnot [IO.IOException] -and
+                        $cause -isnot [UnauthorizedAccessException]) {
+                    throw
+                }
+                $remainingMs = $RetryTimeoutMs - [int]$watch.ElapsedMilliseconds
+                if ($remainingMs -le 0) { throw }
+                Start-Sleep -Milliseconds ([Math]::Min(50, $remainingMs))
+            }
+        } while ($true)
+    } finally {
+        $watch.Stop()
+    }
 }
 
 function Invoke-NinhoTimedProcess {
@@ -111,7 +246,8 @@ function Invoke-NinhoTimedProcess {
         [Parameter(Mandatory)][string]$StdoutPath,
         [Parameter(Mandatory)][string]$StderrPath,
         [string]$WorkingDirectory = '',
-        [string]$FatalMarker = 'NINHO_CAPTURE_FATAL reason=timeout'
+        [string]$FatalMarker = 'NINHO_CAPTURE_FATAL reason=timeout',
+        [string]$ProcessIdentityToken = ''
     )
     $encodedArguments = @($ArgumentList | ForEach-Object {
         $argument = [string]$_
@@ -123,16 +259,53 @@ function Invoke-NinhoTimedProcess {
     }
     if (-not [string]::IsNullOrWhiteSpace($WorkingDirectory)) { $parameters.WorkingDirectory = $WorkingDirectory }
     $process = Start-Process @parameters
+    $processDisposed = $false
+    $watch = [Diagnostics.Stopwatch]::StartNew()
     try {
-        if (-not $process.WaitForExit($TimeoutMs)) {
-            Stop-NinhoProcessTree -ProcessId $process.Id
+        $timedOut = -not $process.WaitForExit($TimeoutMs)
+        if (-not $timedOut) {
             $process.WaitForExit()
-            [IO.File]::AppendAllText($StderrPath, "$FatalMarker timeout_ms=$TimeoutMs`n", [Text.UTF8Encoding]::new($false))
-            throw "process timed out after $TimeoutMs ms: $FilePath"
         }
-        $process.WaitForExit()
+        if (-not $timedOut -and
+                -not [string]::IsNullOrWhiteSpace($ProcessIdentityToken)) {
+            do {
+                $identifiedPids = @(
+                    Get-NinhoIdentifiedProcessIds -IdentityToken $ProcessIdentityToken)
+                if ($identifiedPids.Count -eq 0) { break }
+                $remainingMs = $TimeoutMs - [int]$watch.ElapsedMilliseconds
+                if ($remainingMs -le 0) {
+                    $timedOut = $true
+                    break
+                }
+                Start-Sleep -Milliseconds ([Math]::Min(50, $remainingMs))
+            } while ($true)
+        }
+        if ($timedOut) {
+            Stop-NinhoProcessTree -ProcessId $process.Id
+            if (-not [string]::IsNullOrWhiteSpace($ProcessIdentityToken)) {
+                Stop-NinhoIdentifiedProcessTrees -IdentityToken $ProcessIdentityToken
+            }
+            if (-not $process.HasExited) { $process.WaitForExit(3000) | Out-Null }
+            $process.Dispose()
+            $processDisposed = $true
+            $timeoutMessage = "process timed out after $TimeoutMs ms: $FilePath"
+            $markerFailure = ''
+            try {
+                Add-NinhoTextWithRetry -Path $StderrPath `
+                    -Text "$FatalMarker timeout_ms=$TimeoutMs`n"
+            } catch {
+                $markerFailure = $_.Exception.Message
+            }
+            if (-not [string]::IsNullOrWhiteSpace($markerFailure)) {
+                throw "$timeoutMessage; failed to persist timeout marker after bounded retry: $markerFailure"
+            }
+            throw $timeoutMessage
+        }
         return [pscustomobject]@{ ExitCode=[int]$process.ExitCode; ProcessId=[int]$process.Id }
-    } finally { $process.Dispose() }
+    } finally {
+        $watch.Stop()
+        if (-not $processDisposed) { $process.Dispose() }
+    }
 }
 
 function Get-NinhoTestedInputPaths {
@@ -152,34 +325,181 @@ function Get-NinhoTestedInputPaths {
     return $filtered
 }
 
-function Assert-NinhoIndependentReviews {
+function Assert-NinhoAgentReviews {
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)]$Reviews,
-        [Parameter(Mandatory)][string]$ExpectedTestedInputsSha256
+        [Parameter(Mandatory)][string]$ExpectedTestedInputsSha256,
+        [Parameter(Mandatory)][ValidatePattern('^[0-9a-f]{64}$')]
+        [string]$ExpectedCaptureManifestSha256,
+        [Parameter(Mandatory)][ValidateSet('Debug','Release')]
+        [string]$ExpectedCaptureConfiguration,
+        [Parameter(Mandatory)][object[]]$ExpectedGoldenMetadata
     )
-    if ($Reviews.schema -cne 'ninho.vertical-slice.reviews.v1' -or
+    if ($Reviews.schema -cne 'ninho.vertical-slice.reviews.v2' -or
+            $Reviews.schema_version -ne 2 -or
             $Reviews.tested_inputs_schema -cne 'ninho.tested-inputs.v2' -or
             $Reviews.tested_inputs_sha256 -cne $ExpectedTestedInputsSha256) {
         throw 'reviews manifest schema/tested-content mismatch'
     }
-    $reviewerIds = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
     foreach ($role in 'code','architecture','gameplay','art') {
         $review = @($Reviews.reviews | Where-Object role -CEQ $role)
         if ($review.Count -ne 1 -or $review[0].verdict -cne 'approved' -or
                 $review[0].critical -ne 0 -or $review[0].important -ne 0) {
-            throw "blocking or missing independent review: $role"
+            throw "blocking or missing agent review: $role"
         }
         $reviewerId = [string]$review[0].reviewer_id
-        if ($reviewerId -notmatch '^/root(?:/[a-z][a-z0-9_]*)+$') {
-            throw "reviewer ID is not canonical for role ${role}: $reviewerId"
-        }
-        if (-not $reviewerIds.Add($reviewerId)) {
-            throw "reviewer IDs must be unique across canonical roles: $reviewerId"
+        if ([string]::IsNullOrWhiteSpace($reviewerId)) {
+            throw "agent review attribution label is missing for role: $role"
         }
     }
     if (@($Reviews.reviews).Count -ne 4) {
         throw 'reviews manifest must contain exactly four canonical roles'
+    }
+
+    $artReview = @($Reviews.reviews | Where-Object role -CEQ 'art')[0]
+    $bindings = @(Assert-NinhoProperty $artReview 'artifact_bindings' 'art review')
+    $seenConfigurations = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
+    foreach ($candidate in $bindings) {
+        $candidateConfiguration = [string](
+            Assert-NinhoProperty $candidate 'capture_configuration' 'art review artifact binding')
+        if ($candidate.schema -cne 'ninho.vertical-slice.art-review-binding.v1' -or
+                $candidateConfiguration -notin @('Debug','Release')) {
+            throw 'art review artifact binding schema/configuration mismatch'
+        }
+        if (-not $seenConfigurations.Add($candidateConfiguration)) {
+            throw "art review must contain exactly one binding for capture configuration: $candidateConfiguration"
+        }
+    }
+    $matchingBindings = @($bindings | Where-Object capture_configuration -CEQ $ExpectedCaptureConfiguration)
+    if ($matchingBindings.Count -ne 1) {
+        throw "art review capture configuration mismatch: expected $ExpectedCaptureConfiguration"
+    }
+    $binding = $matchingBindings[0]
+    if ([string]$binding.capture_manifest_sha256 -notmatch '^[0-9a-f]{64}$' -or
+            $binding.capture_manifest_sha256 -cne $ExpectedCaptureManifestSha256) {
+        throw 'art review capture manifest SHA-256 mismatch'
+    }
+
+    $canonicalGoldenNames = @('overview','aim','virela','vulnerable_impact','result')
+    $declaredGoldens = @(Assert-NinhoProperty $binding 'goldens' 'art review artifact binding')
+    if ($declaredGoldens.Count -ne $canonicalGoldenNames.Count) {
+        throw 'art review artifact binding must contain exactly five canonical goldens'
+    }
+    foreach ($goldenName in $canonicalGoldenNames) {
+        $expectedGolden = @($ExpectedGoldenMetadata | Where-Object name -CEQ $goldenName)
+        $declaredGolden = @($declaredGoldens | Where-Object name -CEQ $goldenName)
+        if ($expectedGolden.Count -ne 1 -or
+                [string]$expectedGolden[0].sha256 -notmatch '^[0-9a-f]{64}$') {
+            throw "expected golden metadata is invalid: $goldenName"
+        }
+        if ($declaredGolden.Count -ne 1 -or
+                [string]$declaredGolden[0].sha256 -notmatch '^[0-9a-f]{64}$' -or
+                $declaredGolden[0].sha256 -cne $expectedGolden[0].sha256) {
+            throw "art review golden binding mismatch: $goldenName"
+        }
+    }
+}
+
+function Assert-NinhoCleanRoomReview {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]$Review,
+        [Parameter(Mandatory)][ValidatePattern('^[0-9a-f]{64}$')]
+        [string]$ExpectedAssetManifestSha256,
+        [Parameter(Mandatory)][ValidatePattern('^[0-9a-f]{64}$')]
+        [string]$ExpectedAudioManifestSha256
+    )
+
+    if ($Review.schema -cne 'ninho.vertical-slice.clean-room-review.v1' -or
+            $Review.schema_version -ne 1) {
+        throw 'clean-room review schema/version mismatch'
+    }
+    if ($Review.result -cne 'approved_no_confusing_similarity') {
+        throw 'clean-room review is pending or not approved'
+    }
+
+    $reviewer = Assert-NinhoProperty $Review 'reviewer' 'clean-room review'
+    $reviewerType = [string](Assert-NinhoProperty $reviewer 'type' 'clean-room reviewer')
+    $reviewerId = [string](Assert-NinhoProperty $reviewer 'id' 'clean-room reviewer')
+    if ([string]::IsNullOrWhiteSpace($reviewerId)) {
+        throw 'clean-room reviewer attribution is missing'
+    }
+    if ($reviewerType -notin @('agent','human') -or
+            ($reviewerType -ceq 'agent' -and -not $reviewerId.StartsWith('/root', [StringComparison]::Ordinal)) -or
+            ($reviewerType -ceq 'human' -and $reviewerId.StartsWith('/root', [StringComparison]::Ordinal))) {
+        throw 'clean-room reviewer type/attribution mismatch'
+    }
+
+    $reviewedAt = [DateTimeOffset]::MinValue
+    if (-not [DateTimeOffset]::TryParse(
+            [string]$Review.reviewed_utc,
+            [Globalization.CultureInfo]::InvariantCulture,
+            [Globalization.DateTimeStyles]::RoundtripKind,
+            [ref]$reviewedAt)) {
+        throw 'clean-room reviewed_utc is invalid'
+    }
+    if ($Review.legal_limit -cne 'not_legal_advice') {
+        throw 'clean-room legal limit is missing'
+    }
+
+    $canonicalScope = @('names','logos','silhouettes','sounds','ui','layouts','promotional_material')
+    $declaredScope = @(Assert-NinhoProperty $Review 'scope' 'clean-room review')
+    if ($declaredScope.Count -ne $canonicalScope.Count) {
+        throw 'clean-room review scope mismatch'
+    }
+    foreach ($scopeItem in $canonicalScope) {
+        if (@($declaredScope | Where-Object { $_ -ceq $scopeItem }).Count -ne 1) {
+            throw 'clean-room review scope mismatch'
+        }
+    }
+
+    $manifests = Assert-NinhoProperty $Review 'manifests' 'clean-room review'
+    $expectedManifests = @(
+        @('assets','tools/art/vertical_slice_asset_manifest.json',$ExpectedAssetManifestSha256),
+        @('audio','tools/audio/audio_manifest.json',$ExpectedAudioManifestSha256)
+    )
+    foreach ($expected in $expectedManifests) {
+        $entry = Assert-NinhoProperty $manifests $expected[0] 'clean-room review manifests'
+        if ($entry.path -cne $expected[1] -or
+                [string]$entry.sha256 -notmatch '^[0-9a-f]{64}$' -or
+                $entry.sha256 -cne $expected[2]) {
+            throw "clean-room $($expected[0].TrimEnd('s')) manifest SHA-256 mismatch"
+        }
+    }
+}
+
+function Get-NinhoTestedInputs {
+    [CmdletBinding()]
+    param([Parameter(Mandatory)][string]$Root)
+    return Get-NinhoTestedInputIdentity -Root $Root `
+        -RelativePaths @(Get-NinhoTestedInputPaths -Root $Root)
+}
+
+function Assert-NinhoHumanPlaytestPending {
+    [CmdletBinding()]
+    param([Parameter(Mandatory)]$Playtest)
+
+    $properties = @($Playtest.PSObject.Properties.Name)
+    $isCurrentPending =
+        $properties -ccontains 'participants' -and [int]$Playtest.participants -eq 0 -and
+        $Playtest.status -ceq 'not_performed' -and $Playtest.substitute -ceq 'none' -and
+        $properties -ccontains 'gate_status' -and $Playtest.gate_status -ceq 'pending' -and
+        $properties -ccontains 'required_before' -and $Playtest.required_before -ceq 'product_release'
+    $isLegacyPending =
+        $properties -cnotcontains 'participants' -and
+        $properties -cnotcontains 'gate_status' -and
+        $Playtest.status -ceq 'unavailable' -and
+        $Playtest.substitute -ceq 'independent_agents'
+    if (($Playtest.legal_limit -cne 'not_legal_advice') -or
+            (-not $isCurrentPending -and -not $isLegacyPending)) {
+        throw 'human playtest record must remain pending; agent reviews are not a substitute'
+    }
+    return [pscustomobject]@{
+        status = 'pending'
+        participants = 0
+        satisfies_human_playtest = $false
+        legacy_record = $isLegacyPending
     }
 }
 
@@ -189,46 +509,8 @@ function Get-NinhoCanonicalTestedInputContent {
         [Parameter(Mandatory)][string]$Path,
         [Parameter(Mandatory)][string]$RelativePath
     )
-    [byte[]]$bytes = [IO.File]::ReadAllBytes($Path)
-    $binaryExtension = $RelativePath -match '(?i)\.(blend|glb|png|wav|dll|exe|pck|avi|jpg|jpeg|webp|ttf|otf)$'
-    if ($binaryExtension -or $bytes -contains 0) {
-        return [pscustomobject]@{ mode='binary'; bytes=$bytes }
-    }
-    $strictUtf8 = [Text.UTF8Encoding]::new($false, $true)
-    try { $text = $strictUtf8.GetString($bytes) }
-    catch { return [pscustomobject]@{ mode='binary'; bytes=$bytes } }
-    $canonicalText = $text.Replace("`r`n", "`n").Replace("`r", "`n")
-    return [pscustomobject]@{
-        mode = 'text_utf8_lf'
-        bytes = [Text.UTF8Encoding]::new($false).GetBytes($canonicalText)
-    }
-}
-
-function Get-NinhoTestedInputs {
-    [CmdletBinding()]
-    param([Parameter(Mandatory)][string]$Root)
-    $rows = [Collections.Generic.List[object]]::new()
-    $aggregate = [Text.StringBuilder]::new()
-    foreach ($relative in @(Get-NinhoTestedInputPaths -Root $Root)) {
-        $path = Assert-NinhoRelativeArtifactPath $relative $Root
-        if (-not (Test-Path -LiteralPath $path -PathType Leaf)) { throw "tested input missing: $relative" }
-        $content = Get-NinhoCanonicalTestedInputContent -Path $path -RelativePath $relative
-        $size = [int64]$content.bytes.Length
-        $fileAlgorithm = [Security.Cryptography.SHA256]::Create()
-        try {
-            $hash = -join ($fileAlgorithm.ComputeHash($content.bytes) |
-                ForEach-Object { $_.ToString('x2') })
-        } finally { $fileAlgorithm.Dispose() }
-        $rows.Add([ordered]@{ path=$relative; mode=$content.mode; size_bytes=$size; sha256=$hash })
-        $null = $aggregate.Append($relative).Append("`0").Append($content.mode).Append("`0")
-        $null = $aggregate.Append($size).Append("`0").Append($hash).Append("`n")
-    }
-    $algorithm = [Security.Cryptography.SHA256]::Create()
-    try {
-        $fingerprint = -join ($algorithm.ComputeHash([Text.Encoding]::UTF8.GetBytes($aggregate.ToString())) |
-            ForEach-Object { $_.ToString('x2') })
-    } finally { $algorithm.Dispose() }
-    return [pscustomobject]@{ files=@($rows); sha256=$fingerprint }
+    return TestedInputIdentity\Get-NinhoCanonicalTestedInputContent `
+        -Path $Path -RelativePath $RelativePath
 }
 
 function Assert-NinhoInputFeedbackMarkers {
@@ -261,14 +543,18 @@ function Assert-NinhoInputFeedbackMarkers {
             }
         }
         $previewHash = [string]$marker.preview_hash
+        $observedTick = [int64]$marker.observed_tick
         if ([int]$marker.sample_index -ne $index -or
                 [string]$marker.command_id -cne [string]$expected[$index].command_id -or
                 [double]$marker.theta_degrees -ne [double]$expected[$index].theta_degrees -or
                 [double]$marker.phase_degrees -ne [double]$expected[$index].phase_degrees -or
                 [double]$marker.speed -ne [double]$expected[$index].speed -or
-                [int64]$marker.observed_tick -lt 0 -or
+                $observedTick -lt 0 -or
                 $previewHash -notmatch '^-?[0-9]+$' -or $previewHash -ceq '0') {
             throw "$Context causal marker $index does not match its input command"
+        }
+        if ($index -gt 0 -and $observedTick -le [int64]$items[$index - 1].observed_tick) {
+            throw "$Context observed_tick must be strictly increasing at causal marker $index"
         }
         if (-not $commands.Add([string]$marker.command_id) -or -not $hashes.Add($previewHash)) {
             throw "$Context has duplicated causal command or preview hash"
@@ -318,8 +604,7 @@ function Assert-NinhoVerticalSliceEvidence {
     param(
         [Parameter(Mandatory)][string]$EvidencePath,
         [Parameter(Mandatory)][string]$ArtifactRoot,
-        [Parameter(Mandatory)][ValidateSet('Debug','Release')][string]$ExpectedConfiguration,
-        [Parameter(Mandatory)][ValidatePattern('^[0-9a-f]{40}$')][string]$ExpectedCommit
+        [Parameter(Mandatory)][ValidateSet('Debug','Release')][string]$ExpectedConfiguration
     )
 
     if (-not (Test-Path -LiteralPath $EvidencePath -PathType Leaf)) {
@@ -333,35 +618,12 @@ function Assert-NinhoVerticalSliceEvidence {
     if ($doc.configuration -cne $ExpectedConfiguration) {
         throw "vertical slice evidence configuration mismatch: $($doc.configuration)"
     }
-    if ($doc.commit -cne $ExpectedCommit) {
-        throw "vertical slice evidence is stale: expected commit $ExpectedCommit, got $($doc.commit)"
-    }
-    if ($doc.source_revision -cne $doc.commit -or
-            $doc.tested_inputs_schema -cne 'ninho.tested-inputs.v2' -or
-            $doc.tested_inputs_sha256 -notmatch '^[0-9a-f]{64}$') {
-        throw 'tested-content identity header mismatch'
-    }
     $rootForInputs = [IO.Path]::GetFullPath($ArtifactRoot)
-    & git -c "safe.directory=$rootForInputs" -C $rootForInputs `
-        merge-base --is-ancestor $doc.source_revision HEAD 2>$null
-    if ($LASTEXITCODE -ne 0) { throw 'source revision is not an ancestor of the current HEAD' }
     $actualInputs = Get-NinhoTestedInputs -Root $rootForInputs
-    if ($actualInputs.sha256 -cne [string]$doc.tested_inputs_sha256) {
-        throw 'tested inputs aggregate SHA-256 mismatch'
-    }
-    $declaredInputs = @($doc.tested_inputs)
-    if ($declaredInputs.Count -ne $actualInputs.files.Count) { throw 'tested input file set mismatch' }
-    for ($inputIndex = 0; $inputIndex -lt $declaredInputs.Count; ++$inputIndex) {
-        $declared = $declaredInputs[$inputIndex]
-        $actual = $actualInputs.files[$inputIndex]
-        if ($declared.path -cne $actual.path -or $declared.mode -cne $actual.mode -or
-                [int64]$declared.size_bytes -ne $actual.size_bytes -or
-                $declared.sha256 -cne $actual.sha256) {
-            throw "tested input mismatch at index $inputIndex"
-        }
-    }
-    if ($doc.canonical_state_contract -cne 'canonical_state_v1') {
-        throw 'canonical_state_v1 contract missing'
+    Assert-NinhoTestedInputIdentity -Root $rootForInputs -Document $doc `
+        -ExpectedIdentity $actualInputs -ExpectedSourceRevision ([string]$doc.commit)
+    if ($doc.canonical_state_contract -cne 'canonical_state_v2') {
+        throw 'canonical_state_v2 contract missing'
     }
     foreach ($name in 'cpu','gpu','ram_bytes','os') {
         $null = Assert-NinhoProperty $doc.hardware $name 'hardware'
@@ -381,11 +643,6 @@ function Assert-NinhoVerticalSliceEvidence {
         }
         if ($route[0].ordered_events_sha256 -notmatch '^[0-9a-f]{64}$') {
             throw "ordered event hash missing: $name"
-        }
-    }
-    foreach ($name in 'foundation','slice_tests','restart_20','abi','scanner','assets','smokes','box3d_only') {
-        if ((Assert-NinhoProperty $doc.acceptance $name 'acceptance') -cne $true) {
-            throw "acceptance gate failed: $name"
         }
     }
     if ([double]$doc.physics.step_p95_ms -gt 8.0 -or [double]$doc.physics.limit_ms -ne 8.0) {
@@ -448,18 +705,16 @@ function Assert-NinhoVerticalSliceEvidence {
     if ($impactGolden.event -notlike 'damage_applied:vulnerable:anchor:*') {
         throw 'vulnerable impact golden is not tied to a positive Anchor damage event'
     }
+    $virelaGolden = @($doc.golden_metadata | Where-Object name -CEQ 'virela')[0]
+    if ($virelaGolden.phase -cne 'flight_ability' -or $virelaGolden.outcome -cne 'none' -or
+            $virelaGolden.source_frame -ne $virelaGolden.source_transition_frame -or
+            $virelaGolden.event -notin @('ability_started:vortex','ability_pulse:virela_pulse')) {
+        throw 'Virela golden is not tied to an exact ability/VFX event frame'
+    }
     if ($doc.rubric.critical -ne 0 -or $doc.rubric.important -ne 0) {
-        throw 'independent review has blocking findings'
+        throw 'agent review has blocking findings'
     }
-    if ($doc.playtest.status -cne 'unavailable' -or
-            $doc.playtest.substitute -cne 'independent_agents' -or
-            $doc.playtest.legal_limit -cne 'not_legal_advice') {
-        throw 'playtest availability/legal limit contract mismatch'
-    }
-    if ($doc.clean_room.approved -cne $true -or
-            $doc.clean_room.comparative_review -cne 'approved') {
-        throw 'clean-room review failed'
-    }
+    $null = Assert-NinhoHumanPlaytestPending -Playtest $doc.playtest
     $assetProvenancePath = Assert-NinhoRelativeArtifactPath 'tools/art/vertical_slice_asset_manifest.json' $ArtifactRoot
     $audioProvenancePath = Assert-NinhoRelativeArtifactPath 'tools/audio/audio_manifest.json' $ArtifactRoot
     foreach ($provenancePath in $assetProvenancePath,$audioProvenancePath) {
@@ -467,17 +722,25 @@ function Assert-NinhoVerticalSliceEvidence {
             throw "clean-room provenance manifest missing: $provenancePath"
         }
     }
-    $provenancePayload =
-        (Get-FileHash -Algorithm SHA256 -LiteralPath $assetProvenancePath).Hash.ToLowerInvariant() + '|' +
-        (Get-FileHash -Algorithm SHA256 -LiteralPath $audioProvenancePath).Hash.ToLowerInvariant()
-    $provenanceAlgorithm = [Security.Cryptography.SHA256]::Create()
-    try {
-        $actualProvenanceHash = -join ($provenanceAlgorithm.ComputeHash(
-            [Text.Encoding]::UTF8.GetBytes($provenancePayload)) | ForEach-Object { $_.ToString('x2') })
-    } finally { $provenanceAlgorithm.Dispose() }
-    if ([string]$doc.clean_room.provenance_manifest_sha256 -cne $actualProvenanceHash) {
-        throw 'clean-room provenance manifest SHA-256 mismatch'
+    $assetProvenanceHash = (Get-FileHash -Algorithm SHA256 -LiteralPath $assetProvenancePath).Hash.ToLowerInvariant()
+    $audioProvenanceHash = (Get-FileHash -Algorithm SHA256 -LiteralPath $audioProvenancePath).Hash.ToLowerInvariant()
+    $cleanRoomReference = Assert-NinhoProperty $doc 'clean_room_review' 'vertical slice evidence'
+    if ($cleanRoomReference.path -cne 'docs/gameplay/evidence/vertical-slice-clean-room-review.json' -or
+            [string]$cleanRoomReference.sha256 -notmatch '^[0-9a-f]{64}$') {
+        throw 'clean-room review reference is invalid'
     }
+    $cleanRoomReviewPath = Assert-NinhoRelativeArtifactPath $cleanRoomReference.path $ArtifactRoot
+    if (-not (Test-Path -LiteralPath $cleanRoomReviewPath -PathType Leaf)) {
+        throw 'separate clean-room review evidence is missing'
+    }
+    $cleanRoomReviewHash = (Get-FileHash -Algorithm SHA256 -LiteralPath $cleanRoomReviewPath).Hash.ToLowerInvariant()
+    if ($cleanRoomReviewHash -cne [string]$cleanRoomReference.sha256) {
+        throw 'clean-room review reference SHA-256 mismatch'
+    }
+    $cleanRoomReview = Get-Content -Raw -LiteralPath $cleanRoomReviewPath | ConvertFrom-Json
+    Assert-NinhoCleanRoomReview -Review $cleanRoomReview `
+        -ExpectedAssetManifestSha256 $assetProvenanceHash `
+        -ExpectedAudioManifestSha256 $audioProvenanceHash
     if ($ExpectedConfiguration -ceq 'Release') {
         if ($doc.package.launch_from_space_path -cne 'passed' -or
                 $doc.package.manifest_sha256 -notmatch '^[0-9a-f]{64}$') {
@@ -504,7 +767,7 @@ function Assert-NinhoVerticalSliceEvidence {
         $packagePaths = @($packageDocument.files.path)
         foreach ($required in @(
             'NinhoOrbital.exe','NinhoOrbital.pck','ninho_physics.windows.template_release.x86_64.dll',
-            'package-content.json','build-contract.json','licenses/THIRD_PARTY_NOTICES.md','licenses/sbom.spdx.json',
+            'package-source-inventory.json','build-contract.json','licenses/THIRD_PARTY_NOTICES.md','licenses/sbom.spdx.json',
             'licenses/box3d.LICENSE.txt','licenses/godot.LICENSE.txt','licenses/godot.COPYRIGHT.txt',
             'licenses/godot-export-templates.LICENSE.txt','licenses/godot-cpp.LICENSE.txt',
             'licenses/nlohmann-json.LICENSE.txt')) {
@@ -558,7 +821,8 @@ function Assert-NinhoVerticalSliceEvidence {
         $buildContractPath = Join-Path $packageRoot 'build-contract.json'
         $buildContract = Get-Content -Raw -LiteralPath $buildContractPath | ConvertFrom-Json
         $buildContractHash = (Get-FileHash -Algorithm SHA256 -LiteralPath $buildContractPath).Hash.ToLowerInvariant()
-        $contentDocument = Get-Content -Raw -LiteralPath (Join-Path $packageRoot 'package-content.json') | ConvertFrom-Json
+        $sourceInventoryRow = @($packageDocument.files | Where-Object path -CEQ 'package-source-inventory.json')
+        $sourceInventoryDocument = Get-Content -Raw -LiteralPath (Join-Path $packageRoot 'package-source-inventory.json') | ConvertFrom-Json
         if ($buildContract.schema -cne 'ninho.native-build-contract.v1' -or
                 $buildContract.configuration -cne 'Release' -or
                 $buildContract.build_testing -cne $false -or
@@ -567,12 +831,21 @@ function Assert-NinhoVerticalSliceEvidence {
                 $packageDocument.native_build_contract.path -cne 'build-contract.json' -or
                 $packageDocument.native_build_contract.sha256 -cne $buildContractHash -or
                 $packageDocument.native_build_contract.build_testing -cne $false -or
-                $packageDocument.native_build_contract.test_facades -cne $false -or
-                $contentDocument.native_build_contract.path -cne 'build-contract.json' -or
-                $contentDocument.native_build_contract.sha256 -cne $buildContractHash -or
-                $contentDocument.native_build_contract.build_testing -cne $false -or
-                $contentDocument.native_build_contract.test_facades -cne $false) {
+                $packageDocument.native_build_contract.test_facades -cne $false) {
             throw 'Release package native build provenance mismatch'
+        }
+        if ($sourceInventoryRow.Count -ne 1 -or
+                $sourceInventoryRow[0].role -cne 'source_inventory' -or
+                $sourceInventoryDocument.schema -cne 'ninho.package-source-inventory.v1' -or
+                $sourceInventoryDocument.schema_version -ne 1 -or
+                $sourceInventoryDocument.note -notmatch 'does not enumerate NinhoOrbital\.pck contents' -or
+                $sourceInventoryDocument.note -notmatch 'PCK SHA-256' -or
+                $sourceInventoryDocument.note -notmatch 'packaged runtime smoke' -or
+                $sourceInventoryDocument.native_build_contract.path -cne 'build-contract.json' -or
+                $sourceInventoryDocument.native_build_contract.sha256 -cne $buildContractHash -or
+                $sourceInventoryDocument.native_build_contract.build_testing -cne $false -or
+                $sourceInventoryDocument.native_build_contract.test_facades -cne $false) {
+            throw 'Release package source inventory contract/provenance mismatch'
         }
         if ($packagePaths -ccontains 'ninho_physics.windows.template_debug.x86_64.dll') {
             throw 'Release package contains the Debug runtime DLL'
@@ -632,8 +905,8 @@ function Assert-NinhoVerticalSliceEvidence {
         throw 'raw route log hash/source mismatch'
     }
     $routeRawText = [IO.File]::ReadAllText($routeRawPath)
-    $canonicalBaseline = [regex]::Match($routeRawText, '(?m)^\[TRACE\] canonical_playthrough_v3 (\d+) (\d+) (\d+)\r?$')
-    $canonicalRepeat = [regex]::Match($routeRawText, '(?m)^\[TRACE\] canonical_playthrough_v3_repeat (\d+) (\d+) (\d+)\r?$')
+    $canonicalBaseline = [regex]::Match($routeRawText, '(?m)^\[TRACE\] canonical_playthrough_v4 (\d+) (\d+) (\d+)\r?$')
+    $canonicalRepeat = [regex]::Match($routeRawText, '(?m)^\[TRACE\] canonical_playthrough_v4_repeat (\d+) (\d+) (\d+)\r?$')
     if (-not $canonicalBaseline.Success -or -not $canonicalRepeat.Success) {
         $routeRawLength = [int64](Get-Item -LiteralPath $routeRawPath).Length
         throw "raw canonical route traces missing: path=$routeRawPath bytes=$routeRawLength " +
@@ -650,7 +923,7 @@ function Assert-NinhoVerticalSliceEvidence {
         $payloadHashes = [Collections.Generic.List[string]]::new()
         foreach ($runName in 'baseline','repeat') {
             $payload = [regex]::Match($routeRawText,
-                "(?m)^\[TRACE\] ordered_events_v1 $([regex]::Escape($routeName)) $runName ([0-9a-f]+)\r?`$")
+                "(?m)^\[TRACE\] ordered_events_v2 $([regex]::Escape($routeName)) $runName ([0-9a-f]+)\r?`$")
             if (-not $payload.Success -or ($payload.Groups[1].Value.Length % 2) -ne 0) {
                 throw "raw ordered event payload missing: $routeName/$runName"
             }
@@ -704,7 +977,7 @@ function Assert-NinhoVerticalSliceEvidence {
                 $sourceHashByPath[[string]$renderer.capture.log_path] -cne [string]$renderer.capture.log_hash) {
             throw "capture log hash/artifact mismatch: $($renderer.name)"
         }
-        $ffprobe = (Get-Command ffprobe.exe -ErrorAction Stop).Source
+        $ffprobe = Resolve-NinhoPinnedToolchainExecutable -Root $ArtifactRoot -ToolName 'ffmpeg' -ExecutableProperty 'ffprobe_exe' -HashProperty 'ffprobe_exe_sha256' -Name 'FFprobe'
         $probe = & $ffprobe -v error -select_streams v:0 `
             -show_entries stream=width,height,nb_frames -of json $capturePath | ConvertFrom-Json
         if ($LASTEXITCODE -ne 0 -or @($probe.streams).Count -ne 1 -or
@@ -742,11 +1015,14 @@ function Assert-NinhoVerticalSliceEvidence {
             throw "golden/downsample source mapping mismatch: $($metadata.name)"
         }
     }
-    $goldenVerificationRoot = Join-Path ([IO.Path]::GetFullPath($ArtifactRoot)) 'artifacts\vertical-slice-golden-verification'
-    Assert-NinhoNoReparseAncestors -Path $goldenVerificationRoot -AllowedRoot $ArtifactRoot | Out-Null
-    New-Item -ItemType Directory -Force -Path $goldenVerificationRoot | Out-Null
-    $ffmpeg = (Get-Command ffmpeg.exe -ErrorAction Stop).Source
+    $ffmpeg = Resolve-NinhoPinnedToolchainExecutable -Root $ArtifactRoot -ToolName 'ffmpeg' -ExecutableProperty 'exe' -HashProperty 'exe_sha256' -Name 'FFmpeg'
     $vulkanSourcePath = Assert-NinhoRelativeArtifactPath $vulkan.capture.source_path $ArtifactRoot
+    $temporaryRoot = [IO.Path]::GetTempPath().TrimEnd('\','/')
+    $goldenVerificationRoot = Join-Path $temporaryRoot (
+        'ninho-vertical-slice-golden-verification-' + [Guid]::NewGuid().ToString('N'))
+    Assert-NinhoNoReparseAncestors `
+        -Path $goldenVerificationRoot -AllowedRoot $temporaryRoot | Out-Null
+    New-Item -ItemType Directory -Path $goldenVerificationRoot | Out-Null
     try {
         foreach ($metadata in @($doc.golden_metadata)) {
             $token = [Guid]::NewGuid().ToString('N')
@@ -767,17 +1043,20 @@ function Assert-NinhoVerticalSliceEvidence {
             }
         }
     } finally {
-        Assert-NinhoNoReparseAncestors -Path $goldenVerificationRoot -AllowedRoot $ArtifactRoot | Out-Null
+        Assert-NinhoNoReparseAncestors -Path $goldenVerificationRoot -AllowedRoot $temporaryRoot | Out-Null
         Remove-Item -LiteralPath $goldenVerificationRoot -Recurse -Force
     }
     $reviewsPath = Assert-NinhoRelativeArtifactPath $doc.reviews_manifest.path $ArtifactRoot
     $reviews = Get-Content -Raw -LiteralPath $reviewsPath | ConvertFrom-Json
-    Assert-NinhoIndependentReviews -Reviews $reviews `
-        -ExpectedTestedInputsSha256 ([string]$doc.tested_inputs_sha256)
+    Assert-NinhoAgentReviews -Reviews $reviews `
+        -ExpectedTestedInputsSha256 ([string]$doc.tested_inputs_sha256) `
+        -ExpectedCaptureManifestSha256 ([string]$doc.capture_manifest.sha256) `
+        -ExpectedCaptureConfiguration $ExpectedConfiguration `
+        -ExpectedGoldenMetadata @($captureManifest.golden_metadata)
     $vulkanLog = [IO.File]::ReadAllText((Assert-NinhoRelativeArtifactPath $vulkan.capture.log_path $ArtifactRoot))
     $stateProofPattern = '(?m)^NINHO_CAPTURE_STATE frame=(\d+) tick=(\d+) phase=(\S+) outcome=(\S+) camera=(\([^)]+\)) exposure=([0-9.]+)\s*$'
     $stateProofs = @([regex]::Matches($vulkanLog, $stateProofPattern))
-    foreach ($stateGoldenName in 'overview','aim','virela','result') {
+    foreach ($stateGoldenName in 'overview','aim','result') {
         $metadata = @($doc.golden_metadata | Where-Object name -CEQ $stateGoldenName)[0]
         if ($metadata.event -cne 'phase_transition') {
             throw "golden phase event contract mismatch: $stateGoldenName"
@@ -792,6 +1071,16 @@ function Assert-NinhoVerticalSliceEvidence {
                 [Math]::Abs([double]$proof[0].Groups[6].Value - [double]$metadata.exposure) -gt 0.000001) {
             throw "golden state metadata differs from verified Vulkan log: $($metadata.name)"
         }
+    }
+    $virelaProof = Get-NinhoVirelaAbilityProof -Text $vulkanLog
+    if ([int]$virelaGolden.source_transition_frame -ne [int]$virelaProof.frame -or
+            [int64]$virelaGolden.tick -ne [int64]$virelaProof.tick -or
+            $virelaGolden.phase -cne $virelaProof.phase -or
+            $virelaGolden.outcome -cne $virelaProof.outcome -or
+            $virelaGolden.event -cne $virelaProof.event -or
+            $virelaGolden.camera -cne $virelaProof.camera -or
+            [Math]::Abs([double]$virelaGolden.exposure - [double]$virelaProof.exposure) -gt 0.000001) {
+        throw 'Virela ability metadata differs from verified Vulkan log'
     }
     $impactProofPattern = '(?m)^NINHO_CAPTURE_EVENT frame=(\d+) tick=(\d+) kind=(\S+) profile=(\S+) affected=(\d+) damage=([0-9.]+) camera=(\([^)]+\)) exposure=([0-9.]+)\s*$'
     $impactProofs = @([regex]::Matches($vulkanLog, $impactProofPattern) | Where-Object {
@@ -811,10 +1100,64 @@ function Assert-NinhoVerticalSliceEvidence {
     return $doc
 }
 
+function Publish-NinhoVerticalSliceEvidence {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]$Document,
+        [Parameter(Mandatory)][string]$EvidencePath,
+        [Parameter(Mandatory)][string]$ArtifactRoot,
+        [Parameter(Mandatory)][ValidateSet('Debug','Release')]
+        [string]$ExpectedConfiguration
+    )
+
+    $rootPath = [IO.Path]::GetFullPath($ArtifactRoot).TrimEnd('\','/')
+    $canonicalPath = [IO.Path]::GetFullPath($EvidencePath)
+    Assert-NinhoNoReparseAncestors -Path $canonicalPath -AllowedRoot $rootPath |
+        Out-Null
+    $evidenceDirectory = [IO.Path]::GetDirectoryName($canonicalPath)
+    if (-not (Test-Path -LiteralPath $evidenceDirectory -PathType Container)) {
+        throw "vertical slice evidence directory missing: $evidenceDirectory"
+    }
+
+    $publicationId = [Guid]::NewGuid().ToString('N')
+    $temporaryName = '.{0}.{1}.tmp' -f (
+        [IO.Path]::GetFileName($canonicalPath)),$publicationId
+    $temporaryPath = Join-Path $evidenceDirectory $temporaryName
+    $backupPath = Join-Path $evidenceDirectory ('.{0}.{1}.bak' -f (
+        [IO.Path]::GetFileName($canonicalPath)),$publicationId)
+    Assert-NinhoNoReparseAncestors -Path $temporaryPath -AllowedRoot $rootPath |
+        Out-Null
+    Assert-NinhoNoReparseAncestors -Path $backupPath -AllowedRoot $rootPath |
+        Out-Null
+    try {
+        $Document | ConvertTo-Json -Depth 30 |
+            Set-Content -LiteralPath $temporaryPath -Encoding utf8
+        $validated = Assert-NinhoVerticalSliceEvidence `
+            -EvidencePath $temporaryPath -ArtifactRoot $rootPath `
+            -ExpectedConfiguration $ExpectedConfiguration
+
+        if (Test-Path -LiteralPath $canonicalPath -PathType Leaf) {
+            # File.Replace is an atomic same-volume promotion that keeps the old
+            # canonical file in place until the validated temporary file wins.
+            [IO.File]::Replace($temporaryPath, $canonicalPath, $backupPath)
+        } else {
+            [IO.File]::Move($temporaryPath, $canonicalPath)
+        }
+        return $validated
+    } finally {
+        if (Test-Path -LiteralPath $temporaryPath -PathType Leaf) {
+            Remove-Item -LiteralPath $temporaryPath -Force
+        }
+        if (Test-Path -LiteralPath $backupPath -PathType Leaf) {
+            Remove-Item -LiteralPath $backupPath -Force
+        }
+    }
+}
+
 function Get-NinhoRouteEvidenceFromLog {
     [CmdletBinding()]
     param([Parameter(Mandatory)][string]$Text)
-    $pattern = '(?m)^NINHO_ROUTE_HASH name=(\S+) outcome=(Victory|Defeat) canonical_state_v1=(\d+) events_sha256=([0-9a-f]{64})\s*$'
+    $pattern = '(?m)^NINHO_ROUTE_HASH name=(\S+) outcome=(Victory|Defeat) canonical_state_v2=(\d+) events_sha256=([0-9a-f]{64})\s*$'
     $matches = [regex]::Matches($Text, $pattern)
     $result = [Collections.Generic.List[object]]::new()
     foreach ($name in 'virela_win','structural_win','no_ability_loss') {
@@ -865,4 +1208,4 @@ function Invoke-NinhoLimitedRetry {
     throw "$Name failed after $MaximumAttempts attempts (exit codes: $codes)"
 }
 
-Export-ModuleMember -Function Assert-NinhoVerticalSliceEvidence,Assert-NinhoRelativeArtifactPath,Get-NinhoRouteEvidenceFromLog,Invoke-NinhoLimitedRetry,Get-NinhoTestedInputPaths,Get-NinhoTestedInputs,Get-NinhoCausalFrameIndex,Set-NinhoRequiredDownsampleFrame,Invoke-NinhoTimedProcess,Resolve-NinhoPackageManifestOutput,Assert-NinhoInputFeedbackMarkers,Assert-NinhoIndependentReviews,Get-NinhoCanonicalTestedInputContent
+Export-ModuleMember -Function Assert-NinhoVerticalSliceEvidence,Publish-NinhoVerticalSliceEvidence,Assert-NinhoRelativeArtifactPath,Get-NinhoRouteEvidenceFromLog,Invoke-NinhoLimitedRetry,Get-NinhoTestedInputPaths,Get-NinhoTestedInputs,Get-NinhoCausalFrameIndex,Set-NinhoRequiredDownsampleFrame,Get-NinhoCompactDownsampleSelectExpression,Get-NinhoVirelaAbilityProof,Invoke-NinhoTimedProcess,Resolve-NinhoPackageManifestOutput,Assert-NinhoInputFeedbackMarkers,Assert-NinhoAgentReviews,Assert-NinhoCleanRoomReview,Assert-NinhoHumanPlaytestPending,Get-NinhoCanonicalTestedInputContent

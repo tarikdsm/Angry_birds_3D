@@ -10,6 +10,10 @@ $root = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 $artifactsRoot = Join-Path $root 'artifacts'
 $gameRoot = Join-Path $root 'game'
 $lockPath = Join-Path $PSScriptRoot 'toolchain.lock.json'
+$sourceInventoryNote = "This inventory records working-tree source inputs supplied to the Godot export; it does not enumerate NinhoOrbital.pck contents. The package manifest's PCK SHA-256 validates the pack bytes, and packaged runtime smoke validates required resource loading."
+Import-Module (Join-Path $PSScriptRoot 'TestedInputIdentity.psm1') -Force
+Import-Module (Join-Path $PSScriptRoot 'CapturedProcess.psm1') -Force
+Import-Module (Join-Path $PSScriptRoot 'ToolchainIntegrity.psm1') -Force
 Import-Module (Join-Path $PSScriptRoot 'SafePath.psm1') -Force
 
 if (-not ('Ninho.NativeProcessExit' -as [type])) {
@@ -52,7 +56,7 @@ function Get-PackageRole {
     param([string]$RelativePath)
     if ($RelativePath -ceq 'NinhoOrbital.exe' -or $RelativePath -ceq 'NinhoOrbital.console.exe') { return 'game_executable' }
     if ($RelativePath -ceq 'NinhoOrbital.pck') { return 'game_data' }
-    if ($RelativePath -ceq 'package-content.json') { return 'content_inventory' }
+    if ($RelativePath -ceq 'package-source-inventory.json') { return 'source_inventory' }
     if ($RelativePath -ceq 'build-contract.json') { return 'build_provenance' }
     if ($RelativePath -ceq 'ninho_physics.windows.template_release.x86_64.dll') { return 'native_extension' }
     if ($RelativePath -ceq 'licenses/sbom.spdx.json') { return 'sbom' }
@@ -74,6 +78,21 @@ function Test-ManifestRelativePath {
         }
     }
     return $true
+}
+
+function Assert-NinhoCanonicalPackageText {
+    param(
+        [Parameter(Mandatory)][string]$Path,
+        [Parameter(Mandatory)][string]$RelativePath
+    )
+    [byte[]]$actualBytes = [IO.File]::ReadAllBytes($Path)
+    $canonical = Get-NinhoCanonicalTestedInputContent `
+        -Path $Path -RelativePath $RelativePath
+    if ($canonical.mode -cne 'text_utf8_lf' -or
+            [Convert]::ToBase64String($actualBytes) -cne
+            [Convert]::ToBase64String($canonical.bytes)) {
+        throw "Package legal text is not canonical UTF-8 LF: $RelativePath"
+    }
 }
 
 function Assert-WindowsPackage {
@@ -120,12 +139,15 @@ function Assert-WindowsPackage {
             $manifest.native_build_contract.test_facades -cne $false) {
         throw 'Package native build contract mismatch'
     }
-    $content = Get-Content -Raw -LiteralPath (Join-Path $PackageRoot 'package-content.json') | ConvertFrom-Json
-    if ($content.native_build_contract.path -cne 'build-contract.json' -or
-            $content.native_build_contract.sha256 -cne $buildContractHash -or
-            $content.native_build_contract.build_testing -cne $false -or
-            $content.native_build_contract.test_facades -cne $false) {
-        throw 'Package content native build provenance mismatch'
+    $sourceInventory = Get-Content -Raw -LiteralPath (Join-Path $PackageRoot 'package-source-inventory.json') | ConvertFrom-Json
+    if ($sourceInventory.schema -cne 'ninho.package-source-inventory.v1' -or
+            $sourceInventory.schema_version -ne 1 -or
+            $sourceInventory.note -cne $sourceInventoryNote -or
+            $sourceInventory.native_build_contract.path -cne 'build-contract.json' -or
+            $sourceInventory.native_build_contract.sha256 -cne $buildContractHash -or
+            $sourceInventory.native_build_contract.build_testing -cne $false -or
+            $sourceInventory.native_build_contract.test_facades -cne $false) {
+        throw 'Package source inventory contract/provenance mismatch'
     }
 
     $manifestPaths = [Collections.Generic.List[string]]::new()
@@ -150,6 +172,9 @@ function Assert-WindowsPackage {
         }
         if ((Get-PackageRole $relative) -cne [string]$entry.role) {
             throw "Package role mismatch: $relative"
+        }
+        if ([string]$entry.role -cin @('license', 'notice', 'sbom')) {
+            Assert-NinhoCanonicalPackageText -Path $file -RelativePath $relative
         }
         $manifestPaths.Add($relative)
     }
@@ -180,7 +205,7 @@ function Assert-WindowsPackage {
         'NinhoOrbital.exe',
         'NinhoOrbital.pck',
         'ninho_physics.windows.template_release.x86_64.dll',
-        'package-content.json',
+        'package-source-inventory.json',
         'build-contract.json',
         'licenses/THIRD_PARTY_NOTICES.md',
         'licenses/sbom.spdx.json',
@@ -202,19 +227,16 @@ if ($VerifyOnly) {
 
 Write-Verbose 'Building the Release GDExtension'
 $quotedBuildScript = '"' + (Join-Path $PSScriptRoot 'build.ps1') + '"'
-$buildProcess = $null
-try {
-    $buildProcess = Start-Process -FilePath 'powershell' -ArgumentList @(
+Invoke-NinhoCapturedProcess `
+    -FilePath 'powershell' `
+    -ArgumentList @(
         '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', $quotedBuildScript,
         '-Configuration', 'Release', '-WithGodot', '-ProductionPackage'
-    ) -Wait -PassThru -WindowStyle Hidden
-    $buildExitCode = $buildProcess.ExitCode
-} finally {
-    if ($null -ne $buildProcess) { $buildProcess.Dispose() }
-}
-if ($buildExitCode -ne 0) {
-    throw "Release GDExtension build failed with exit code $buildExitCode"
-}
+    ) `
+    -LogDirectory $artifactsRoot `
+    -AllowedRoot $artifactsRoot `
+    -LogPrefix 'package-build' `
+    -FailureLabel 'Release GDExtension build'
 Write-Verbose 'Release GDExtension build completed'
 $sourceBuildContractPath = Join-Path $root 'build\release\ninho-build-contract.json'
 Assert-NinhoNoReparseAncestors -Path $sourceBuildContractPath -AllowedRoot $root | Out-Null
@@ -292,6 +314,11 @@ try {
     $exportExecutable = Join-Path $stagingRoot 'NinhoOrbital.exe'
     $exportProcess = $null
     try {
+        Assert-NinhoPinnedExecutable `
+            -Path $godot `
+            -ExpectedSha256 $lock.godot.exe_sha256 `
+            -Name 'Godot' `
+            -AllowedRoot $root
         $exportProcess = Start-Process -FilePath $godot -WorkingDirectory $gameRoot -ArgumentList @(
             '--headless', '--path', ('"' + $gameRoot + '"'),
             '--export-release', '"Windows Desktop"', ('"' + $exportExecutable + '"')
@@ -347,7 +374,12 @@ try {
         $target = Join-Path $licenseDirectory $name
         Assert-NinhoNoReparseAncestors -Path $source -AllowedRoot $root | Out-Null
         Assert-NinhoNoReparseAncestors -Path $target -AllowedRoot $stagingRoot | Out-Null
-        Copy-Item -LiteralPath $source -Destination $target
+        $canonical = Get-NinhoCanonicalTestedInputContent `
+            -Path $source -RelativePath "licenses/$name"
+        if ($canonical.mode -cne 'text_utf8_lf') {
+            throw "Package legal text is not valid UTF-8: $source"
+        }
+        [IO.File]::WriteAllBytes($target, $canonical.bytes)
     }
     Copy-Item -LiteralPath $sourceBuildContractPath -Destination (Join-Path $stagingRoot 'build-contract.json')
 
@@ -381,8 +413,9 @@ try {
         throw 'Package source inventory must contain data, visual assets, and audio'
     }
     Write-CanonicalJson -Value ([ordered]@{
+        schema = 'ninho.package-source-inventory.v1'
         schema_version = 1
-        note = 'These source resources are embedded in NinhoOrbital.pck; packaged launch validates their runtime load.'
+        note = $sourceInventoryNote
         native_build_contract = [ordered]@{
             path = 'build-contract.json'
             sha256 = $nativeBuildContractHash
@@ -390,7 +423,7 @@ try {
             test_facades = $false
         }
         resources = $canonicalResources
-    }) -Path (Join-Path $stagingRoot 'package-content.json')
+    }) -Path (Join-Path $stagingRoot 'package-source-inventory.json')
 
     $fileByPath = @{}
     foreach ($file in Get-ChildItem -LiteralPath $stagingRoot -Recurse -File) {
@@ -439,6 +472,9 @@ try {
     Assert-WindowsPackage -PackageRoot $OutputRoot
 
     $launchExe = Join-Path $OutputRoot 'NinhoOrbital.exe'
+    # Exercise the packaged runtime at normal engine cadence. Development smokes
+    # use --fixed-fps for repeatability; this launch validates the shipped scheduler
+    # and clean shutdown while project.godot keeps authoritative physics at 60 Hz.
     $launchProcess = Start-Process -FilePath $launchExe -WorkingDirectory $OutputRoot -ArgumentList @(
         '--headless', '--rendering-method', 'gl_compatibility',
         '--script', 'res://tests/vertical_slice_smoke.gd'

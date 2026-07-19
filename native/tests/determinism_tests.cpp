@@ -9,6 +9,9 @@
 
 using namespace ninho::physics;
 
+// These tests cover deterministic state/report contracts plus one same-binary
+// physics rerun. The broad six-scenario, two-repeat physics gate is spike_json_smoke.
+
 NINHO_TEST("canonical state hash uses the pinned quantization and FNV mix")
 {
     const BodyState state{
@@ -325,7 +328,7 @@ NINHO_TEST("report always defers private budget with limits recommendation")
         != std::string::npos);
 }
 
-NINHO_TEST("scenario watchdog uses sixty seconds and disarms after success")
+NINHO_TEST("scenario watchdog keeps short scenarios bounded and disarms after success")
 {
     const auto path = std::filesystem::temp_directory_path()
         / "ninho-watchdog-disarm.json";
@@ -333,6 +336,15 @@ NINHO_TEST("scenario watchdog uses sixty seconds and disarms after success")
     std::filesystem::remove(path, error);
     ScenarioRunner::set_emergency_json_path(path.string());
     NINHO_REQUIRE(ScenarioRunner::watchdog_timeout_seconds() == 60);
+    NINHO_REQUIRE(
+        ScenarioRunner::watchdog_timeout_seconds(ScenarioKind::RadialFall) == 60);
+#if !defined(NDEBUG)
+    NINHO_REQUIRE(
+        ScenarioRunner::watchdog_timeout_seconds(ScenarioKind::Stress) == 180);
+#else
+    NINHO_REQUIRE(
+        ScenarioRunner::watchdog_timeout_seconds(ScenarioKind::Stress) == 60);
+#endif
     const auto result = ScenarioRunner{}.run(ScenarioKind::RadialFall, 1, 4);
     ScenarioRunner::set_emergency_json_path(std::nullopt);
     NINHO_REQUIRE(result.violations.empty());

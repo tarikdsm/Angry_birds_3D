@@ -369,6 +369,7 @@ public:
     {
         return 60;
     }
+    [[nodiscard]] static int watchdog_timeout_seconds(ScenarioKind kind) noexcept;
 
     static void set_emergency_json_path(std::optional<std::string> path);
 

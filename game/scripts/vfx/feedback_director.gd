@@ -2,11 +2,38 @@ extends Node3D
 
 const CONFIG_PATH := "res://data/feedback/vertical_slice.feedback.json"
 const ARCHETYPES_PATH := "res://data/archetypes/vertical_slice.archetypes.json"
+const CONTENT_FILE_LOADER := preload("res://scripts/data/content_file_loader.gd")
 const DEFAULT_POSITION := Vector3(0.0, 12.0, 0.0)
 const SNAPSHOT_POSITION_KINDS := [
 	"bird_launched", "ability_activation_requested", "ability_started",
 	"ability_affected_body", "ability_pulse", "ability_ended", "joint_broken",
 ]
+const CONFIG_KEYS := [
+	"schema_version", "budgets", "directional_anchor", "material_profiles",
+	"event_profiles", "outcome_profiles", "profiles",
+]
+const BUDGET_KEYS := [
+	"vfx_pool_size", "audio_voice_pool_size", "fragment_pool_size",
+	"max_particles_per_slot", "max_particles_total", "max_fragments_total",
+	"glass_screen_coverage_limit", "first_impact_limit_ms",
+]
+const DIRECTIONAL_ANCHOR_KEYS := ["enemy_archetype_id"]
+const MATERIAL_PROFILE_KEYS := ["1", "5", "9"]
+const EVENT_PROFILE_KEYS := [
+	"bird_launched", "ability_activation_requested", "command_rejected",
+	"ability_started", "ability_affected_body", "ability_pulse", "ability_ended",
+	"damage_applied", "entity_neutralized", "joint_overloaded",
+	"piece_fracture_triggered", "joint_broken", "piece_fractured",
+]
+const EVENT_PROFILE_SELECTORS := {
+	"damage_applied": ["material_or_anchor"],
+	"joint_overloaded": ["material"],
+	"piece_fracture_triggered": ["material"],
+	"joint_broken": ["material"],
+	"piece_fractured": ["material"],
+}
+const OUTCOME_PROFILE_KEYS := ["victory", "defeat"]
+const PROFILE_DEFINITION_KEYS := ["color", "particles", "lifetime_s", "size_m", "audio"]
 
 var _config: Dictionary = {}
 var _vfx_slots: Array[Dictionary] = []
@@ -34,7 +61,15 @@ var _audio_pool: Node
 
 func _ready() -> void:
 	_config = _load_config()
+	if _config.is_empty():
+		_feedback_fault_count += 1
+		set_process(false)
+		return
 	_directional_contract = _load_directional_contract()
+	if _directional_contract.is_empty():
+		_feedback_fault_count += 1
+		set_process(false)
+		return
 	_build_profile_resources()
 	_build_vfx_pool()
 	_build_fragment_pool()
@@ -50,18 +85,19 @@ func apply_frame(frame: Dictionary) -> void:
 		reset_feedback()
 	_last_tick = tick
 	var snapshots: Array = frame.get("snapshots", [])
+	var objective_targets: Array = frame.get("objective_targets", [])
 	_measured_glass_screen_coverage = _measure_glass_screen_coverage(snapshots)
 	for event: Dictionary in frame.get("events", []):
 		var profile := profile_for_event(event, snapshots)
 		if profile.is_empty():
 			continue
-		_emit_profile(profile, _event_position(event, snapshots), event)
+		_emit_profile(profile, _event_position(event, snapshots, objective_targets), event)
 	var outcome := str(frame.get("outcome", "none"))
 	if outcome != "none" and outcome != _last_outcome:
 		var outcome_profiles: Dictionary = _config.get("outcome_profiles", {})
 		var outcome_profile := str(outcome_profiles.get(outcome, ""))
 		if not outcome_profile.is_empty():
-			_emit_profile(outcome_profile, _anchor_position(snapshots), {})
+			_emit_profile(outcome_profile, _anchor_position(snapshots, objective_targets), {})
 	_last_outcome = outcome
 
 
@@ -106,9 +142,12 @@ func profile_for_event(event: Dictionary, snapshots: Array) -> String:
 	var event_profiles: Dictionary = _config.get("event_profiles", {})
 	var mapped := str(event_profiles.get(kind, ""))
 	if mapped == "material" or mapped == "material_or_anchor":
-		if mapped == "material_or_anchor" \
-				and int(event.get("affected_entity_id", 0)) == _anchor_entity_id():
-			return "helmet" if _is_protected_anchor_hit(event, snapshots) else "vulnerable"
+		if mapped == "material_or_anchor":
+			var classification := str(event.get("damage_classification", "none"))
+			if classification == "protected":
+				return "helmet"
+			if classification == "vulnerable":
+				return "vulnerable"
 		var material_id := int(event.get("material_id", 0))
 		if material_id == 0:
 			material_id = _material_for_entity(
@@ -410,23 +449,8 @@ func _active_fragment_profiles() -> Dictionary:
 	return counts
 
 
-func _is_protected_anchor_hit(event: Dictionary, snapshots: Array) -> bool:
-	var anchor_transform := Transform3D.IDENTITY
-	for snapshot: Dictionary in snapshots:
-		if int(snapshot.get("entity_id", 0)) == _anchor_entity_id():
-			anchor_transform = snapshot.get("transform", Transform3D.IDENTITY)
-			break
-	var direction_values: Array = _directional_contract.local_protected_direction
-	var local_front := Vector3(
-		float(direction_values[0]), float(direction_values[1]), float(direction_values[2]))
-	var world_front := (anchor_transform.basis * local_front).normalized()
-	var cause_to_target: Vector3 = event.get("normal", Vector3.ZERO)
-	var target_to_source := -cause_to_target.normalized()
-	var cone_cosine := cos(deg_to_rad(float(_directional_contract.protected_cone_degrees)))
-	return world_front.dot(target_to_source) >= cone_cosine
-
-
-func _event_position(event: Dictionary, snapshots: Array) -> Vector3:
+func _event_position(
+		event: Dictionary, snapshots: Array, objective_targets: Array = []) -> Vector3:
 	var kind := str(event.get("kind", ""))
 	var affected_id := int(event.get("affected_entity_id", 0))
 	var preferred_id := affected_id if affected_id != 0 else int(event.get("entity_id", 0))
@@ -435,21 +459,26 @@ func _event_position(event: Dictionary, snapshots: Array) -> Vector3:
 			if int(snapshot.get("entity_id", 0)) == preferred_id:
 				var transform: Transform3D = snapshot.get("transform", Transform3D.IDENTITY)
 				return transform.origin
-		return _anchor_position(snapshots)
+		return _anchor_position(snapshots, objective_targets)
 	if kind == "command_rejected":
-		return _anchor_position(snapshots)
+		return _anchor_position(snapshots, objective_targets)
 	if event.has("position"):
 		return event.position
 	for snapshot: Dictionary in snapshots:
 		if int(snapshot.get("entity_id", 0)) == preferred_id:
 			var transform: Transform3D = snapshot.get("transform", Transform3D.IDENTITY)
 			return transform.origin
-	return _anchor_position(snapshots)
+	return _anchor_position(snapshots, objective_targets)
 
 
-func _anchor_position(snapshots: Array) -> Vector3:
+func _anchor_position(snapshots: Array, objective_targets: Array = []) -> Vector3:
+	if objective_targets.is_empty() or not objective_targets.front() is Dictionary:
+		return DEFAULT_POSITION
+	var target_entity_id := int((objective_targets.front() as Dictionary).get("entity_id", 0))
+	if target_entity_id <= 0:
+		return DEFAULT_POSITION
 	for snapshot: Dictionary in snapshots:
-		if int(snapshot.get("entity_id", 0)) == _anchor_entity_id():
+		if int(snapshot.get("entity_id", 0)) == target_entity_id:
 			var transform: Transform3D = snapshot.get("transform", Transform3D.IDENTITY)
 			return transform.origin
 	return DEFAULT_POSITION
@@ -517,10 +546,6 @@ func _screen_ratio_at(position: Vector3, radius_m: float) -> float:
 	return clampf(PI * radius_pixels * radius_pixels / viewport_area, 0.0, 1.0)
 
 
-func _anchor_entity_id() -> int:
-	return int((_config.get("directional_anchor", {}) as Dictionary).get("entity_id", 200))
-
-
 func _audio_metrics() -> Dictionary:
 	if _audio_pool != null and _audio_pool.has_method("pool_metrics"):
 		return _audio_pool.pool_metrics()
@@ -564,33 +589,201 @@ func _profile(profile: String) -> Dictionary:
 
 
 func _load_config() -> Dictionary:
-	var parsed: Variant = JSON.parse_string(FileAccess.get_file_as_string(CONFIG_PATH))
-	if parsed is Dictionary:
-		return parsed
-	push_error("feedback config could not be parsed: %s" % CONFIG_PATH)
+	var result := load_config_document(CONFIG_PATH)
+	if bool(result.get("ok", false)):
+		return result.get("document") as Dictionary
+	push_error("feedback config %s error: %s" % [
+		result.get("error_kind", "unknown"), result.get("message", CONFIG_PATH)])
 	return {}
 
 
+func load_config_document(path: String) -> Dictionary:
+	var result := CONTENT_FILE_LOADER.load_json(path)
+	if not bool(result.get("ok", false)):
+		return result
+	var validation_error := validate_config_document(result.get("document"))
+	if not validation_error.is_empty():
+		return {
+			"ok": false,
+			"error_kind": "schema",
+			"message": "%s violates the feedback schema: %s" % [path, validation_error],
+		}
+	return result
+
+
+func validate_config_document(document: Variant) -> String:
+	if not document is Dictionary:
+		return "$ must be an object"
+	var config := document as Dictionary
+	var error := _exact_keys_error(config, CONFIG_KEYS, "$")
+	if not error.is_empty():
+		return error
+	if not _is_integer(config["schema_version"]) or int(config["schema_version"]) != 1:
+		return "$.schema_version must be integer 1"
+	error = _validate_budgets(config["budgets"])
+	if not error.is_empty():
+		return error
+	error = _validate_directional_anchor(config["directional_anchor"])
+	if not error.is_empty():
+		return error
+	var profiles_value: Variant = config["profiles"]
+	if not profiles_value is Dictionary or (profiles_value as Dictionary).is_empty():
+		return "$.profiles must be a non-empty object"
+	var profiles := profiles_value as Dictionary
+	for profile_name: Variant in profiles:
+		if typeof(profile_name) != TYPE_STRING or str(profile_name).is_empty():
+			return "$.profiles keys must be non-empty strings"
+		error = _validate_profile_definition(profiles[profile_name], "$.profiles.%s" % profile_name)
+		if not error.is_empty():
+			return error
+	for mapping_spec: Array in [
+		["material_profiles", MATERIAL_PROFILE_KEYS, {}],
+		["event_profiles", EVENT_PROFILE_KEYS, EVENT_PROFILE_SELECTORS],
+		["outcome_profiles", OUTCOME_PROFILE_KEYS, {}],
+	]:
+		error = _validate_profile_mapping(
+			config[mapping_spec[0]], mapping_spec[1], profiles, "$.%s" % mapping_spec[0],
+			mapping_spec[2])
+		if not error.is_empty():
+			return error
+	return ""
+
+
+func _validate_budgets(value: Variant) -> String:
+	if not value is Dictionary:
+		return "$.budgets must be an object"
+	var budgets := value as Dictionary
+	var error := _exact_keys_error(budgets, BUDGET_KEYS, "$.budgets")
+	if not error.is_empty():
+		return error
+	for key: String in [
+		"vfx_pool_size", "audio_voice_pool_size", "fragment_pool_size",
+		"max_particles_per_slot", "max_particles_total", "max_fragments_total",
+	]:
+		if not _is_integer(budgets[key]) or int(budgets[key]) <= 0:
+			return "$.budgets.%s must be a positive integer" % key
+	for key: String in ["glass_screen_coverage_limit", "first_impact_limit_ms"]:
+		if not _is_positive_number(budgets[key]):
+			return "$.budgets.%s must be a positive finite number" % key
+	if float(budgets["glass_screen_coverage_limit"]) > 1.0:
+		return "$.budgets.glass_screen_coverage_limit must not exceed 1"
+	if int(budgets["max_particles_total"]) \
+			< int(budgets["vfx_pool_size"]) * int(budgets["max_particles_per_slot"]):
+		return "$.budgets.max_particles_total is smaller than the fixed pool capacity"
+	if int(budgets["max_fragments_total"]) < int(budgets["fragment_pool_size"]):
+		return "$.budgets.max_fragments_total is smaller than fragment_pool_size"
+	return ""
+
+
+func _validate_directional_anchor(value: Variant) -> String:
+	if not value is Dictionary:
+		return "$.directional_anchor must be an object"
+	var anchor := value as Dictionary
+	var error := _exact_keys_error(anchor, DIRECTIONAL_ANCHOR_KEYS, "$.directional_anchor")
+	if not error.is_empty():
+		return error
+	for key: String in DIRECTIONAL_ANCHOR_KEYS:
+		if not _is_integer(anchor[key]) or int(anchor[key]) <= 0:
+			return "$.directional_anchor.%s must be a positive integer" % key
+	return ""
+
+
+func _validate_profile_definition(value: Variant, path: String) -> String:
+	if not value is Dictionary:
+		return "%s must be an object" % path
+	var definition := value as Dictionary
+	var error := _exact_keys_error(definition, PROFILE_DEFINITION_KEYS, path)
+	if not error.is_empty():
+		return error
+	if typeof(definition["color"]) != TYPE_STRING \
+			or not Color.html_is_valid(str(definition["color"])):
+		return "%s.color must be an HTML color" % path
+	if not _is_integer(definition["particles"]) or int(definition["particles"]) <= 0:
+		return "%s.particles must be a positive integer" % path
+	for key: String in ["lifetime_s", "size_m"]:
+		if not _is_positive_number(definition[key]):
+			return "%s.%s must be a positive finite number" % [path, key]
+	if typeof(definition["audio"]) != TYPE_STRING:
+		return "%s.audio must be a string" % path
+	return ""
+
+
+func _validate_profile_mapping(
+		value: Variant, expected_keys: Array, profiles: Dictionary, path: String,
+		allowed_selectors: Dictionary) -> String:
+	if not value is Dictionary:
+		return "%s must be an object" % path
+	var mapping := value as Dictionary
+	var error := _exact_keys_error(mapping, expected_keys, path)
+	if not error.is_empty():
+		return error
+	for key: Variant in mapping:
+		var target: Variant = mapping[key]
+		if typeof(target) != TYPE_STRING or str(target).is_empty():
+			return "%s.%s must be a non-empty profile name" % [path, key]
+		var allowed_for_key: Array = allowed_selectors.get(key, [])
+		if target not in allowed_for_key and not profiles.has(target):
+			return "%s.%s references missing profile %s" % [path, key, target]
+	return ""
+
+
+func _exact_keys_error(value: Dictionary, expected_keys: Array, path: String) -> String:
+	for key: Variant in expected_keys:
+		if not value.has(key):
+			return "%s is missing required key %s" % [path, key]
+	for key: Variant in value:
+		if key not in expected_keys:
+			return "%s has unknown key %s" % [path, key]
+	return ""
+
+
+func _is_integer(value: Variant) -> bool:
+	if typeof(value) == TYPE_INT:
+		return true
+	return typeof(value) == TYPE_FLOAT and is_finite(value) and value == floor(value)
+
+
+func _is_positive_number(value: Variant) -> bool:
+	return _is_finite_number(value) and float(value) > 0.0
+
+
+func _is_finite_number(value: Variant) -> bool:
+	return (typeof(value) == TYPE_INT or typeof(value) == TYPE_FLOAT) \
+		and is_finite(float(value))
+
+
 func _load_directional_contract() -> Dictionary:
-	var parsed: Variant = JSON.parse_string(FileAccess.get_file_as_string(ARCHETYPES_PATH))
+	var result := CONTENT_FILE_LOADER.load_json(ARCHETYPES_PATH)
+	if not bool(result.get("ok", false)):
+		push_error("archetype config %s error: %s" % [
+			result.get("error_kind", "unknown"), result.get("message", ARCHETYPES_PATH)])
+		return {}
+	var parsed: Variant = result.get("document")
 	if not parsed is Dictionary:
-		push_error("archetype config could not be parsed: %s" % ARCHETYPES_PATH)
+		push_error("archetype config schema error: %s must contain an object" % ARCHETYPES_PATH)
 		return {}
 	var catalog := parsed as Dictionary
-	var enemy_id := int((_config.get("directional_anchor", {}) as Dictionary).get(
-		"enemy_archetype_id", 0))
-	var weakpoint_id := 0
-	for enemy: Dictionary in catalog.get("enemies", []):
+	var contract := _resolve_directional_contract(_config, catalog)
+	if not contract.is_empty():
+		return contract
+	push_error("Anchor feedback contract is unavailable")
+	return {}
+
+
+func _resolve_directional_contract(config: Dictionary, catalog: Dictionary) -> Dictionary:
+	var anchor_value: Variant = config.get("directional_anchor")
+	if not anchor_value is Dictionary:
+		return {}
+	var enemy_id := int((anchor_value as Dictionary).get("enemy_archetype_id", 0))
+	var enemies_value: Variant = catalog.get("enemies")
+	if not enemies_value is Array:
+		return {}
+	for enemy_value: Variant in enemies_value:
+		if not enemy_value is Dictionary:
+			continue
+		var enemy := enemy_value as Dictionary
 		if int(enemy.get("id", 0)) == enemy_id:
-			weakpoint_id = int(enemy.get("weakpoint_id", 0))
-			break
-	for weakpoint: Dictionary in catalog.get("weakpoints", []):
-		if int(weakpoint.get("id", 0)) == weakpoint_id:
-			return {
-				"local_protected_direction": weakpoint.get("protected_direction", []),
-				"protected_cone_degrees": float(weakpoint.get("protected_cone_deg", 0.0)),
-			}
-	push_error("Anchor weakpoint contract is unavailable")
+			return {"enemy_archetype_id": enemy_id}
 	return {}
 
 

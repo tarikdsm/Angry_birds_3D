@@ -77,7 +77,7 @@ NINHO_TEST("orbital accumulator rejects invalid delta and resets pending time")
     NINHO_REQUIRE(!accumulator.schedule(std::numeric_limits<double>::infinity()).ok);
 }
 
-NINHO_TEST("session frame batch preserves every event and only the latest state snapshot and preview")
+NINHO_TEST("session frame batch accumulates events without recapturing latest state")
 {
     SessionFrameBatch batch;
     DomainEvent first{.id = EventId{1}, .tick = TickIndex{3},
@@ -91,15 +91,26 @@ NINHO_TEST("session frame batch preserves every event and only the latest state 
 
     const std::array first_events{first};
     const std::array first_snapshots{old_snapshot};
-    batch.capture_tick(first_events, first_snapshots,
+    batch.capture_latest(first_snapshots,
         SessionState{.tick = TickIndex{3}, .phase = SessionPhase::Aim},
-        3, false, {}, old_preview);
+        3, false, {});
+    batch.set_preview(old_preview);
+    batch.capture_events(first_events);
 
     const std::array second_events{second};
     const std::array second_snapshots{latest_snapshot};
-    batch.capture_tick(second_events, second_snapshots,
+    batch.capture_events(second_events);
+    NINHO_REQUIRE(batch.peek().ticks_executed == 2);
+    NINHO_REQUIRE(batch.peek().events == std::vector<DomainEvent>({first, second}));
+    NINHO_REQUIRE(batch.peek().snapshots == std::vector<EntitySnapshot>({old_snapshot}));
+    NINHO_REQUIRE(batch.peek().state.tick == TickIndex{3});
+    NINHO_REQUIRE(batch.peek().preview.has_value());
+    NINHO_REQUIRE(batch.peek().preview->canonical_hash == 11);
+
+    batch.capture_latest(second_snapshots,
         SessionState{.tick = TickIndex{4}, .phase = SessionPhase::Aim},
-        2, true, {}, latest_preview);
+        2, true, {});
+    batch.set_preview(latest_preview);
 
     const SessionFrameData frame = batch.consume();
     NINHO_REQUIRE(frame.ticks_executed == 2);
@@ -176,7 +187,13 @@ NINHO_TEST("session frame capture preserves events from a tick that ends faulted
     const SessionStatus status = session->tick();
     NINHO_REQUIRE(!status.ok());
     SessionFrameBatch batch;
-    capture_session_tick(batch, *session);
+    capture_session_events(batch, *session);
+    const std::vector<ObjectiveTargetStatus> objective_targets =
+        session->objective_target_statuses();
+    batch.capture_latest(
+        session->snapshots(), session->state(), session->birds_remaining(),
+        session->objectives_complete(), session->physics_metrics(), objective_targets,
+        session->ability_readiness());
     const SessionFrameData frame = batch.consume();
     NINHO_REQUIRE(std::ranges::any_of(frame.events, [](const DomainEvent& event) {
         return event.kind == DomainEventKind::BirdLaunched;

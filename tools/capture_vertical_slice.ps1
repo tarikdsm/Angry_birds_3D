@@ -11,6 +11,7 @@ $preset = $Configuration.ToLowerInvariant()
 if (-not $OutputDirectory) { $OutputDirectory = Join-Path $root "artifacts\vertical-slice\$preset" }
 if (-not $GoldenDirectory) { $GoldenDirectory = Join-Path $root "docs\art\goldens\vertical-slice\$preset" }
 Import-Module (Join-Path $PSScriptRoot 'VerticalSliceGate.psm1') -Force
+Import-Module (Join-Path $PSScriptRoot 'ToolchainIntegrity.psm1') -Force
 Import-Module (Join-Path $PSScriptRoot 'SafePath.psm1') -Force
 foreach ($path in $OutputDirectory,$GoldenDirectory) {
     Assert-NinhoNoReparseAncestors -Path $path -AllowedRoot $root | Out-Null
@@ -18,8 +19,14 @@ foreach ($path in $OutputDirectory,$GoldenDirectory) {
 }
 $godot = Join-Path $root '.tools\godot\Godot_v4.5.1-stable_win64.exe'
 if (-not (Test-Path -LiteralPath $godot -PathType Leaf)) { throw "pinned Godot missing: $godot" }
-$ffprobe = (Get-Command ffprobe.exe -ErrorAction Stop).Source
-$ffmpeg = (Get-Command ffmpeg.exe -ErrorAction Stop).Source
+$ffprobe = Resolve-NinhoPinnedToolchainExecutable `
+    -Root $root -ToolName 'ffmpeg' `
+    -ExecutableProperty 'ffprobe_exe' -HashProperty 'ffprobe_exe_sha256' `
+    -Name 'FFprobe'
+$ffmpeg = Resolve-NinhoPinnedToolchainExecutable `
+    -Root $root -ToolName 'ffmpeg' `
+    -ExecutableProperty 'exe' -HashProperty 'exe_sha256' `
+    -Name 'FFmpeg'
 $artifacts = [Collections.Generic.List[object]]::new()
 
 function Get-RelativePath([string]$Base, [string]$Target) {
@@ -107,6 +114,7 @@ $rendererEvidence = [Collections.Generic.List[object]]::new()
 $vulkanCaptureLog = ''
 $vulkanRawMovie = ''
 $vulkanSelectedFrames = @()
+$vulkanAbilityProof = $null
 foreach ($renderer in 'Vulkan','OpenGL') {
     $slug = if ($renderer -ceq 'Vulkan') { 'vulkan' } else { 'opengl' }
     $rawMovie = Join-Path $OutputDirectory "vertical-slice-$slug-source.avi"
@@ -136,25 +144,24 @@ foreach ($renderer in 'Vulkan','OpenGL') {
         throw "deterministic downsample mapping is invalid: $renderer"
     }
     if ($renderer -ceq 'Vulkan') {
+        $captureText = [IO.File]::ReadAllText($capture.Stdout)
         $impactPattern = '(?m)^NINHO_CAPTURE_EVENT frame=(\d+) tick=(\d+) kind=\S+ profile=vulnerable affected=200 damage=([0-9.]+)'
-        $impactMatches = @([regex]::Matches([IO.File]::ReadAllText($capture.Stdout), $impactPattern) |
+        $impactMatches = @([regex]::Matches($captureText, $impactPattern) |
             Where-Object { [double]$_.Groups[3].Value -gt 0 })
         if ($impactMatches.Count -eq 0) { throw 'capture has no causal vulnerable Anchor impact frame' }
         $requiredImpactFrame = [int]$impactMatches[0].Groups[1].Value + 1
         $selectedFrames = Set-NinhoRequiredDownsampleFrame `
             -Mapping ([int[]]@($selectedFrames)) -RequiredSourceFrame $requiredImpactFrame
-        $flightAbilityState = [regex]::Match(
-            [IO.File]::ReadAllText($capture.Stdout),
-            '(?m)^NINHO_CAPTURE_STATE frame=(\d+) tick=\d+ phase=flight_ability outcome=none ')
-        if (-not $flightAbilityState.Success) { throw 'capture has no flight ability transition frame' }
-        $requiredFlightAbilityFrame = [int]$flightAbilityState.Groups[1].Value + 5
+        $vulkanAbilityProof = Get-NinhoVirelaAbilityProof -Text $captureText
         $selectedFrames = Set-NinhoRequiredDownsampleFrame `
-            -Mapping ([int[]]@($selectedFrames)) -RequiredSourceFrame $requiredFlightAbilityFrame
+            -Mapping ([int[]]@($selectedFrames)) `
+            -RequiredSourceFrame ([int]$vulkanAbilityProof.frame)
         $vulkanRawMovie = $rawMovie
         $vulkanSelectedFrames = @($selectedFrames)
     }
-    $selectTerms = @($selectedFrames | ForEach-Object { "eq(n\,$_)" }) -join '+'
-    $videoFilter = "select='$selectTerms',setpts=N/(60*TB)"
+    $selectExpression = Get-NinhoCompactDownsampleSelectExpression `
+        -Mapping ([int[]]@($selectedFrames)) -SourceFrameCount $rawFrameCount
+    $videoFilter = "select='$selectExpression',setpts=N/(60*TB)"
     $downsampleStdout = Join-Path $OutputDirectory "downsample-$slug.stdout.log"
     $downsampleStderr = Join-Path $OutputDirectory "downsample-$slug.stderr.log"
     $downsample = Invoke-NinhoTimedProcess -FilePath $ffmpeg -ArgumentList @(
@@ -232,8 +239,8 @@ if ($LASTEXITCODE -ne 0) { throw "route determinism run failed: $($output -join 
 Add-Artifact $routeRawLog
 $traceText = $output -join "`n"
 $traces = @(
-    [regex]::Match($traceText, '(?m)^\[TRACE\] canonical_playthrough_v3 (\d+) (\d+) (\d+)$'),
-    [regex]::Match($traceText, '(?m)^\[TRACE\] canonical_playthrough_v3_repeat (\d+) (\d+) (\d+)$')
+    [regex]::Match($traceText, '(?m)^\[TRACE\] canonical_playthrough_v4 (\d+) (\d+) (\d+)$'),
+    [regex]::Match($traceText, '(?m)^\[TRACE\] canonical_playthrough_v4_repeat (\d+) (\d+) (\d+)$')
 )
 if (@($traces | Where-Object Success).Count -ne 2) { throw 'route determinism repeat traces missing' }
 function Get-HexPayloadBytes([string]$Hex) {
@@ -257,7 +264,7 @@ for ($traceIndex = 0; $traceIndex -lt $traces.Count; ++$traceIndex) {
     foreach ($route in $routes) {
         $payloadMatch = [regex]::Match(
             $traceText,
-            "(?m)^\[TRACE\] ordered_events_v1 $([regex]::Escape($route[0])) $runName ([0-9a-f]+)$")
+            "(?m)^\[TRACE\] ordered_events_v2 $([regex]::Escape($route[0])) $runName ([0-9a-f]+)$")
         if (-not $payloadMatch.Success) {
             throw "ordered event payload missing: $($route[0])/$runName"
         }
@@ -268,7 +275,7 @@ for ($traceIndex = 0; $traceIndex -lt $traces.Count; ++$traceIndex) {
         } finally {
             $algorithm.Dispose()
         }
-        $normalized.Add("NINHO_ROUTE_HASH name=$($route[0]) outcome=$($route[1]) canonical_state_v1=$($route[2]) events_sha256=$sha")
+        $normalized.Add("NINHO_ROUTE_HASH name=$($route[0]) outcome=$($route[1]) canonical_state_v2=$($route[2]) events_sha256=$sha")
     }
 }
 [IO.File]::WriteAllLines($routeLog, $normalized, [Text.UTF8Encoding]::new($false))
@@ -292,7 +299,8 @@ function Find-State([string]$Phase, [string]$Outcome = '') {
 }
 $overviewState = Find-State 'inspection'
 $aimState = Find-State 'aim'
-$virelaState = Find-State 'flight_ability'
+$virelaState = $vulkanAbilityProof
+if ($null -eq $virelaState) { throw 'Vulkan capture has no Virela ability proof' }
 $resultState = Find-State 'result' 'victory'
 $eventPattern = '(?m)^NINHO_CAPTURE_EVENT frame=(\d+) tick=(\d+) kind=(\S+) profile=(\S+) affected=(\d+) damage=([0-9.]+) camera=(\([^)]+\)) exposure=([0-9.]+)\s*$'
 $vulnerableMatch = @([regex]::Matches([IO.File]::ReadAllText($vulkanCaptureLog), $eventPattern) |
@@ -308,7 +316,7 @@ $impactState = [pscustomobject]@{
 $goldenPlan = [ordered]@{
     overview=@($overviewState,0)
     aim=@($aimState,30)
-    virela=@($virelaState,5)
+    virela=@($virelaState,0)
     vulnerable_impact=@($impactState,1)
     result=@($resultState,10)
 }

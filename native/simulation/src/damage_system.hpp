@@ -45,6 +45,7 @@ struct DamageOutcome {
     double energy_j{};
     double damage{};
     NeutralizationCause neutralization_cause{NeutralizationCause::None};
+    DamageClassification damage_classification{DamageClassification::None};
 };
 
 struct DamageState {

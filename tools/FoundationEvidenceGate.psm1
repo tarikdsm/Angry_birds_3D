@@ -1,6 +1,188 @@
 Set-StrictMode -Version Latest
 Import-Module (Join-Path $PSScriptRoot 'SpikeEvidenceValidation.psm1') -Force
 Import-Module (Join-Path $PSScriptRoot 'SafePath.psm1') -Force
+Import-Module (Join-Path $PSScriptRoot 'TestedInputIdentity.psm1') -Force
+
+function Get-NinhoFoundationTestedInputPaths {
+    [CmdletBinding()]
+    param([Parameter(Mandatory)][string]$Root)
+    $rootPath = [System.IO.Path]::GetFullPath($Root)
+    [string[]]$requiredPaths = @(
+        'CMakeLists.txt',
+        'CMakePresets.json',
+        'tools/bootstrap.ps1',
+        'tools/box3d-v0.1.0-compile-sources.txt',
+        'tools/build.ps1',
+        'tools/FoundationEvidenceGate.psm1',
+        'tools/generate_foundation_report.py',
+        'tools/GodotSmokeRegistry.psm1',
+        'tools/GodotSpikeGate.psm1',
+        'tools/Invoke-Native.ps1',
+        'tools/run_spike.ps1',
+        'tools/SafePath.psm1',
+        'tools/SpikeEvidenceValidation.psm1',
+        'tools/SpikeReportGate.psm1',
+        'tools/test.ps1',
+        'tools/TestedInputIdentity.psm1',
+        'tools/ToolchainIntegrity.psm1',
+        'tools/toolchain.lock.json',
+        'tools/UpstreamBox3DGate.psm1',
+        'tools/VerticalSliceGate.psm1'
+    )
+    [string[]]$pathSpecs = @('native', 'cmake') + $requiredPaths
+    $paths = @(& git -c "safe.directory=$rootPath" -C $rootPath `
+        ls-files --cached --others --exclude-standard -- $pathSpecs)
+    if ($LASTEXITCODE -ne 0) {
+        throw 'unable to enumerate foundation tested inputs with git'
+    }
+    $requiredSet = [Collections.Generic.HashSet[string]]::new(
+        $requiredPaths,
+        [StringComparer]::Ordinal)
+    $unique = [Collections.Generic.HashSet[string]]::new(
+        [StringComparer]::Ordinal)
+    foreach ($path in $paths) {
+        $relative = ([string]$path).Replace('\','/')
+        if ($relative -match '^(native|cmake)/.+' -or
+                $requiredSet.Contains($relative)) {
+            $null = $unique.Add($relative)
+        }
+    }
+    foreach ($required in $requiredPaths) {
+        $requiredPath = Join-Path $rootPath $required
+        if (-not $unique.Contains($required) -or
+                -not (Test-Path -LiteralPath $requiredPath -PathType Leaf)) {
+            throw "required foundation tested input is missing: $required"
+        }
+    }
+    [string[]]$filtered = @($unique)
+    [Array]::Sort($filtered, [StringComparer]::Ordinal)
+    if ($filtered.Count -eq 0) {
+        throw 'foundation tested input set is empty'
+    }
+    return $filtered
+}
+
+function Get-NinhoFoundationTestedInputs {
+    [CmdletBinding()]
+    param([Parameter(Mandatory)][string]$Root)
+    return Get-NinhoTestedInputIdentity -Root $Root `
+        -RelativePaths @(Get-NinhoFoundationTestedInputPaths -Root $Root)
+}
+
+function Add-NinhoFoundationEvidenceIdentity {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)][string]$Root,
+        [Parameter(Mandatory)]$Document
+    )
+    $rootPath = [System.IO.Path]::GetFullPath($Root)
+    $sourceRevision = [string](& git -c "safe.directory=$rootPath" `
+        -C $rootPath rev-parse HEAD 2>$null)
+    if ($LASTEXITCODE -ne 0 -or $sourceRevision -notmatch '^[0-9a-f]{40}$') {
+        throw 'unable to resolve foundation source revision'
+    }
+    $identity = Get-NinhoFoundationTestedInputs -Root $rootPath
+    $Document | Add-Member -NotePropertyName source_revision `
+        -NotePropertyValue $sourceRevision -Force
+    $Document | Add-Member -NotePropertyName tested_inputs_schema `
+        -NotePropertyValue 'ninho.tested-inputs.v2' -Force
+    $Document | Add-Member -NotePropertyName tested_inputs_sha256 `
+        -NotePropertyValue $identity.sha256 -Force
+    $Document | Add-Member -NotePropertyName tested_inputs `
+        -NotePropertyValue @($identity.files) -Force
+    return $Document
+}
+
+function Publish-NinhoFoundationEvidence {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)][string]$Root,
+        [Parameter(Mandatory)][string]$ArtifactDirectory
+    )
+    $rootPath = [System.IO.Path]::GetFullPath($Root).TrimEnd('\','/')
+    $artifactRoot = [System.IO.Path]::GetFullPath($ArtifactDirectory).TrimEnd('\','/')
+    if (-not $artifactRoot.StartsWith(
+            $rootPath + [System.IO.Path]::DirectorySeparatorChar,
+            [System.StringComparison]::OrdinalIgnoreCase)) {
+        throw "foundation artifact directory escapes repository: $artifactRoot"
+    }
+    Assert-NinhoNoReparseAncestors -Path $artifactRoot -AllowedRoot $rootPath | Out-Null
+    $testedInputs = Get-NinhoFoundationTestedInputs -Root $rootPath
+    $entries = [Collections.Generic.List[object]]::new()
+    foreach ($configuration in 'Debug', 'Release') {
+        $preset = $configuration.ToLowerInvariant()
+        $source = Join-Path $artifactRoot "box3d-spike-$preset.json"
+        Assert-NinhoNoReparseAncestors -Path $source -AllowedRoot $rootPath | Out-Null
+        if (-not (Test-Path -LiteralPath $source -PathType Leaf)) {
+            throw "foundation artifact missing for publication: $source"
+        }
+        try {
+            $raw = [System.IO.File]::ReadAllBytes($source)
+            $document = [System.IO.File]::ReadAllText($source) | ConvertFrom-Json
+        } catch {
+            throw "foundation artifact is not valid JSON for ${configuration}: $($_.Exception.Message)"
+        }
+        Assert-NinhoSpikeEvidenceDocument -Document $document `
+            -ExpectedBuildType $configuration
+        Assert-NinhoTestedInputIdentity -Root $rootPath -Document $document `
+            -ExpectedIdentity $testedInputs
+        $relative = "docs/physics/evidence/foundation-report-$preset.json"
+        $destination = Join-Path $rootPath $relative
+        Assert-NinhoNoReparseAncestors -Path $destination -AllowedRoot $rootPath | Out-Null
+        & git -c "safe.directory=$rootPath" -C $rootPath `
+            ls-files --error-unmatch -- $relative 2>$null | Out-Null
+        if ($LASTEXITCODE -ne 0) {
+            throw "canonical foundation evidence is not tracked by git: $relative"
+        }
+        $entries.Add([pscustomobject]@{
+            Configuration=$configuration
+            Document=$document
+            Raw=$raw
+            Destination=$destination
+        })
+    }
+    if ($entries[0].Document.source_revision -cne $entries[1].Document.source_revision -or
+            $entries[0].Document.tested_inputs_sha256 -cne
+                $entries[1].Document.tested_inputs_sha256) {
+        throw 'Debug and Release foundation evidence source identities diverge'
+    }
+
+    $reportPath = Join-Path $rootPath 'docs\physics\box3d-spike-report.md'
+    Assert-NinhoNoReparseAncestors -Path $reportPath -AllowedRoot $rootPath | Out-Null
+    $backups = @($entries | ForEach-Object {
+        [pscustomobject]@{
+            Path=$_.Destination
+            Bytes=[System.IO.File]::ReadAllBytes($_.Destination)
+        }
+    })
+    $reportExisted = Test-Path -LiteralPath $reportPath -PathType Leaf
+    $reportBackup = if ($reportExisted) {
+        [System.IO.File]::ReadAllBytes($reportPath)
+    } else { $null }
+    try {
+        foreach ($entry in $entries) {
+            [System.IO.File]::WriteAllBytes($entry.Destination, $entry.Raw)
+        }
+        $generator = Join-Path $PSScriptRoot 'generate_foundation_report.py'
+        $python = Get-Command python -CommandType Application -ErrorAction Stop |
+            Select-Object -First 1
+        $generatorOutput = @(& $python.Source $generator --root $rootPath --write 2>&1)
+        if ($LASTEXITCODE -ne 0) {
+            throw "failed to regenerate canonical foundation report: $($generatorOutput -join ' ')"
+        }
+        Assert-NinhoFoundationEvidence -Root $rootPath -ReportPath $reportPath
+    } catch {
+        foreach ($backup in $backups) {
+            [System.IO.File]::WriteAllBytes($backup.Path, $backup.Bytes)
+        }
+        if ($reportExisted) {
+            [System.IO.File]::WriteAllBytes($reportPath, $reportBackup)
+        } elseif (Test-Path -LiteralPath $reportPath -PathType Leaf) {
+            Remove-Item -LiteralPath $reportPath -Force
+        }
+        throw
+    }
+}
 
 function Get-NinhoSingleReportToken {
     param(
@@ -86,6 +268,7 @@ function Assert-NinhoFoundationEvidence {
         'stress',
         'capability_matrix'
     )
+    $testedInputs = Get-NinhoFoundationTestedInputs -Root $rootPath
 
     foreach ($configuration in 'Debug', 'Release') {
         $canonicalRelative = "docs/physics/evidence/foundation-report-$($configuration.ToLowerInvariant()).json"
@@ -141,6 +324,8 @@ function Assert-NinhoFoundationEvidence {
         Assert-NinhoSpikeEvidenceDocument `
             -Document $document `
             -ExpectedBuildType $configuration
+        Assert-NinhoTestedInputIdentity -Root $rootPath -Document $document `
+            -ExpectedIdentity $testedInputs
         $matrixScenario = @($document.scenarios | Where-Object name -CEQ 'capability_matrix')
         if ($matrixScenario.Count -ne 1) {
             throw "Foundation evidence missing unique capability_matrix for $configuration"
@@ -200,4 +385,4 @@ function Assert-NinhoFoundationEvidence {
     Assert-NinhoGeneratedFoundationReport -Root $rootPath -ReportPath $resolvedReportPath
 }
 
-Export-ModuleMember -Function Assert-NinhoFoundationEvidence
+Export-ModuleMember -Function Assert-NinhoFoundationEvidence,Get-NinhoFoundationTestedInputPaths,Get-NinhoFoundationTestedInputs,Add-NinhoFoundationEvidenceIdentity,Publish-NinhoFoundationEvidence

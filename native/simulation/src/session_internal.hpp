@@ -5,6 +5,7 @@
 
 #include <ninho/physics/physics_world.hpp>
 
+#include <cstddef>
 #include <cstdint>
 #include <deque>
 #include <optional>
@@ -54,6 +55,7 @@ struct SimulationSession::Impl {
         std::string visual_id;
         ninho::physics::BodyHandle physics_handle;
         bool neutralized{};
+        bool is_projectile{};
     };
 
     struct JointRecord {
@@ -101,7 +103,15 @@ struct SimulationSession::Impl {
     [[nodiscard]] std::optional<JointEndpoint> domain_identity(
         ninho::physics::BodyHandle) const noexcept;
     void rebuild_snapshots();
+    void rebuild_canonical_static_content();
+    [[nodiscard]] std::vector<std::uint8_t> serialize_canonical_state(
+        const std::vector<std::uint8_t>& material_blob,
+        const std::vector<std::uint8_t>& archetype_blob,
+        const std::vector<std::uint8_t>& level_blob) const;
     void refresh_canonical_state();
+#if defined(NINHO_ENABLE_TEST_FACADES)
+    [[nodiscard]] std::vector<std::uint8_t> canonical_state_uncached_for_testing() const;
+#endif
 
     ContentBundle bundle;
     ninho::physics::PhysicsWorld physics;
@@ -145,8 +155,21 @@ struct SimulationSession::Impl {
     std::vector<PieceFractureRequest> piece_fracture_requests_for_testing;
 #endif
     std::vector<EntitySnapshot> entity_snapshots;
+    std::vector<EntitySnapshot> entity_snapshot_scratch;
+    std::vector<const ninho::physics::BodyState*> physics_state_by_handle_index;
+    std::unordered_map<std::uint64_t, std::size_t> snapshot_index_by_identity;
     std::vector<StructuralJointSnapshot> joint_snapshots;
     std::vector<DomainEvent> domain_events;
+    // ContentBundle is immutable for one Impl. Reconfigure atomically swaps in
+    // a newly built Impl with a fresh set of these canonical blobs.
+    std::vector<std::uint8_t> canonical_material_blob;
+    std::vector<std::uint8_t> canonical_archetype_blob;
+    std::vector<std::uint8_t> canonical_level_blob;
+#if defined(NINHO_ENABLE_TEST_FACADES)
+    std::size_t canonical_static_content_builds{};
+    std::size_t snapshot_rebuilds{};
+    std::size_t snapshot_visual_id_copies{};
+#endif
     std::vector<std::uint8_t> canonical_bytes;
     std::uint64_t canonical_hash{};
 };

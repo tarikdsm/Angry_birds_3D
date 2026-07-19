@@ -3,6 +3,7 @@ extends Node
 const MATERIALS_PATH := "res://data/materials/vertical_slice.materials.json"
 const ARCHETYPES_PATH := "res://data/archetypes/vertical_slice.archetypes.json"
 const LEVEL_PATH := "res://data/levels/first_orbit.level.json"
+const CONTENT_FILE_LOADER := preload("res://scripts/data/content_file_loader.gd")
 const CAPTURE_ARGUMENT := "--vertical-slice-capture"
 const CAPTURE_FRAME_LIMIT := 300
 const CAPTURE_MARKER := "VERTICAL_SLICE_CAPTURE_COMPLETE frame=300"
@@ -11,6 +12,10 @@ const PERFORMANCE_INPUT_SAMPLES := [
 	{"command_id": "set_aim_center", "theta_degrees": 0.0, "phase_degrees": 0.0, "speed": 10.5},
 	{"command_id": "set_aim_right", "theta_degrees": 2.0, "phase_degrees": 0.0, "speed": 8.0},
 	{"command_id": "set_aim_left", "theta_degrees": -2.0, "phase_degrees": 0.0, "speed": 8.0},
+]
+const CAPTURE_ABILITY_EVENT_KINDS := [
+	"ability_started",
+	"ability_pulse",
 ]
 const INPUT_AIM_EPSILON := 0.002
 
@@ -55,10 +60,16 @@ func _ready() -> void:
 	launch_controller.bind_session(session)
 	launch_controller.recenter_requested.connect(orbital_camera.recenter)
 	session.gameplay_fault.connect(_on_gameplay_fault)
-	session_configured = session.configure_session(
-		FileAccess.get_file_as_string(MATERIALS_PATH),
-		FileAccess.get_file_as_string(ARCHETYPES_PATH),
-		FileAccess.get_file_as_string(LEVEL_PATH))
+	var content_result := _load_session_content()
+	if bool(content_result.get("ok", false)):
+		session_configured = session.configure_session(
+			content_result.get("materials", ""),
+			content_result.get("archetypes", ""),
+			content_result.get("level", ""))
+	else:
+		push_error("session content %s error: %s" % [
+			content_result.get("error_kind", "unknown"),
+			content_result.get("message", "content load failed")])
 	_capture_enabled = OS.get_cmdline_user_args().has(CAPTURE_ARGUMENT)
 	for argument: String in OS.get_cmdline_user_args():
 		if argument.begins_with("--vertical-slice-metrics="):
@@ -69,6 +80,21 @@ func _ready() -> void:
 			get_window().content_scale_factor = 1.5
 		elif argument == "--capture-normal-terminal":
 			_capture_require_terminal = true
+
+
+func _load_session_content() -> Dictionary:
+	var documents := {}
+	for spec: Array in [
+		["materials", MATERIALS_PATH],
+		["archetypes", ARCHETYPES_PATH],
+		["level", LEVEL_PATH],
+	]:
+		var result := CONTENT_FILE_LOADER.read_text(spec[1])
+		if not bool(result.get("ok", false)):
+			return result
+		documents[spec[0]] = result.get("text", "")
+	documents["ok"] = true
+	return documents
 
 
 func _physics_process(_delta: float) -> void:
@@ -93,6 +119,7 @@ func _physics_process(_delta: float) -> void:
 func _process(delta: float) -> void:
 	if not _capture_enabled:
 		return
+	_drive_causal_input_samples()
 	_capture_render_frames += 1
 	if _capture_render_frames > 20:
 		_frame_times_ms.append(delta * 1000.0)
@@ -142,7 +169,6 @@ func _shutdown_capture_feedback() -> void:
 
 
 func _drive_capture() -> void:
-	_drive_causal_input_samples()
 	if consume_calls >= 55 and _capture_shot_count == 0 \
 			and _input_next_sample == PERFORMANCE_INPUT_SAMPLES.size() \
 			and _input_pending_sample.is_empty():
@@ -197,9 +223,14 @@ func _drive_causal_input_samples() -> void:
 
 
 func _expected_aim_for_input_sample(sample: Dictionary) -> Dictionary:
+	var aim_envelope: Dictionary = current_frame.get("aim_envelope", {})
+	if aim_envelope.is_empty():
+		return {}
 	var theta := deg_to_rad(float(sample.theta_degrees))
 	var phase := deg_to_rad(float(sample.phase_degrees))
-	var origin := Vector3(-13.0 * cos(theta), 0.0, 13.0 * sin(theta))
+	var shell_radius := float(aim_envelope.shell_radius_m)
+	var origin := Vector3(
+		-shell_radius * cos(theta), 0.0, shell_radius * sin(theta))
 	var azimuth := Vector3(sin(theta), 0.0, cos(theta))
 	return {
 		"origin": origin,
@@ -268,13 +299,15 @@ func _log_capture_state() -> void:
 			str(orbital_camera.global_position),
 		])
 	for event: Dictionary in current_frame.get("events", []):
+		var kind := str(event.get("kind", ""))
 		var profile := str(feedback.profile_for_event(event, current_frame.get("snapshots", [])))
-		if profile not in ["helmet", "vulnerable"]:
+		if profile not in ["helmet", "vulnerable"] \
+				and kind not in CAPTURE_ABILITY_EVENT_KINDS:
 			continue
 		print("NINHO_CAPTURE_EVENT frame=%d tick=%d kind=%s profile=%s affected=%d damage=%.6f camera=%s exposure=1.0" % [
 			_capture_render_frames,
 			int(event.get("tick", current_frame.get("tick", 0))),
-			str(event.get("kind", "")),
+			kind,
 			profile,
 			int(event.get("affected_entity_id", 0)),
 			float(event.get("damage", 0.0)),

@@ -11,12 +11,8 @@ foreach ($configuration in 'Debug','Release') {
     if (-not (Test-Path -LiteralPath $evidencePath -PathType Leaf)) {
         throw "vertical slice evidence missing: $evidencePath"
     }
-    $document = Get-Content -Raw -LiteralPath $evidencePath | ConvertFrom-Json
-    if ([string]$document.commit -notmatch '^[0-9a-f]{40}$') {
-        throw "vertical slice evidence commit invalid: $evidencePath"
-    }
     Assert-NinhoVerticalSliceEvidence -EvidencePath $evidencePath -ArtifactRoot $Root `
-        -ExpectedConfiguration $configuration -ExpectedCommit ([string]$document.commit) | Out-Null
+        -ExpectedConfiguration $configuration | Out-Null
 }
 
 Write-Output 'VERTICAL_SLICE_EVIDENCE_CHECK_OK'

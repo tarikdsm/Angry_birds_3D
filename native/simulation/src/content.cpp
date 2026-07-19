@@ -1,5 +1,7 @@
 #include "ninho/simulation/content.hpp"
 
+#include <ninho/physics/physics_limits.hpp>
+
 #include <nlohmann/json.hpp>
 
 #include <algorithm>
@@ -883,6 +885,16 @@ ContentResult<ContentBundle> make_content_bundle(const MaterialCatalog& material
         const auto has_material = [&](MaterialId id) {
             return material_index.contains(id.value());
         };
+        if (!std::isfinite(level.planet.surface_gravity_m_s2)) {
+            fail(ContentErrorCode::InvalidNumber, "/planet/surface_gravity_m_s2",
+                "surface gravity must be finite");
+        }
+        if (level.planet.surface_gravity_m_s2 <= 0.0
+            || level.planet.surface_gravity_m_s2
+                > static_cast<double>(physics::maximum_radial_acceleration)) {
+            fail(ContentErrorCode::OutOfRange, "/planet/surface_gravity_m_s2",
+                "surface gravity is outside the supported range");
+        }
         require_content_entity_id(level.planet.entity_id, "/planet/entity_id");
         for (std::size_t i = 0; i < level.bodies.size(); ++i) {
             require_content_entity_id(

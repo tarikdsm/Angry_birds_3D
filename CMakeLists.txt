@@ -9,8 +9,12 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
 
 option(NINHO_BUILD_GDEXTENSION "Build the Godot presentation adapter" OFF)
-include(cmake/Dependencies.cmake)
 include(CTest)
+set(NINHO_GODOT_EXECUTABLE
+  ""
+  CACHE FILEPATH "Godot 4.5.1 executable used by GDExtension runtime tests")
+include(cmake/RequireGodotRuntimeTests.cmake)
+include(cmake/Dependencies.cmake)
 option(NINHO_ENABLE_TEST_FACADES "Compile internal test-only facades" "${BUILD_TESTING}")
 if(BUILD_TESTING AND NOT NINHO_ENABLE_TEST_FACADES)
   message(FATAL_ERROR "BUILD_TESTING requires NINHO_ENABLE_TEST_FACADES=ON")
@@ -18,6 +22,20 @@ endif()
 if(NINHO_ENABLE_TEST_FACADES AND NOT BUILD_TESTING)
   message(FATAL_ERROR "NINHO_ENABLE_TEST_FACADES must be OFF when BUILD_TESTING is OFF")
 endif()
+
+# The Debug stress protocol includes CRT bookkeeping and intentionally receives
+# extra safety headroom. Release retains the 60 second performance contract.
+if(CMAKE_BUILD_TYPE STREQUAL "Debug")
+  set(NINHO_STRESS_WATCHDOG_TIMEOUT_SECONDS 180)
+else()
+  set(NINHO_STRESS_WATCHDOG_TIMEOUT_SECONDS 60)
+endif()
+math(EXPR NINHO_STRESS_CTEST_TIMEOUT_SECONDS
+  "${NINHO_STRESS_WATCHDOG_TIMEOUT_SECONDS} + 5")
+set(NINHO_SPIKE_JSON_SMOKE_BASE_TIMEOUT_SECONDS 150)
+set(NINHO_SPIKE_JSON_SMOKE_STRESS_REPEAT_COUNT 2)
+math(EXPR NINHO_SPIKE_JSON_SMOKE_CTEST_TIMEOUT_SECONDS
+  "${NINHO_SPIKE_JSON_SMOKE_BASE_TIMEOUT_SECONDS} + ${NINHO_SPIKE_JSON_SMOKE_STRESS_REPEAT_COUNT} * (${NINHO_STRESS_WATCHDOG_TIMEOUT_SECONDS} - 60)")
 
 if(BUILD_TESTING)
   set(_ninho_build_testing_json true)

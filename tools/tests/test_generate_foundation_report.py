@@ -49,6 +49,23 @@ def leaf_rows(value, pointer=""):
 
 
 class FoundationReportGeneratorTests(unittest.TestCase):
+    def test_spike_certifies_local_artifact_before_optional_canonical_publication(self):
+        runner = (ROOT / "tools" / "run_spike.ps1").read_text(encoding="utf-8")
+
+        self.assertIn("[switch]$PublishCanonicalEvidence", runner)
+        read_index = runner.index("Read-NinhoFreshSpikeReport")
+        identity_index = runner.index("Add-NinhoFoundationEvidenceIdentity")
+        write_index = runner.index("[System.IO.File]::WriteAllText")
+        publish_index = runner.index("Publish-NinhoFoundationEvidence")
+        self.assertLess(read_index, identity_index)
+        self.assertLess(identity_index, write_index)
+        self.assertLess(write_index, publish_index)
+        self.assertRegex(
+            runner,
+            r"(?s)if \(\$PublishCanonicalEvidence\)\s*\{.*?"
+            r"Publish-NinhoFoundationEvidence",
+        )
+
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         self.root = Path(self.temp.name)
@@ -118,7 +135,20 @@ class FoundationReportGeneratorTests(unittest.TestCase):
         ):
             self.assertIn(exact_pin, report)
 
-        for persisted_result in (
+        for determinism_limit in (
+            "repeatability only within one executable and build configuration",
+            "do not guarantee identical results across build configurations, machines, CPU models,",
+            "not portable serialization, network-consensus, or cross-platform replay contracts",
+        ):
+            self.assertIn(determinism_limit, report)
+
+        self.assertIn("Volatile local outputs", report)
+        self.assertIn("may be absent after cleanup or in a clean checkout", report)
+        self.assertNotIn("persisted gate counts", report)
+        self.assertNotIn("Persisted logs", report)
+        self.assertNotIn("persisted graphical gate contract", report)
+
+        for recorded_result in (
             "24/24",
             "20/20",
             "build/debug/Testing/Temporary/LastTest.log",
@@ -128,7 +158,7 @@ class FoundationReportGeneratorTests(unittest.TestCase):
             "artifacts/physics/godot-smoke-debug.stdout.log",
             "artifacts/physics/godot-smoke-release.stdout.log",
         ):
-            self.assertIn(persisted_result, report)
+            self.assertIn(recorded_result, report)
         movie_paths = (
             "artifacts/physics/godot-scene-debug.avi",
             "artifacts/physics/godot-scene-gl-debug.avi",

@@ -44,7 +44,8 @@ class VerticalSliceReportTests(unittest.TestCase):
                 "golden_metadata": [{"name": "result", "source_frame": 3999,
                                      "source_transition_frame": 3970, "sha256": "e" * 64}],
                 "rubric": {"critical": 0, "important": 0},
-                "playtest": {"status": "unavailable", "substitute": "independent_agents"},
+                "playtest": {"status": "unavailable", "substitute": "independent_agents",
+                             "legal_limit": "not_legal_advice"},
                 "clean_room": {"approved": True, "comparative_review": "approved"},
                 "package": {"path": "dist/NinhoCosmico", "manifest_sha256": "a" * 64,
                             "launch_from_space_path": "passed"},
@@ -58,7 +59,11 @@ class VerticalSliceReportTests(unittest.TestCase):
             self.assertEqual(first.returncode, 0, first.stderr)
             report = root / "docs/gameplay/vertical-slice-report.md"
             original = report.read_bytes()
-            self.assertIn(b"independent_agents", original)
+            self.assertIn(b"Human playtest: `pending`", original)
+            self.assertIn(b"legacy record", original)
+            self.assertIn(b"do not substitute for human usability observations", original)
+            self.assertNotIn(b"Independent substitute review", original)
+            self.assertNotIn(b"All recorded blocking gates passed", original)
             self.assertIn(b"not a legal opinion", original)
             self.assertIn(b"Release goldens are the canonical certification images", original)
             self.assertIn(b"Tested-Inputs-Release-SHA256", original)

@@ -2,6 +2,7 @@
 
 #include <ninho/extension/orbital_session_node.hpp>
 
+#include <algorithm>
 #include <filesystem>
 #include <fstream>
 #include <limits>
@@ -35,11 +36,40 @@ struct JsonFixture {
         "game/data/levels/first_orbit.level.json");
 };
 
+void replace_once(std::string& value, std::string_view from, std::string_view to)
+{
+    const std::size_t position = value.find(from);
+    NINHO_REQUIRE(position != std::string::npos);
+    value.replace(position, from.size(), to);
+}
+
 static_assert(noexcept(std::declval<OrbitalSessionAdapter&>().configure(
     std::declval<std::string_view>(), std::declval<std::string_view>(),
     std::declval<std::string_view>())));
 static_assert(noexcept(std::declval<OrbitalSessionAdapter&>().advance(0.0)));
 static_assert(noexcept(std::declval<OrbitalSessionAdapter&>().consume_frame()));
+
+NINHO_TEST("orbital adapter publishes the configured manifest aim envelope")
+{
+    JsonFixture json;
+    replace_once(json.level, "\"shell_offset_m\": 3.0", "\"shell_offset_m\": 6.0");
+    replace_once(json.level, "\"theta_min_deg\": -50.0", "\"theta_min_deg\": -35.0");
+    replace_once(json.level, "\"theta_max_deg\": 50.0", "\"theta_max_deg\": 60.0");
+    replace_once(json.level, "\"phase_speed_min_m_s\": 8.0", "\"phase_speed_min_m_s\": 9.0");
+    replace_once(json.level, "\"phase_speed_max_m_s\": 16.0", "\"phase_speed_max_m_s\": 18.0");
+    replace_once(json.level, "\"default_speed_m_s\": 10.5", "\"default_speed_m_s\": 12.5");
+
+    OrbitalSessionAdapter adapter;
+    NINHO_REQUIRE(adapter.configure(json.materials, json.archetypes, json.level));
+
+    const SessionFrameData frame = adapter.consume_frame();
+    NINHO_REQUIRE_NEAR(frame.aim_envelope.shell_radius_m, 16.0, 1.0e-9);
+    NINHO_REQUIRE_NEAR(frame.aim_envelope.theta_min_deg, -35.0, 1.0e-9);
+    NINHO_REQUIRE_NEAR(frame.aim_envelope.theta_max_deg, 60.0, 1.0e-9);
+    NINHO_REQUIRE_NEAR(frame.aim_envelope.speed_min_m_s, 9.0, 1.0e-9);
+    NINHO_REQUIRE_NEAR(frame.aim_envelope.speed_max_m_s, 18.0, 1.0e-9);
+    NINHO_REQUIRE_NEAR(frame.aim_envelope.default_speed_m_s, 12.5, 1.0e-9);
+}
 
 NINHO_TEST("orbital adapter configures queues all commands advances and restarts")
 {
@@ -62,6 +92,9 @@ NINHO_TEST("orbital adapter configures queues all commands advances and restarts
     NINHO_REQUIRE(launched.ticks_executed == 3);
     NINHO_REQUIRE(!launched.events.empty());
     NINHO_REQUIRE(!launched.snapshots.empty());
+    NINHO_REQUIRE(std::ranges::count(
+                      launched.snapshots, true, &ninho::simulation::EntitySnapshot::is_projectile)
+        == 1);
     NINHO_REQUIRE(!launched.preview.has_value());
     NINHO_REQUIRE(launched.objective_targets.size() == 1U);
     NINHO_REQUIRE(launched.objective_targets.front().entity_id.value() == 200U);
@@ -79,6 +112,40 @@ NINHO_TEST("orbital adapter configures queues all commands advances and restarts
         restarted.objective_targets.front().current_integrity, 100.0, 1.0e-9);
     NINHO_REQUIRE(
         restarted.ability_readiness == ninho::simulation::AbilityReadiness::Unavailable);
+}
+
+NINHO_TEST("orbital adapter catch up retains per tick events and only final frame state")
+{
+    const JsonFixture json;
+    OrbitalSessionAdapter adapter;
+    NINHO_REQUIRE(adapter.configure(json.materials, json.archetypes, json.level));
+    NINHO_REQUIRE(adapter.queue_begin_aim());
+    NINHO_REQUIRE(adapter.advance(1.0 / 60.0));
+    static_cast<void>(adapter.consume_frame());
+
+    NINHO_REQUIRE(adapter.queue_aim(
+        Vec3{-13.0F, 0.0F, 0.0F}, Vec3{0.0F, 1.0F, 0.0F}, 10.5));
+    NINHO_REQUIRE(adapter.queue_launch());
+    NINHO_REQUIRE(adapter.advance(10.0 / 60.0));
+
+    const SessionFrameData frame = adapter.consume_frame();
+    NINHO_REQUIRE(frame.ticks_executed == 4);
+    NINHO_REQUIRE(frame.state.tick.value() == 5);
+    NINHO_REQUIRE_NEAR(frame.discarded_time_seconds, 6.0 / 60.0, 1.0e-12);
+    NINHO_REQUIRE(std::ranges::any_of(frame.events, [](const auto& event) {
+        return event.kind == ninho::simulation::DomainEventKind::BirdLaunched;
+    }));
+    NINHO_REQUIRE(std::ranges::count(
+                      frame.snapshots, true,
+                      &ninho::simulation::EntitySnapshot::is_projectile)
+        == 1);
+
+    const SessionFrameData acknowledged = adapter.consume_frame();
+    NINHO_REQUIRE(acknowledged.ticks_executed == 0);
+    NINHO_REQUIRE(acknowledged.events.empty());
+    NINHO_REQUIRE_NEAR(acknowledged.discarded_time_seconds, 0.0, 1.0e-12);
+    NINHO_REQUIRE(acknowledged.snapshots == frame.snapshots);
+    NINHO_REQUIRE(acknowledged.state.tick == frame.state.tick);
 }
 
 NINHO_TEST("orbital adapter rolls back invalid configuration latches fault and recovers")
@@ -104,7 +171,9 @@ NINHO_TEST("orbital adapter rolls back invalid configuration latches fault and r
     NINHO_REQUIRE(!adapter.queue_aim(
         Vec3{std::numeric_limits<float>::infinity(), 0.0F, 0.0F},
         Vec3{0.0F, 1.0F, 0.0F}, 10.5));
-    NINHO_REQUIRE(adapter.fault().has_value());
+    NINHO_REQUIRE(!adapter.fault().has_value());
+    NINHO_REQUIRE(adapter.queue_begin_aim());
+    NINHO_REQUIRE(adapter.advance(1.0 / 60.0));
     NINHO_REQUIRE(adapter.configure(json.materials, json.archetypes, json.level));
     NINHO_REQUIRE(!adapter.fault().has_value());
 }

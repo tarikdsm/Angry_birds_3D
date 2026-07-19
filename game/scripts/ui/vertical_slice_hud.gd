@@ -1,5 +1,33 @@
 extends CanvasLayer
 
+const HUD_TEXT_CATALOG := preload("res://scripts/data/hud_text_catalog.gd")
+const DEFAULT_TEXT_CATALOG_PATH := "res://data/ui/vertical_slice.pt-BR.json"
+const PHASE_MESSAGE_IDS := {
+	"loading": "hud.phase.loading",
+	"inspection": "hud.phase.inspection",
+	"aim": "hud.phase.aim",
+	"flight_ability": "hud.phase.flight_ability",
+	"resolution": "hud.phase.resolution",
+	"evaluation": "hud.phase.evaluation",
+	"result": "hud.phase.result",
+	"faulted": "hud.phase.faulted",
+}
+const CONTROL_MESSAGE_IDS := {
+	"loading": "hud.controls.loading",
+	"inspection": "hud.controls.inspection",
+	"aim": "hud.controls.aim",
+	"resolution": "hud.controls.resolution",
+	"evaluation": "hud.controls.evaluation",
+	"result": "hud.controls.result",
+	"faulted": "hud.controls.faulted",
+}
+const OUTCOME_MESSAGE_IDS := {
+	"none": "hud.outcome.none",
+	"victory": "hud.outcome.victory",
+	"defeat": "hud.outcome.defeat",
+}
+
+@export_file("*.json") var text_catalog_path := DEFAULT_TEXT_CATALOG_PATH
 @onready var phase_label: Label = %PhaseLabel
 @onready var birds_label: Label = %BirdsLabel
 @onready var integrity_label: Label = %IntegrityLabel
@@ -12,10 +40,22 @@ var _last_ability_readiness := "unavailable"
 var _last_ability_armed := false
 var _ability_rejected_early := false
 var _reduced_motion := false
+var _label_write_count := 0
+var _text_catalog_load_count := 0
+var _text_catalog_status := {"ok": false, "error_kind": "not_loaded"}
+var _messages: Dictionary = HUD_TEXT_CATALOG.safe_fallback_messages()
 
 const SPACE_COLOR := Color("07111f")
 const PRIMARY_TEXT_COLOR := Color("bef9e8")
 const SECONDARY_TEXT_COLOR := Color("f6c95c")
+
+func _ready() -> void:
+	_text_catalog_load_count += 1
+	_text_catalog_status = HUD_TEXT_CATALOG.load_catalog(text_catalog_path)
+	if bool(_text_catalog_status.get("ok", false)):
+		var document := _text_catalog_status.get("document", {}) as Dictionary
+		_messages = (document.get("messages", {}) as Dictionary).duplicate(true)
+	_render_initial_state()
 
 
 func apply_frame(frame: Dictionary) -> void:
@@ -32,27 +72,47 @@ func apply_frame(frame: Dictionary) -> void:
 	_last_phase = phase
 	_last_ability_readiness = readiness
 	_last_ability_armed = ability_armed
-	phase_label.text = "FASE  %s" % phase.to_upper().replace("_", " ")
-	birds_label.text = "VIRELAS  %d" % int(frame.get("birds_remaining", 0))
-	integrity_label.text = _objective_integrity_text(frame.get("objective_targets", []))
-	controls_label.text = _controls_with_accessibility(phase, readiness, ability_armed)
+	_set_label_text(phase_label, _message("hud.format.phase") % _phase_label_pt_br(phase))
+	_set_label_text(
+		birds_label, _message("hud.format.birds") % int(frame.get("birds_remaining", 0)))
+	_set_label_text(
+		integrity_label, _objective_integrity_text(frame.get("objective_targets", [])))
+	_set_label_text(
+		controls_label, _controls_with_accessibility(phase, readiness, ability_armed))
 	var outcome := str(frame.get("outcome", "none"))
-	if outcome == "victory":
-		result_label.text = "ÓRBITA CONQUISTADA"
-	elif outcome == "defeat":
-		result_label.text = "ÓRBITA PERDIDA"
-	else:
-		result_label.text = ""
+	var outcome_message_id := str(OUTCOME_MESSAGE_IDS.get(outcome, "hud.outcome.unknown"))
+	_set_label_text(result_label, _message(outcome_message_id))
 
 
 func show_fault(code: String, message: String) -> void:
-	fault_label.text = "FALHA [%s] %s" % [code, message]
+	_set_label_text(fault_label, _message("hud.format.fault") % [code, message])
 
 
 func set_reduced_motion(enabled: bool) -> void:
 	_reduced_motion = enabled
-	controls_label.text = _controls_with_accessibility(
-		_last_phase, _last_ability_readiness, _last_ability_armed)
+	_set_label_text(
+		controls_label,
+		_controls_with_accessibility(
+			_last_phase, _last_ability_readiness, _last_ability_armed))
+
+
+func label_write_count() -> int:
+	return _label_write_count
+
+
+func text_catalog_load_count() -> int:
+	return _text_catalog_load_count
+
+
+func text_catalog_status() -> Dictionary:
+	return _text_catalog_status.duplicate(true)
+
+
+func _set_label_text(label: Label, value: String) -> void:
+	if label.text == value:
+		return
+	label.text = value
+	_label_write_count += 1
 
 
 func minimum_contrast_ratio() -> float:
@@ -63,46 +123,66 @@ func minimum_contrast_ratio() -> float:
 
 func _objective_integrity_text(targets_value: Variant) -> String:
 	if targets_value == null or not targets_value is Array or targets_value.is_empty():
-		return "INTEGRIDADE DO ALVO  ---"
+		return _message("hud.format.objective_empty")
 	var target_value: Variant = targets_value.front()
 	if target_value == null or not target_value is Dictionary:
-		return "INTEGRIDADE DO ALVO  ---"
+		return _message("hud.format.objective_empty")
 	var target := target_value as Dictionary
 	var maximum := float(target.get("maximum_integrity", 0.0))
 	if maximum <= 0.0:
-		return "INTEGRIDADE DO ALVO  ---"
+		return _message("hud.format.objective_empty")
 	var current := clampf(float(target.get("current_integrity", 0.0)), 0.0, maximum)
-	return "INTEGRIDADE DO ALVO  %03d%%" % roundi(100.0 * current / maximum)
+	return _message("hud.format.objective_percent") % roundi(100.0 * current / maximum)
+
+
+func _phase_label_pt_br(phase_id: String) -> String:
+	var message_id := str(PHASE_MESSAGE_IDS.get(phase_id, "hud.phase.unknown"))
+	return _message(message_id)
 
 
 func _controls_for_phase(phase: String, readiness: String, ability_armed: bool) -> String:
 	match phase:
-		"inspection":
-			return "CLIQUE  MIRAR    RMB  ÓRBITA    F  RECENTRAR"
-		"aim":
-			return "Q/E  ARCO    A/D  POTÊNCIA    ESPAÇO  LANÇAR    ESC  CANCELAR"
 		"flight_ability":
 			if _ability_rejected_early:
-				return "VIRELA AINDA NÃO ARMADA    AGUARDE    F  RECENTRAR"
+				return _message("hud.controls.flight_ability.rejected_not_armed")
 			if ability_armed and readiness == "armed":
-				return "ESPAÇO  ATIVAR VIRELA    F  RECENTRAR"
+				return _message("hud.controls.flight_ability.armed")
 			if readiness == "arming":
-				return "VIRELA CARREGANDO    F  RECENTRAR"
+				return _message("hud.controls.flight_ability.arming")
 			if readiness == "active":
-				return "VIRELA ATIVA    F  RECENTRAR"
-			return "F  RECENTRAR"
-		"result":
-			return "SEGURE R 0,5 s  REINICIAR"
+				return _message("hud.controls.flight_ability.active")
+			if readiness == "spent":
+				return _message("hud.controls.flight_ability.spent")
+			if readiness == "unavailable":
+				return _message("hud.controls.flight_ability.unavailable")
+			return _message("hud.controls.flight_ability.unknown")
 		_:
-			return "ESC  PAUSA    SEGURE R 0,5 s  REINICIAR"
+			var message_id := str(CONTROL_MESSAGE_IDS.get(phase, "hud.controls.unknown"))
+			return _message(message_id)
 
 
 func _controls_with_accessibility(
 	phase: String, readiness: String, ability_armed: bool) -> String:
-	return "%s    M  MOVIMENTO %s" % [
+	return _message("hud.accessibility.format") % [
 		_controls_for_phase(phase, readiness, ability_armed),
-		"REDUZIDO" if _reduced_motion else "COMPLETO",
+		_message("hud.accessibility.reduced") if _reduced_motion \
+			else _message("hud.accessibility.full"),
 	]
+
+
+func _render_initial_state() -> void:
+	_set_label_text(
+		phase_label, _message("hud.format.phase") % _message("hud.phase.loading"))
+	_set_label_text(birds_label, _message("hud.format.birds_empty"))
+	_set_label_text(integrity_label, _message("hud.format.objective_empty"))
+	_set_label_text(
+		controls_label, _controls_with_accessibility("loading", "unavailable", false))
+	_set_label_text(result_label, _message("hud.outcome.none"))
+	_set_label_text(fault_label, "")
+
+
+func _message(message_id: String) -> String:
+	return str(_messages.get(message_id, "[%s]" % message_id))
 
 
 func _contrast_ratio(foreground: Color, background: Color) -> float:

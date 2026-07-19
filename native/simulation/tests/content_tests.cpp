@@ -205,6 +205,25 @@ NINHO_SIM_TEST("content parses the production catalogs and validates the complet
     NINHO_SIM_REQUIRE(bundle.ok());
 }
 
+NINHO_SIM_TEST("content bundle enforces the kernel surface gravity ceiling")
+{
+    const RealContent files;
+    const auto materials = parse_material_catalog(files.materials_text);
+    const auto archetypes = parse_archetype_catalog(files.archetypes_text);
+    const auto parsed_level = parse_level_manifest(files.level_text);
+    NINHO_SIM_REQUIRE(materials.ok());
+    NINHO_SIM_REQUIRE(archetypes.ok());
+    NINHO_SIM_REQUIRE(parsed_level.ok());
+
+    auto level = parsed_level.value;
+    level.planet.surface_gravity_m_s2 = 18.0;
+    NINHO_SIM_REQUIRE(make_content_bundle(materials.value, archetypes.value, level).ok());
+
+    level.planet.surface_gravity_m_s2 = 18.01;
+    require_error(make_content_bundle(materials.value, archetypes.value, level),
+        ContentErrorCode::OutOfRange, "/planet/surface_gravity_m_s2");
+}
+
 NINHO_SIM_TEST("content fortification destructible AABB stays inside the design budget")
 {
     const RealContent files;

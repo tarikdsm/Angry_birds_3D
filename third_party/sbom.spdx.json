@@ -130,6 +130,51 @@
       "copyrightText": "NOASSERTION"
     },
     {
+      "name": "Blender",
+      "SPDXID": "SPDXRef-Package-Blender",
+      "versionInfo": "5.1.2",
+      "downloadLocation": "https://download.blender.org/release/Blender5.1/blender-5.1.2-windows-x64.zip",
+      "filesAnalyzed": false,
+      "checksums": [
+        {
+          "algorithm": "SHA256",
+          "checksumValue": "345bedea7b0acf7cc9666423d8553f9129622aea34ded65c23e8cb70f83f14ff"
+        }
+      ],
+      "licenseConcluded": "NOASSERTION",
+      "licenseDeclared": "GPL-3.0-or-later",
+      "copyrightText": "Copyright (c) 2011-2026 Blender Foundation",
+      "sourceInfo": "Official Windows x64 build tool pinned by archive and executable SHA-256 a7d09b04df8f78d432bc45d32c08f25387a78c76d12d2a6f5de07d8e1066e8f8. Blender itself is declared GPL-3.0-or-later, while the binary distribution contains dependencies under other licenses. Tool binaries are not redistributed; only project-authored generated assets are committed and packaged."
+    },
+    {
+      "name": "FFmpeg essentials build by Gyan.dev",
+      "SPDXID": "SPDXRef-Package-FFmpeg-Gyan",
+      "versionInfo": "8.1.2",
+      "downloadLocation": "https://github.com/GyanD/codexffmpeg/releases/download/8.1.2/ffmpeg-8.1.2-essentials_build.zip",
+      "filesAnalyzed": false,
+      "checksums": [
+        {
+          "algorithm": "SHA256",
+          "checksumValue": "db580001caa24ac104c8cb856cd113a87b0a443f7bdf47d8c12b1d740584a2ec"
+        }
+      ],
+      "licenseConcluded": "NOASSERTION",
+      "licenseDeclared": "GPL-3.0-or-later",
+      "copyrightText": "Copyright (c) 2000-2026 the FFmpeg developers",
+      "sourceInfo": "Official Windows x64 essentials build pinned by archive SHA-256 and executable SHA-256 values ffmpeg.exe=1326dde4c84ff1f96fe6b8916c5bed29e163e9b5dccf995f6f3db069d143ec5e and ffprobe.exe=b49ccc7c6547b141ad5a2f6ec69cc04323d7133d7704d70b331b904c63eecb07. The build is declared GPL-3.0-or-later, while its static distribution contains bundled libraries under additional compatible licenses. Tool binaries are not redistributed with the repository or game package."
+    },
+    {
+      "name": "Python interpreter (environment-provided)",
+      "SPDXID": "SPDXRef-Package-Python",
+      "versionInfo": ">=3.11.0",
+      "downloadLocation": "NOASSERTION",
+      "filesAnalyzed": false,
+      "licenseConcluded": "NOASSERTION",
+      "licenseDeclared": "NOASSERTION",
+      "copyrightText": "NOASSERTION",
+      "sourceInfo": "The toolchain lock requires command python at version 3.11.0 or later, but does not pin an implementation, distribution, download URL, or checksum. The interpreter is environment-provided and is not redistributed by this repository."
+    },
+    {
       "name": "Microsoft Visual Studio Build Tools 2026",
       "SPDXID": "SPDXRef-Package-Visual-Studio-Build-Tools",
       "versionInfo": "18.7.3+11925.98",
@@ -184,6 +229,21 @@
     },
     {
       "spdxElementId": "SPDXRef-Package-Ninja",
+      "relationshipType": "BUILD_TOOL_OF",
+      "relatedSpdxElement": "SPDXRef-Package-Ninho-Orbital"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-Blender",
+      "relationshipType": "BUILD_TOOL_OF",
+      "relatedSpdxElement": "SPDXRef-Package-Ninho-Orbital"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-FFmpeg-Gyan",
+      "relationshipType": "BUILD_TOOL_OF",
+      "relatedSpdxElement": "SPDXRef-Package-Ninho-Orbital"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-Python",
       "relationshipType": "BUILD_TOOL_OF",
       "relatedSpdxElement": "SPDXRef-Package-Ninho-Orbital"
     },

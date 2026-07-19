@@ -99,7 +99,12 @@ void apply_material_damage(std::vector<DamageState>& states,
     }
 }
 
-double directional_multiplier(const WeakpointProfile& weakpoint,
+struct DirectionalDamageResponse {
+    double multiplier{};
+    DamageClassification classification{DamageClassification::None};
+};
+
+DirectionalDamageResponse directional_response(const WeakpointProfile& weakpoint,
     const DamageBody& target, ninho::physics::Vec3 cause_to_target)
 {
     const ninho::physics::Vec3 local_front{
@@ -113,7 +118,11 @@ double directional_multiplier(const WeakpointProfile& weakpoint,
         weakpoint.protected_cone_deg * std::numbers::pi / 180.0);
     const bool protected_hit = static_cast<double>(
         ninho::physics::dot(world_front, target_to_source)) >= cone_cosine;
-    return protected_hit ? weakpoint.protected_multiplier : weakpoint.exposed_multiplier;
+    return protected_hit
+        ? DirectionalDamageResponse{weakpoint.protected_multiplier,
+            DamageClassification::Protected}
+        : DirectionalDamageResponse{weakpoint.exposed_multiplier,
+            DamageClassification::Vulnerable};
 }
 
 void apply_enemy_damage(std::vector<DamageState>& states,
@@ -133,8 +142,10 @@ void apply_enemy_damage(std::vector<DamageState>& states,
     }
     const double denominator = enemy->mass_kg * enemy->damage_energy_j_per_kg;
     const double uncapped = enemy->integrity * energy / denominator;
+    const DirectionalDamageResponse response =
+        directional_response(*weakpoint, target, cause_to_target);
     const double damage = std::min(enemy->max_damage,
-        uncapped * directional_multiplier(*weakpoint, target, cause_to_target));
+        uncapped * response.multiplier);
     const double applied = std::min(state->remaining_integrity, damage);
     if (applied <= 0.0) {
         return;
@@ -142,14 +153,15 @@ void apply_enemy_damage(std::vector<DamageState>& states,
     state->remaining_integrity -= applied;
     outcomes.push_back({DamageOutcomeKind::DamageApplied,
         cause_entity, cause_part, target.entity_id, target.part_id,
-        position, cause_to_target, energy, applied});
+        position, cause_to_target, energy, applied,
+        NeutralizationCause::None, response.classification});
     if (state->remaining_integrity <= 0.0) {
         state->remaining_integrity = 0.0;
         state->neutralized = true;
         outcomes.push_back({DamageOutcomeKind::EntityNeutralized,
             cause_entity, cause_part, target.entity_id, target.part_id,
             position, cause_to_target, energy, applied,
-            NeutralizationCause::IntegrityDepleted});
+            NeutralizationCause::IntegrityDepleted, response.classification});
     }
 }
 
@@ -232,6 +244,7 @@ void SimulationSession::Impl::publish_damage_outcomes(
             .normal = outcome.normal_cause_to_target,
             .energy_j = outcome.energy_j,
             .damage = outcome.damage,
+            .damage_classification = outcome.damage_classification,
             .neutralization_cause = outcome.neutralization_cause,
         };
         domain_events.push_back(event);

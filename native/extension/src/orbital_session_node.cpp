@@ -72,6 +72,19 @@ void append_fixed(
     destination[used] = '\0';
 }
 
+[[nodiscard]] AimEnvelope aim_envelope_from(
+    const simulation::LevelManifest& level) noexcept
+{
+    return {
+        .shell_radius_m = level.planet.radius_m + level.launch_ring.shell_offset_m,
+        .theta_min_deg = level.launch_ring.theta_min_deg,
+        .theta_max_deg = level.launch_ring.theta_max_deg,
+        .speed_min_m_s = level.launch_ring.phase_speed_min_m_s,
+        .speed_max_m_s = level.launch_ring.phase_speed_max_m_s,
+        .default_speed_m_s = level.launch_ring.default_speed_m_s,
+    };
+}
+
 }
 
 FaultInfo::FaultInfo(std::string_view code, std::string_view message) noexcept
@@ -103,25 +116,11 @@ std::string_view FaultInfo::message() const noexcept
     return {message_storage_.data(), message_size_};
 }
 
-void SessionFrameBatch::capture_tick(
-    std::span<const simulation::DomainEvent> events,
-    std::span<const simulation::EntitySnapshot> snapshots,
-    const simulation::SessionState& state,
-    std::uint32_t birds_remaining,
-    bool objectives_complete,
-    const physics::WorldMetrics& metrics,
-    std::optional<simulation::TrajectoryPreview> preview,
-    std::span<const simulation::ObjectiveTargetStatus> objective_targets,
-    simulation::AbilityReadiness ability_readiness)
+void SessionFrameBatch::capture_events(
+    std::span<const simulation::DomainEvent> events)
 {
     pending_.events.insert(pending_.events.end(), events.begin(), events.end());
     ++pending_.ticks_executed;
-    capture_latest(
-        snapshots, state, birds_remaining, objectives_complete, metrics,
-        objective_targets, ability_readiness);
-    if (preview && state.phase == simulation::SessionPhase::Aim) {
-        pending_.preview = std::move(preview);
-    }
 }
 
 void SessionFrameBatch::capture_latest(
@@ -148,6 +147,11 @@ void SessionFrameBatch::capture_latest(
 void SessionFrameBatch::set_preview(simulation::TrajectoryPreview preview)
 {
     pending_.preview = std::move(preview);
+}
+
+void SessionFrameBatch::set_aim_envelope(AimEnvelope envelope) noexcept
+{
+    pending_.aim_envelope = envelope;
 }
 
 void SessionFrameBatch::add_discarded_time(double seconds) noexcept
@@ -202,23 +206,11 @@ const std::optional<FaultInfo>& SessionFrameBatch::fault() const noexcept
     return fault_;
 }
 
-void capture_session_tick(
+void capture_session_events(
     SessionFrameBatch& batch,
     const simulation::SimulationSession& session)
 {
-    const std::span<const simulation::DomainEvent> events = session.events();
-    const std::vector<simulation::ObjectiveTargetStatus> objective_targets =
-        session.objective_target_statuses();
-    batch.capture_tick(
-        events,
-        session.snapshots(),
-        session.state(),
-        session.birds_remaining(),
-        session.objectives_complete(),
-        session.physics_metrics(),
-        std::nullopt,
-        objective_targets,
-        session.ability_readiness());
+    batch.capture_events(session.events());
 }
 
 void OrbitalSessionAdapter::latch_content_error(
@@ -306,6 +298,7 @@ bool OrbitalSessionAdapter::configure(
             candidate.value->physics_metrics(),
             objective_targets,
             candidate.value->ability_readiness());
+        candidate_batch.set_aim_envelope(aim_envelope_from(candidate_content.level));
 
         session_ = std::move(candidate.value);
         content_ = std::move(candidate_content);
@@ -368,6 +361,10 @@ bool OrbitalSessionAdapter::queue_aim(
         fail("session_not_configured", "configure_session must succeed first");
         return false;
     }
+    if (!physics::is_finite(origin) || !physics::is_finite(tangent_direction)
+        || !std::isfinite(speed)) {
+        return false;
+    }
     try {
         simulation::AimState aim{origin, tangent_direction, speed};
         simulation::TrajectoryPreview preview = session_->preview(aim);
@@ -427,6 +424,7 @@ bool OrbitalSessionAdapter::restart() noexcept
             candidate.value->physics_metrics(),
             objective_targets,
             candidate.value->ability_readiness());
+        candidate_batch.set_aim_envelope(aim_envelope_from(content_.level));
 
         session_ = std::move(candidate.value);
         batch_ = std::move(candidate_batch);
@@ -475,10 +473,14 @@ bool OrbitalSessionAdapter::advance(double delta) noexcept
     try {
         for (int index = 0; index < schedule.tick_count; ++index) {
             const simulation::SessionStatus status = session_->tick();
-            capture_session_tick(batch_, *session_);
-            if (!accept_status(status)) {
-                return false;
+            capture_session_events(batch_, *session_);
+            if (!status.ok()) {
+                capture_latest();
+                return accept_status(status);
             }
+        }
+        if (schedule.tick_count > 0) {
+            capture_latest();
         }
         return true;
     } catch (const std::exception& error) {
@@ -586,6 +588,17 @@ namespace {
     return "unknown";
 }
 
+[[nodiscard]] const char* damage_classification_name(
+    simulation::DamageClassification classification) noexcept
+{
+    switch (classification) {
+    case simulation::DamageClassification::None: return "none";
+    case simulation::DamageClassification::Protected: return "protected";
+    case simulation::DamageClassification::Vulnerable: return "vulnerable";
+    }
+    return "unknown";
+}
+
 [[nodiscard]] const char* event_kind_name(simulation::DomainEventKind kind) noexcept
 {
     using enum simulation::DomainEventKind;
@@ -654,6 +667,7 @@ namespace {
     result["mass_kg"] = snapshot.mass_kg;
     result["awake"] = snapshot.awake;
     result["ejected"] = snapshot.ejected;
+    result["is_projectile"] = snapshot.is_projectile;
     return result;
 }
 
@@ -678,6 +692,8 @@ namespace {
     result["normal"] = detail::to_godot(event.normal);
     result["energy_j"] = event.energy_j;
     result["damage"] = event.damage;
+    result["damage_classification"] =
+        damage_classification_name(event.damage_classification);
     result["neutralization_cause"] = static_cast<std::int64_t>(event.neutralization_cause);
     result["cause_event_id"] = static_cast<std::int64_t>(event.cause_event_id.value());
     result["joint_id"] = static_cast<std::int64_t>(event.joint_id.value());
@@ -741,6 +757,14 @@ namespace {
     metrics["awake_count"] = frame.metrics.awake_count;
     metrics["step_ms"] = frame.metrics.step_ms;
 
+    godot::Dictionary aim_envelope;
+    aim_envelope["shell_radius_m"] = frame.aim_envelope.shell_radius_m;
+    aim_envelope["theta_min_deg"] = frame.aim_envelope.theta_min_deg;
+    aim_envelope["theta_max_deg"] = frame.aim_envelope.theta_max_deg;
+    aim_envelope["speed_min_m_s"] = frame.aim_envelope.speed_min_m_s;
+    aim_envelope["speed_max_m_s"] = frame.aim_envelope.speed_max_m_s;
+    aim_envelope["default_speed_m_s"] = frame.aim_envelope.default_speed_m_s;
+
     godot::Dictionary result;
     result["tick"] = static_cast<std::int64_t>(frame.state.tick.value());
     result["ticks_executed"] = frame.ticks_executed;
@@ -755,6 +779,7 @@ namespace {
     result["ability_armed"] =
         frame.ability_readiness == simulation::AbilityReadiness::Armed;
     result["trajectory_preview"] = preview_variant(frame.preview);
+    result["aim_envelope"] = aim_envelope;
     result["metrics"] = metrics;
     result["discarded_time_seconds"] = frame.discarded_time_seconds;
     return result;
@@ -858,8 +883,6 @@ bool OrbitalSessionNode::queue_aim(
     const auto kernel_origin = detail::to_kernel_checked(origin);
     const auto kernel_direction = detail::to_kernel_checked(tangent_direction);
     if (!kernel_origin || !kernel_direction || !std::isfinite(speed)) {
-        adapter_.fail("invalid_number", "aim values must be finite and representable");
-        emit_pending_fault();
         return false;
     }
     const bool result = adapter_.queue_aim(*kernel_origin, *kernel_direction, speed);

@@ -613,3 +613,22 @@ NINHO_TEST("capability metrics exclude contacts attached to pending body destruc
     NINHO_REQUIRE(world.destroy_body(body).ok());
     NINHO_REQUIRE(world.metrics().contact_count == 0);
 }
+
+NINHO_TEST("capability metrics reuse contact scratch after warmup")
+{
+    PhysicsWorld world(WorldConfig{.surface_gravity = 0});
+    world.create_body(BodyDesc::static_box({2, 0.5f, 2}, {{0, 0, 0}, {}}));
+    world.create_body(
+        BodyDesc::dynamic_box({0.5f, 0.5f, 0.5f}, {{0, 1, 0}, {}}, 10));
+    world.step();
+
+    const int expected_contact_count = world.metrics().contact_count;
+    NINHO_REQUIRE(expected_contact_count > 0);
+
+    ninho::test::AllocationCounter allocations;
+    const int repeated_contact_count = world.metrics().contact_count;
+    const std::size_t allocation_count = allocations.finish();
+
+    NINHO_REQUIRE(repeated_contact_count == expected_contact_count);
+    NINHO_REQUIRE(allocation_count == 0);
+}

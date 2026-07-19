@@ -68,7 +68,6 @@ SessionStatus SimulationSession::tick()
         impl_->evaluate_fractures_after_step();
         impl_->evaluate_objectives_after_step();
         impl_->finish_gravity_field_after_step();
-        impl_->rebuild_snapshots();
         impl_->remove_confirmed_runtime_body_records();
         impl_->update_fsm_after_step();
         impl_->rebuild_snapshots();
@@ -192,12 +191,12 @@ ninho::physics::WorldMetrics SimulationSession::physics_metrics() const noexcept
     return impl_->physics.metrics();
 }
 
-const std::vector<std::uint8_t>& SimulationSession::canonical_state_v1() const noexcept
+const std::vector<std::uint8_t>& SimulationSession::canonical_state_v2() const noexcept
 {
     return impl_->canonical_bytes;
 }
 
-std::uint64_t SimulationSession::canonical_hash_v1() const noexcept
+std::uint64_t SimulationSession::canonical_hash_v2() const noexcept
 {
     return impl_->canonical_hash;
 }
@@ -396,6 +395,73 @@ void detail::SessionTestFacade::set_launch_ordinal(
 std::size_t detail::SessionTestFacade::body_record_count(const SimulationSession& session)
 {
     return session.impl_->body_records.size();
+}
+
+std::size_t detail::SessionTestFacade::canonical_static_content_build_count(
+    const SimulationSession& session)
+{
+    return session.impl_->canonical_static_content_builds;
+}
+
+std::vector<std::uint8_t> detail::SessionTestFacade::canonical_state_uncached(
+    const SimulationSession& session)
+{
+    return session.impl_->canonical_state_uncached_for_testing();
+}
+
+void detail::SessionTestFacade::refresh_canonical_state(SimulationSession& session)
+{
+    session.impl_->refresh_canonical_state();
+}
+
+std::size_t detail::SessionTestFacade::snapshot_rebuild_count(
+    const SimulationSession& session)
+{
+    return session.impl_->snapshot_rebuilds;
+}
+
+std::size_t detail::SessionTestFacade::snapshot_visual_copy_count(
+    const SimulationSession& session)
+{
+    return session.impl_->snapshot_visual_id_copies;
+}
+
+std::vector<EntitySnapshot> detail::SessionTestFacade::snapshots_uncached(
+    const SimulationSession& session)
+{
+    std::vector<EntitySnapshot> result;
+    result.reserve(session.impl_->body_records.size());
+    for (const SimulationSession::Impl::BodyRecord& record : session.impl_->body_records) {
+        const auto state = session.impl_->physics.state(record.physics_handle);
+        if (!state) {
+            continue;
+        }
+        result.push_back({record.entity_id,
+            record.part_id,
+            record.body_type,
+            record.material_id,
+            record.surface_id,
+            record.enemy_archetype_id,
+            record.shape,
+            record.visual_id,
+            state->transform,
+            state->linear_velocity,
+            state->angular_velocity,
+            state->mass,
+            state->awake,
+            state->ejected,
+            record.is_projectile});
+    }
+    std::ranges::sort(result, [](const auto& lhs, const auto& rhs) {
+        return std::pair{lhs.entity_id, lhs.part_id}
+            < std::pair{rhs.entity_id, rhs.part_id};
+    });
+    return result;
+}
+
+void detail::SessionTestFacade::rebuild_snapshots(SimulationSession& session)
+{
+    session.impl_->rebuild_snapshots();
 }
 
 std::int64_t detail::SessionTestFacade::quantize_canonical(double value)

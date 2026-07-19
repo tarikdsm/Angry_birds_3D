@@ -1,4 +1,5 @@
 #include "test_framework.hpp"
+#include "physics_world_test_facade.hpp"
 
 #include <ninho/physics/physics_world.hpp>
 
@@ -13,6 +14,12 @@ static_assert(!std::is_copy_constructible_v<PhysicsWorld>);
 static_assert(!std::is_copy_assignable_v<PhysicsWorld>);
 static_assert(std::is_nothrow_move_constructible_v<PhysicsWorld>);
 static_assert(std::is_nothrow_move_assignable_v<PhysicsWorld>);
+
+NINHO_TEST("contract Box3D world remains single worker")
+{
+    const PhysicsWorld world(WorldConfig{});
+    NINHO_REQUIRE(detail::PhysicsWorldTestFacade::worker_count(world) == 1);
+}
 
 NINHO_TEST("world rejects destroyed handle after slot reuse")
 {
@@ -88,6 +95,21 @@ NINHO_TEST("contract configuration validation rejects unsafe values")
     config = {};
     config.planet_radius = std::numeric_limits<float>::max();
     NINHO_REQUIRE(rejected(config));
+}
+
+NINHO_TEST("contract configuration rejects surface gravity above the acceleration ceiling")
+{
+    const auto rejected = [](float surface_gravity) {
+        try {
+            PhysicsWorld physics(WorldConfig{.surface_gravity = surface_gravity});
+        } catch (const std::invalid_argument&) {
+            return true;
+        }
+        return false;
+    };
+
+    NINHO_REQUIRE(!rejected(18.0f));
+    NINHO_REQUIRE(rejected(18.01f));
 }
 
 NINHO_TEST("contract body validation rejects unsafe primitive data")

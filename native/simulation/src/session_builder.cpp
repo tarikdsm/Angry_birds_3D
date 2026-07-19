@@ -285,6 +285,7 @@ SessionStatus SimulationSession::Impl::build() noexcept
             return build_failure(committed.message);
         }
         rebuild_snapshots();
+        rebuild_canonical_static_content();
         refresh_canonical_state();
         return {};
     } catch (const std::exception& error) {
@@ -296,36 +297,102 @@ SessionStatus SimulationSession::Impl::build() noexcept
 
 void SimulationSession::Impl::rebuild_snapshots()
 {
-    entity_snapshots.clear();
-    entity_snapshots.reserve(body_records.size());
+    const auto identity_key = [](EntityId entity, PartId part) {
+        return (static_cast<std::uint64_t>(entity.value()) << 32U)
+            | static_cast<std::uint64_t>(part.value());
+    };
+
+    const auto states = physics.states();
+    std::size_t state_index_size = 1U;
+    for (const ninho::physics::BodyState& state : states) {
+        state_index_size = std::max(
+            state_index_size, static_cast<std::size_t>(state.handle.index) + 1U);
+    }
+    physics_state_by_handle_index.assign(state_index_size, nullptr);
+    for (const ninho::physics::BodyState& state : states) {
+        physics_state_by_handle_index[state.handle.index] = &state;
+    }
+
+    snapshot_index_by_identity.clear();
+    snapshot_index_by_identity.reserve(entity_snapshots.size());
+    for (std::size_t index = 0; index < entity_snapshots.size(); ++index) {
+        const EntitySnapshot& snapshot = entity_snapshots[index];
+        snapshot_index_by_identity.emplace(
+            identity_key(snapshot.entity_id, snapshot.part_id), index);
+    }
+
+    entity_snapshot_scratch.clear();
+    entity_snapshot_scratch.reserve(body_records.size());
     for (const BodyRecord& record : body_records) {
-        const auto state = physics.state(record.physics_handle);
-        if (!state) {
+        if (record.physics_handle.index >= physics_state_by_handle_index.size()) {
             continue;
         }
-        entity_snapshots.push_back({record.entity_id,
-            record.part_id,
-            record.body_type,
-            record.material_id,
-            record.surface_id,
-            record.enemy_archetype_id,
-            record.shape,
-            record.visual_id,
-            state->transform,
-            state->linear_velocity,
-            state->angular_velocity,
-            state->mass,
-            state->awake,
-            state->ejected});
+        const ninho::physics::BodyState* state =
+            physics_state_by_handle_index[record.physics_handle.index];
+        if (state == nullptr || state->handle != record.physics_handle) {
+            continue;
+        }
+
+        const auto previous = snapshot_index_by_identity.find(
+            identity_key(record.entity_id, record.part_id));
+        if (previous == snapshot_index_by_identity.end()) {
+            entity_snapshot_scratch.push_back({record.entity_id,
+                record.part_id,
+                record.body_type,
+                record.material_id,
+                record.surface_id,
+                record.enemy_archetype_id,
+                record.shape,
+                record.visual_id,
+                state->transform,
+                state->linear_velocity,
+                state->angular_velocity,
+                state->mass,
+                state->awake,
+                state->ejected,
+                record.is_projectile});
+#if defined(NINHO_ENABLE_TEST_FACADES)
+            ++snapshot_visual_id_copies;
+#endif
+            continue;
+        }
+
+        entity_snapshot_scratch.push_back(
+            std::move(entity_snapshots[previous->second]));
+        EntitySnapshot& snapshot = entity_snapshot_scratch.back();
+        snapshot.entity_id = record.entity_id;
+        snapshot.part_id = record.part_id;
+        snapshot.body_type = record.body_type;
+        snapshot.material_id = record.material_id;
+        snapshot.surface_id = record.surface_id;
+        snapshot.enemy_archetype_id = record.enemy_archetype_id;
+        snapshot.shape = record.shape;
+        if (snapshot.visual_id != record.visual_id) {
+            snapshot.visual_id = record.visual_id;
+#if defined(NINHO_ENABLE_TEST_FACADES)
+            ++snapshot_visual_id_copies;
+#endif
+        }
+        snapshot.transform = state->transform;
+        snapshot.linear_velocity_m_s = state->linear_velocity;
+        snapshot.angular_velocity_rad_s = state->angular_velocity;
+        snapshot.mass_kg = state->mass;
+        snapshot.awake = state->awake;
+        snapshot.ejected = state->ejected;
+        snapshot.is_projectile = record.is_projectile;
     }
-    std::ranges::sort(entity_snapshots, [](const auto& lhs, const auto& rhs) {
+    std::ranges::sort(entity_snapshot_scratch, [](const auto& lhs, const auto& rhs) {
         return std::pair{lhs.entity_id, lhs.part_id} < std::pair{rhs.entity_id, rhs.part_id};
     });
+    entity_snapshots.swap(entity_snapshot_scratch);
     joint_snapshots.clear();
     joint_snapshots.reserve(joint_records.size());
     for (const JointRecord& record : joint_records) {
         joint_snapshots.push_back(record.snapshot);
     }
+#if defined(NINHO_ENABLE_TEST_FACADES)
+    ++snapshot_rebuilds;
+#endif
 }
 
 ContentResult<std::unique_ptr<SimulationSession>> SimulationSession::create(

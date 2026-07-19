@@ -1,12 +1,43 @@
 #pragma once
 
 #include <cmath>
+#include <cstddef>
 #include <sstream>
 #include <stdexcept>
 #include <string>
 #include <vector>
 
 namespace ninho::test {
+
+void begin_allocation_counting() noexcept;
+[[nodiscard]] std::size_t end_allocation_counting() noexcept;
+
+class AllocationCounter {
+public:
+    AllocationCounter() noexcept
+    {
+        begin_allocation_counting();
+    }
+
+    ~AllocationCounter()
+    {
+        if (active_) {
+            static_cast<void>(end_allocation_counting());
+        }
+    }
+
+    AllocationCounter(const AllocationCounter&) = delete;
+    AllocationCounter& operator=(const AllocationCounter&) = delete;
+
+    [[nodiscard]] std::size_t finish() noexcept
+    {
+        active_ = false;
+        return end_allocation_counting();
+    }
+
+private:
+    bool active_{true};
+};
 
 struct Case {
     std::string name;

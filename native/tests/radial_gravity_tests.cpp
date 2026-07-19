@@ -112,3 +112,28 @@ NINHO_TEST("radial ejection predicate requires radius speed and duration")
     EjectionTracker boundary;
     NINHO_REQUIRE(boundary.update(BodyHandle{10, 1}, 40.0f, 2.0f, 0.5f, 10.0f));
 }
+
+NINHO_TEST("radial ejection tracker resets and recovers after a non finite sample")
+{
+    constexpr float valid_dt = 1.0f / 60.0f;
+    const float nan = std::numeric_limits<float>::quiet_NaN();
+    const auto require_reset = [&](float radius, float radial_speed, float dt,
+                                   float planet_radius) {
+        EjectionTracker tracker;
+        const BodyHandle body{11, 1};
+        for (int i = 0; i < 29; ++i) {
+            NINHO_REQUIRE(!tracker.update(body, 41.0f, 2.1f, valid_dt, 10.0f));
+        }
+
+        NINHO_REQUIRE(!tracker.update(body, radius, radial_speed, dt, planet_radius));
+        for (int i = 0; i < 29; ++i) {
+            NINHO_REQUIRE(!tracker.update(body, 41.0f, 2.1f, valid_dt, 10.0f));
+        }
+        NINHO_REQUIRE(tracker.update(body, 41.0f, 2.1f, valid_dt, 10.0f));
+    };
+
+    require_reset(nan, 2.1f, valid_dt, 10.0f);
+    require_reset(41.0f, nan, valid_dt, 10.0f);
+    require_reset(41.0f, 2.1f, nan, 10.0f);
+    require_reset(41.0f, 2.1f, valid_dt, nan);
+}

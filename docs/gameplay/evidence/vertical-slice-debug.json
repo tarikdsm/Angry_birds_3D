@@ -2,22 +2,46 @@
     "schema":  "ninho.vertical-slice.evidence.v1",
     "schema_version":  1,
     "configuration":  "Debug",
-    "commit":  "2312994724bc5b55684194158e4e2d8af64b2918",
-    "source_revision":  "2312994724bc5b55684194158e4e2d8af64b2918",
+    "commit":  "2c7e3b5afa296df1d37b376eac6b41ffeffc4fcb",
+    "source_revision":  "2c7e3b5afa296df1d37b376eac6b41ffeffc4fcb",
     "tested_inputs_schema":  "ninho.tested-inputs.v2",
-    "tested_inputs_sha256":  "e2bfea17396bdc850521f3ac6fe1be55854272954fd0bf22e719102bda8401b3",
+    "tested_inputs_sha256":  "57bf28f13af31d893854596619133235d53d3de9e8215be7f037cede9d12c7f2",
     "tested_inputs":  [
                           {
                               "path":  ".gitattributes",
                               "mode":  "text_utf8_lf",
-                              "size_bytes":  259,
-                              "sha256":  "06d1f3077a82b748f21ab4a9b807764771a188a92426dc2d6b41327eee7ccdb6"
+                              "size_bytes":  312,
+                              "sha256":  "51cce96365c3331950de12c510988a3a4cb15fda3ab42b62e64294d66c654d8d"
                           },
                           {
                               "path":  ".gitignore",
                               "mode":  "text_utf8_lf",
                               "size_bytes":  189,
                               "sha256":  "40d99f365076bddda50fde627fac007b1feb60d0ae3cf5d92a66b058ce0d2a3f"
+                          },
+                          {
+                              "path":  "CMakeLists.txt",
+                              "mode":  "text_utf8_lf",
+                              "size_bytes":  3834,
+                              "sha256":  "f39c15ec5bfa29494d00b2954c93e055babc32e74348bf39a431723b23b69b04"
+                          },
+                          {
+                              "path":  "CMakePresets.json",
+                              "mode":  "text_utf8_lf",
+                              "size_bytes":  1120,
+                              "sha256":  "3316126b405902b73d22d6ea299a9da7c77adcdf09ef24da8c15404273bef1aa"
+                          },
+                          {
+                              "path":  "README.md",
+                              "mode":  "text_utf8_lf",
+                              "size_bytes":  5054,
+                              "sha256":  "75c0de68c94b1e574b9a743698cb38f6852d58cc9e90c419e85692d8455aad5a"
+                          },
+                          {
+                              "path":  "THIRD_PARTY_NOTICES.md",
+                              "mode":  "text_utf8_lf",
+                              "size_bytes":  7914,
+                              "sha256":  "1c2748e5a678e91ce8fb414d7bac26826fd47194e53df4dfbd1aaa5f22bb8638"
                           },
                           {
                               "path":  "art/config/vertical_slice_assets.json",
@@ -130,14 +154,20 @@
                           {
                               "path":  "cmake/Dependencies.cmake",
                               "mode":  "text_utf8_lf",
-                              "size_bytes":  3840,
-                              "sha256":  "f9e9907bc94d3fb5b03d744b3e7b2fbda35a67a5813208281d976ce35c3fe43d"
+                              "size_bytes":  4063,
+                              "sha256":  "5c49175883c6658759d99b82458996ff6aadf6ce68e2feb9e65183a8f63aa4f8"
                           },
                           {
                               "path":  "cmake/PrepareGDExtensionTest.cmake",
                               "mode":  "text_utf8_lf",
                               "size_bytes":  261,
                               "sha256":  "66d8783a8394ecd593da4d2d221196e00cc5e4bb377dab83c7862f651388a1b5"
+                          },
+                          {
+                              "path":  "cmake/RequireGodotRuntimeTests.cmake",
+                              "mode":  "text_utf8_lf",
+                              "size_bytes":  573,
+                              "sha256":  "3b08148730ad5b1abb4f42b496b21bb5f238b4c66bdfbd606f19de8ac3e7feaa"
                           },
                           {
                               "path":  "cmake/VerifyGDExtension.cmake",
@@ -152,22 +182,10 @@
                               "sha256":  "fc17c00d02334a374a63df6401a6f88fe3d1150a32f98daba8e6158b655a5a5c"
                           },
                           {
-                              "path":  "CMakeLists.txt",
-                              "mode":  "text_utf8_lf",
-                              "size_bytes":  2968,
-                              "sha256":  "290349fdde411bd07b35b73d71520c39148a875a51ee05349f10c6e368691194"
-                          },
-                          {
-                              "path":  "CMakePresets.json",
-                              "mode":  "text_utf8_lf",
-                              "size_bytes":  1120,
-                              "sha256":  "3316126b405902b73d22d6ea299a9da7c77adcdf09ef24da8c15404273bef1aa"
-                          },
-                          {
                               "path":  "docs/gameplay/vertical-slice-content-schema.md",
                               "mode":  "text_utf8_lf",
-                              "size_bytes":  5965,
-                              "sha256":  "09ae8c42061a05f3c993da97bcee47471d00d19ebfd1668fd0cfc182efc2dde0"
+                              "size_bytes":  9426,
+                              "sha256":  "f3493e334a8ca5517befc47dc944312510449a4132321b186646552c844fa39d"
                           },
                           {
                               "path":  "docs/superpowers/plans/2026-07-11-vertical-slice-balance-correction.md",
@@ -178,8 +196,8 @@
                           {
                               "path":  "docs/superpowers/plans/2026-07-11-vertical-slice-implementation.md",
                               "mode":  "text_utf8_lf",
-                              "size_bytes":  29402,
-                              "sha256":  "116267352b2e2c3ff6cb8dcb6d866de160de83623df541f22c579b584fc20a6e"
+                              "size_bytes":  29603,
+                              "sha256":  "702157c398d73a453a792aca2ba11aaf83358096ca8796c1b5c573bd42609bd6"
                           },
                           {
                               "path":  "docs/superpowers/specs/2026-07-11-vertical-slice-balance-correction-design.md",
@@ -190,8 +208,14 @@
                           {
                               "path":  "docs/superpowers/specs/2026-07-11-vertical-slice-design.md",
                               "mode":  "text_utf8_lf",
-                              "size_bytes":  22566,
-                              "sha256":  "2770bfd429c86c7515ff0d322ec5849856b3402a1ba262745de152735f1cb5c8"
+                              "size_bytes":  25656,
+                              "sha256":  "7efd3efa11daeb23f32a863ca0875e80afe3d0156f1e812a7b96b21762de4187"
+                          },
+                          {
+                              "path":  "game/assets/audio/README.md",
+                              "mode":  "text_utf8_lf",
+                              "size_bytes":  2204,
+                              "sha256":  "017c8c4655fced6efa3a0fff1961fa8502f1fd407c2995eec8684aebeae4d41d"
                           },
                           {
                               "path":  "game/assets/audio/generated/brick.wav",
@@ -300,12 +324,6 @@
                               "mode":  "text_utf8_lf",
                               "size_bytes":  510,
                               "sha256":  "df9f0502344f6330c9dde27ddd37d06625bf9b80522afcb9bfe8a2f453c80274"
-                          },
-                          {
-                              "path":  "game/assets/audio/README.md",
-                              "mode":  "text_utf8_lf",
-                              "size_bytes":  2204,
-                              "sha256":  "017c8c4655fced6efa3a0fff1961fa8502f1fd407c2995eec8684aebeae4d41d"
                           },
                           {
                               "path":  "game/assets/vertical_slice/aster/AST_AsterPlanet.glb",
@@ -616,8 +634,8 @@
                           {
                               "path":  "game/data/feedback/vertical_slice.feedback.json",
                               "mode":  "text_utf8_lf",
-                              "size_bytes":  2623,
-                              "sha256":  "fedd58487d833692557804694edd31cbcc7ba045cee97e9b9556b4e1edf9a9cb"
+                              "size_bytes":  2601,
+                              "sha256":  "26bccc2b1cbb28f02c7f4c54711752c6e5be5ccaaacb70e3cdf5f74ad853d495"
                           },
                           {
                               "path":  "game/data/levels/first_orbit.level.json",
@@ -632,10 +650,16 @@
                               "sha256":  "848c1928732fc455e6b935566aa216ac8e26812f93cb0aca811ab7948d7f43f8"
                           },
                           {
+                              "path":  "game/data/ui/vertical_slice.pt-BR.json",
+                              "mode":  "text_utf8_lf",
+                              "size_bytes":  2149,
+                              "sha256":  "d37ae82405a3085d4869db8a0bbb02e4a9a0bc3421dddd3dffb492916bf3c20c"
+                          },
+                          {
                               "path":  "game/export_presets.cfg",
                               "mode":  "text_utf8_lf",
-                              "size_bytes":  1370,
-                              "sha256":  "7fe16f3a0e2efe223e7f0afd90d4a0ed95996916e229fa0e35ac4db6dec4f8f1"
+                              "size_bytes":  1206,
+                              "sha256":  "f5064daf679ca1b6396bf8264a48af125479563432bb2b6cfe68271bb6fda9ed"
                           },
                           {
                               "path":  "game/materials/brick.tres",
@@ -670,8 +694,8 @@
                           {
                               "path":  "game/scenes/vertical_slice.tscn",
                               "mode":  "text_utf8_lf",
-                              "size_bytes":  4696,
-                              "sha256":  "6d597aafe4e9a94630e532da240cb736ed36e66bf64e8ca05ce63113596c8775"
+                              "size_bytes":  3759,
+                              "sha256":  "68fd3af5dfbcc08e3b9b19516b1da113c882e832ce74cc9d34899ffec54972cd"
                           },
                           {
                               "path":  "game/scripts/audio/feedback_audio_pool.gd",
@@ -688,8 +712,8 @@
                           {
                               "path":  "game/scripts/camera/orbital_camera.gd",
                               "mode":  "text_utf8_lf",
-                              "size_bytes":  9641,
-                              "sha256":  "a430dcde722b83d6dc6e8ba440ea2b3f22ca48bc40e7277f9d75b5febcfc8796"
+                              "size_bytes":  9728,
+                              "sha256":  "07b22f9d5edfa8989efcfe84a7704b92f76420c1147d243533656ff30e21488a"
                           },
                           {
                               "path":  "game/scripts/camera/orbital_camera.gd.uid",
@@ -698,10 +722,34 @@
                               "sha256":  "17cbba0593e24858a72d2bf5c83a0715006459ca13181c08ddd11dfee6b005f8"
                           },
                           {
+                              "path":  "game/scripts/data/content_file_loader.gd",
+                              "mode":  "text_utf8_lf",
+                              "size_bytes":  1073,
+                              "sha256":  "6fe0e33a003ed7447cbcc9c26b30e695b602fb6e3aa58f0165fa05591d59d260"
+                          },
+                          {
+                              "path":  "game/scripts/data/content_file_loader.gd.uid",
+                              "mode":  "text_utf8_lf",
+                              "size_bytes":  19,
+                              "sha256":  "de1e4eef186708e26b6592680e0b18a64321518d02c536aa454eb7617b1d249b"
+                          },
+                          {
+                              "path":  "game/scripts/data/hud_text_catalog.gd",
+                              "mode":  "text_utf8_lf",
+                              "size_bytes":  5211,
+                              "sha256":  "88282ea9c111230a1edb179d9b5933bfa368a6a3be13daadd28442f4d65895f3"
+                          },
+                          {
+                              "path":  "game/scripts/data/hud_text_catalog.gd.uid",
+                              "mode":  "text_utf8_lf",
+                              "size_bytes":  19,
+                              "sha256":  "1459ff3e78c48764bc8cfbd79b487326c97dcb1f693cf68bfdc250ffc3a9d8d6"
+                          },
+                          {
                               "path":  "game/scripts/game/authored_asset_view.gd",
                               "mode":  "text_utf8_lf",
-                              "size_bytes":  751,
-                              "sha256":  "c532a9353c0a7529ebc3444699c3e8a1916e2bd436f54132ecf4c6dae7fe0b84"
+                              "size_bytes":  613,
+                              "sha256":  "ad00979238e509860b917e65c81fa5b4dfc39b9f5fa2959adc62c12598ae1e47"
                           },
                           {
                               "path":  "game/scripts/game/authored_asset_view.gd.uid",
@@ -712,8 +760,8 @@
                           {
                               "path":  "game/scripts/game/body_view_registry.gd",
                               "mode":  "text_utf8_lf",
-                              "size_bytes":  5346,
-                              "sha256":  "5e9aff522b0ae7803c2a677e81b4dda5057355b591afeb5d2be875f32b9b3c6a"
+                              "size_bytes":  5339,
+                              "sha256":  "99f0033c26c3f463291916687e43ea82c6043f4f1d8790617e1b4beaa64a16f3"
                           },
                           {
                               "path":  "game/scripts/game/body_view_registry.gd.uid",
@@ -724,8 +772,8 @@
                           {
                               "path":  "game/scripts/game/launch_controller.gd",
                               "mode":  "text_utf8_lf",
-                              "size_bytes":  6450,
-                              "sha256":  "5fc2ae375ce960d08b15968917b9f98535b922da598b31b8ce2de147b68396f9"
+                              "size_bytes":  9028,
+                              "sha256":  "53f32c9b9bf8d96f81a8e664b2c2c7396ecb0cbb25c7b4dd1f1709587712d897"
                           },
                           {
                               "path":  "game/scripts/game/launch_controller.gd.uid",
@@ -736,8 +784,8 @@
                           {
                               "path":  "game/scripts/game/vertical_slice_controller.gd",
                               "mode":  "text_utf8_lf",
-                              "size_bytes":  13770,
-                              "sha256":  "cc75f76b1ea08a8150d9491b1c79f4d5ea765afb236e7d2a941c042974d87096"
+                              "size_bytes":  14797,
+                              "sha256":  "d58c839f85b4115de16cfaa91e3621219d3b0be56ccb36336544d892003657e2"
                           },
                           {
                               "path":  "game/scripts/game/vertical_slice_controller.gd.uid",
@@ -772,8 +820,8 @@
                           {
                               "path":  "game/scripts/ui/vertical_slice_hud.gd",
                               "mode":  "text_utf8_lf",
-                              "size_bytes":  4510,
-                              "sha256":  "1aa6316d86ec7aaa1cb072ebad3afd0f3e12dcf357ce39f36f220a446d071f30"
+                              "size_bytes":  7448,
+                              "sha256":  "7bb822a1f81faacd8af56529ac9be3c01e814820de1ab7b6da9413cf4b204078"
                           },
                           {
                               "path":  "game/scripts/ui/vertical_slice_hud.gd.uid",
@@ -784,14 +832,14 @@
                           {
                               "path":  "game/scripts/ui/vertical_slice_hud.tscn",
                               "mode":  "text_utf8_lf",
-                              "size_bytes":  3034,
-                              "sha256":  "0546af85d4cacff1e2c88734bd66bc4365388a09bab6b60995d8f80cd3b9aa40"
+                              "size_bytes":  2897,
+                              "sha256":  "51b4730b25f596274666e51466508448b583acd77b8c75b7240c14a57e3274e1"
                           },
                           {
                               "path":  "game/scripts/vfx/feedback_director.gd",
                               "mode":  "text_utf8_lf",
-                              "size_bytes":  24169,
-                              "sha256":  "13828b7648fcf117479417ad36c0453d016663b79ad216aefac1f3a9380b5d18"
+                              "size_bytes":  31582,
+                              "sha256":  "39b01676b962e6ddfe3215c9e9783b68e4d02076955ab8fb207c24c0a9464eca"
                           },
                           {
                               "path":  "game/scripts/vfx/feedback_director.gd.uid",
@@ -812,10 +860,22 @@
                               "sha256":  "e378af2029e093a7a11bba5e60d61489d8fd9a6eb117d2b895a42134579c57ea"
                           },
                           {
+                              "path":  "game/tests/feedback_config_validation.gd",
+                              "mode":  "text_utf8_lf",
+                              "size_bytes":  8801,
+                              "sha256":  "3abb9d587bea8c9b646e4b56bf43df59d75a115424631077bc9c78a644152a38"
+                          },
+                          {
+                              "path":  "game/tests/feedback_config_validation.gd.uid",
+                              "mode":  "text_utf8_lf",
+                              "size_bytes":  19,
+                              "sha256":  "ee366c26cdb460b317b1e2670d9c92b0ba17ab6831765795236e47126ff2257d"
+                          },
+                          {
                               "path":  "game/tests/feedback_smoke.gd",
                               "mode":  "text_utf8_lf",
-                              "size_bytes":  21878,
-                              "sha256":  "741a97c0ac378f4d6b17e653723579274e238dcb627fafff3baa6628fe645667"
+                              "size_bytes":  27677,
+                              "sha256":  "e312695c23c71bf41b5a44c58d6b07b8a5c8698ebeb3cbc47f7887e42a659be8"
                           },
                           {
                               "path":  "game/tests/feedback_smoke.gd.uid",
@@ -826,8 +886,8 @@
                           {
                               "path":  "game/tests/forbid_godot_physics.gd",
                               "mode":  "text_utf8_lf",
-                              "size_bytes":  2363,
-                              "sha256":  "d22388cf59ad6150d5427eeff590de1fd7bc7a2b8d04eba1d3606fa593dd33de"
+                              "size_bytes":  3401,
+                              "sha256":  "eff2e78a31fcdf0e22af2ecddca8f8073c707b0a52fd0b125f96deaa12809e1a"
                           },
                           {
                               "path":  "game/tests/forbid_godot_physics.gd.uid",
@@ -838,8 +898,8 @@
                           {
                               "path":  "game/tests/import_completeness_smoke.gd",
                               "mode":  "text_utf8_lf",
-                              "size_bytes":  1997,
-                              "sha256":  "4657cd7e52c576b29e4d1385a3bb00310b07a2c3149d04ed17f3b457d76e084d"
+                              "size_bytes":  2648,
+                              "sha256":  "d0591a76ad5e97696a614420e8262a74a7cc4444a5cb4afcb32a513e193e9bd0"
                           },
                           {
                               "path":  "game/tests/import_completeness_smoke.gd.uid",
@@ -850,8 +910,8 @@
                           {
                               "path":  "game/tests/orbital_session_node_smoke.gd",
                               "mode":  "text_utf8_lf",
-                              "size_bytes":  4369,
-                              "sha256":  "998c0a6ae2eef9b3248a11fd481b23da9270cd3f00e578211c1a3e52f747f5d3"
+                              "size_bytes":  5051,
+                              "sha256":  "93b2f472158baf6948b752327506cf159a5e07efbebf9c950d0dad80b2cd7362"
                           },
                           {
                               "path":  "game/tests/orbital_session_node_smoke.gd.uid",
@@ -862,8 +922,8 @@
                           {
                               "path":  "game/tests/vertical_slice_smoke.gd",
                               "mode":  "text_utf8_lf",
-                              "size_bytes":  18043,
-                              "sha256":  "52231be80142f1a32d16dff84f6d06cd02a4e582777e9068fc19bec4d48f70dd"
+                              "size_bytes":  24602,
+                              "sha256":  "08e08d06f5f60ded3bba27be3cbfa6685c6502f5cbbf7e078e2bc435ef65153e"
                           },
                           {
                               "path":  "game/tests/vertical_slice_smoke.gd.uid",
@@ -874,8 +934,8 @@
                           {
                               "path":  "native/extension/CMakeLists.txt",
                               "mode":  "text_utf8_lf",
-                              "size_bytes":  3673,
-                              "sha256":  "bd6fd52a1d66078d89a6cdae6cafc6ef4a9ebd061a215424aabbebf0a4b6fdbe"
+                              "size_bytes":  3567,
+                              "sha256":  "697f38e9980865286c11fb2161edb84b0918f140aeda5cb92f34408f2a4928b1"
                           },
                           {
                               "path":  "native/extension/include/ninho/extension/adapter_helpers.hpp",
@@ -892,8 +952,8 @@
                           {
                               "path":  "native/extension/include/ninho/extension/orbital_session_node.hpp",
                               "mode":  "text_utf8_lf",
-                              "size_bytes":  6521,
-                              "sha256":  "260ace6de3f3fe6246caa0a112c3529ccf025893670235dee00f564f11357c31"
+                              "size_bytes":  6359,
+                              "sha256":  "f710cc9d3c8a220428c1d2992f3510f3f7b278dd91081d0729b180f193720ff5"
                           },
                           {
                               "path":  "native/extension/include/ninho/extension/register_types.hpp",
@@ -916,8 +976,8 @@
                           {
                               "path":  "native/extension/src/orbital_session_node.cpp",
                               "mode":  "text_utf8_lf",
-                              "size_bytes":  30888,
-                              "sha256":  "1fc6d1222969802709471788e70d74ab9869ab01b5fb142d96bd946a8e0333fd"
+                              "size_bytes":  31793,
+                              "sha256":  "3d17a7af772f6a96a7d36e8a1c9136f8f030a78a0cb239e40e64ae85bcf19180"
                           },
                           {
                               "path":  "native/extension/src/register_types.cpp",
@@ -934,8 +994,8 @@
                           {
                               "path":  "native/extension/tests/orbital_session_adapter_tests.cpp",
                               "mode":  "text_utf8_lf",
-                              "size_bytes":  6210,
-                              "sha256":  "794f961574a26a55a2e6c2f0b969d852cab7c66a09a12821687ca1c1730a3068"
+                              "size_bytes":  9485,
+                              "sha256":  "1356b5a30edccbd48c3bfa4816cb39da662bd87a5288e27a8849b28793a4d371"
                           },
                           {
                               "path":  "native/extension/tests/registration_contract_tests.cpp",
@@ -946,14 +1006,20 @@
                           {
                               "path":  "native/extension/tests/session_frame_batch_tests.cpp",
                               "mode":  "text_utf8_lf",
-                              "size_bytes":  7423,
-                              "sha256":  "dea474ca3373a00eeab845ce026b6a8a59ba2259b184963e7743eb69900d7961"
+                              "size_bytes":  8254,
+                              "sha256":  "007856c724bba9cdcb81a79b192284ba55e7e0be2adde11ddaa4cbb6ee1e37e4"
                           },
                           {
                               "path":  "native/kernel/CMakeLists.txt",
                               "mode":  "text_utf8_lf",
-                              "size_bytes":  926,
-                              "sha256":  "6575fc0685faf074e7a19f83d3fabab62ab4db23875c3828612d7aa6aa6ef72b"
+                              "size_bytes":  1007,
+                              "sha256":  "2f7a6f92d53b6c9975e1175915e14e86f730935661aa3a1a691bb62f370b3323"
+                          },
+                          {
+                              "path":  "native/kernel/include/ninho/physics/physics_limits.hpp",
+                              "mode":  "text_utf8_lf",
+                              "size_bytes":  105,
+                              "sha256":  "fa4ee6c1ecfae90e16a1ac8531a9f2012280798fd1dd70afe62c60e6b171f4ec"
                           },
                           {
                               "path":  "native/kernel/include/ninho/physics/physics_types.hpp",
@@ -964,20 +1030,20 @@
                           {
                               "path":  "native/kernel/include/ninho/physics/physics_world.hpp",
                               "mode":  "text_utf8_lf",
-                              "size_bytes":  6251,
-                              "sha256":  "5ccce19a4fd45fc5c0d30475aa0045a1b3f3ef0de8f1cf77e88d319eff45c5ba"
+                              "size_bytes":  6642,
+                              "sha256":  "0b344d5251a6ccb14c4d6dd9f09ecf9fb93d2d95bd5a60ec9b6f857e960c48a7"
                           },
                           {
                               "path":  "native/kernel/include/ninho/physics/radial_gravity.hpp",
                               "mode":  "text_utf8_lf",
-                              "size_bytes":  719,
-                              "sha256":  "32e0ee1b4ea5ba7777858f4cd57dc2e5eb58daf341a3a66caff594842c39613d"
+                              "size_bytes":  763,
+                              "sha256":  "14af0b3aa42a1e26ec1bd6036c97da97d1371b5aa15ae6a32a877a526b905db2"
                           },
                           {
                               "path":  "native/kernel/include/ninho/physics/scenario.hpp",
                               "mode":  "text_utf8_lf",
-                              "size_bytes":  13444,
-                              "sha256":  "db382b929b2653c867a0e433e57b58fcc93a789d342f1b46d2b8c75f013304a2"
+                              "size_bytes":  13527,
+                              "sha256":  "c0d8a789c0b91cf00395308c640a8e02fb903731382ab270b42cd1c4bce6a821"
                           },
                           {
                               "path":  "native/kernel/src/box3d_allocator_probe.cpp",
@@ -988,8 +1054,8 @@
                           {
                               "path":  "native/kernel/src/box3d_allocator_probe.hpp",
                               "mode":  "text_utf8_lf",
-                              "size_bytes":  139,
-                              "sha256":  "77ccde5ecb57c76409704a5c2c5f12b0b00d94a2ea6fcfc99ca4fa056c439e33"
+                              "size_bytes":  337,
+                              "sha256":  "5bf393d6cde5cf02db2f790ff162aba33e190d1768102466ecfe5c1616d7be4b"
                           },
                           {
                               "path":  "native/kernel/src/box3d_conversions.hpp",
@@ -1012,26 +1078,26 @@
                           {
                               "path":  "native/kernel/src/physics_world.cpp",
                               "mode":  "text_utf8_lf",
-                              "size_bytes":  66376,
-                              "sha256":  "3191a780e63060f3cca4d8dd6967e028af1c1157999a90a948b688ad131b8761"
+                              "size_bytes":  67137,
+                              "sha256":  "da655462e410c3f6473fa3a9a6fd9135c193658c6bdd4f9eea874ca8c68f5a3d"
                           },
                           {
                               "path":  "native/kernel/src/physics_world_test_facade.hpp",
                               "mode":  "text_utf8_lf",
-                              "size_bytes":  356,
-                              "sha256":  "3fd5f3a5f09b53985f44648d41798f3ee7970f4a511d4de3bc0260a3dffa09ba"
+                              "size_bytes":  420,
+                              "sha256":  "7ddb6c079257a4e7c1a245fa043b54ab6d473d364eec3fa803a99b9afe913b2b"
                           },
                           {
                               "path":  "native/kernel/src/radial_gravity.cpp",
                               "mode":  "text_utf8_lf",
-                              "size_bytes":  1748,
-                              "sha256":  "d47d0e64f07fcdcd6e8444864798150796a5373cb68dca6c194a1e1afd28242d"
+                              "size_bytes":  1863,
+                              "sha256":  "ef20acd6f17034cf8c5b017137796bea945fb9910d5c7ec7b8eff941b7b1ab46"
                           },
                           {
                               "path":  "native/kernel/src/scenario.cpp",
                               "mode":  "text_utf8_lf",
-                              "size_bytes":  165652,
-                              "sha256":  "75e49b4c988108d0e7b9d2da0396d32ffca64f1e5d31d6255e25312beb599982"
+                              "size_bytes":  166432,
+                              "sha256":  "3349eb04913719a7f77229722333e894c290afa7d2ee592d89bf9b638916b90a"
                           },
                           {
                               "path":  "native/kernel/src/scenario_configuration.hpp",
@@ -1040,10 +1106,16 @@
                               "sha256":  "1dce7723604301a83b37349f8a42969bfea8baa3ebe4a7c5b8ac3e9445331f7c"
                           },
                           {
+                              "path":  "native/kernel/src/scenario_test_facade.hpp",
+                              "mode":  "text_utf8_lf",
+                              "size_bytes":  359,
+                              "sha256":  "161de04d8c791b5294c47d4a5a959384ce5f566584188c72ba984a4a9a16a1c0"
+                          },
+                          {
                               "path":  "native/simulation/CMakeLists.txt",
                               "mode":  "text_utf8_lf",
-                              "size_bytes":  4029,
-                              "sha256":  "f12f04e7f0334b4ec929f59516a9a8d9f70bd46a3d5b194bc43e04faf4883c22"
+                              "size_bytes":  4362,
+                              "sha256":  "32863b3949d68f34eadeeef964c29cd31c3769dca3ca61be5192216cbb28b146"
                           },
                           {
                               "path":  "native/simulation/include/ninho/simulation/commands.hpp",
@@ -1060,38 +1132,38 @@
                           {
                               "path":  "native/simulation/include/ninho/simulation/events.hpp",
                               "mode":  "text_utf8_lf",
-                              "size_bytes":  1505,
-                              "sha256":  "7caf4611d035823db3ed6d1eeac04560c1e81726e54f2e5bf44eb5894641fd13"
+                              "size_bytes":  1675,
+                              "sha256":  "b26bcbcb85c59394ade20e65f889976e0994fd17fe68dcfba6ad868d553591d5"
                           },
                           {
                               "path":  "native/simulation/include/ninho/simulation/session.hpp",
                               "mode":  "text_utf8_lf",
-                              "size_bytes":  4921,
-                              "sha256":  "e1c3b0403b2cb69e39e14f2209cf19c0cd9086279ccd4f14a8e120c7bd339238"
+                              "size_bytes":  5196,
+                              "sha256":  "eb2b6a7261c322d71cd6a7e0680936282d6fb989923977f32222c0c72dd75205"
                           },
                           {
                               "path":  "native/simulation/src/canonical_state.cpp",
                               "mode":  "text_utf8_lf",
-                              "size_bytes":  20717,
-                              "sha256":  "166d3c171b2b579e611a93bfa64918a382476f8ecccc1a767387bf52b6db2254"
+                              "size_bytes":  22123,
+                              "sha256":  "7db3a11f11ca40880c4689824341a9870803d39eaffdd4d90caff154671b0f7a"
                           },
                           {
                               "path":  "native/simulation/src/content.cpp",
                               "mode":  "text_utf8_lf",
-                              "size_bytes":  62929,
-                              "sha256":  "177172395f751aac7d8f8a6d6d026cff0c0fe4a14dadf0374f76af7ddaadeea4"
+                              "size_bytes":  63519,
+                              "sha256":  "1a92c0529f66cdd8a762cff1c93ae52be4276faab3ee1986a7118eeb2c600020"
                           },
                           {
                               "path":  "native/simulation/src/damage_system.cpp",
                               "mode":  "text_utf8_lf",
-                              "size_bytes":  12254,
-                              "sha256":  "38102251c82dced5f52569a665651f285522a6d830417be44df45510664dba8a"
+                              "size_bytes":  12792,
+                              "sha256":  "263bfb2aecf4100cda01f2e5a9b0b6d3220ff6193a10680f338bac8871dbe963"
                           },
                           {
                               "path":  "native/simulation/src/damage_system.hpp",
                               "mode":  "text_utf8_lf",
-                              "size_bytes":  1939,
-                              "sha256":  "0ad10dc49c9f74a9cb7a35fd93d58a65d8818b45908e5f9d78e21b02296696f8"
+                              "size_bytes":  2015,
+                              "sha256":  "3ec71c08d1347854cae553be7f75269fa011b47f94958974836efbf6a6eb1b17"
                           },
                           {
                               "path":  "native/simulation/src/fracture_system.cpp",
@@ -1108,8 +1180,8 @@
                           {
                               "path":  "native/simulation/src/launch_system.cpp",
                               "mode":  "text_utf8_lf",
-                              "size_bytes":  24837,
-                              "sha256":  "0dfb73058fbb02ec438d92b4c2a5575f55125661601dfaaeb168a9d1077ad835"
+                              "size_bytes":  25197,
+                              "sha256":  "32709496fcdbb14cac7982052dfd7c41f8503ba13feea0fa3cf409700bcee14d"
                           },
                           {
                               "path":  "native/simulation/src/material_mapping.hpp",
@@ -1126,38 +1198,38 @@
                           {
                               "path":  "native/simulation/src/session.cpp",
                               "mode":  "text_utf8_lf",
-                              "size_bytes":  14128,
-                              "sha256":  "523e73030083f5c928ac1b970fb7aa0c14ad9dfa3380e59b0cbdf99fd1608865"
+                              "size_bytes":  16157,
+                              "sha256":  "4ba94a74b769618e962717b86adb7a8bdbb706b2b6ee653e4112d6f95ecd760a"
                           },
                           {
                               "path":  "native/simulation/src/session_builder.cpp",
                               "mode":  "text_utf8_lf",
-                              "size_bytes":  14598,
-                              "sha256":  "506a1bb9e32f0f8fd1817a13e127c605b9747ce4d2976297f4dcc4b80bd5bfe0"
+                              "size_bytes":  17518,
+                              "sha256":  "67c1ea77e1034340e253b46f9060c43fd5d2f5fed56ace8efd875f1f226714b2"
                           },
                           {
                               "path":  "native/simulation/src/session_internal.hpp",
                               "mode":  "text_utf8_lf",
-                              "size_bytes":  5285,
-                              "sha256":  "bc7e0b4cf098eae0fd22231e5e0ba70ed3513a2d539f4104a2eb61fdcd4f2c7d"
+                              "size_bytes":  6467,
+                              "sha256":  "670bd18fe94ecee1c6e3282bff050368e8f87e141ce5722a1ac8bd3caaf4853b"
                           },
                           {
                               "path":  "native/simulation/src/session_test_facade.hpp",
                               "mode":  "text_utf8_lf",
-                              "size_bytes":  2474,
-                              "sha256":  "4ba14030c04847dae5019e0950be1dbc175d7305798de453eebff9c7d89930d6"
+                              "size_bytes":  3042,
+                              "sha256":  "fecb6cd51c6fefba0adc238f04bdfc56dc429043b4a00e6ab07b0afcc7890679"
                           },
                           {
                               "path":  "native/simulation/tests/content_tests.cpp",
                               "mode":  "text_utf8_lf",
-                              "size_bytes":  34851,
-                              "sha256":  "45e76fac43c2825cac1ec9a85fcff794d3f7c33e0c2f25d586871cd0e686808b"
+                              "size_bytes":  35677,
+                              "sha256":  "796a08013d6651a274acdaadb97f3f6eb9d1a20f218816c87edfbfab160ddddf"
                           },
                           {
                               "path":  "native/simulation/tests/damage_anchor_tests.cpp",
                               "mode":  "text_utf8_lf",
-                              "size_bytes":  18842,
-                              "sha256":  "f578931cfca47720736c161dc4f6bc14e99edd8bee943de27683d02ba1f51e3d"
+                              "size_bytes":  20494,
+                              "sha256":  "598f040d12c0c691bb6d7e21c783309c35722710a82e458d60f9e23ffde9bade"
                           },
                           {
                               "path":  "native/simulation/tests/fracture_objective_tests.cpp",
@@ -1169,7 +1241,7 @@
                               "path":  "native/simulation/tests/gravity_field_ability_tests.cpp",
                               "mode":  "text_utf8_lf",
                               "size_bytes":  23041,
-                              "sha256":  "2fd285b6bad94f6eeb46962ff104b9e92ed0f7c21b090d5193ed9493bd82faa3"
+                              "sha256":  "300c30eb6018254854d066933b254fd47ad20e92f10a805397657303ff10e9e7"
                           },
                           {
                               "path":  "native/simulation/tests/kernel_contract_tests.cpp",
@@ -1180,20 +1252,20 @@
                           {
                               "path":  "native/simulation/tests/launch_fsm_tests.cpp",
                               "mode":  "text_utf8_lf",
-                              "size_bytes":  33473,
-                              "sha256":  "5ebf994eb4076ce7877746c66ed384d635c4ba72924c3fead2bed3fd214df27f"
+                              "size_bytes":  34247,
+                              "sha256":  "60bf5278a375a18024aa2adb8bec7e3dc2d98602b31602f1cc9adfcb355f089f"
                           },
                           {
                               "path":  "native/simulation/tests/playthrough_tests.cpp",
                               "mode":  "text_utf8_lf",
-                              "size_bytes":  20956,
-                              "sha256":  "8dfdac510f66913892b8ce33e7b3bd66fe819cbbbb687bca037eb05eb4dd7a32"
+                              "size_bytes":  20246,
+                              "sha256":  "d0d0987f9ab8dca70d6f18cb185bf84ee7eabff2f3ff21f56e2cec382e6575f9"
                           },
                           {
                               "path":  "native/simulation/tests/session_tests.cpp",
                               "mode":  "text_utf8_lf",
-                              "size_bytes":  34192,
-                              "sha256":  "f3f768dd5fb0a082ace51c843d09b067c65d7f4b1e24b4b5b2f4f32216a6be18"
+                              "size_bytes":  41736,
+                              "sha256":  "1a8ee368a9e0bb3afb69fa58f2579dbbe0870ed7a55c07ea6953ff21fc698ec7"
                           },
                           {
                               "path":  "native/simulation/tests/test_framework.hpp",
@@ -1216,26 +1288,26 @@
                           {
                               "path":  "native/spike/main.cpp",
                               "mode":  "text_utf8_lf",
-                              "size_bytes":  13238,
-                              "sha256":  "07a6f7e096972b123ebd356f629936de39c2231144fee062a774c3dbb483df0e"
-                          },
-                          {
-                              "path":  "native/tests/capability_tests.cpp",
-                              "mode":  "text_utf8_lf",
-                              "size_bytes":  26806,
-                              "sha256":  "b9392cbc4231251c0d59f217281cdfe47958b714eb7583746e011ed8069a7dda"
+                              "size_bytes":  13396,
+                              "sha256":  "e72ceeab9c929bf6fee638de840a9eac8fe074681c3517e023c094ee4374cbdd"
                           },
                           {
                               "path":  "native/tests/CMakeLists.txt",
                               "mode":  "text_utf8_lf",
-                              "size_bytes":  3455,
-                              "sha256":  "a6e7302489fec5f895e523f84c79b60f884923ad8bb758731457f03cb4d79fe6"
+                              "size_bytes":  4134,
+                              "sha256":  "d36e5eebdf52db4c8fa4d6fb00e5bce434440ebefcfdb9950fb6ef0ce9bd9e22"
+                          },
+                          {
+                              "path":  "native/tests/capability_tests.cpp",
+                              "mode":  "text_utf8_lf",
+                              "size_bytes":  27540,
+                              "sha256":  "d495449638982624fae7d6b5ad98bbb8461dce45383175832f77ce23c50877a1"
                           },
                           {
                               "path":  "native/tests/determinism_tests.cpp",
                               "mode":  "text_utf8_lf",
-                              "size_bytes":  12918,
-                              "sha256":  "6c4b60c6080c27b58732d63d8a13fae46b73f2246db6de7d5f5b369f1b280031"
+                              "size_bytes":  13429,
+                              "sha256":  "0798f4b49c3cc52796d498d90062ee16eb85653c28335e11444c581d83399095"
                           },
                           {
                               "path":  "native/tests/json_smoke.py",
@@ -1252,14 +1324,14 @@
                           {
                               "path":  "native/tests/projectile_ccd_tests.cpp",
                               "mode":  "text_utf8_lf",
-                              "size_bytes":  2384,
-                              "sha256":  "c29c9707166b6adcaa6f18734f6318544bd7f7e94ae90cb1dda0b2ae6bd70e10"
+                              "size_bytes":  5898,
+                              "sha256":  "7a620a39da06923e1b7ef5eedd8d49aefe6c6f66e414431cce409093232478d5"
                           },
                           {
                               "path":  "native/tests/radial_gravity_tests.cpp",
                               "mode":  "text_utf8_lf",
-                              "size_bytes":  5227,
-                              "sha256":  "6b85c5be27e9c4a0aaef9ae29ddfb315483a4e682277156c2b3e360d938bc766"
+                              "size_bytes":  6247,
+                              "sha256":  "e9732b98d3c545af0d0a6067c566c5767e50f4d3d54b4042c5c675653919d278"
                           },
                           {
                               "path":  "native/tests/scenario_capability_tests.cpp",
@@ -1270,44 +1342,32 @@
                           {
                               "path":  "native/tests/test_framework.hpp",
                               "mode":  "text_utf8_lf",
-                              "size_bytes":  3235,
-                              "sha256":  "60f184b3974cff40f5c039b5c2be5391d06f1b9c5944fef6496b8ab1aa8bbe30"
+                              "size_bytes":  3899,
+                              "sha256":  "76e694857c118ca7d3007d349637a52bf9b321228fdd81a8408f9547b81ee1e6"
                           },
                           {
                               "path":  "native/tests/test_main.cpp",
                               "mode":  "text_utf8_lf",
-                              "size_bytes":  1225,
-                              "sha256":  "d4f8d38c198bd97c0ca9a246881c1733f610b0914e59712c471e772912d468fe"
+                              "size_bytes":  2566,
+                              "sha256":  "372df787fbb6fae307ba0ee2c862ef043913b264760358e86ce81903eb9b4626"
                           },
                           {
                               "path":  "native/tests/world_lifecycle_tests.cpp",
                               "mode":  "text_utf8_lf",
-                              "size_bytes":  11434,
-                              "sha256":  "b18b260e2622978ad79f155e800f8d0872592aa89e14f358296cbf4965f3be58"
+                              "size_bytes":  12095,
+                              "sha256":  "da2fab9c92a64d572c04e2311dca0bfa0343e9738dcbdb5ecdb16d884e9dceed"
                           },
                           {
-                              "path":  "README.md",
+                              "path":  "third_party/README.md",
                               "mode":  "text_utf8_lf",
-                              "size_bytes":  758,
-                              "sha256":  "596749ee8bd18a44575755b710aa7196efb952ac28f0b142fd344194625514fa"
+                              "size_bytes":  2263,
+                              "sha256":  "ffb38acc307a87d26227d80d30e81f9ec766e38b3dcf638cd2e03d23fdeb8583"
                           },
                           {
                               "path":  "third_party/box3d.LICENSE.txt",
                               "mode":  "text_utf8_lf",
                               "size_bytes":  1067,
                               "sha256":  "da5e31a26bf3cfd5ba5c96d6823e480128c81e76c107ef9d3ee5d94789184b90"
-                          },
-                          {
-                              "path":  "third_party/godot.COPYRIGHT.txt",
-                              "mode":  "text_utf8_lf",
-                              "size_bytes":  97253,
-                              "sha256":  "2039020f520ebd55592070ede2ef38dfbc28a6550140008da004143872789e5d"
-                          },
-                          {
-                              "path":  "third_party/godot.LICENSE.txt",
-                              "mode":  "text_utf8_lf",
-                              "size_bytes":  1149,
-                              "sha256":  "b0435e3b3e4e55238f05f4b306f30524a1b2e20147810d436eaa554fa6855c80"
                           },
                           {
                               "path":  "third_party/godot-cpp.LICENSE.txt",
@@ -1322,28 +1382,106 @@
                               "sha256":  "b0435e3b3e4e55238f05f4b306f30524a1b2e20147810d436eaa554fa6855c80"
                           },
                           {
+                              "path":  "third_party/godot.COPYRIGHT.txt",
+                              "mode":  "text_utf8_lf",
+                              "size_bytes":  97253,
+                              "sha256":  "2039020f520ebd55592070ede2ef38dfbc28a6550140008da004143872789e5d"
+                          },
+                          {
+                              "path":  "third_party/godot.LICENSE.txt",
+                              "mode":  "text_utf8_lf",
+                              "size_bytes":  1149,
+                              "sha256":  "b0435e3b3e4e55238f05f4b306f30524a1b2e20147810d436eaa554fa6855c80"
+                          },
+                          {
                               "path":  "third_party/nlohmann-json.LICENSE.txt",
                               "mode":  "text_utf8_lf",
                               "size_bytes":  1076,
                               "sha256":  "86b998c792894ccb911a1cb7994f7a9652894e7a094c0b5e45be2f553f45cf14"
                           },
                           {
-                              "path":  "third_party/README.md",
-                              "mode":  "text_utf8_lf",
-                              "size_bytes":  2263,
-                              "sha256":  "ffb38acc307a87d26227d80d30e81f9ec766e38b3dcf638cd2e03d23fdeb8583"
-                          },
-                          {
                               "path":  "third_party/sbom.spdx.json",
                               "mode":  "text_utf8_lf",
-                              "size_bytes":  7805,
-                              "sha256":  "19f882486b1f9a9dd5771d90fa15898bf2cdad56027b9993f02d23725b78718e"
+                              "size_bytes":  10976,
+                              "sha256":  "6493a8b439b0195dd0e4fcc34464d8f49d09bfb0d82664d28a5b23eb2f858b9c"
                           },
                           {
-                              "path":  "THIRD_PARTY_NOTICES.md",
+                              "path":  "tools/CapturedProcess.psm1",
                               "mode":  "text_utf8_lf",
-                              "size_bytes":  5226,
-                              "sha256":  "5e049e1df025d2fd1f5ceec4193596fbf216dacafab584efcae2dc2ccc8e732a"
+                              "size_bytes":  2431,
+                              "sha256":  "0f035962e4326cb387a2ce4602320a11c01d3f88a8dd5fdd71ceff8775c32a0d"
+                          },
+                          {
+                              "path":  "tools/FoundationEvidenceGate.psm1",
+                              "mode":  "text_utf8_lf",
+                              "size_bytes":  17615,
+                              "sha256":  "cc407a83de549957fc2d5d4ac52dcdb81a4ea1b42ad93f4e9c423db57eecd859"
+                          },
+                          {
+                              "path":  "tools/GodotSmokeRegistry.psm1",
+                              "mode":  "text_utf8_lf",
+                              "size_bytes":  5268,
+                              "sha256":  "82319b1f009954a5632b7991d4ca291091d2619d762ff5df44b4cc0330857b32"
+                          },
+                          {
+                              "path":  "tools/GodotSpikeGate.psm1",
+                              "mode":  "text_utf8_lf",
+                              "size_bytes":  11080,
+                              "sha256":  "f81ed257e02861aa6f84aace45d39f33d51ceef740d09f149d5c0363087f4b1c"
+                          },
+                          {
+                              "path":  "tools/Invoke-Native.ps1",
+                              "mode":  "text_utf8_lf",
+                              "size_bytes":  2185,
+                              "sha256":  "4cba4036cbc5007bddb3762f5b1c45f72fc63ef63d6b6dbb16c8b0a6ed9344d4"
+                          },
+                          {
+                              "path":  "tools/SafePath.psm1",
+                              "mode":  "text_utf8_lf",
+                              "size_bytes":  1841,
+                              "sha256":  "d6a5c2daeeb3ef4369daa35bf21d6dc60c3ec736ab8c932078b3e24bd32e4ffc"
+                          },
+                          {
+                              "path":  "tools/SpikeEvidenceValidation.psm1",
+                              "mode":  "text_utf8_lf",
+                              "size_bytes":  51353,
+                              "sha256":  "847f52d2501bf25b5136797e71600c4934bf1c03b9ba454f483e73422bd1ddd9"
+                          },
+                          {
+                              "path":  "tools/SpikeReportGate.psm1",
+                              "mode":  "text_utf8_lf",
+                              "size_bytes":  2400,
+                              "sha256":  "762cc1cd1e6740f4eb5745511d9a565a11d7835bac863f71374e44ded9c11077"
+                          },
+                          {
+                              "path":  "tools/TestedInputIdentity.psm1",
+                              "mode":  "text_utf8_lf",
+                              "size_bytes":  6567,
+                              "sha256":  "45160531c01d36f7eb1c0d3d2a115fd6d7541de7f2883081b5fb57a7f5cb0898"
+                          },
+                          {
+                              "path":  "tools/ToolchainIntegrity.psm1",
+                              "mode":  "text_utf8_lf",
+                              "size_bytes":  3009,
+                              "sha256":  "c3fc2f6b8d97c27e2f1d5887c05de4c91cfa8f4f6b814c21208fb3f6d533dc4c"
+                          },
+                          {
+                              "path":  "tools/UpstreamBox3DGate.psm1",
+                              "mode":  "text_utf8_lf",
+                              "size_bytes":  7219,
+                              "sha256":  "324fd58c0dcee1ea712e36df53390ee4deff6faac604e4f32894f57a756c7163"
+                          },
+                          {
+                              "path":  "tools/VerticalSliceCaptureWorkflow.psm1",
+                              "mode":  "text_utf8_lf",
+                              "size_bytes":  9299,
+                              "sha256":  "0566368d21ab6440c9bc81e2f31abd0caead31430cb7572360467fee6b4f26ec"
+                          },
+                          {
+                              "path":  "tools/VerticalSliceGate.psm1",
+                              "mode":  "text_utf8_lf",
+                              "size_bytes":  64476,
+                              "sha256":  "624df6fdbc6d6ce9a639b3bc972e3ed4c1ac821e5ef9b78164134ef8292bac97"
                           },
                           {
                               "path":  "tools/art/build_assets.ps1",
@@ -1361,7 +1499,7 @@
                               "path":  "tools/art/vertical_slice_asset_manifest.json",
                               "mode":  "text_utf8_lf",
                               "size_bytes":  50148,
-                              "sha256":  "6053efb12d341db4dffd5c60641bbb7fe95370093012807ec897bc22df88e4cf"
+                              "sha256":  "97060e28e622b03d500aea2d933e2d673291d390c5a5addf236af1076c20c3bd"
                           },
                           {
                               "path":  "tools/audio/audio_manifest.json",
@@ -1396,8 +1534,8 @@
                           {
                               "path":  "tools/bootstrap.ps1",
                               "mode":  "text_utf8_lf",
-                              "size_bytes":  13169,
-                              "sha256":  "293727b295ae0801912a875f8295f7581dc4723f209746c973f33359d7d7a9e0"
+                              "size_bytes":  15698,
+                              "sha256":  "df335d69a457724bfc9d8ec05463adde0728feb6c217c772f910777715f80246"
                           },
                           {
                               "path":  "tools/box3d-v0.1.0-compile-sources.txt",
@@ -1408,104 +1546,74 @@
                           {
                               "path":  "tools/build.ps1",
                               "mode":  "text_utf8_lf",
-                              "size_bytes":  836,
-                              "sha256":  "064fdbd5fd3f734090cc8519d98311c6ca0d6edb31d76dec2b7d7c89c02ad310"
+                              "size_bytes":  1456,
+                              "sha256":  "5faf578e2d23965aa2c5f87d4cb86d74c9605e842ebb38dcacccaefcff185241"
                           },
                           {
                               "path":  "tools/capture_vertical_slice.ps1",
                               "mode":  "text_utf8_lf",
-                              "size_bytes":  19610,
-                              "sha256":  "f533103588645ddb75922515f2616f135510b4c2930073867e37fe3a2ef8f42d"
+                              "size_bytes":  19834,
+                              "sha256":  "f02f572c7700893d9e7e7a88656c339a7f7a45f32ddda0469aab0781d38bbf23"
                           },
                           {
                               "path":  "tools/check_vertical_slice_evidence.ps1",
                               "mode":  "text_utf8_lf",
-                              "size_bytes":  986,
-                              "sha256":  "5a25fba2fcacad5de40d63a5205322b2094be255cfadd2da5d60320e037d5543"
-                          },
-                          {
-                              "path":  "tools/FoundationEvidenceGate.psm1",
-                              "mode":  "text_utf8_lf",
-                              "size_bytes":  9410,
-                              "sha256":  "c69b87aa67275c53afe8f4755297dc7ece64d34bddb9897ca538d8ad2630812c"
+                              "size_bytes":  725,
+                              "sha256":  "0c124132db997935c9933203e25375230d7bcc541599284e80f091996a72384a"
                           },
                           {
                               "path":  "tools/generate_foundation_report.py",
                               "mode":  "text_utf8_lf",
-                              "size_bytes":  20927,
-                              "sha256":  "33ef273a024263de9aeb3a6470bb33f363bd27b65d673a1d81785e356f6fab26"
+                              "size_bytes":  21816,
+                              "sha256":  "329a3b11ce264e34d767aa5daed49b7779268172d22c4358d24dd20e217c4c03"
                           },
                           {
                               "path":  "tools/generate_vertical_slice_report.py",
                               "mode":  "text_utf8_lf",
-                              "size_bytes":  7517,
-                              "sha256":  "67288370eb9df2bf3d732f7efae4a0e84ef799c392054b6c6ff48832e7e58c96"
-                          },
-                          {
-                              "path":  "tools/GodotSpikeGate.psm1",
-                              "mode":  "text_utf8_lf",
-                              "size_bytes":  11080,
-                              "sha256":  "f81ed257e02861aa6f84aace45d39f33d51ceef740d09f149d5c0363087f4b1c"
-                          },
-                          {
-                              "path":  "tools/Invoke-Native.ps1",
-                              "mode":  "text_utf8_lf",
-                              "size_bytes":  1325,
-                              "sha256":  "a0f1816edf931500c99e08026729030f80f5c18d98d662149b4b3593268f21ac"
+                              "size_bytes":  8713,
+                              "sha256":  "0bd289f9670efd3af766bd19f1faad368de26c66ef0a670c04201737b81c6da0"
                           },
                           {
                               "path":  "tools/package_windows.ps1",
                               "mode":  "text_utf8_lf",
-                              "size_bytes":  25693,
-                              "sha256":  "7185df8797c169f6a9843ec9bcf3182e14fb9699af495f86bcbe44c554f074b7"
+                              "size_bytes":  27708,
+                              "sha256":  "d917c25c382c06e6d5c4f2c4f140e9d8a28ec750112842e6690e808845c237ca"
                           },
                           {
                               "path":  "tools/run_spike.ps1",
                               "mode":  "text_utf8_lf",
-                              "size_bytes":  2246,
-                              "sha256":  "329e329dd9d5dee8c47c10e64b5aa53940b97134fd5e830334ac40007f2ad49a"
-                          },
-                          {
-                              "path":  "tools/SafePath.psm1",
-                              "mode":  "text_utf8_lf",
-                              "size_bytes":  1841,
-                              "sha256":  "d6a5c2daeeb3ef4369daa35bf21d6dc60c3ec736ab8c932078b3e24bd32e4ffc"
-                          },
-                          {
-                              "path":  "tools/SpikeEvidenceValidation.psm1",
-                              "mode":  "text_utf8_lf",
-                              "size_bytes":  51353,
-                              "sha256":  "847f52d2501bf25b5136797e71600c4934bf1c03b9ba454f483e73422bd1ddd9"
-                          },
-                          {
-                              "path":  "tools/SpikeReportGate.psm1",
-                              "mode":  "text_utf8_lf",
-                              "size_bytes":  2400,
-                              "sha256":  "762cc1cd1e6740f4eb5745511d9a565a11d7835bac863f71374e44ded9c11077"
+                              "size_bytes":  2709,
+                              "sha256":  "d571b34deb9f4cf708da2942b892016a13edae05472133b0e6887b3e4050b36d"
                           },
                           {
                               "path":  "tools/test.ps1",
                               "mode":  "text_utf8_lf",
-                              "size_bytes":  21515,
-                              "sha256":  "23a41d152d781b05c1a87fc5dd6ecad82484367989ac3fad72017011179f300f"
+                              "size_bytes":  23185,
+                              "sha256":  "e2220526d429cab96ce083db8c86fda7e57bbd424d0951b93e694418308d7a35"
                           },
                           {
                               "path":  "tools/test_vertical_slice.ps1",
                               "mode":  "text_utf8_lf",
-                              "size_bytes":  9054,
-                              "sha256":  "dace97488bf9db9b9bfecbebb07d43e3c5438902c6015a9dbb52db749bb3c0f3"
+                              "size_bytes":  11347,
+                              "sha256":  "5dff4c14d3b4d47b96bfea4ea3c593991d9e82ab66d5ac67bde51f3570336c7e"
                           },
                           {
                               "path":  "tools/tests/art-pipeline-tests.ps1",
                               "mode":  "text_utf8_lf",
-                              "size_bytes":  24945,
-                              "sha256":  "d5a3abd1388930a2502df459928344d1b1f45e99195d86d98fca5074fb688a9d"
+                              "size_bytes":  24951,
+                              "sha256":  "9cc6fd61261901fec2675bab2fb7505fa57f0694e58b5de052f6db89dc43d8af"
                           },
                           {
                               "path":  "tools/tests/audio-pipeline-tests.ps1",
                               "mode":  "text_utf8_lf",
                               "size_bytes":  7426,
                               "sha256":  "949df33a347f1082a958b601c5f8327082727f84d2499cd7bcc4d3ec16fa78ad"
+                          },
+                          {
+                              "path":  "tools/tests/binary-gitattributes-contract-tests.ps1",
+                              "mode":  "text_utf8_lf",
+                              "size_bytes":  2626,
+                              "sha256":  "abb352cbf7cd9baa171e5ec09cbe1d1f7730c971c58d9d0912deccfe5a97e40e"
                           },
                           {
                               "path":  "tools/tests/bootstrap-behavior.ps1",
@@ -1516,26 +1624,74 @@
                           {
                               "path":  "tools/tests/bootstrap-smoke.ps1",
                               "mode":  "text_utf8_lf",
-                              "size_bytes":  771,
-                              "sha256":  "f77327f5b96af56a71a1f2dc6383d8dc03f541b358f31af82c6e70972e01725b"
+                              "size_bytes":  1143,
+                              "sha256":  "f01b94b0a633e70d1157ec447feb57061cdc11d954fe79c819a03c8041d8d2a0"
+                          },
+                          {
+                              "path":  "tools/tests/bootstrap-test-integration-contract.ps1",
+                              "mode":  "text_utf8_lf",
+                              "size_bytes":  2118,
+                              "sha256":  "9c9f8dbffe9d4c74105459373268e64ce346b47a1c93ae1a06e0c2b65f275d80"
+                          },
+                          {
+                              "path":  "tools/tests/captured-process-tests.ps1",
+                              "mode":  "text_utf8_lf",
+                              "size_bytes":  3317,
+                              "sha256":  "064c391660956362355913f89c8afb8fc54dc3a7c0737ce051729367cb4eb5f1"
+                          },
+                          {
+                              "path":  "tools/tests/ci-workflow-tests.ps1",
+                              "mode":  "text_utf8_lf",
+                              "size_bytes":  5164,
+                              "sha256":  "487ca56256b4521f8868662c1a22fb8f067c69021de5583b97d1b8e79ba30904"
+                          },
+                          {
+                              "path":  "tools/tests/export-preset-contract-tests.ps1",
+                              "mode":  "text_utf8_lf",
+                              "size_bytes":  2091,
+                              "sha256":  "cb134d0692e931636c8eb9a61958e6c7cd20b2fec326b8d85401bc9a966697e8"
                           },
                           {
                               "path":  "tools/tests/foundation-evidence-gate-tests.ps1",
                               "mode":  "text_utf8_lf",
-                              "size_bytes":  16701,
-                              "sha256":  "5c16692d3b1c11c7ac6e256331c057652753ff11aa0f1a3b75b299732bfc427f"
+                              "size_bytes":  26326,
+                              "sha256":  "7e4fcd514e83b810f19887a06705356e2251cafbe9512ea3de80c68568b26581"
+                          },
+                          {
+                              "path":  "tools/tests/godot-copyright-eol-contract-tests.ps1",
+                              "mode":  "text_utf8_lf",
+                              "size_bytes":  3745,
+                              "sha256":  "2e99cc9640214f9010b1c987210f42ee498bca8d7b65409fe9cdb485870b429b"
+                          },
+                          {
+                              "path":  "tools/tests/godot-runtime-cmake-contract-tests.ps1",
+                              "mode":  "text_utf8_lf",
+                              "size_bytes":  5186,
+                              "sha256":  "98582568d25700ee6ea3a89a9735fe6d53f546c14cd69e02f31ed41def2178a0"
+                          },
+                          {
+                              "path":  "tools/tests/godot-smoke-registry-tests.ps1",
+                              "mode":  "text_utf8_lf",
+                              "size_bytes":  5230,
+                              "sha256":  "bbf6f738b0b36d787c79829dc30942c1d02a4f560be5b4867de4aaff227a1097"
                           },
                           {
                               "path":  "tools/tests/godot-spike-gate-tests.ps1",
                               "mode":  "text_utf8_lf",
-                              "size_bytes":  16118,
-                              "sha256":  "fc056d3fac07cd8093eb8f84fdb68bb1e6bd12aeb1aed3106bbc6b0199177180"
+                              "size_bytes":  20477,
+                              "sha256":  "2fe2726e6b32389a9354952d4af6f56f0683c19f5842140c904d080353d0f1e7"
+                          },
+                          {
+                              "path":  "tools/tests/package-launch-cadence-contract-tests.ps1",
+                              "mode":  "text_utf8_lf",
+                              "size_bytes":  2259,
+                              "sha256":  "45193d046fb34799d661bdc2b50e04013ca8b9b6587d20c63f5eea3250a14691"
                           },
                           {
                               "path":  "tools/tests/package-windows-tests.ps1",
                               "mode":  "text_utf8_lf",
-                              "size_bytes":  12587,
-                              "sha256":  "cb74539dc6c855d58fbf572b7d03211923f12eebf69d502ab82e822999364dcc"
+                              "size_bytes":  15267,
+                              "sha256":  "0f22e8ac4bef335a1af44561a2864aa44ede21a2fae7756b685d2c62221ca9c7"
                           },
                           {
                               "path":  "tools/tests/spike-report-gate-tests.ps1",
@@ -1546,8 +1702,8 @@
                           {
                               "path":  "tools/tests/test_art_contracts.py",
                               "mode":  "text_utf8_lf",
-                              "size_bytes":  5951,
-                              "sha256":  "99bbfe40fd8406601a854ee6723e31de1142a4844a1a5959a712a66d609e3f7f"
+                              "size_bytes":  6863,
+                              "sha256":  "1776610039c055f574fb812de74d4446b52de2b6867412911a9d4d502161a3a7"
                           },
                           {
                               "path":  "tools/tests/test_audio_contracts.py",
@@ -1558,20 +1714,44 @@
                           {
                               "path":  "tools/tests/test_generate_foundation_report.py",
                               "mode":  "text_utf8_lf",
-                              "size_bytes":  11095,
-                              "sha256":  "9d60205b3873c9571661d850f6481b26810c3f005049f13627ac24d6543ac997"
+                              "size_bytes":  12633,
+                              "sha256":  "9704bf85a72fb7bcdff343770ee9a2dfbf0be0c57324ecd0c2bd21ee980f4ce5"
                           },
                           {
                               "path":  "tools/tests/test_generate_vertical_slice_report.py",
                               "mode":  "text_utf8_lf",
-                              "size_bytes":  5350,
-                              "sha256":  "c2a71cdde374f4b9af1af8ac24b23e2e48a7294fd24f292df0aa38022347b052"
+                              "size_bytes":  5717,
+                              "sha256":  "e1a3f345748551f97f2a5d3b0404290beb8e815baac0b1325ae19f16cc9e8d99"
+                          },
+                          {
+                              "path":  "tools/tests/test_third_party_inventory.py",
+                              "mode":  "text_utf8_lf",
+                              "size_bytes":  7508,
+                              "sha256":  "3600c90fffdc036928cca474f6d1287afce0c01c42ef1e060a0c2367b4522f44"
                           },
                           {
                               "path":  "tools/tests/test_vertical_slice_tooling_contracts.py",
                               "mode":  "text_utf8_lf",
-                              "size_bytes":  3087,
-                              "sha256":  "a5f8a324bf5a27fbda2d0fd07072468523dbc9df7dcbd0744e0e00cd2be2a5a6"
+                              "size_bytes":  17007,
+                              "sha256":  "2d04c02b6248fb6a3eebdea7e09a706d44a078b5ac9f62861b78e975a94d87e4"
+                          },
+                          {
+                              "path":  "tools/tests/toolchain-integrity-tests.ps1",
+                              "mode":  "text_utf8_lf",
+                              "size_bytes":  6801,
+                              "sha256":  "74a8384d0b870332c1e841ae7426eb70f205d9f38ca446a6392750baba25a767"
+                          },
+                          {
+                              "path":  "tools/tests/toolchain-lock-path-contract-tests.ps1",
+                              "mode":  "text_utf8_lf",
+                              "size_bytes":  6038,
+                              "sha256":  "1f828c710930bc3d4cf9e4fd8beafaf5d2010c727d2e8d2f082541706510f9af"
+                          },
+                          {
+                              "path":  "tools/tests/toolchain-parent-scope-regression.ps1",
+                              "mode":  "text_utf8_lf",
+                              "size_bytes":  1253,
+                              "sha256":  "815e9e7d2d64764b5baa58ec4a763ceaa60733c086bd16b0678a5ae0e512ab44"
                           },
                           {
                               "path":  "tools/tests/upstream-box3d-gate-tests.ps1",
@@ -1580,85 +1760,99 @@
                               "sha256":  "6616259316b750b3b38ed778f44e4f4e2a59b70a6899703eadbb8a491c333a16"
                           },
                           {
+                              "path":  "tools/tests/vertical-slice-capture-workflow-tests.ps1",
+                              "mode":  "text_utf8_lf",
+                              "size_bytes":  12158,
+                              "sha256":  "5fd24b32971a346e67f47285076454b568c4c854ca8e2d241abf326a804f054b"
+                          },
+                          {
+                              "path":  "tools/tests/vertical-slice-evidence-api-contract.ps1",
+                              "mode":  "text_utf8_lf",
+                              "size_bytes":  1349,
+                              "sha256":  "add570eb9c54a06c049e8d7b500746e8a5eb8b241c91dcdc6762b58933ac64d6"
+                          },
+                          {
+                              "path":  "tools/tests/vertical-slice-finding64-smoke.ps1",
+                              "mode":  "text_utf8_lf",
+                              "size_bytes":  2436,
+                              "sha256":  "2862ce39d35e4b9db4ad672fdb824b997e45b2ac80258f0e733998e922d1dde3"
+                          },
+                          {
                               "path":  "tools/tests/vertical-slice-gate-tests.ps1",
                               "mode":  "text_utf8_lf",
-                              "size_bytes":  36763,
-                              "sha256":  "f0710ad34efd60bfa0e4704e4a75029f726669ef26e5cb7484d72808d81c7830"
+                              "size_bytes":  65197,
+                              "sha256":  "b77c26801e77632194a41438f96f7411eec94ff02c52fdcead0384f1896b6d88"
                           },
                           {
                               "path":  "tools/tests/vertical-slice-identity-contract-tests.ps1",
                               "mode":  "text_utf8_lf",
-                              "size_bytes":  5350,
-                              "sha256":  "fa90aac430f7bdabb31357768c1bafc33570caa3aff3f9628d4c26b706b62680"
+                              "size_bytes":  7507,
+                              "sha256":  "d1cde76f761e52b564033742f21b6c24148f6e3787576f778ac90c9875906a06"
+                          },
+                          {
+                              "path":  "tools/tests/vertical-slice-input-feedback-smoke.ps1",
+                              "mode":  "text_utf8_lf",
+                              "size_bytes":  3873,
+                              "sha256":  "52eb82a7e975c704f887ef77ed553f2f17772aea1ff3c47dd0a323efff84e51e"
+                          },
+                          {
+                              "path":  "tools/tests/vertical-slice-verification-contract.ps1",
+                              "mode":  "text_utf8_lf",
+                              "size_bytes":  1784,
+                              "sha256":  "d94e63208a811d2c29cf9ed82804e32895d30fdfd9356c9d0deb4b36d33852f1"
+                          },
+                          {
+                              "path":  "tools/tests/watchdog-timeout-contract-tests.ps1",
+                              "mode":  "text_utf8_lf",
+                              "size_bytes":  3341,
+                              "sha256":  "4910a1af3f95c9a34de10de1a7f864740596a36ea6e15522724582e044e261ef"
                           },
                           {
                               "path":  "tools/toolchain.lock.json",
                               "mode":  "text_utf8_lf",
-                              "size_bytes":  2507,
-                              "sha256":  "6a9d05df510d74130a91e9ec1d5cc862fef0d6d3aca2b73fe3762b0b93de90ee"
-                          },
-                          {
-                              "path":  "tools/UpstreamBox3DGate.psm1",
-                              "mode":  "text_utf8_lf",
-                              "size_bytes":  7219,
-                              "sha256":  "324fd58c0dcee1ea712e36df53390ee4deff6faac604e4f32894f57a756c7163"
-                          },
-                          {
-                              "path":  "tools/VerticalSliceGate.psm1",
-                              "mode":  "text_utf8_lf",
-                              "size_bytes":  48887,
-                              "sha256":  "9c89d313367a5e6a9cece014d7f3f4f29509532030a23b5855d31206da476add"
+                              "size_bytes":  3047,
+                              "sha256":  "4242a98bf001fb9064227baf5f77ce5f28bac3abdd81c17ae2b3399b31d4cb01"
                           }
                       ],
-    "generated_utc":  "2026-07-12T12:47:48.9347573Z",
+    "generated_utc":  "2026-07-19T22:39:23.3368588Z",
     "hardware":  {
                      "cpu":  "11th Gen Intel(R) Core(TM) i7-11800H @ 2.30GHz",
                      "gpu":  "NVIDIA GeForce RTX 3070 Laptop GPU",
                      "ram_bytes":  34073251840,
                      "os":  "Microsoft Windows 11 Pro"
                  },
-    "canonical_state_contract":  "canonical_state_v1",
+    "canonical_state_contract":  "canonical_state_v2",
     "routes":  [
                    {
                        "name":  "virela_win",
                        "outcome":  "Victory",
                        "hashes":  [
-                                      "14930337922665451601",
-                                      "14930337922665451601"
+                                      "16950529107460336353",
+                                      "16950529107460336353"
                                   ],
-                       "ordered_events_sha256":  "965c6dfe3109212d2d83d5f06bdf52411a60d6c42d8308c941860111061f7ec1"
+                       "ordered_events_sha256":  "2a8274aedd8b300ce0023d2bf460a05dc0f94d57c3283bcd930981ee76ba0f8f"
                    },
                    {
                        "name":  "structural_win",
                        "outcome":  "Victory",
                        "hashes":  [
-                                      "9772566425278638545",
-                                      "9772566425278638545"
+                                      "9286739750595435608",
+                                      "9286739750595435608"
                                   ],
-                       "ordered_events_sha256":  "39efed3d685c12a6e730f9bd47516af7ddd18a0200a0c936e0f494d5f382606e"
+                       "ordered_events_sha256":  "4d9f088a9d42951b0e36842de588505f1bd9963bd5f5db4a9f6d48a287cedb71"
                    },
                    {
                        "name":  "no_ability_loss",
                        "outcome":  "Defeat",
                        "hashes":  [
-                                      "11323609224403413012",
-                                      "11323609224403413012"
+                                      "9146724923232777924",
+                                      "9146724923232777924"
                                   ],
-                       "ordered_events_sha256":  "2b1d72ce8b2b9a28b4c3dc48cc1d7102e683bef66bcf856f4bb6d59aef89bbd3"
+                       "ordered_events_sha256":  "c028ce03bed93c1f6ef7bc1a7b714ffab35966f883388bd2775fa80da76e82ec"
                    }
                ],
-    "acceptance":  {
-                       "foundation":  true,
-                       "slice_tests":  true,
-                       "restart_20":  true,
-                       "abi":  true,
-                       "scanner":  true,
-                       "assets":  true,
-                       "smokes":  true,
-                       "box3d_only":  true
-                   },
     "physics":  {
-                    "step_p95_ms":  1.65,
+                    "step_p95_ms":  2.4711,
                     "limit_ms":  8
                 },
     "renderers":  [
@@ -1667,15 +1861,15 @@
                           "scales":  [
                                          {
                                              "ui_scale":  100,
-                                             "frame_p95_ms":  6.25,
-                                             "frame_p99_ms":  6.25,
-                                             "max_hitch_ms":  11.0102121212123,
-                                             "input_feedback_p95_ms":  6.032,
+                                             "frame_p95_ms":  6.06060606060606,
+                                             "frame_p99_ms":  6.83178787878788,
+                                             "max_hitch_ms":  11.4315151515153,
+                                             "input_feedback_p95_ms":  18.426,
                                              "input_feedback_samples":  3,
                                              "input_feedback_markers":  [
                                                                             {
                                                                                 "command_id":  "set_aim_center",
-                                                                                "observed_tick":  5,
+                                                                                "observed_tick":  13,
                                                                                 "phase_degrees":  0.0,
                                                                                 "preview_hash":  "-5737333301593154889",
                                                                                 "sample_index":  0,
@@ -1684,42 +1878,42 @@
                                                                             },
                                                                             {
                                                                                 "command_id":  "set_aim_right",
-                                                                                "observed_tick":  6,
+                                                                                "observed_tick":  15,
                                                                                 "phase_degrees":  0.0,
-                                                                                "preview_hash":  "-5465358568780565436",
+                                                                                "preview_hash":  "-37126174601071957",
                                                                                 "sample_index":  1,
                                                                                 "speed":  8.0,
                                                                                 "theta_degrees":  2.0
                                                                             },
                                                                             {
                                                                                 "command_id":  "set_aim_left",
-                                                                                "observed_tick":  7,
+                                                                                "observed_tick":  16,
                                                                                 "phase_degrees":  0.0,
-                                                                                "preview_hash":  "5678929320877639882",
+                                                                                "preview_hash":  "-8248177275834007971",
                                                                                 "sample_index":  2,
                                                                                 "speed":  8.0,
                                                                                 "theta_degrees":  -2.0
                                                                             }
                                                                         ],
-                                             "physics_step_p95_ms":  1.6015,
-                                             "frames_measured":  486,
+                                             "physics_step_p95_ms":  2.4711,
+                                             "frames_measured":  482,
                                              "rupture_observed":  true,
                                              "vfx_observed":  true,
                                              "post_vfx_frames":  35,
                                              "metrics_path":  "artifacts/vertical-slice/debug/metrics-vulkan-100.json",
-                                             "metrics_sha256":  "8c3af4dc8199330179f3abc99ce800f8cfc8ce9eff9b01ba23646b090613d384"
+                                             "metrics_sha256":  "df37fc2deabfb04675db8a980d95e464309ebf6675de8829cef1d831b6a3e933"
                                          },
                                          {
                                              "ui_scale":  150,
                                              "frame_p95_ms":  6.06060606060606,
-                                             "frame_p99_ms":  6.107,
-                                             "max_hitch_ms":  10.9045151515153,
-                                             "input_feedback_p95_ms":  5.856,
+                                             "frame_p99_ms":  6.891,
+                                             "max_hitch_ms":  15.3530303030303,
+                                             "input_feedback_p95_ms":  16.487,
                                              "input_feedback_samples":  3,
                                              "input_feedback_markers":  [
                                                                             {
                                                                                 "command_id":  "set_aim_center",
-                                                                                "observed_tick":  5,
+                                                                                "observed_tick":  12,
                                                                                 "phase_degrees":  0.0,
                                                                                 "preview_hash":  "-5737333301593154889",
                                                                                 "sample_index":  0,
@@ -1728,30 +1922,30 @@
                                                                             },
                                                                             {
                                                                                 "command_id":  "set_aim_right",
-                                                                                "observed_tick":  6,
+                                                                                "observed_tick":  13,
                                                                                 "phase_degrees":  0.0,
-                                                                                "preview_hash":  "-5465358568780565436",
+                                                                                "preview_hash":  "-5557736428459727519",
                                                                                 "sample_index":  1,
                                                                                 "speed":  8.0,
                                                                                 "theta_degrees":  2.0
                                                                             },
                                                                             {
                                                                                 "command_id":  "set_aim_left",
-                                                                                "observed_tick":  7,
+                                                                                "observed_tick":  14,
                                                                                 "phase_degrees":  0.0,
-                                                                                "preview_hash":  "5678929320877639882",
+                                                                                "preview_hash":  "1124383463957110733",
                                                                                 "sample_index":  2,
                                                                                 "speed":  8.0,
                                                                                 "theta_degrees":  -2.0
                                                                             }
                                                                         ],
-                                             "physics_step_p95_ms":  1.6186,
-                                             "frames_measured":  488,
+                                             "physics_step_p95_ms":  2.2951,
+                                             "frames_measured":  487,
                                              "rupture_observed":  true,
                                              "vfx_observed":  true,
                                              "post_vfx_frames":  35,
                                              "metrics_path":  "artifacts/vertical-slice/debug/metrics-vulkan-150.json",
-                                             "metrics_sha256":  "346b6973669a468f25f88325a228074b647f014fa8081ef4e67923a3fd5d9f39"
+                                             "metrics_sha256":  "34ac281dedb50e4a77eda01e66634ee44e6b29d24a960c3dcad30afbf7983391"
                                          }
                                      ],
                           "capture":  {
@@ -1759,12 +1953,12 @@
                                           "width":  1920,
                                           "height":  1080,
                                           "path":  "artifacts/vertical-slice/debug/vertical-slice-vulkan.avi",
-                                          "hash":  "4a1882d1bd8212752eb30f4670bd6e697f9c630b2b62a640f9f3aa12840a0eb2",
+                                          "hash":  "ce30d9cb7d964c09921fec187b8c5251c1c40dd44630f042c4a4076857995c40",
                                           "log_path":  "artifacts/vertical-slice/debug/capture-vulkan-attempt1.stdout.log",
-                                          "log_hash":  "703a9e0871e7b36935cea21f54e7c55ec209fa46bb0e244dcb7c439741f5c583",
+                                          "log_hash":  "0634c5150663d12d0a47b997d56cfa8b5369d3f8536531838827879cd7fadd25",
                                           "retry_count":  0,
                                           "source_path":  "artifacts/vertical-slice/debug/vertical-slice-vulkan-source.avi",
-                                          "source_hash":  "ef786ff5ebf4c0791e786637891e3a038b357d5ba64c6183765205bdfde35418",
+                                          "source_hash":  "de63446b9ecbaaec108517e43cf162af04a0c4a2adc478b69df9abc6227786a9",
                                           "source_frames":  2307,
                                           "downsample_source_frames":  [
                                                                            0,
@@ -1775,11 +1969,11 @@
                                                                            39,
                                                                            46,
                                                                            54,
-                                                                           60,
+                                                                           62,
                                                                            69,
                                                                            77,
                                                                            85,
-                                                                           93,
+                                                                           95,
                                                                            100,
                                                                            108,
                                                                            116,
@@ -2075,15 +2269,15 @@
                           "scales":  [
                                          {
                                              "ui_scale":  100,
-                                             "frame_p95_ms":  6.06060606060606,
-                                             "frame_p99_ms":  6.06060606060606,
-                                             "max_hitch_ms":  6.06060606060606,
-                                             "input_feedback_p95_ms":  3.635,
+                                             "frame_p95_ms":  6.25,
+                                             "frame_p99_ms":  6.66666666666667,
+                                             "max_hitch_ms":  10.6464242424242,
+                                             "input_feedback_p95_ms":  15.388,
                                              "input_feedback_samples":  3,
                                              "input_feedback_markers":  [
                                                                             {
                                                                                 "command_id":  "set_aim_center",
-                                                                                "observed_tick":  5,
+                                                                                "observed_tick":  14,
                                                                                 "phase_degrees":  0.0,
                                                                                 "preview_hash":  "-5737333301593154889",
                                                                                 "sample_index":  0,
@@ -2092,42 +2286,42 @@
                                                                             },
                                                                             {
                                                                                 "command_id":  "set_aim_right",
-                                                                                "observed_tick":  6,
+                                                                                "observed_tick":  15,
                                                                                 "phase_degrees":  0.0,
-                                                                                "preview_hash":  "-5465358568780565436",
+                                                                                "preview_hash":  "-37126174601071957",
                                                                                 "sample_index":  1,
                                                                                 "speed":  8.0,
                                                                                 "theta_degrees":  2.0
                                                                             },
                                                                             {
                                                                                 "command_id":  "set_aim_left",
-                                                                                "observed_tick":  7,
+                                                                                "observed_tick":  16,
                                                                                 "phase_degrees":  0.0,
-                                                                                "preview_hash":  "5678929320877639882",
+                                                                                "preview_hash":  "-8248177275834007971",
                                                                                 "sample_index":  2,
                                                                                 "speed":  8.0,
                                                                                 "theta_degrees":  -2.0
                                                                             }
                                                                         ],
-                                             "physics_step_p95_ms":  1.5836,
-                                             "frames_measured":  481,
+                                             "physics_step_p95_ms":  1.9181,
+                                             "frames_measured":  480,
                                              "rupture_observed":  true,
                                              "vfx_observed":  true,
                                              "post_vfx_frames":  35,
                                              "metrics_path":  "artifacts/vertical-slice/debug/metrics-opengl-100.json",
-                                             "metrics_sha256":  "0d4c7ac219b3a006280c187be8571b58893741e4fa33fe82a563e037883a829e"
+                                             "metrics_sha256":  "3692ccae03182332ee4426dec19ac77fe0d0abd336106c7b455c2b8a148e9f25"
                                          },
                                          {
                                              "ui_scale":  150,
-                                             "frame_p95_ms":  6.06060606060606,
-                                             "frame_p99_ms":  6.09124242424242,
-                                             "max_hitch_ms":  12.710181818182,
-                                             "input_feedback_p95_ms":  3.953,
+                                             "frame_p95_ms":  6.25,
+                                             "frame_p99_ms":  6.66666666666667,
+                                             "max_hitch_ms":  11.2163636363636,
+                                             "input_feedback_p95_ms":  11.384,
                                              "input_feedback_samples":  3,
                                              "input_feedback_markers":  [
                                                                             {
                                                                                 "command_id":  "set_aim_center",
-                                                                                "observed_tick":  5,
+                                                                                "observed_tick":  15,
                                                                                 "phase_degrees":  0.0,
                                                                                 "preview_hash":  "-5737333301593154889",
                                                                                 "sample_index":  0,
@@ -2136,30 +2330,30 @@
                                                                             },
                                                                             {
                                                                                 "command_id":  "set_aim_right",
-                                                                                "observed_tick":  6,
+                                                                                "observed_tick":  16,
                                                                                 "phase_degrees":  0.0,
-                                                                                "preview_hash":  "-5465358568780565436",
+                                                                                "preview_hash":  "9188153077635663011",
                                                                                 "sample_index":  1,
                                                                                 "speed":  8.0,
                                                                                 "theta_degrees":  2.0
                                                                             },
                                                                             {
                                                                                 "command_id":  "set_aim_left",
-                                                                                "observed_tick":  7,
+                                                                                "observed_tick":  17,
                                                                                 "phase_degrees":  0.0,
-                                                                                "preview_hash":  "5678929320877639882",
+                                                                                "preview_hash":  "4333360449678182912",
                                                                                 "sample_index":  2,
                                                                                 "speed":  8.0,
                                                                                 "theta_degrees":  -2.0
                                                                             }
                                                                         ],
-                                             "physics_step_p95_ms":  1.65,
-                                             "frames_measured":  482,
+                                             "physics_step_p95_ms":  1.8739,
+                                             "frames_measured":  475,
                                              "rupture_observed":  true,
                                              "vfx_observed":  true,
                                              "post_vfx_frames":  35,
                                              "metrics_path":  "artifacts/vertical-slice/debug/metrics-opengl-150.json",
-                                             "metrics_sha256":  "2c6a6c31900c16d7d236ef0baa10bfe9b4f0e1debd014b30276fb0efc5b737c0"
+                                             "metrics_sha256":  "bc63e841d089d44c824f29dbd82a4b0a4c203990fe976b641af7a1e6b94ecd22"
                                          }
                                      ],
                           "capture":  {
@@ -2167,12 +2361,12 @@
                                           "width":  1920,
                                           "height":  1080,
                                           "path":  "artifacts/vertical-slice/debug/vertical-slice-opengl.avi",
-                                          "hash":  "30eecb670c3b192c5f481f5b12953188b792ea10867182f44c1c52e2cfddf57c",
+                                          "hash":  "fbbfea780dc57c2e70ec63413274c1ca8aeb9cd3446011c21d079ecd8cdcde87",
                                           "log_path":  "artifacts/vertical-slice/debug/capture-opengl-attempt1.stdout.log",
-                                          "log_hash":  "6bf9b872672257a141924ccb0c96849d6dde336a1b876d2784a4822cd9f16c2d",
+                                          "log_hash":  "3b81435910d8ad768681877488235b01c306f4185087a78b63ae6c71fd21c642",
                                           "retry_count":  0,
                                           "source_path":  "artifacts/vertical-slice/debug/vertical-slice-opengl-source.avi",
-                                          "source_hash":  "94e8ceaa4eb29bb168e330149a7f1816d28c742653b09a994f3a5d37460bccfb",
+                                          "source_hash":  "59ea27cf5f81608732a7728b4003e76c80425ae255e279e971ae235a2f5f2b84",
                                           "source_frames":  2307,
                                           "downsample_source_frames":  [
                                                                            0,
@@ -2500,7 +2694,7 @@
                                 "exposure":  1,
                                 "renderer":  "Vulkan",
                                 "path":  "docs/art/goldens/vertical-slice/debug/overview.png",
-                                "sha256":  "cf1718912d511a5382a36451a36b8688476dda2ec076d10aa14ffbae68b72d08"
+                                "sha256":  "f781242d099e915fdca0d2303f6098caba249f3b33f903ae26e19feb5a8caa78"
                             },
                             {
                                 "name":  "aim",
@@ -2515,22 +2709,22 @@
                                 "exposure":  1,
                                 "renderer":  "Vulkan",
                                 "path":  "docs/art/goldens/vertical-slice/debug/aim.png",
-                                "sha256":  "9142a81b833679ff28f622a191b28a457bca6dce62ba4d9f5cf4c49320280f59"
+                                "sha256":  "8b1b33712b986c3d50a0c9dc864d7d678bb7e282e2dea7a1623f7f1e4e6f6d81"
                             },
                             {
                                 "name":  "virela",
-                                "frame":  8,
-                                "source_frame":  60,
-                                "source_transition_frame":  55,
-                                "tick":  56,
+                                "frame":  12,
+                                "source_frame":  95,
+                                "source_transition_frame":  95,
+                                "tick":  96,
                                 "phase":  "flight_ability",
                                 "outcome":  "none",
-                                "event":  "phase_transition",
-                                "camera":  "(-16.50704, 21.09833, 17.29956)",
+                                "event":  "ability_started:vortex",
+                                "camera":  "(-14.03122, 18.02529, 13.1179)",
                                 "exposure":  1,
                                 "renderer":  "Vulkan",
                                 "path":  "docs/art/goldens/vertical-slice/debug/virela.png",
-                                "sha256":  "b823c2996cbb231e6a15e9f881be0b64b5c5479cf81d01a926c4c662ab070feb"
+                                "sha256":  "a21d4cd8852034fbf51cea6281ceffc86cc660b051857712cb35ce4b033eabb8"
                             },
                             {
                                 "name":  "vulnerable_impact",
@@ -2545,7 +2739,7 @@
                                 "exposure":  1,
                                 "renderer":  "Vulkan",
                                 "path":  "docs/art/goldens/vertical-slice/debug/vulnerable_impact.png",
-                                "sha256":  "9c5127e167d1ce0f0651f6adf5e7b38d1e68953417c8ff6b23cba5b99fdc6d3b"
+                                "sha256":  "3f8eba2d60245bb15ada0c3d49c622fb14bfdc1a72cd720031833b6e971d24f2"
                             },
                             {
                                 "name":  "result",
@@ -2560,7 +2754,7 @@
                                 "exposure":  1,
                                 "renderer":  "Vulkan",
                                 "path":  "docs/art/goldens/vertical-slice/debug/result.png",
-                                "sha256":  "1c60700e3f26b4b37e8fccf0c86279f4c58b0f904dfc18561c286c62f6b291a2"
+                                "sha256":  "9b0d40ced7ebb73fdd11b6030b3b062372924e8d73786d53202ee94f7e5a6831"
                             }
                         ],
     "rubric":  {
@@ -2572,37 +2766,25 @@
                    "important":  0
                },
     "playtest":  {
-                     "status":  "unavailable",
-                     "substitute":  "independent_agents",
+                     "status":  "not_performed",
+                     "participants":  0,
+                     "substitute":  "none",
+                     "gate_status":  "pending",
+                     "required_before":  "product_release",
                      "legal_limit":  "not_legal_advice",
                      "human_targets":  "4/5 launch in 90 s; 4/5 finish in 6 min; 4/5 understand front armor; 3/5 discover debris; 5/5 distinguish materials"
                  },
-    "clean_room":  {
-                       "approved":  true,
-                       "provenance_manifest_sha256":  "539ea81212dbe6b7b0c709033adb956c435fc7d0bb4f7a3065a12fa5ee4dc2a9",
-                       "comparative_review":  "approved",
-                       "scope":  [
-                                     "names",
-                                     "logos",
-                                     "silhouettes",
-                                     "sounds",
-                                     "ui",
-                                     "layouts",
-                                     "promotional_material"
-                                 ],
-                       "codenames":  [
-                                         "Virela",
-                                         "Nox",
-                                         "Talo"
-                                     ]
-                   },
+    "clean_room_review":  {
+                              "path":  "docs/gameplay/evidence/vertical-slice-clean-room-review.json",
+                              "sha256":  "ed0de2fccf431a490d58712e7173022533161b7967675ab14a941ef8f8af36dc"
+                          },
     "capture_manifest":  {
                              "path":  "artifacts/vertical-slice/debug/capture-manifest.json",
-                             "sha256":  "f3d84e46839bdd4479d4418e815f1bb12fe20412aa85c972c1ed37810ea20b72"
+                             "sha256":  "7d2d02e94d7462389131b74d7b59e31dea1f321cf7bdca70b51e768bcc5af8a9"
                          },
     "reviews_manifest":  {
                              "path":  "docs/gameplay/evidence/vertical-slice-reviews.json",
-                             "sha256":  "fd7edd3d3fec558b91d0855ca7b94effa362993d3a1c2fd22312b78604625281"
+                             "sha256":  "1104220fb0549b3c439ba51e7d32d7f23c4268e8c8354a792bd7546bc4a8f17e"
                          },
     "package":  {
                     "path":  "not_applicable_debug",
@@ -2612,7 +2794,7 @@
     "source_artifacts":  [
                              {
                                  "path":  "artifacts/vertical-slice/debug/capture-vulkan-attempt1.stdout.log",
-                                 "sha256":  "703a9e0871e7b36935cea21f54e7c55ec209fa46bb0e244dcb7c439741f5c583"
+                                 "sha256":  "0634c5150663d12d0a47b997d56cfa8b5369d3f8536531838827879cd7fadd25"
                              },
                              {
                                  "path":  "artifacts/vertical-slice/debug/capture-vulkan-attempt1.stderr.log",
@@ -2628,15 +2810,15 @@
                              },
                              {
                                  "path":  "artifacts/vertical-slice/debug/vertical-slice-vulkan-source.avi",
-                                 "sha256":  "ef786ff5ebf4c0791e786637891e3a038b357d5ba64c6183765205bdfde35418"
+                                 "sha256":  "de63446b9ecbaaec108517e43cf162af04a0c4a2adc478b69df9abc6227786a9"
                              },
                              {
                                  "path":  "artifacts/vertical-slice/debug/vertical-slice-vulkan.avi",
-                                 "sha256":  "4a1882d1bd8212752eb30f4670bd6e697f9c630b2b62a640f9f3aa12840a0eb2"
+                                 "sha256":  "ce30d9cb7d964c09921fec187b8c5251c1c40dd44630f042c4a4076857995c40"
                              },
                              {
                                  "path":  "artifacts/vertical-slice/debug/performance-vulkan-100-attempt1.stdout.log",
-                                 "sha256":  "43e631d2805b94ebb0e7fe1b14ff20b2d29b2bc44690d7b7b6dd754127e5c144"
+                                 "sha256":  "db835ec494a6c06ff8449792c2d608602ca1d456be539833ac84e909b6fe2d02"
                              },
                              {
                                  "path":  "artifacts/vertical-slice/debug/performance-vulkan-100-attempt1.stderr.log",
@@ -2644,11 +2826,11 @@
                              },
                              {
                                  "path":  "artifacts/vertical-slice/debug/metrics-vulkan-100.json",
-                                 "sha256":  "8c3af4dc8199330179f3abc99ce800f8cfc8ce9eff9b01ba23646b090613d384"
+                                 "sha256":  "df37fc2deabfb04675db8a980d95e464309ebf6675de8829cef1d831b6a3e933"
                              },
                              {
                                  "path":  "artifacts/vertical-slice/debug/performance-vulkan-150-attempt1.stdout.log",
-                                 "sha256":  "808657eed8fe2d966b5191d8ee129e339c464189c4befccc2db61829855f245c"
+                                 "sha256":  "6b6b55b0d386f30f71cdc66d8708a3574cc451465154699175d559bbc94dcd8b"
                              },
                              {
                                  "path":  "artifacts/vertical-slice/debug/performance-vulkan-150-attempt1.stderr.log",
@@ -2656,11 +2838,11 @@
                              },
                              {
                                  "path":  "artifacts/vertical-slice/debug/metrics-vulkan-150.json",
-                                 "sha256":  "346b6973669a468f25f88325a228074b647f014fa8081ef4e67923a3fd5d9f39"
+                                 "sha256":  "34ac281dedb50e4a77eda01e66634ee44e6b29d24a960c3dcad30afbf7983391"
                              },
                              {
                                  "path":  "artifacts/vertical-slice/debug/capture-opengl-attempt1.stdout.log",
-                                 "sha256":  "6bf9b872672257a141924ccb0c96849d6dde336a1b876d2784a4822cd9f16c2d"
+                                 "sha256":  "3b81435910d8ad768681877488235b01c306f4185087a78b63ae6c71fd21c642"
                              },
                              {
                                  "path":  "artifacts/vertical-slice/debug/capture-opengl-attempt1.stderr.log",
@@ -2676,15 +2858,15 @@
                              },
                              {
                                  "path":  "artifacts/vertical-slice/debug/vertical-slice-opengl-source.avi",
-                                 "sha256":  "94e8ceaa4eb29bb168e330149a7f1816d28c742653b09a994f3a5d37460bccfb"
+                                 "sha256":  "59ea27cf5f81608732a7728b4003e76c80425ae255e279e971ae235a2f5f2b84"
                              },
                              {
                                  "path":  "artifacts/vertical-slice/debug/vertical-slice-opengl.avi",
-                                 "sha256":  "30eecb670c3b192c5f481f5b12953188b792ea10867182f44c1c52e2cfddf57c"
+                                 "sha256":  "fbbfea780dc57c2e70ec63413274c1ca8aeb9cd3446011c21d079ecd8cdcde87"
                              },
                              {
                                  "path":  "artifacts/vertical-slice/debug/performance-opengl-100-attempt1.stdout.log",
-                                 "sha256":  "a53c54b6dd97b2b304e86a95c9a411280b886eb22944fc544013fa573d88299b"
+                                 "sha256":  "cbf2606f0ef0563adfefb86c09eeecb6b0d791b0fb52c185cad2d2a2c5163b11"
                              },
                              {
                                  "path":  "artifacts/vertical-slice/debug/performance-opengl-100-attempt1.stderr.log",
@@ -2692,11 +2874,11 @@
                              },
                              {
                                  "path":  "artifacts/vertical-slice/debug/metrics-opengl-100.json",
-                                 "sha256":  "0d4c7ac219b3a006280c187be8571b58893741e4fa33fe82a563e037883a829e"
+                                 "sha256":  "3692ccae03182332ee4426dec19ac77fe0d0abd336106c7b455c2b8a148e9f25"
                              },
                              {
                                  "path":  "artifacts/vertical-slice/debug/performance-opengl-150-attempt1.stdout.log",
-                                 "sha256":  "0c9b3a326f25beec7c9bce4cfc4fa76db1a3ddf4b692e1c421abe1c3dbdba11a"
+                                 "sha256":  "797f9d040c100c29d29f586e31932d0b506f742120e985049e19125b0ebf34ba"
                              },
                              {
                                  "path":  "artifacts/vertical-slice/debug/performance-opengl-150-attempt1.stderr.log",
@@ -2704,15 +2886,15 @@
                              },
                              {
                                  "path":  "artifacts/vertical-slice/debug/metrics-opengl-150.json",
-                                 "sha256":  "2c6a6c31900c16d7d236ef0baa10bfe9b4f0e1debd014b30276fb0efc5b737c0"
+                                 "sha256":  "bc63e841d089d44c824f29dbd82a4b0a4c203990fe976b641af7a1e6b94ecd22"
                              },
                              {
                                  "path":  "artifacts/vertical-slice/debug/route-determinism-raw.log",
-                                 "sha256":  "873b06f6496eff0d7dddd678c61fea80b6ac0e824ff19f22a1b12eee6c2e6daf"
+                                 "sha256":  "3480e342e39f8015b9cddd50e524e3ecd358cb9ade16613a545ffa469c560f59"
                              },
                              {
                                  "path":  "artifacts/vertical-slice/debug/route-determinism.log",
-                                 "sha256":  "c46ef934176b2176d8a77db6e67cf633010f7877cea909d365bfff7af436e262"
+                                 "sha256":  "53fb5937968c7aa9d5bab778b2d637a4dedd7b264e2497eb3a586ba5b37e084e"
                              },
                              {
                                  "path":  "artifacts/vertical-slice/debug/golden-overview.stdout.log",
@@ -2724,7 +2906,7 @@
                              },
                              {
                                  "path":  "docs/art/goldens/vertical-slice/debug/overview.png",
-                                 "sha256":  "cf1718912d511a5382a36451a36b8688476dda2ec076d10aa14ffbae68b72d08"
+                                 "sha256":  "f781242d099e915fdca0d2303f6098caba249f3b33f903ae26e19feb5a8caa78"
                              },
                              {
                                  "path":  "artifacts/vertical-slice/debug/golden-aim.stdout.log",
@@ -2736,7 +2918,7 @@
                              },
                              {
                                  "path":  "docs/art/goldens/vertical-slice/debug/aim.png",
-                                 "sha256":  "9142a81b833679ff28f622a191b28a457bca6dce62ba4d9f5cf4c49320280f59"
+                                 "sha256":  "8b1b33712b986c3d50a0c9dc864d7d678bb7e282e2dea7a1623f7f1e4e6f6d81"
                              },
                              {
                                  "path":  "artifacts/vertical-slice/debug/golden-virela.stdout.log",
@@ -2748,7 +2930,7 @@
                              },
                              {
                                  "path":  "docs/art/goldens/vertical-slice/debug/virela.png",
-                                 "sha256":  "b823c2996cbb231e6a15e9f881be0b64b5c5479cf81d01a926c4c662ab070feb"
+                                 "sha256":  "a21d4cd8852034fbf51cea6281ceffc86cc660b051857712cb35ce4b033eabb8"
                              },
                              {
                                  "path":  "artifacts/vertical-slice/debug/golden-vulnerable_impact.stdout.log",
@@ -2760,7 +2942,7 @@
                              },
                              {
                                  "path":  "docs/art/goldens/vertical-slice/debug/vulnerable_impact.png",
-                                 "sha256":  "9c5127e167d1ce0f0651f6adf5e7b38d1e68953417c8ff6b23cba5b99fdc6d3b"
+                                 "sha256":  "3f8eba2d60245bb15ada0c3d49c622fb14bfdc1a72cd720031833b6e971d24f2"
                              },
                              {
                                  "path":  "artifacts/vertical-slice/debug/golden-result.stdout.log",
@@ -2772,7 +2954,7 @@
                              },
                              {
                                  "path":  "docs/art/goldens/vertical-slice/debug/result.png",
-                                 "sha256":  "1c60700e3f26b4b37e8fccf0c86279f4c58b0f904dfc18561c286c62f6b291a2"
+                                 "sha256":  "9b0d40ced7ebb73fdd11b6030b3b062372924e8d73786d53202ee94f7e5a6831"
                              }
                          ]
 }

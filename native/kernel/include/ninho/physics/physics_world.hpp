@@ -212,6 +212,10 @@ public:
     Status commit_pending_initial_state();
     void step();
     [[nodiscard]] std::optional<BodyState> state(BodyHandle body) const;
+    // Non-owning views of buffers published by this world. Any non-const
+    // operation on the world, as well as moving or destroying it, may
+    // invalidate a previously returned view. Copy elements that must outlive
+    // that boundary.
     [[nodiscard]] std::span<const BodyState> states() const;
     [[nodiscard]] std::vector<QueryHit> overlap_shape(
         const QueryShape& shape, Transform transform) const;
@@ -221,7 +225,9 @@ public:
     [[nodiscard]] std::optional<QueryHit> cast_sphere(
         Vec3 center, float radius, Vec3 translation) const;
     [[nodiscard]] std::optional<Aabb> body_bounds(BodyHandle body) const;
+    // Borrowed published view; it follows the invalidation rules above.
     [[nodiscard]] std::span<const ContactHit> contact_hits() const;
+    // Borrowed published view; it follows the invalidation rules above.
     [[nodiscard]] std::span<const JointReaction> joint_reactions() const;
     [[nodiscard]] std::optional<JointReaction> joint_reaction(JointHandle joint) const;
     [[nodiscard]] WorldMetrics metrics() const;

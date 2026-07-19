@@ -3,11 +3,6 @@ extends Node
 signal recenter_requested
 signal pause_changed(paused: bool)
 
-const LAUNCH_RADIUS := 13.0
-const MIN_THETA_DEGREES := -50.0
-const MAX_THETA_DEGREES := 50.0
-const MIN_SPEED := 8.0
-const MAX_SPEED := 16.0
 const RESTART_HOLD_SECONDS := 0.5
 const RING_INNER_RADIUS := 0.15
 const RING_OUTER_RADIUS := 1.25
@@ -17,11 +12,16 @@ const RING_OUTER_RADIUS := 1.25
 
 var _session: Node
 var _frame: Dictionary = {}
+var _aim_envelope: Dictionary = {}
 var _theta_degrees := 0.0
 var _phase_degrees := 0.0
-var _speed := 10.5
+var _speed := 0.0
 var _restart_hold := 0.0
 var _restart_latched := false
+var _has_pending_aim := false
+var _pending_aim_origin := Vector3.ZERO
+var _pending_aim_tangent := Vector3.ZERO
+var _pending_aim_speed := 0.0
 
 
 func _ready() -> void:
@@ -30,10 +30,44 @@ func _ready() -> void:
 
 func bind_session(session: Node) -> void:
 	_session = session
+	_has_pending_aim = false
 
 
 func observe_frame(frame: Dictionary) -> void:
 	_frame = frame
+	if str(frame.get("phase", "")) != "aim":
+		_has_pending_aim = false
+	var envelope_value: Variant = frame.get("aim_envelope")
+	if envelope_value is Dictionary \
+			and _aim_envelope_changed(envelope_value as Dictionary):
+		_aim_envelope = (envelope_value as Dictionary).duplicate(true)
+		_theta_degrees = clampf(
+			_theta_degrees,
+			float(_aim_envelope.theta_min_deg),
+			float(_aim_envelope.theta_max_deg))
+		_speed = float(_aim_envelope.default_speed_m_s)
+		_ring.global_position = _origin_for_theta(_theta_degrees)
+
+
+func _aim_envelope_changed(candidate: Dictionary) -> bool:
+	if not candidate.has_all([
+		"shell_radius_m", "theta_min_deg", "theta_max_deg",
+		"speed_min_m_s", "speed_max_m_s", "default_speed_m_s"
+	]):
+		return false
+	return _aim_envelope.is_empty() \
+		or not is_equal_approx(
+			float(candidate.shell_radius_m), float(_aim_envelope.shell_radius_m)) \
+		or not is_equal_approx(
+			float(candidate.theta_min_deg), float(_aim_envelope.theta_min_deg)) \
+		or not is_equal_approx(
+			float(candidate.theta_max_deg), float(_aim_envelope.theta_max_deg)) \
+		or not is_equal_approx(
+			float(candidate.speed_min_m_s), float(_aim_envelope.speed_min_m_s)) \
+		or not is_equal_approx(
+			float(candidate.speed_max_m_s), float(_aim_envelope.speed_max_m_s)) \
+		or not is_equal_approx(
+			float(candidate.default_speed_m_s), float(_aim_envelope.default_speed_m_s))
 
 
 func begin_aim() -> bool:
@@ -62,26 +96,56 @@ func try_begin_aim_at(screen_position: Vector2) -> bool:
 
 
 func set_aim_degrees(theta_degrees: float, phase_degrees: float, speed: float) -> bool:
-	if not is_instance_valid(_session):
+	if not is_instance_valid(_session) or _aim_envelope.is_empty():
 		return false
-	_theta_degrees = clampf(theta_degrees, MIN_THETA_DEGREES, MAX_THETA_DEGREES)
+	_theta_degrees = clampf(
+		theta_degrees,
+		float(_aim_envelope.theta_min_deg),
+		float(_aim_envelope.theta_max_deg))
 	_phase_degrees = clampf(phase_degrees, -80.0, 80.0)
-	_speed = clampf(speed, MIN_SPEED, MAX_SPEED)
+	_speed = clampf(
+		speed,
+		float(_aim_envelope.speed_min_m_s),
+		float(_aim_envelope.speed_max_m_s))
 	var theta := deg_to_rad(_theta_degrees)
 	var phase := deg_to_rad(_phase_degrees)
-	var origin := Vector3(-LAUNCH_RADIUS * cos(theta), 0.0, LAUNCH_RADIUS * sin(theta))
+	var origin := _origin_for_theta(_theta_degrees)
 	var azimuth := Vector3(sin(theta), 0.0, cos(theta))
 	var tangent := (Vector3.UP * cos(phase) + azimuth * sin(phase)).normalized()
 	_ring.global_position = origin
-	return _session.queue_aim(origin, tangent, _speed)
+	return _stage_aim(origin, tangent, _speed)
+
+
+func _stage_aim(origin: Vector3, tangent: Vector3, speed: float) -> bool:
+	if not is_instance_valid(_session):
+		return false
+	_pending_aim_origin = origin
+	_pending_aim_tangent = tangent
+	_pending_aim_speed = speed
+	_has_pending_aim = true
+	return true
+
+
+func _flush_pending_aim() -> bool:
+	if not _has_pending_aim:
+		return true
+	if not is_instance_valid(_session):
+		_has_pending_aim = false
+		return false
+	_has_pending_aim = false
+	return _session.queue_aim(
+		_pending_aim_origin, _pending_aim_tangent, _pending_aim_speed)
 
 
 func solve_aim_from_screen(screen_position: Vector2) -> Dictionary:
+	if _aim_envelope.is_empty():
+		return {}
 	var ray_origin := _camera.project_ray_origin(screen_position)
 	var ray_direction := _camera.project_ray_normal(screen_position).normalized()
 	var projection := ray_origin.dot(ray_direction)
+	var shell_radius := float(_aim_envelope.shell_radius_m)
 	var discriminant := projection * projection \
-		- (ray_origin.length_squared() - LAUNCH_RADIUS * LAUNCH_RADIUS)
+		- (ray_origin.length_squared() - shell_radius * shell_radius)
 	if discriminant < 0.0:
 		return {}
 	var root_distance := sqrt(discriminant)
@@ -96,10 +160,10 @@ func solve_aim_from_screen(screen_position: Vector2) -> Dictionary:
 		return {}
 	var theta_degrees := clampf(
 		rad_to_deg(atan2(equatorial.z, -equatorial.x)),
-		MIN_THETA_DEGREES,
-		MAX_THETA_DEGREES)
+		float(_aim_envelope.theta_min_deg),
+		float(_aim_envelope.theta_max_deg))
 	var theta := deg_to_rad(theta_degrees)
-	var origin := Vector3(-LAUNCH_RADIUS * cos(theta), 0.0, LAUNCH_RADIUS * sin(theta))
+	var origin := _origin_for_theta(theta_degrees)
 	var radial := origin.normalized()
 	var north := (Vector3.UP - radial * radial.dot(Vector3.UP)).normalized()
 	var azimuth := north.cross(radial).normalized()
@@ -113,13 +177,19 @@ func solve_aim_from_screen(screen_position: Vector2) -> Dictionary:
 	}
 
 
+func _origin_for_theta(theta_degrees: float) -> Vector3:
+	var theta := deg_to_rad(theta_degrees)
+	var shell_radius := float(_aim_envelope.shell_radius_m)
+	return Vector3(-shell_radius * cos(theta), 0.0, shell_radius * sin(theta))
+
+
 func author_aim_from_screen(screen_position: Vector2) -> bool:
 	var solved := solve_aim_from_screen(screen_position)
 	if solved.is_empty() or not is_instance_valid(_session):
 		return false
 	_theta_degrees = float(solved.theta_degrees)
 	_ring.global_position = solved.origin
-	return _session.queue_aim(solved.origin, solved.tangent, solved.speed)
+	return _stage_aim(solved.origin, solved.tangent, solved.speed)
 
 
 func launch_or_activate() -> bool:
@@ -127,6 +197,8 @@ func launch_or_activate() -> bool:
 		return false
 	var phase := str(_frame.get("phase", ""))
 	if phase == "aim":
+		if not _flush_pending_aim():
+			return false
 		return _session.queue_launch()
 	if phase == "flight_ability":
 		return _session.queue_activate_ability()
@@ -134,11 +206,13 @@ func launch_or_activate() -> bool:
 
 
 func restart_now() -> bool:
+	_has_pending_aim = false
 	return is_instance_valid(_session) and _session.restart_level()
 
 
 func cancel_aim_or_toggle_pause() -> void:
 	if str(_frame.get("phase", "")) == "aim":
+		_has_pending_aim = false
 		_session.queue_cancel_aim()
 		return
 	get_tree().paused = not get_tree().paused
@@ -160,9 +234,9 @@ func _process(delta: float) -> void:
 		_restart_latched = false
 	if get_tree().paused:
 		return
-	if Input.is_action_just_pressed("launch_or_ability"):
-		launch_or_activate()
 	if str(_frame.get("phase", "")) != "aim":
+		if Input.is_action_just_pressed("launch_or_ability"):
+			launch_or_activate()
 		return
 	if Input.is_action_pressed("aim_left"):
 		set_aim_degrees(_theta_degrees - 24.0 * delta, _phase_degrees, _speed)
@@ -172,6 +246,10 @@ func _process(delta: float) -> void:
 		set_aim_degrees(_theta_degrees, _phase_degrees, _speed - 4.0 * delta)
 	if Input.is_action_pressed("aim_power_up"):
 		set_aim_degrees(_theta_degrees, _phase_degrees, _speed + 4.0 * delta)
+	if Input.is_action_just_pressed("launch_or_ability"):
+		launch_or_activate()
+	else:
+		_flush_pending_aim()
 
 
 func _unhandled_input(event: InputEvent) -> void:

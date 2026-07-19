@@ -35,6 +35,12 @@ enum class NeutralizationCause : std::uint8_t {
     Ejection,
 };
 
+enum class DamageClassification : std::uint8_t {
+    None,
+    Protected,
+    Vulnerable,
+};
+
 struct DomainEvent {
     EventId id{};
     TickIndex tick{};
@@ -53,6 +59,7 @@ struct DomainEvent {
     ninho::physics::Vec3 normal{};
     double energy_j{};
     double damage{};
+    DamageClassification damage_classification{DamageClassification::None};
     NeutralizationCause neutralization_cause{NeutralizationCause::None};
     EventId cause_event_id{};
     JointId joint_id{};

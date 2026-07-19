@@ -467,7 +467,7 @@ DeterministicRun run_deterministic_scenario()
     DeterministicRun result;
     for (std::uint32_t tick = 0; tick < 75; ++tick) {
         NINHO_SIM_REQUIRE(session->tick().ok());
-        result.hashes.push_back(session->canonical_hash_v1());
+        result.hashes.push_back(session->canonical_hash_v2());
         result.events.insert(
             result.events.end(), session->events().begin(), session->events().end());
     }

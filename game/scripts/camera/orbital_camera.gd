@@ -10,7 +10,6 @@ const PLANET_RADIUS := 10.0
 const IMPACT_FOCUS_SECONDS := 0.6
 const SAFE_MARGIN_RATIO := 0.08
 const FORTIFICATION_CENTER := Vector3(0.0, 11.8, 0.4)
-const DEFAULT_RING_POINT := Vector3(-13.0, 0.0, 0.0)
 const FORTIFICATION_BOUNDS := [
 	Vector3(-3.2, 10.0, -1.8), Vector3(3.2, 10.0, -1.8),
 	Vector3(-3.2, 14.0, -1.8), Vector3(3.2, 14.0, -1.8),
@@ -29,13 +28,13 @@ var _impact_focus := Vector3.ZERO
 var _impact_focus_remaining := 0.0
 var _fov_kick := 0.0
 var _phase := "inspection"
-var _ring_point := DEFAULT_RING_POINT
+var _ring_point := Vector3.ZERO
 var _first_hit := Vector3.ZERO
 var _has_first_hit := false
 var _anchor_point := FORTIFICATION_CENTER
 var _projectile_point := Vector3.ZERO
 var _has_projectile := false
-var _required_points: Array[Vector3] = [DEFAULT_RING_POINT, FORTIFICATION_CENTER]
+var _required_points: Array[Vector3] = [FORTIFICATION_CENTER]
 
 
 func _ready() -> void:
@@ -81,9 +80,12 @@ func is_safe_framing() -> bool:
 
 func observe_frame(frame: Dictionary) -> void:
 	_phase = str(frame.get("phase", "inspection"))
+	var aim_envelope: Dictionary = frame.get("aim_envelope", {})
+	if not aim_envelope.is_empty():
+		_ring_point = Vector3(-float(aim_envelope.shell_radius_m), 0.0, 0.0)
 	_has_projectile = false
 	for snapshot: Dictionary in frame.get("snapshots", []):
-		if int(snapshot.get("surface_id", 0)) == 1003:
+		if bool(snapshot.get("is_projectile", false)):
 			var transform: Transform3D = snapshot.get("transform", Transform3D.IDENTITY)
 			var velocity: Vector3 = snapshot.get("linear_velocity", Vector3.ZERO)
 			_projectile_point = transform.origin

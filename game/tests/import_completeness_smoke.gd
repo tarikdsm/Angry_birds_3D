@@ -1,9 +1,13 @@
 extends SceneTree
 
+const CONTENT_FILE_LOADER := preload("res://scripts/data/content_file_loader.gd")
 const SUCCESS_MARKER := "NINHO_IMPORT_COMPLETENESS_OK"
 const IMPORT_ROOTS := [
 	"res://assets/vertical_slice",
 	"res://assets/audio/generated",
+]
+const DATA_ROOTS := [
+	"res://data",
 ]
 const REQUIRED_ENTRYPOINTS := [
 	"res://scripts/game/body_view_registry.gd",
@@ -18,7 +22,7 @@ const IMPORTED_EXTENSIONS := ["glb", "png", "wav"]
 func _initialize() -> void:
 	var resources: Array[String] = []
 	for root_path: String in IMPORT_ROOTS:
-		if not _collect_imported_resources(root_path, resources):
+		if not _collect_files(root_path, IMPORTED_EXTENSIONS, resources):
 			return
 	resources.sort()
 	if resources.is_empty():
@@ -32,15 +36,31 @@ func _initialize() -> void:
 		if not ResourceLoader.exists(path) or ResourceLoader.load(path) == null:
 			_fail("required preload entrypoint is unavailable: %s" % path)
 			return
-	print("%s resources=%d entrypoints=%d" % [
-		SUCCESS_MARKER, resources.size(), REQUIRED_ENTRYPOINTS.size()])
+	var documents: Array[String] = []
+	for root_path: String in DATA_ROOTS:
+		if not _collect_files(root_path, ["json"], documents):
+			return
+	documents.sort()
+	if documents.is_empty():
+		_fail("data manifest resolved no JSON documents")
+		return
+	for path: String in documents:
+		var load_result: Dictionary = CONTENT_FILE_LOADER.load_json(path)
+		if not bool(load_result.get("ok", false)):
+			_fail(str(load_result.get("message", "JSON document could not be loaded: %s" % path)))
+			return
+	print("%s resources=%d entrypoints=%d documents=%d" % [
+		SUCCESS_MARKER, resources.size(), REQUIRED_ENTRYPOINTS.size(), documents.size()])
 	quit(0)
 
 
-func _collect_imported_resources(directory_path: String, resources: Array[String]) -> bool:
+func _collect_files(
+		directory_path: String,
+		extensions: Array,
+		resources: Array[String]) -> bool:
 	var directory := DirAccess.open(directory_path)
 	if directory == null:
-		_fail("import root is unavailable: %s" % directory_path)
+		_fail("scan root is unavailable: %s" % directory_path)
 		return false
 	directory.list_dir_begin()
 	while true:
@@ -51,10 +71,10 @@ func _collect_imported_resources(directory_path: String, resources: Array[String
 			continue
 		var path := directory_path.path_join(entry)
 		if directory.current_is_dir():
-			if not _collect_imported_resources(path, resources):
+			if not _collect_files(path, extensions, resources):
 				directory.list_dir_end()
 				return false
-		elif entry.get_extension().to_lower() in IMPORTED_EXTENSIONS:
+		elif entry.get_extension().to_lower() in extensions:
 			resources.append(path)
 	directory.list_dir_end()
 	return true

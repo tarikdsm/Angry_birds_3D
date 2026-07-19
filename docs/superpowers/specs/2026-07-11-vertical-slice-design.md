@@ -237,7 +237,7 @@ public:
 };
 ```
 
-Comandos entram no próximo tick; a fila tem 128 entradas. Mira múltipla no mesmo tick é coalescida pela maior sequência. Snapshots ordenam `(EntityId, PartId)`; eventos ordenam `(tick,event_id)`. `events()` contém somente eventos do último tick e é sobrescrito no próximo; o adaptador os copia após cada tick. Falha de `tick()` é latched em `Faulted`, preserva código/mensagem no frame e rejeita ticks posteriores até restart/configuração.
+Comandos entram no próximo tick; a fila tem 128 entradas. Mira múltipla no mesmo tick é coalescida pela maior sequência. Snapshots ordenam `(EntityId, PartId)`; eventos ordenam `(tick,event_id)`. Os `std::span` publicados por `snapshots()`, `structural_joints()` e `events()` são views somente de leitura de buffers pertencentes à sessão e podem ser invalidados por qualquer operação não `const`, além de move ou destruição; quem precisar reter os dados deve copiá-los. `events()` contém somente eventos do último tick e é sobrescrito no próximo; o adaptador os copia após cada tick. Falha de `tick()` é latched em `Faulted`, preserva código/mensagem no frame e rejeita ticks posteriores até restart/configuração.
 
 Como `PhysicsWorld` cria corpos/joints por comandos diferidos, a Tarefa 3 adiciona `commit_pending_initial_state()`: permitido somente antes do primeiro step, aplica criação canônica sem integrar física, não avança tick e não publica contatos. Chamadas posteriores falham. Assim o snapshot tick zero existe sem gravidade ou eventos ocultos.
 
@@ -269,7 +269,15 @@ O nível declara `force_limit_n/torque_limit_nm` por joint, o arco numérico, ar
 
 - `game/data/materials/vertical_slice.materials.json`;
 - `game/data/archetypes/vertical_slice.archetypes.json`;
-- `game/data/levels/first_orbit.level.json`.
+- `game/data/levels/first_orbit.level.json`;
+- `game/data/feedback/vertical_slice.feedback.json`;
+- `game/data/ui/vertical_slice.pt-BR.json`.
+
+O catálogo de UI mantém os textos pt-BR fora da cena e do script do HUD, sob IDs
+canônicos `hud.*`. Ele é carregado uma vez, rejeita integralmente schema, chaves ou
+tokens de formatação inválidos e usa somente IDs técnicos seguros quando o
+documento não pode ser aceito; fase e outcome desconhecidos resolvem para chaves
+`unknown` autoradas, sem criar chaves dinamicamente.
 
 ## 10. Fronteira GDExtension
 
@@ -281,6 +289,7 @@ queue_begin_aim()
 queue_aim(origin, tangent_direction, speed)
 queue_launch()
 queue_activate_ability()
+queue_cancel_aim()
 restart_level()
 consume_frame()
 ```
@@ -290,6 +299,8 @@ consume_frame()
 O `OrbitalSessionNode` roda com prioridade de physics process `-100`; o controller usa prioridade `0`, garantindo que a extensão avance antes da única leitura. Acumulador, batching e conversões ficam em helpers C++ puros; bindings e sinais reais são testados dentro do Godot headless.
 
 Toda exceção é capturada antes da ABI e emite `gameplay_fault`.
+
+`queue_aim()` rejeita valores não finitos ou não representáveis retornando `false`, sem enfileirar comando, emitir `gameplay_fault` ou bloquear a sessão. Falhas de conteúdo, exceções e falhas de `tick()` continuam latched e exigem `restart_level()` ou nova configuração válida.
 
 ## 11. Godot
 
@@ -367,10 +378,16 @@ O marco passa quando:
 - assets são reproduzíveis e passam bounds/pivô/hull/LOD;
 - capturas douradas: overview, aim, Virela, impacto vulnerável e resultado;
 - rubric visual bloqueante: silhueta, hierarquia focal, leitura dos materiais, contraste, clipping, transparência e distinção frontal/lateral;
-- playtest com cinco pessoas novas quando disponível: 4/5 lançam em 90 s, 4/5 concluem em 6 min, 4/5 entendem a proteção frontal, 3/5 descobrem a rota de destroços e todos distinguem os três materiais; até lá, agentes independentes executam a mesma rubric e findings graves bloqueiam o slice;
+- playtest com cinco pessoas novas: 4/5 lançam em 90 s, 4/5 concluem em 6 min, 4/5 entendem a proteção frontal, 3/5 descobrem a rota de destroços e todos distinguem os três materiais. Enquanto não houver participantes e observações humanas, esse playtest permanece pendente e é obrigatório antes do marco Produto/lançamento. Reviews técnicos por agentes podem bloquear o slice por findings graves de código, arquitetura, gameplay ou arte, mas não contam participantes, não medem usabilidade humana e não substituem esse playtest;
 - Box3D pinado continua sendo o único solver.
 
-O hash de sessão usa contrato `canonical_state_v1`: campos de domínio em ordem fixa, inteiros little-endian, floats quantizados a `1e-5`, `-0` normalizado para `+0`, strings UTF-8 com tamanho e eventos em `(tick,event_id)`. Exclui timings, endereços, handles físicos e métricas de alocação. O diagnóstico de alocador é exposto somente ao target de testes por uma façade interna; o smoke Godot mede separadamente SceneTree, views e pools antes/depois de 20 reinícios.
+As pré-condições de fundação, testes, reinícios, ABI, scanner, assets e smokes permanecem etapas fail-fast do orquestrador. Elas não são serializadas como booleanos `acceptance` na evidência, porque um valor escrito pelo mesmo processo que declara sucesso não constitui prova independente. O gate da evidência valida somente observações e artefatos concretos com identidade própria, como manifests, hashes, logs, rotas, métricas, goldens, reviews e pacote. Snapshots históricos que ainda contenham `acceptance` permanecem legíveis, mas esse campo legado é ignorado e não concede confiança.
+
+O contrato corrente registra o playtest humano como `status=not_performed`, `participants=0`, `substitute=none` e `gate_status=pending`. O gate do vertical slice aceita essa pendência porque certifica controles técnicos, não prontidão de produto. O formato histórico `status=unavailable`/`substitute=independent_agents` continua legível exclusivamente como pendência legada e não satisfaz o requisito humano. Os `reviewer_id` do manifest são rótulos de atribuição de agentes, sem autenticação de identidade ou garantia de independência.
+
+O hash de sessão usa contrato `canonical_state_v2`: campos de domínio em ordem fixa, inteiros little-endian, floats quantizados a `1e-5`, `-0` normalizado para `+0`, strings UTF-8 com tamanho e eventos em `(tick,event_id)`. A v2 inclui explicitamente o papel `is_projectile` dos snapshots e a classificação direcional de dano dos eventos; qualquer alteração futura de layout exige nova versão e golden congelado. Exclui timings, endereços, handles físicos e métricas de alocação. O diagnóstico de alocador é exposto somente ao target de testes por uma façade interna; o smoke Godot mede separadamente SceneTree, views e pools antes/depois de 20 reinícios.
+
+As rotas usam `ordered_events_v2` para serializar o histórico completo de eventos em ordem de publicação, incluindo `damage_classification` imediatamente após `damage`, e `canonical_playthrough_v4` para combinar esse stream com `canonical_state_v2`. Produtor e gate aceitam somente essas versões; qualquer mudança futura em um dos layouts exige promover a respectiva versão antes de recapturar evidência.
 
 ## 15. Riscos e limites
 

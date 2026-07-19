@@ -88,6 +88,7 @@ struct EntitySnapshot {
     double mass_kg{};
     bool awake{};
     bool ejected{};
+    bool is_projectile{};
 
     bool operator==(const EntitySnapshot&) const = default;
 };
@@ -149,6 +150,10 @@ public:
     [[nodiscard]] ContentResult<AimState> quantize_aim(const AimState&) const;
     [[nodiscard]] TrajectoryPreview preview(const AimState&) const;
 
+    // Non-owning views of buffers published by this session. Any non-const
+    // operation on the session, as well as moving or destroying it, may
+    // invalidate a previously returned view. Copy elements that must outlive
+    // that boundary.
     [[nodiscard]] std::span<const EntitySnapshot> snapshots() const noexcept;
     [[nodiscard]] std::span<const StructuralJointSnapshot> structural_joints() const noexcept;
     [[nodiscard]] std::span<const DomainEvent> events() const noexcept;
@@ -158,8 +163,8 @@ public:
     [[nodiscard]] std::vector<ObjectiveTargetStatus> objective_target_statuses() const;
     [[nodiscard]] AbilityReadiness ability_readiness() const noexcept;
     [[nodiscard]] ninho::physics::WorldMetrics physics_metrics() const noexcept;
-    [[nodiscard]] const std::vector<std::uint8_t>& canonical_state_v1() const noexcept;
-    [[nodiscard]] std::uint64_t canonical_hash_v1() const noexcept;
+    [[nodiscard]] const std::vector<std::uint8_t>& canonical_state_v2() const noexcept;
+    [[nodiscard]] std::uint64_t canonical_hash_v2() const noexcept;
 
 private:
     friend struct detail::FractureAccess;

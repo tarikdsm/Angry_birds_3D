@@ -1,8 +1,5 @@
 extends Node3D
 
-@export var glass_material: Material
-
-
 func _ready() -> void:
 	_prepare_descendants(self)
 
@@ -20,6 +17,4 @@ func _prepare_descendants(node: Node) -> void:
 		elif child is GeometryInstance3D:
 			(child as GeometryInstance3D).cast_shadow = \
 				GeometryInstance3D.SHADOW_CASTING_SETTING_ON
-			if glass_material != null:
-				(child as GeometryInstance3D).material_override = glass_material
 		_prepare_descendants(child)

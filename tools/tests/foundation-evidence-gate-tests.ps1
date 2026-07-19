@@ -44,9 +44,126 @@ foreach ($configuration in 'Debug', 'Release') {
     }
 }
 & git -C $gateRoot init --quiet
-& git -c "safe.directory=$gateRoot" -C $gateRoot add -- docs/physics/evidence/foundation-report-debug.json `
-    docs/physics/evidence/foundation-report-release.json
+$fixtureSource = Join-Path $gateRoot 'native\kernel\fixture.cpp'
+New-Item -ItemType Directory -Force -Path (Split-Path -Parent $fixtureSource) | Out-Null
+[System.IO.File]::WriteAllText($fixtureSource, "int foundation_fixture = 1;`n")
+$requiredFoundationInputs = @(
+    'CMakeLists.txt',
+    'CMakePresets.json',
+    'tools/bootstrap.ps1',
+    'tools/box3d-v0.1.0-compile-sources.txt',
+    'tools/build.ps1',
+    'tools/FoundationEvidenceGate.psm1',
+    'tools/generate_foundation_report.py',
+    'tools/GodotSmokeRegistry.psm1',
+    'tools/GodotSpikeGate.psm1',
+    'tools/Invoke-Native.ps1',
+    'tools/run_spike.ps1',
+    'tools/SafePath.psm1',
+    'tools/SpikeEvidenceValidation.psm1',
+    'tools/SpikeReportGate.psm1',
+    'tools/test.ps1',
+    'tools/TestedInputIdentity.psm1',
+    'tools/ToolchainIntegrity.psm1',
+    'tools/toolchain.lock.json',
+    'tools/UpstreamBox3DGate.psm1',
+    'tools/VerticalSliceGate.psm1'
+)
+$cmakeInputs = @(
+    'cmake/Dependencies.cmake',
+    'cmake/RequireFoundationFlags.cmake'
+)
+$fixtureContents = @{
+    'CMakeLists.txt' = "cmake_minimum_required(VERSION 3.22)`n"
+    'CMakePresets.json' = "{}`n"
+    'cmake/Dependencies.cmake' = @"
+FetchContent_Declare(box3d
+  GIT_TAG 8441b4a06d6d09dcfb0b0f704df4d847d1437b92)
+target_compile_options(box3d PRIVATE /fp:precise)
+"@
+    'cmake/RequireFoundationFlags.cmake' = "set(NINHO_FOUNDATION_FLAGS precise)`n"
+    'tools/toolchain.lock.json' = "{`"cmake`":{`"version`":`"4.3.3`"}}`n"
+}
+foreach ($relative in @($requiredFoundationInputs + $cmakeInputs)) {
+    $path = Join-Path $gateRoot $relative
+    New-Item -ItemType Directory -Force -Path (Split-Path -Parent $path) | Out-Null
+    $content = if ($fixtureContents.ContainsKey($relative)) {
+        $fixtureContents[$relative]
+    } else {
+        "foundation fixture: $relative`n"
+    }
+    [System.IO.File]::WriteAllText($path, $content)
+}
+& git -c "safe.directory=$gateRoot" -C $gateRoot config user.email fixture@example.invalid
+& git -c "safe.directory=$gateRoot" -C $gateRoot config user.name 'Foundation Fixture'
+$trackedFixtureInputs = @(
+    'native/kernel/fixture.cpp',
+    'docs/physics/evidence/foundation-report-debug.json',
+    'docs/physics/evidence/foundation-report-release.json'
+) + $requiredFoundationInputs + $cmakeInputs
+& git -c "safe.directory=$gateRoot" -C $gateRoot add -- $trackedFixtureInputs
 if ($LASTEXITCODE -ne 0) { throw 'failed to create tracked evidence fixture' }
+& git -c "safe.directory=$gateRoot" -C $gateRoot commit --quiet -m fixture
+if ($LASTEXITCODE -ne 0) { throw 'failed to commit foundation source fixture' }
+$sourceRevision = (& git -c "safe.directory=$gateRoot" -C $gateRoot rev-parse HEAD).Trim()
+
+$expectedFoundationInputs = [string[]]@(
+    $requiredFoundationInputs + $cmakeInputs + 'native/kernel/fixture.cpp'
+)
+[Array]::Sort($expectedFoundationInputs, [StringComparer]::Ordinal)
+$actualFoundationInputs = [string[]]@(
+    Get-NinhoFoundationTestedInputPaths -Root $gateRoot
+)
+if ($actualFoundationInputs.Count -ne $expectedFoundationInputs.Count) {
+    throw "Foundation tested input count mismatch: expected $($expectedFoundationInputs.Count), got $($actualFoundationInputs.Count)"
+}
+for ($index = 0; $index -lt $expectedFoundationInputs.Count; ++$index) {
+    if ($actualFoundationInputs[$index] -cne $expectedFoundationInputs[$index]) {
+        throw "Foundation tested input mismatch at ${index}: expected $($expectedFoundationInputs[$index]), got $($actualFoundationInputs[$index])"
+    }
+}
+
+$requiredBuildScript = Join-Path $gateRoot 'tools\build.ps1'
+$requiredBuildScriptText = [System.IO.File]::ReadAllText($requiredBuildScript)
+try {
+    Remove-Item -LiteralPath $requiredBuildScript -Force
+    Assert-Throws {
+        Get-NinhoFoundationTestedInputPaths -Root $gateRoot | Out-Null
+    } 'required foundation tested input is missing: tools/build.ps1'
+} finally {
+    [System.IO.File]::WriteAllText($requiredBuildScript, $requiredBuildScriptText)
+}
+
+function Set-EvidenceIdentity {
+    param(
+        [Parameter(Mandatory)][string]$Path,
+        [Parameter(Mandatory)]$Identity,
+        [string]$Revision = $sourceRevision
+    )
+    $document = [System.IO.File]::ReadAllText($Path) | ConvertFrom-Json
+    $document | Add-Member -NotePropertyName source_revision -NotePropertyValue $Revision -Force
+    $document | Add-Member -NotePropertyName tested_inputs_schema `
+        -NotePropertyValue 'ninho.tested-inputs.v2' -Force
+    $document | Add-Member -NotePropertyName tested_inputs_sha256 `
+        -NotePropertyValue $Identity.sha256 -Force
+    $document | Add-Member -NotePropertyName tested_inputs `
+        -NotePropertyValue @($Identity.files) -Force
+    [System.IO.File]::WriteAllText(
+        $Path,
+        ($document | ConvertTo-Json -Depth 100),
+        [System.Text.UTF8Encoding]::new($false))
+}
+
+function Reset-EvidenceDocuments {
+    $identity = Get-NinhoFoundationTestedInputs -Root $gateRoot
+    foreach ($name in 'Debug', 'Release') {
+        Copy-Item -LiteralPath (Join-Path $repositoryRoot "docs\physics\evidence\foundation-report-$($name.ToLowerInvariant()).json") `
+            -Destination $documents[$name].Path -Force
+        Set-EvidenceIdentity -Path $documents[$name].Path -Identity $identity
+        $documents[$name].Hash = (Get-FileHash -Algorithm SHA256 -LiteralPath $documents[$name].Path).Hash
+    }
+    return $identity
+}
 
 function Write-EvidenceReport {
     param([switch]$AllowInvalidEvidence)
@@ -82,11 +199,7 @@ function Assert-SemanticMutation {
         [ValidateSet('Debug', 'Release')]
         [string]$Configuration = 'Debug'
     )
-    foreach ($name in 'Debug', 'Release') {
-        Copy-Item -LiteralPath (Join-Path $repositoryRoot "docs\physics\evidence\foundation-report-$($name.ToLowerInvariant()).json") `
-            -Destination $documents[$name].Path -Force
-        $documents[$name].Hash = (Get-FileHash -Algorithm SHA256 -LiteralPath $documents[$name].Path).Hash
-    }
+    Reset-EvidenceDocuments | Out-Null
     Write-EvidenceReport
     $mutated = [System.IO.File]::ReadAllText($documents[$Configuration].Path) | ConvertFrom-Json
     & $Mutation $mutated
@@ -99,7 +212,120 @@ function Assert-SemanticMutation {
     } $ExpectedMessage
 }
 
+function Assert-TestedInputMutationInvalidatesEvidence {
+    param(
+        [Parameter(Mandatory)][string]$RelativePath,
+        [Parameter(Mandatory)][string]$From,
+        [Parameter(Mandatory)][string]$To
+    )
+    Reset-EvidenceDocuments | Out-Null
+    Write-EvidenceReport
+    $path = Join-Path $gateRoot $RelativePath
+    $original = [System.IO.File]::ReadAllText($path)
+    $mutated = $original.Replace($From, $To)
+    if ($mutated -ceq $original) {
+        throw "Foundation mutation fixture token is missing: $RelativePath / $From"
+    }
+    try {
+        [System.IO.File]::WriteAllText($path, $mutated)
+        Assert-Throws {
+            Assert-NinhoFoundationEvidence -Root $gateRoot -ReportPath $reportPath
+        } 'tested inputs aggregate SHA-256 mismatch'
+    } finally {
+        [System.IO.File]::WriteAllText($path, $original)
+    }
+}
+
+$validIdentity = Reset-EvidenceDocuments
 Write-EvidenceReport
+Assert-NinhoFoundationEvidence -Root $gateRoot -ReportPath $reportPath
+
+$fixtureSourceText = [System.IO.File]::ReadAllText($fixtureSource)
+[System.IO.File]::AppendAllText($fixtureSource, "int stale_mutation = 2;`n")
+Assert-Throws {
+    Assert-NinhoFoundationEvidence -Root $gateRoot -ReportPath $reportPath
+} 'tested inputs aggregate SHA-256 mismatch'
+[System.IO.File]::WriteAllText($fixtureSource, $fixtureSourceText)
+
+Set-EvidenceIdentity -Path $documents.Debug.Path -Identity $validIdentity `
+    -Revision ('f' * 40)
+Write-EvidenceReport
+Assert-Throws {
+    Assert-NinhoFoundationEvidence -Root $gateRoot -ReportPath $reportPath
+} 'source revision is not an ancestor of the current HEAD'
+$validIdentity = Reset-EvidenceDocuments
+
+[System.IO.File]::AppendAllText($fixtureSource, "int local_artifact = 3;`n")
+$localIdentity = Get-NinhoFoundationTestedInputs -Root $gateRoot
+foreach ($name in 'Debug', 'Release') {
+    Set-EvidenceIdentity -Path $documents[$name].Path -Identity $localIdentity
+}
+Write-EvidenceReport
+Assert-NinhoFoundationEvidence -Root $gateRoot -ReportPath $reportPath
+$publicationArtifacts = Join-Path $gateRoot 'artifacts\physics'
+New-Item -ItemType Directory -Force -Path $publicationArtifacts | Out-Null
+foreach ($name in 'Debug', 'Release') {
+    Copy-Item -LiteralPath $documents[$name].Path -Destination (Join-Path `
+        $publicationArtifacts "box3d-spike-$($name.ToLowerInvariant()).json") -Force
+}
+[System.IO.File]::WriteAllText($fixtureSource, $fixtureSourceText)
+
+Assert-TestedInputMutationInvalidatesEvidence `
+    -RelativePath 'cmake/Dependencies.cmake' `
+    -From '8441b4a06d6d09dcfb0b0f704df4d847d1437b92' `
+    -To '9441b4a06d6d09dcfb0b0f704df4d847d1437b92'
+Assert-TestedInputMutationInvalidatesEvidence `
+    -RelativePath 'cmake/Dependencies.cmake' `
+    -From '/fp:precise' `
+    -To '/fp:fast'
+Assert-TestedInputMutationInvalidatesEvidence `
+    -RelativePath 'tools/toolchain.lock.json' `
+    -From '4.3.3' `
+    -To '4.3.4'
+Assert-TestedInputMutationInvalidatesEvidence `
+    -RelativePath 'tools/build.ps1' `
+    -From 'tools/build.ps1' `
+    -To 'tools/build-v2.ps1'
+Assert-TestedInputMutationInvalidatesEvidence `
+    -RelativePath 'tools/run_spike.ps1' `
+    -From 'tools/run_spike.ps1' `
+    -To 'tools/run-spike-v2.ps1'
+Assert-TestedInputMutationInvalidatesEvidence `
+    -RelativePath 'tools/generate_foundation_report.py' `
+    -From 'tools/generate_foundation_report.py' `
+    -To 'tools/generate-foundation-report-v2.py'
+Assert-TestedInputMutationInvalidatesEvidence `
+    -RelativePath 'tools/SpikeEvidenceValidation.psm1' `
+    -From 'tools/SpikeEvidenceValidation.psm1' `
+    -To 'tools/SpikeEvidenceValidationV2.psm1'
+Assert-TestedInputMutationInvalidatesEvidence `
+    -RelativePath 'tools/GodotSpikeGate.psm1' `
+    -From 'tools/GodotSpikeGate.psm1' `
+    -To 'tools/GodotSpikeGateV2.psm1'
+Assert-TestedInputMutationInvalidatesEvidence `
+    -RelativePath 'tools/VerticalSliceGate.psm1' `
+    -From 'tools/VerticalSliceGate.psm1' `
+    -To 'tools/VerticalSliceGateV2.psm1'
+Assert-TestedInputMutationInvalidatesEvidence `
+    -RelativePath 'tools/GodotSmokeRegistry.psm1' `
+    -From 'tools/GodotSmokeRegistry.psm1' `
+    -To 'tools/GodotSmokeRegistryV2.psm1'
+Assert-TestedInputMutationInvalidatesEvidence `
+    -RelativePath 'tools/ToolchainIntegrity.psm1' `
+    -From 'tools/ToolchainIntegrity.psm1' `
+    -To 'tools/ToolchainIntegrityV2.psm1'
+$validIdentity = Reset-EvidenceDocuments
+Write-EvidenceReport
+Assert-Throws {
+    Publish-NinhoFoundationEvidence -Root $gateRoot `
+        -ArtifactDirectory $publicationArtifacts
+} 'tested inputs aggregate SHA-256 mismatch'
+foreach ($name in 'Debug', 'Release') {
+    Copy-Item -LiteralPath $documents[$name].Path -Destination (Join-Path `
+        $publicationArtifacts "box3d-spike-$($name.ToLowerInvariant()).json") -Force
+}
+Publish-NinhoFoundationEvidence -Root $gateRoot `
+    -ArtifactDirectory $publicationArtifacts
 Assert-NinhoFoundationEvidence -Root $gateRoot -ReportPath $reportPath
 
 $validReport = [System.IO.File]::ReadAllText($reportPath)

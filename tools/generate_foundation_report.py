@@ -290,23 +290,23 @@ def _append_footprint(lines: list[str], evidences: Iterable[Evidence]) -> None:
             _append_leaf_table(lines, observation["memory"])
 
 
-def _append_persisted_results(lines: list[str]) -> None:
+def _append_recorded_gate_results(lines: list[str]) -> None:
     lines.extend(
         (
             "## Godot Smoke",
             "",
-            "These are persisted gate counts and exact log paths. Non-persisted wall-clock durations are intentionally omitted.",
+            "Gate counts are recorded in this generated report. The paths name volatile local outputs ignored by Git; they may be absent after cleanup or in a clean checkout. Non-recorded wall-clock durations are intentionally omitted.",
             "",
-            "| Verification | Debug | Release | Persisted logs |",
+            "| Verification | Debug | Release | Volatile local outputs |",
             "| --- | --- | --- | --- |",
             "| Project gate | `24/24` | `24/24` | `build/debug/Testing/Temporary/LastTest.log`; `build/release/Testing/Temporary/LastTest.log` |",
             "| Upstream Box3D | `20/20` | `20/20` | `artifacts/physics/upstream-box3d-debug.log`; `artifacts/physics/upstream-box3d-release.log` |",
             "| Godot headless API | `1/1`, exit `0` | `1/1`, exit `0` | `artifacts/physics/godot-smoke-debug.stdout.log`, `artifacts/physics/godot-smoke-debug.stderr.log`; `artifacts/physics/godot-smoke-release.stdout.log`, `artifacts/physics/godot-smoke-release.stderr.log` |",
             "| Godot renderers | `2/2` (Vulkan/OpenGL) | `2/2` (Vulkan/OpenGL) | `artifacts/physics/godot-scene-debug.stdout.log`, `artifacts/physics/godot-scene-debug.stderr.log`, `artifacts/physics/godot-scene-gl-debug.stdout.log`, `artifacts/physics/godot-scene-gl-debug.stderr.log`; `artifacts/physics/godot-scene-release.stdout.log`, `artifacts/physics/godot-scene-release.stderr.log`, `artifacts/physics/godot-scene-gl-release.stdout.log`, `artifacts/physics/godot-scene-gl-release.stderr.log` |",
             "",
-            "The following rows are the persisted graphical gate contract, not metadata derived from volatile AVI files. Every gate run removes the prior target, requires a fresh frame-300 marker, and verifies the resulting movie with `ffprobe`.",
+            "The following rows are the recorded graphical gate contract, not metadata retained from volatile AVI files. Every gate run removes the prior target, requires a fresh frame-300 marker, and verifies the resulting movie with `ffprobe`.",
             "",
-            "| Build | Renderer | Contract movie path | Gate contract (verified every run) |",
+            "| Build | Renderer | Volatile local movie path | Gate contract (verified every run) |",
             "| --- | --- | --- | --- |",
             "| Debug | Vulkan Forward Mobile | `artifacts/physics/godot-scene-debug.avi` | `MJPEG; 1280x720; 300 frames; 5 s; freshness verified; frame-300 marker verified` |",
             "| Debug | OpenGL Compatibility | `artifacts/physics/godot-scene-gl-debug.avi` | `MJPEG; 1280x720; 300 frames; 5 s; freshness verified; frame-300 marker verified` |",
@@ -349,7 +349,7 @@ def render_report(evidences: tuple[Evidence, Evidence]) -> str:
     _append_scenarios(lines, evidences)
     _append_ownership(lines, evidences)
     _append_footprint(lines, evidences)
-    _append_persisted_results(lines)
+    _append_recorded_gate_results(lines)
     lines.extend(
         (
             "## Known Limits",
@@ -359,7 +359,13 @@ def render_report(evidences: tuple[Evidence, Evidence]) -> str:
             "- The future 5% budget and 8 ms p95 target require a packaged Godot Release build on reference hardware.",
             "- The deterministic runtime manifest remains the valid Godot gate when the initial headless editor scan fails.",
             "- Windows x86_64 is the only qualified foundation target.",
-            "- `artifacts/physics/box3d-spike-{debug,release}.json` is volatile; only the two Evidence paths above are normative.",
+            "- The determinism gate guarantees repeatability only within one executable and build configuration "
+            "produced by the pinned MSVC x64 toolchain. Matching Debug/Release hashes in the captured snapshots "
+            "are observed evidence, not a requirement, and do not guarantee identical results across build "
+            "configurations, machines, CPU models, MSVC/toolset versions, compiler families, or architectures.",
+            "- Canonical state and fixture hashes are regression oracles for that qualified environment; they are "
+            "not portable serialization, network-consensus, or cross-platform replay contracts.",
+            "- `build/` and `artifacts/physics/` contain volatile local outputs ignored by Git; an empty or absent directory is expected after cleanup and in a clean checkout. Only the two Evidence paths above are normative.",
             "",
             "## Recommendation",
             "",

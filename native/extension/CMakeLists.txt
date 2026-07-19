@@ -7,6 +7,9 @@ add_library(ninho_physics_extension SHARED
 target_include_directories(ninho_physics_extension PRIVATE include)
 target_link_libraries(ninho_physics_extension PRIVATE ninho::physics ninho::simulation godot::cpp)
 target_compile_features(ninho_physics_extension PRIVATE cxx_std_20)
+target_link_options(ninho_physics_extension PRIVATE
+  "$<$<AND:$<CXX_COMPILER_ID:MSVC>,$<CONFIG:Release>>:/Brepro>"
+)
 
 get_target_property(GODOTCPP_SUFFIX godot-cpp GODOTCPP_SUFFIX)
 if(NOT GODOTCPP_SUFFIX)
@@ -72,27 +75,22 @@ if(BUILD_TESTING)
   endif()
   add_test(NAME gdextension_adapter_helpers COMMAND ninho_extension_adapter_tests)
 
-  set(_ninho_godot_executable
-    "${PROJECT_SOURCE_DIR}/.tools/godot/Godot_v4.5.1-stable_win64.exe")
-  if(EXISTS "${_ninho_godot_executable}")
-    add_test(
-      NAME gdextension_project_import
-      COMMAND "${CMAKE_COMMAND}"
-        "-DCACHE_DIRECTORY=${PROJECT_SOURCE_DIR}/game/.godot"
-        -P "${PROJECT_SOURCE_DIR}/cmake/PrepareGDExtensionTest.cmake"
-    )
-    add_test(
-      NAME gdextension_vertical_slice
-      COMMAND "${_ninho_godot_executable}"
-        --headless
-        --path "${PROJECT_SOURCE_DIR}/game"
-        --script res://tests/orbital_session_node_smoke.gd
-    )
-    set_tests_properties(gdextension_project_import PROPERTIES
-      FIXTURES_SETUP ninho_gdextension_import)
-    set_tests_properties(gdextension_vertical_slice PROPERTIES
-      FIXTURES_REQUIRED ninho_gdextension_import
-      PASS_REGULAR_EXPRESSION "ORBITAL_SESSION_NODE_SMOKE_OK")
-  endif()
-  unset(_ninho_godot_executable)
+  add_test(
+    NAME gdextension_project_import
+    COMMAND "${CMAKE_COMMAND}"
+      "-DCACHE_DIRECTORY=${PROJECT_SOURCE_DIR}/game/.godot"
+      -P "${PROJECT_SOURCE_DIR}/cmake/PrepareGDExtensionTest.cmake"
+  )
+  add_test(
+    NAME gdextension_vertical_slice
+    COMMAND "${NINHO_GODOT_EXECUTABLE}"
+      --headless
+      --path "${PROJECT_SOURCE_DIR}/game"
+      --script res://tests/orbital_session_node_smoke.gd
+  )
+  set_tests_properties(gdextension_project_import PROPERTIES
+    FIXTURES_SETUP ninho_gdextension_import)
+  set_tests_properties(gdextension_vertical_slice PROPERTIES
+    FIXTURES_REQUIRED ninho_gdextension_import
+    PASS_REGULAR_EXPRESSION "ORBITAL_SESSION_NODE_SMOKE_OK")
 endif()

@@ -7,12 +7,14 @@
 #include <cstddef>
 #include <cstdint>
 #include <string>
+#include <vector>
 #include <ninho/physics/physics_types.hpp>
 #include "ninho/simulation/content.hpp"
 
 namespace ninho::simulation {
 
 class SimulationSession;
+struct EntitySnapshot;
 
 namespace detail {
 
@@ -50,6 +52,13 @@ public:
     static AbilityId ability_id(const SimulationSession&);
     static void set_launch_ordinal(SimulationSession&, std::uint32_t);
     static std::size_t body_record_count(const SimulationSession&);
+    static std::size_t canonical_static_content_build_count(const SimulationSession&);
+    static std::vector<std::uint8_t> canonical_state_uncached(const SimulationSession&);
+    static void refresh_canonical_state(SimulationSession&);
+    static std::size_t snapshot_rebuild_count(const SimulationSession&);
+    static std::size_t snapshot_visual_copy_count(const SimulationSession&);
+    static std::vector<EntitySnapshot> snapshots_uncached(const SimulationSession&);
+    static void rebuild_snapshots(SimulationSession&);
 };
 
 }

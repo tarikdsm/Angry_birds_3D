@@ -1,4 +1,5 @@
 import copy
+import hashlib
 import json
 import os
 import subprocess
@@ -108,6 +109,25 @@ class ArtContractTests(unittest.TestCase):
             )
             with self.assertRaisesRegex(ValueError, "outside output root"):
                 safe_output_path(root, Path("../escape.glb"))
+
+    def test_runtime_material_outputs_are_portable_lf_and_match_manifest(self) -> None:
+        attributes = (ROOT / ".gitattributes").read_text(encoding="utf-8")
+        self.assertRegex(attributes, r"(?m)^\*\.tres text eol=lf(?:\s|$)")
+        manifest = json.loads(
+            (ROOT / "tools" / "art" / "vertical_slice_asset_manifest.json").read_text(
+                encoding="utf-8"
+            )
+        )
+        expected = {item["path"]: item["sha256"] for item in manifest["outputs"]}
+        for relative in (
+            "game/materials/brick.tres",
+            "game/materials/pine.tres",
+            "game/materials/glass.tres",
+        ):
+            with self.subTest(path=relative):
+                payload = (ROOT / relative).read_bytes()
+                self.assertNotIn(b"\r", payload)
+                self.assertEqual(expected[relative], hashlib.sha256(payload).hexdigest())
 
     @unittest.skipUnless(os.name == "nt", "junction contract is Windows-specific")
     def test_safe_output_path_rejects_junction_ancestor(self) -> None:

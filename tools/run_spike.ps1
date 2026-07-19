@@ -1,7 +1,8 @@
 [CmdletBinding()]
 param(
     [ValidateSet('Debug', 'Release')]
-    [string]$Configuration = 'Release'
+    [string]$Configuration = 'Release',
+    [switch]$PublishCanonicalEvidence
 )
 
 $ErrorActionPreference = 'Stop'
@@ -9,6 +10,7 @@ $root = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 $build = Join-Path $PSScriptRoot 'build.ps1'
 Import-Module (Join-Path $PSScriptRoot 'SpikeReportGate.psm1') -Force
 Import-Module (Join-Path $PSScriptRoot 'SafePath.psm1') -Force
+Import-Module (Join-Path $PSScriptRoot 'FoundationEvidenceGate.psm1') -Force
 & $build -Configuration $Configuration
 if ($LASTEXITCODE -ne 0) {
     exit $LASTEXITCODE
@@ -62,6 +64,16 @@ if (-not (@($document.warnings).code -contains
         'private_commit_budget_unqualified')) {
     [Console]::Error.WriteLine('missing permanent private budget warning')
     exit 1
+}
+
+$document = Add-NinhoFoundationEvidenceIdentity -Root $root -Document $document
+[System.IO.File]::WriteAllText(
+    $report,
+    ($document | ConvertTo-Json -Depth 100),
+    [System.Text.UTF8Encoding]::new($false))
+if ($PublishCanonicalEvidence) {
+    Publish-NinhoFoundationEvidence -Root $root `
+        -ArtifactDirectory $artifactDirectory
 }
 
 exit 0

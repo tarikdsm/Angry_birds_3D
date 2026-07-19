@@ -18,12 +18,17 @@ Assert-NinhoNoReparseAncestors -Path $lockPath -AllowedRoot $PSScriptRoot | Out-
 $lock = Get-Content -Raw -LiteralPath $lockPath | ConvertFrom-Json
 
 function Test-HexSha([string]$value) { return $value -match '^[0-9a-f]{64}$' }
-foreach ($name in 'cmake','ninja','godot','blender','visual_studio') {
+foreach ($name in 'cmake','ninja','godot','blender','ffmpeg','visual_studio') {
     $entry = $lock.$name
     if (-not $entry.version) { $errors.Add("$name.version missing") }
     if ($entry.url -notmatch '^https://') { $errors.Add("$name.url must use https") }
     if (-not (Test-HexSha $entry.sha256)) { $errors.Add("$name.sha256 invalid") }
     if ($name -ne 'visual_studio' -and -not (Test-HexSha $entry.exe_sha256)) { $errors.Add("$name.exe_sha256 invalid") }
+}
+$ffmpegLock = $lock.ffmpeg
+if (-not $ffmpegLock.ffprobe_exe) { $errors.Add('ffmpeg.ffprobe_exe missing') }
+if (-not (Test-HexSha $ffmpegLock.ffprobe_exe_sha256)) {
+    $errors.Add('ffmpeg.ffprobe_exe_sha256 invalid')
 }
 $templateLock = $lock.godot_export_templates
 if (-not $templateLock.version) { $errors.Add('godot_export_templates.version missing') }
@@ -58,7 +63,14 @@ function Install-Portable([string]$name) {
     $destination = Join-Path $tools $name
     $exe = Join-Path $destination $entry.exe
     Assert-NinhoNoReparseAncestors -Path $destination -AllowedRoot $root | Out-Null
-    if (-not (Test-Path -LiteralPath $exe)) {
+    $requiredExecutables = @($exe)
+    if ($entry.PSObject.Properties.Name -ccontains 'ffprobe_exe') {
+        $requiredExecutables += Join-Path $destination $entry.ffprobe_exe
+    }
+    $requiresInstall = @($requiredExecutables | Where-Object {
+            -not (Test-Path -LiteralPath $_ -PathType Leaf)
+        }).Count -gt 0
+    if ($requiresInstall) {
         $archive = Get-LockedArchive $name
         New-Item -ItemType Directory -Force $destination | Out-Null
         Assert-NinhoNoReparseAncestors -Path $archive -AllowedRoot $downloads | Out-Null
@@ -66,7 +78,9 @@ function Install-Portable([string]$name) {
         Assert-NinhoNoReparseAncestors -Path $destination -AllowedRoot $root | Out-Null
         Assert-NinhoNoReparseAncestors -Path $exe -AllowedRoot $root | Out-Null
     }
-    Assert-NinhoNoReparseAncestors -Path $exe -AllowedRoot $root | Out-Null
+    foreach ($requiredExecutable in $requiredExecutables) {
+        Assert-NinhoNoReparseAncestors -Path $requiredExecutable -AllowedRoot $root | Out-Null
+    }
     return $exe
 }
 
@@ -152,6 +166,8 @@ $cmake = Join-Path $tools ('cmake\' + $lock.cmake.exe)
 $ninja = Join-Path $tools ('ninja\' + $lock.ninja.exe)
 $godot = Join-Path $tools ('godot\' + $lock.godot.exe)
 $portableBlender = Join-Path $tools ('blender\' + $lock.blender.exe)
+$ffmpeg = Join-Path $tools ('ffmpeg\' + $lock.ffmpeg.exe)
+$ffprobe = Join-Path $tools ('ffmpeg\' + $lock.ffmpeg.ffprobe_exe)
 $installedBlender = Join-Path $env:ProgramFiles 'Blender Foundation\Blender 5.1\blender.exe'
 $blender = if (Test-Path -LiteralPath $portableBlender) { $portableBlender } else { $installedBlender }
 $vswhere = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio\Installer\vswhere.exe'
@@ -174,6 +190,8 @@ if ($InstallPortable -and $errors.Count -eq 0) {
     $ninja = Install-Portable 'ninja'
     $godot = Install-Portable 'godot'
     $blender = Install-Portable 'blender'
+    $ffmpeg = Install-Portable 'ffmpeg'
+    $ffprobe = Join-Path $tools ('ffmpeg\' + $lock.ffmpeg.ffprobe_exe)
 }
 $exportTemplates = Join-Path $tools ('godot\editor_data\export_templates\' + $lock.godot_export_templates.install_directory)
 if (($InstallPortable -or $InstallExportTemplates) -and $errors.Count -eq 0) {
@@ -191,7 +209,7 @@ if ($InstallVisualStudio -and $errors.Count -eq 0) {
 }
 
 if ($CheckOnly -or $InstallPortable) {
-    foreach ($pair in @(@('cmake',$cmake),@('ninja',$ninja),@('godot',$godot),@('blender',$blender))) {
+    foreach ($pair in @(@('cmake',$cmake),@('ninja',$ninja),@('godot',$godot),@('blender',$blender),@('ffmpeg',$ffmpeg))) {
         if ($pair[0] -ne 'blender' -or $pair[1].StartsWith($root, [StringComparison]::OrdinalIgnoreCase)) {
             Assert-NinhoNoReparseAncestors -Path $pair[1] -AllowedRoot $root | Out-Null
         }
@@ -225,6 +243,32 @@ if ($CheckOnly -or $InstallPortable) {
                     $errors.Add('Blender executable version mismatch')
                 }
             }
+            'ffmpeg' {
+                $ffmpegVersionOutput = @(& $pair[1] -version 2>&1)
+                $ffmpegVersionExitCode = $LASTEXITCODE
+                if ($ffmpegVersionExitCode -ne 0) {
+                    $errors.Add("FFmpeg version check failed: $ffmpegVersionExitCode")
+                } elseif ($ffmpegVersionOutput[0] -notmatch '^ffmpeg version 8\.1\.2-essentials_build-www\.gyan\.dev') {
+                    $errors.Add('FFmpeg executable version mismatch')
+                }
+            }
+        }
+    }
+    Assert-NinhoNoReparseAncestors -Path $ffprobe -AllowedRoot $root | Out-Null
+    if (-not (Test-Path -LiteralPath $ffprobe -PathType Leaf)) {
+        $errors.Add("ffprobe missing: $ffprobe")
+    } else {
+        $actualFfprobe = (Get-FileHash -Algorithm SHA256 -LiteralPath $ffprobe).Hash.ToLowerInvariant()
+        if ($actualFfprobe -ne $lock.ffmpeg.ffprobe_exe_sha256) {
+            $errors.Add('ffprobe executable checksum mismatch')
+        } else {
+            $ffprobeVersionOutput = @(& $ffprobe -version 2>&1)
+            $ffprobeVersionExitCode = $LASTEXITCODE
+            if ($ffprobeVersionExitCode -ne 0) {
+                $errors.Add("FFprobe version check failed: $ffprobeVersionExitCode")
+            } elseif ($ffprobeVersionOutput[0] -notmatch '^ffprobe version 8\.1\.2-essentials_build-www\.gyan\.dev') {
+                $errors.Add('FFprobe executable version mismatch')
+            }
         }
     }
     $pythonVersion = $null
@@ -252,6 +296,8 @@ $result = [ordered]@{
         archive_sha256=$lock.godot_export_templates.sha256
     }
     blender = @{ version=$lock.blender.version; path=$blender; executable_sha256=$lock.blender.exe_sha256 }
+    ffmpeg = @{ version=$lock.ffmpeg.version; path=$ffmpeg; executable_sha256=$lock.ffmpeg.exe_sha256 }
+    ffprobe = @{ version=$lock.ffmpeg.version; path=$ffprobe; executable_sha256=$lock.ffmpeg.ffprobe_exe_sha256 }
     python = @{ minimum_version=$lock.python.minimum_version; detected_version=$pythonVersion }
     visual_studio = @{ version=$lock.visual_studio.version; path=$vsInstall }
     errors = @($errors)

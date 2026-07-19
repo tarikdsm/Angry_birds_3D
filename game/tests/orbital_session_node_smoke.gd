@@ -72,9 +72,21 @@ func _initialize() -> void:
 		"tick", "ticks_executed", "phase", "outcome", "birds_remaining",
 		"snapshots", "events", "objectives_complete", "objective_targets",
 		"ability_readiness", "ability_armed", "trajectory_preview",
-		"metrics", "discarded_time_seconds"
+		"aim_envelope", "metrics", "discarded_time_seconds"
 	]):
 		_fail("consume_frame dictionary contract is incomplete")
+		return
+	var aim_envelope: Dictionary = _controller.latest.aim_envelope
+	if not aim_envelope.has_all([
+		"shell_radius_m", "theta_min_deg", "theta_max_deg",
+		"speed_min_m_s", "speed_max_m_s", "default_speed_m_s"
+	]) or not is_equal_approx(float(aim_envelope.shell_radius_m), 13.0) \
+			or not is_equal_approx(float(aim_envelope.theta_min_deg), -50.0) \
+			or not is_equal_approx(float(aim_envelope.theta_max_deg), 50.0) \
+			or not is_equal_approx(float(aim_envelope.speed_min_m_s), 8.0) \
+			or not is_equal_approx(float(aim_envelope.speed_max_m_s), 16.0) \
+			or not is_equal_approx(float(aim_envelope.default_speed_m_s), 10.5):
+		_fail("aim envelope does not match the configured manifest")
 		return
 	var objective_targets: Array = _controller.latest.objective_targets
 	if objective_targets.size() != 1 \
@@ -86,6 +98,10 @@ func _initialize() -> void:
 			or float((objective_targets[0] as Dictionary).maximum_integrity) != 100.0:
 		_fail("initial objective integrity is not authoritative")
 		return
+	for snapshot: Dictionary in _controller.latest.snapshots:
+		if not snapshot.has("is_projectile") or bool(snapshot.is_projectile):
+			_fail("initial snapshots must publish a false projectile role")
+			return
 	if str(_controller.latest.ability_readiness) != "unavailable" \
 			or bool(_controller.latest.ability_armed):
 		_fail("inspection must expose unavailable unarmed ability state")
@@ -94,21 +110,13 @@ func _initialize() -> void:
 	if _session.queue_aim(Vector3(INF, 0.0, 0.0), Vector3.UP, 10.5):
 		_fail("nonfinite aim should fail")
 		return
-	if _faults.size() != 1:
-		_fail("gameplay_fault must be emitted exactly once")
+	if not _faults.is_empty():
+		_fail("nonfinite aim must not fault the session")
 		return
-	var blocked_tick := int(_controller.latest.tick)
+	var rejected_tick := int(_controller.latest.tick)
 	await physics_frame
-	if int(_controller.latest.tick) != blocked_tick:
-		_fail("faulted session advanced before recovery")
-		return
-	if not _session.restart_level():
-		_fail("restart_level did not recover the valid rolled-back session")
-		return
-	await physics_frame
-	await physics_frame
-	if int(_controller.latest.tick) < 1:
-		_fail("session did not advance after restart")
+	if int(_controller.latest.tick) <= rejected_tick:
+		_fail("session did not advance after rejected nonfinite aim")
 		return
 
 	print("ORBITAL_SESSION_NODE_SMOKE_OK")

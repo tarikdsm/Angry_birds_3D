@@ -95,11 +95,11 @@ static_assert(!noexcept(std::declval<const SimulationSession&>().quantize_aim(
 NINHO_SIM_TEST("launch fsm queue is bounded sequenced deferred and last aim wins")
 {
     auto session = create_session();
-    const auto initial_hash = session->canonical_hash_v1();
+    const auto initial_hash = session->canonical_hash_v2();
     for (std::size_t index = 0; index < 128; ++index) {
         NINHO_SIM_REQUIRE(session->enqueue(BeginAimCommand{}).ok());
     }
-    NINHO_SIM_REQUIRE(session->canonical_hash_v1() != initial_hash);
+    NINHO_SIM_REQUIRE(session->canonical_hash_v2() != initial_hash);
     const auto overflow = session->enqueue(BeginAimCommand{});
     NINHO_SIM_REQUIRE(!overflow.ok());
     NINHO_SIM_REQUIRE(overflow.error.code == ContentErrorCode::ResourceLimit);
@@ -279,6 +279,25 @@ NINHO_SIM_TEST("launch fsm creates one stable bullet bird and publishes one tick
     NINHO_SIM_REQUIRE(session->events().front().tick == TickIndex{2});
     NINHO_SIM_REQUIRE(session->tick().ok());
     NINHO_SIM_REQUIRE(session->events().empty());
+}
+
+NINHO_SIM_TEST("launch fsm trajectory preview stops at the world removal envelope")
+{
+    const auto bundle = load_bundle();
+    auto session = create_session();
+    const auto preview = session->preview(default_aim(16.0));
+    const float removal_radius =
+        6.0f * static_cast<float>(bundle.level.planet.radius_m);
+
+    NINHO_SIM_REQUIRE(preview.status.ok());
+    NINHO_SIM_REQUIRE(!preview.first_hit.has_value());
+    NINHO_SIM_REQUIRE(preview.samples.size() > 2U);
+    NINHO_SIM_REQUIRE(preview.samples.size() < 601U);
+    NINHO_SIM_REQUIRE(
+        ninho::physics::length(preview.samples.back()) >= removal_radius);
+    NINHO_SIM_REQUIRE(ninho::physics::length(
+                          preview.samples[preview.samples.size() - 2U])
+        < removal_radius);
 }
 
 NINHO_SIM_TEST("launch fsm trajectory preview shares quantized gravity and collision path")
@@ -587,8 +606,8 @@ NINHO_SIM_TEST("launch fsm canonical roster ordering selects birds by typed id a
     auto a = make(first);
     auto b = make(reordered);
     auto c = make(different_counts);
-    NINHO_SIM_REQUIRE(a->canonical_hash_v1() == b->canonical_hash_v1());
-    NINHO_SIM_REQUIRE(a->canonical_hash_v1() != c->canonical_hash_v1());
+    NINHO_SIM_REQUIRE(a->canonical_hash_v2() == b->canonical_hash_v2());
+    NINHO_SIM_REQUIRE(a->canonical_hash_v2() != c->canonical_hash_v2());
     NINHO_SIM_REQUIRE(detail::SessionTestFacade::next_bird_archetype_id(*a)
         == BirdArchetypeId{1});
     NINHO_SIM_REQUIRE(detail::SessionTestFacade::next_bird_archetype_id(*c)

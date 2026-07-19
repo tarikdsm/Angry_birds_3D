@@ -180,6 +180,8 @@ NINHO_SIM_TEST("damage anchor uses data driven directional protection mass denom
     NINHO_SIM_REQUIRE(front_events.front().position_m == expected_position);
     NINHO_SIM_REQUIRE(front_events.front().normal_cause_to_target == expected_normal);
     NINHO_SIM_REQUIRE(front_events.front().energy_j == half_denominator_energy);
+    NINHO_SIM_REQUIRE(front_events.front().damage_classification
+        == DamageClassification::Protected);
 
     detail::DamageSystem saturated_front;
     const auto saturated_front_events = saturated_front.process(
@@ -187,12 +189,27 @@ NINHO_SIM_TEST("damage anchor uses data driven directional protection mass denom
         std::vector{hit({0.0f, 0.0f, 1.0f}, half_denominator_energy * 10.0)});
     NINHO_SIM_REQUIRE(saturated_front_events.size() == 1U);
     NINHO_SIM_REQUIRE(std::abs(saturated_front_events.front().damage - 55.0) < 1.0e-9);
+    NINHO_SIM_REQUIRE(saturated_front_events.front().damage_classification
+        == DamageClassification::Protected);
 
     detail::DamageSystem lateral;
     const auto lateral_events = lateral.process(materials, archetypes, bodies,
         std::vector{hit({1.0f, 0.0f, 0.0f}, half_denominator_energy)});
     NINHO_SIM_REQUIRE(lateral_events.size() == 1U);
     NINHO_SIM_REQUIRE(std::abs(lateral_events.front().damage - 50.0) < 1.0e-9);
+    NINHO_SIM_REQUIRE(lateral_events.front().damage_classification
+        == DamageClassification::Vulnerable);
+
+    auto rotated_bodies = bodies;
+    const float half_turn = static_cast<float>(std::numbers::pi / 4.0);
+    rotated_bodies[1].transform.rotation = {
+        0.0f, std::sin(half_turn), 0.0f, std::cos(half_turn)};
+    detail::DamageSystem rotated;
+    const auto rotated_events = rotated.process(materials, archetypes, rotated_bodies,
+        std::vector{hit({1.0f, 0.0f, 0.0f}, half_denominator_energy)});
+    NINHO_SIM_REQUIRE(rotated_events.size() == 1U);
+    NINHO_SIM_REQUIRE(rotated_events.front().damage_classification
+        == DamageClassification::Protected);
 
     const auto cause_to_target_at = [](double degrees) {
         const double radians = degrees * std::numbers::pi / 180.0;
@@ -204,17 +221,23 @@ NINHO_SIM_TEST("damage anchor uses data driven directional protection mass denom
         std::vector{hit(cause_to_target_at(45.0), half_denominator_energy)});
     NINHO_SIM_REQUIRE(boundary_events.size() == 1U);
     NINHO_SIM_REQUIRE(std::abs(boundary_events.front().damage - 12.5) < 1.0e-9);
+    NINHO_SIM_REQUIRE(boundary_events.front().damage_classification
+        == DamageClassification::Protected);
     detail::DamageSystem outside_cone;
     const auto outside_events = outside_cone.process(materials, archetypes, bodies,
         std::vector{hit(cause_to_target_at(46.0), half_denominator_energy)});
     NINHO_SIM_REQUIRE(outside_events.size() == 1U);
     NINHO_SIM_REQUIRE(std::abs(outside_events.front().damage - 50.0) < 1.0e-9);
+    NINHO_SIM_REQUIRE(outside_events.front().damage_classification
+        == DamageClassification::Vulnerable);
 
     detail::DamageSystem rear;
     const auto rear_events = rear.process(materials, archetypes, bodies,
         std::vector{hit({0.0f, 0.0f, -1.0f}, half_denominator_energy * 4.0)});
     NINHO_SIM_REQUIRE(rear_events.size() == 1U);
     NINHO_SIM_REQUIRE(std::abs(rear_events.front().damage - 55.0) < 1.0e-9);
+    NINHO_SIM_REQUIRE(rear_events.front().damage_classification
+        == DamageClassification::Vulnerable);
 }
 
 NINHO_SIM_TEST("damage anchor neutralizes once on integrity or first ejection transition including same tick")
@@ -244,6 +267,10 @@ NINHO_SIM_TEST("damage anchor neutralizes once on integrity or first ejection tr
     NINHO_SIM_REQUIRE(lethal.back().kind == detail::DamageOutcomeKind::EntityNeutralized);
     NINHO_SIM_REQUIRE(lethal.back().neutralization_cause
         == NeutralizationCause::IntegrityDepleted);
+    NINHO_SIM_REQUIRE(lethal.front().damage_classification
+        == DamageClassification::Vulnerable);
+    NINHO_SIM_REQUIRE(lethal.back().damage_classification
+        == DamageClassification::Vulnerable);
     NINHO_SIM_REQUIRE(lethal.back().position_m == hit.position_m);
     NINHO_SIM_REQUIRE(lethal.back().normal_cause_to_target == hit.normal_a_to_b);
     NINHO_SIM_REQUIRE(lethal.back().energy_j == hit.energy_j);
@@ -264,6 +291,8 @@ NINHO_SIM_TEST("damage anchor neutralizes once on integrity or first ejection tr
         == detail::DamageOutcomeKind::EntityNeutralized);
     NINHO_SIM_REQUIRE(first_ejection.front().neutralization_cause
         == NeutralizationCause::Ejection);
+    NINHO_SIM_REQUIRE(first_ejection.front().damage_classification
+        == DamageClassification::None);
     NINHO_SIM_REQUIRE(first_ejection.front().position_m
         == ejected_anchor.transform.position);
     NINHO_SIM_REQUIRE(first_ejection.front().normal_cause_to_target
@@ -381,9 +410,10 @@ NINHO_SIM_TEST("damage anchor session processes post step contacts into canonica
     NINHO_SIM_REQUIRE(applied->affected_part_id == target_part);
     NINHO_SIM_REQUIRE(applied->energy_j > 0.0);
     NINHO_SIM_REQUIRE(applied->damage > 0.0);
+    NINHO_SIM_REQUIRE(applied->damage_classification != DamageClassification::None);
     NINHO_SIM_REQUIRE(ninho::physics::is_finite(applied->position_m));
     NINHO_SIM_REQUIRE(ninho::physics::is_finite(applied->normal));
-    NINHO_SIM_REQUIRE(session->canonical_hash_v1() != 0U);
+    NINHO_SIM_REQUIRE(session->canonical_hash_v2() != 0U);
 }
 
 }

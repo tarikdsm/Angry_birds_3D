@@ -1,6 +1,7 @@
 $ErrorActionPreference = 'Stop'
 $root = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
 Import-Module (Join-Path $root 'tools\SafePath.psm1') -Force
+Import-Module (Join-Path $root 'tools\TestedInputIdentity.psm1') -Force
 
 function Assert-True {
     param([bool]$Condition, [string]$Message)
@@ -51,7 +52,17 @@ $godotLicenseText = [IO.File]::ReadAllText((Join-Path $root 'third_party\godot.L
 Assert-True ($templateLicenseText -ceq $godotLicenseText) 'Godot export templates license must be the exact pinned Godot MIT text'
 $copyrightPath = Join-Path $root 'third_party\godot.COPYRIGHT.txt'
 Assert-True (Test-Path -LiteralPath $copyrightPath -PathType Leaf) 'Godot upstream copyright inventory is missing'
-Assert-True ((Get-FileHash -Algorithm SHA256 -LiteralPath $copyrightPath).Hash.ToLowerInvariant() -ceq $templates.copyright_sha256) 'Godot upstream copyright inventory hash mismatch'
+$copyrightContent = Get-NinhoCanonicalTestedInputContent `
+    -Path $copyrightPath -RelativePath 'third_party/godot.COPYRIGHT.txt'
+Assert-True ($copyrightContent.mode -ceq 'text_utf8_lf') `
+    'Godot upstream copyright inventory must be UTF-8 text'
+$copyrightAlgorithm = [Security.Cryptography.SHA256]::Create()
+try {
+    $copyrightHash = -join ($copyrightAlgorithm.ComputeHash($copyrightContent.bytes) |
+        ForEach-Object { $_.ToString('x2') })
+} finally { $copyrightAlgorithm.Dispose() }
+Assert-True ($copyrightHash -ceq $templates.copyright_sha256) `
+    'Godot upstream copyright inventory canonical LF hash mismatch'
 
 $noticeText = [IO.File]::ReadAllText((Join-Path $root 'THIRD_PARTY_NOTICES.md'))
 Assert-True ($noticeText -match 'Godot Export Templates 4\.5\.1-stable') 'NOTICE omits Godot export templates'
@@ -101,8 +112,8 @@ try {
     $dllName = 'ninho_physics.windows.template_release.x86_64.dll'
     $dll = Join-Path $packageRoot $dllName
     $manifestPath = Join-Path $packageRoot 'manifest.sha256.json'
-    $contentPath = Join-Path $packageRoot 'package-content.json'
-    foreach ($required in @($exe, $pck, $dll, $manifestPath, $contentPath)) {
+    $sourceInventoryPath = Join-Path $packageRoot 'package-source-inventory.json'
+    foreach ($required in @($exe, $pck, $dll, $manifestPath, $sourceInventoryPath)) {
         Assert-True (Test-Path -LiteralPath $required -PathType Leaf) "Package file missing: $required"
         Assert-True ((Get-Item -LiteralPath $required).Length -gt 0) "Package file is empty: $required"
     }
@@ -129,13 +140,33 @@ try {
         'licenses\godot-cpp.LICENSE.txt',
         'licenses\nlohmann-json.LICENSE.txt'
     )) {
-        Assert-True (Test-Path -LiteralPath (Join-Path $packageRoot $requiredLicense) -PathType Leaf) "Package license missing: $requiredLicense"
+        $packagedLicense = Join-Path $packageRoot $requiredLicense
+        Assert-True (Test-Path -LiteralPath $packagedLicense -PathType Leaf) `
+            "Package license missing: $requiredLicense"
+        $packagedBytes = [IO.File]::ReadAllBytes($packagedLicense)
+        $packagedCanonical = Get-NinhoCanonicalTestedInputContent `
+            -Path $packagedLicense -RelativePath $requiredLicense.Replace('\','/')
+        Assert-True ($packagedCanonical.mode -ceq 'text_utf8_lf') `
+            "Package license is not UTF-8 text: $requiredLicense"
+        Assert-True ([Convert]::ToBase64String($packagedBytes) -ceq
+            [Convert]::ToBase64String($packagedCanonical.bytes)) `
+            "Package license is not canonical LF text: $requiredLicense"
     }
+    Assert-True ((Get-FileHash -Algorithm SHA256 -LiteralPath `
+        (Join-Path $packageRoot 'licenses\godot.COPYRIGHT.txt')).Hash.ToLowerInvariant() -ceq
+        $templates.copyright_sha256) `
+        'Packaged Godot copyright inventory canonical hash mismatch'
 
-    $content = Get-Content -Raw -LiteralPath $contentPath | ConvertFrom-Json
-    Assert-True (@($content.resources | Where-Object category -ceq 'data').Count -gt 0) 'Package inventory does not contain gameplay data'
-    Assert-True (@($content.resources | Where-Object category -ceq 'asset').Count -gt 0) 'Package inventory does not contain visual assets'
-    Assert-True (@($content.resources | Where-Object category -ceq 'audio').Count -gt 0) 'Package inventory does not contain audio assets'
+    $sourceInventory = Get-Content -Raw -LiteralPath $sourceInventoryPath | ConvertFrom-Json
+    Assert-True ($sourceInventory.schema -ceq 'ninho.package-source-inventory.v1') 'Package source inventory schema mismatch'
+    Assert-True ($sourceInventory.schema_version -eq 1) 'Package source inventory schema version mismatch'
+    Assert-True ($sourceInventory.note -match 'source inputs') 'Package source inventory must identify its source-input scope'
+    Assert-True ($sourceInventory.note -match 'does not enumerate') 'Package source inventory must disclaim PCK enumeration'
+    Assert-True ($sourceInventory.note -match 'PCK SHA-256') 'Package source inventory must identify the PCK integrity proof'
+    Assert-True ($sourceInventory.note -match 'packaged runtime smoke') 'Package source inventory must identify the PCK runtime-load proof'
+    Assert-True (@($sourceInventory.resources | Where-Object category -ceq 'data').Count -gt 0) 'Package source inventory does not contain gameplay data'
+    Assert-True (@($sourceInventory.resources | Where-Object category -ceq 'asset').Count -gt 0) 'Package source inventory does not contain visual assets'
+    Assert-True (@($sourceInventory.resources | Where-Object category -ceq 'audio').Count -gt 0) 'Package source inventory does not contain audio assets'
 
     $manifest = Get-Content -Raw -LiteralPath $manifestPath | ConvertFrom-Json
     Assert-True ($manifest.schema_version -eq 1) 'Package manifest schema mismatch'
@@ -146,6 +177,10 @@ try {
     Assert-True ($manifest.runtime_extension.source_path -ceq "game/bin/$dllName") 'Package manifest runtime DLL source mismatch'
     Assert-True ($manifest.runtime_extension.source_sha256 -ceq (Get-FileHash -Algorithm SHA256 -LiteralPath $dll).Hash.ToLowerInvariant()) 'Packaged DLL does not match the recorded post-build snapshot'
     $paths = @($manifest.files.path)
+    $sourceInventoryRow = @($manifest.files | Where-Object path -CEQ 'package-source-inventory.json')
+    Assert-True ($sourceInventoryRow.Count -eq 1) 'Package manifest must contain one source inventory row'
+    Assert-True ($sourceInventoryRow[0].role -ceq 'source_inventory') 'Package source inventory role mismatch'
+    Assert-True ($paths -cnotcontains 'package-content.json') 'Legacy misleading package-content.json leaked into package'
     [string[]]$sortedPaths = @($paths)
     [Array]::Sort($sortedPaths, [StringComparer]::Ordinal)
     Assert-True (($paths -join "`n") -ceq ($sortedPaths -join "`n")) 'Package manifest paths are not canonical and sorted'
