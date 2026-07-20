@@ -40,6 +40,7 @@ reservado ao runtime. Todo número real deve ser finito e representável como
 ## MaterialCatalog v2
 
 A raiz contém exatamente `schema_version`, `materials` e `surfaces`.
+`materials` e `surfaces` são arrays não vazios com 1–64 itens cada.
 
 Cada material contém:
 
@@ -60,12 +61,13 @@ Cada surface contém `id` (único e `>= 1000`), `key` (única),
 
 A raiz contém exatamente `schema_version`, `presentation_ids`, `score_ids`,
 `abilities`, `birds`, `weakpoints` e `enemies`. Os dois registries são arrays
-não vazios de strings únicas.
+não vazios de strings únicas. `abilities` e `birds` contêm 1–32 itens cada;
+`weakpoints` e `enemies`, 0–32 itens cada.
 
 ### AbilityArchetype
 
-Cada item contém exatamente `id`, `key`, `kind` e `payload`. O payload é fechado
-pelo `kind`:
+Cada item contém exatamente `id`, `key`, `kind` e `payload`. `id` é positivo
+e único entre abilities. O payload é fechado pelo `kind`:
 
 | Kind | Payload obrigatório | Faixa / unidade |
 |---|---|---|
@@ -213,8 +215,10 @@ Shapes são variantes fechadas:
 - `box`: `half_extents_m`, vec3 `[0.0001,1000]` m;
 - `sphere`: `radius_m` `(0,1000]` m;
 - `capsule`: `radius_m` e `half_height_m`, ambos `(0,1000]` m;
-- `convex_hull`: `vertices_m`, 4–64 vec3 em `[-1000,1000]` m, com volume
-  não zero;
+- `convex_hull`: `vertices_m`, 4–64 vec3 em `[-1000,1000]` m. Existe ao
+  menos uma combinação de três arestas partindo do primeiro vértice cujo produto
+  triplo escalar satisfaz `abs(determinant) > 1e-9 m³`; esse determinante é seis
+  vezes o volume assinado do tetraedro e é o critério exato de não degeneração;
 - `compound`: `children`, 1–16 shapes, profundidade máxima 4.
 
 Cada body é um objeto fechado com os campos abaixo. `bodies` contém de 0 a
