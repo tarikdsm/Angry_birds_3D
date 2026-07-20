@@ -1054,11 +1054,12 @@ std::vector<std::uint8_t> SimulationSession::Impl::serialize_canonical_state(
     }
     writer.boolean(shot.has_value());
     if (shot) {
-        const auto* projectile = primary_projectile(*shot);
-        if (projectile == nullptr) {
-            throw std::logic_error("canonical shot must own a projectile");
+        if (!shot->has_valid_projectiles()) {
+            throw std::logic_error(
+                "canonical shot projectiles must be non-empty, unique and ordered");
         }
-        identifier(writer, projectile->entity_id);
+        const auto* projectile = shot->primary_projectile();
+        identifier(writer, projectile->entity_id());
         identifier(writer, shot->bird_archetype_id);
         identifier(writer, shot->ability_id);
         writer.boolean(projectile->bullet);
@@ -1256,6 +1257,10 @@ std::vector<std::uint8_t> SimulationSession::Impl::serialize_canonical_state_v3(
 
     writer.boolean(shot.has_value());
     if (shot) {
+        if (!shot->has_valid_projectiles()) {
+            throw std::logic_error(
+                "canonical shot projectiles must be non-empty, unique and ordered");
+        }
         writer.integer(shot->shot_id);
         identifier(writer, shot->bird_archetype_id);
         identifier(writer, shot->ability_id);
@@ -1269,20 +1274,15 @@ std::vector<std::uint8_t> SimulationSession::Impl::serialize_canonical_state_v3(
         writer.boolean(shot->activation_consumed);
         write_ability_runtime(writer, shot->runtime);
 
-        std::vector<const ProjectileState*> projectiles;
-        projectiles.reserve(shot->projectiles.size());
-        for (const ProjectileState& projectile : shot->projectiles) {
-            projectiles.push_back(&projectile);
-        }
-        std::ranges::sort(projectiles, {}, &ProjectileState::entity_id);
-        writer.integer<std::uint32_t>(static_cast<std::uint32_t>(projectiles.size()));
-        for (const ProjectileState* projectile : projectiles) {
-            identifier(writer, projectile->entity_id);
-            writer.boolean(projectile->bullet);
-            writer.integer(projectile->age_ticks);
-            writer.integer(projectile->rest_ticks);
-            writer.boolean(projectile->finished);
-            writer.boolean(projectile->pending_destroy);
+        writer.integer<std::uint32_t>(
+            static_cast<std::uint32_t>(shot->projectiles().size()));
+        for (const ProjectileState& projectile : shot->projectiles()) {
+            identifier(writer, projectile.entity_id());
+            writer.boolean(projectile.bullet);
+            writer.integer(projectile.age_ticks);
+            writer.integer(projectile.rest_ticks);
+            writer.boolean(projectile.finished);
+            writer.boolean(projectile.pending_destroy);
         }
     }
 

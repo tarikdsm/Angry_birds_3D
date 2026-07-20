@@ -334,6 +334,7 @@ NINHO_SIM_TEST("launcher system deadzone and cancel preserve queue while valid r
     NINHO_SIM_REQUIRE(session->enqueue(ReleaseBirdCommand{}).ok());
     NINHO_SIM_REQUIRE(session->tick().ok());
     NINHO_SIM_REQUIRE(session->state().phase == SessionPhase::Inspection);
+    NINHO_SIM_REQUIRE(!session->state().launcher.has_value());
     NINHO_SIM_REQUIRE(session->birds_remaining() == 2U);
     NINHO_SIM_REQUIRE(session->physics_metrics().body_count == bodies_before);
 
@@ -342,6 +343,7 @@ NINHO_SIM_TEST("launcher system deadzone and cancel preserve queue while valid r
     NINHO_SIM_REQUIRE(session->enqueue(CancelGrabCommand{}).ok());
     NINHO_SIM_REQUIRE(session->tick().ok());
     NINHO_SIM_REQUIRE(session->state().phase == SessionPhase::Inspection);
+    NINHO_SIM_REQUIRE(!session->state().launcher.has_value());
     NINHO_SIM_REQUIRE(session->birds_remaining() == 2U);
     NINHO_SIM_REQUIRE(session->physics_metrics().body_count == bodies_before);
 
@@ -355,7 +357,73 @@ NINHO_SIM_TEST("launcher system deadzone and cancel preserve queue while valid r
     NINHO_SIM_REQUIRE(session->birds_remaining() == 1U);
     NINHO_SIM_REQUIRE(session->physics_metrics().body_count == bodies_before + 1);
     NINHO_SIM_REQUIRE(projectile_snapshot(*session).visual_id == "bird");
-    NINHO_SIM_REQUIRE(session->state().launcher == released);
+    NINHO_SIM_REQUIRE(!session->state().launcher.has_value());
+    NINHO_SIM_REQUIRE(released.pull_horizontal_m == -1.0);
+}
+
+NINHO_SIM_TEST("launcher system release and inspection never publish a stale ghost")
+{
+    auto session = create_session();
+    begin_grab(*session, {1.0F, 0.0F, 0.0F});
+    NINHO_SIM_REQUIRE(session->enqueue(SetPullCommand{-1.0, 0.0}).ok());
+    NINHO_SIM_REQUIRE(session->tick().ok());
+    const auto before_release = session->canonical_hash_v3();
+    NINHO_SIM_REQUIRE(session->enqueue(ReleaseBirdCommand{}).ok());
+    NINHO_SIM_REQUIRE(session->tick().ok());
+    NINHO_SIM_REQUIRE(session->state().phase == SessionPhase::FlightAbility);
+    NINHO_SIM_REQUIRE(!session->state().launcher.has_value());
+    NINHO_SIM_REQUIRE(session->canonical_hash_v3() != before_release);
+
+    detail::SessionTestFacade::finish_projectile(*session);
+    for (int tick = 0;
+         tick < 64 && session->state().phase != SessionPhase::Evaluation; ++tick) {
+        NINHO_SIM_REQUIRE(session->tick().ok());
+    }
+    NINHO_SIM_REQUIRE(session->state().phase == SessionPhase::Evaluation);
+    NINHO_SIM_REQUIRE(!session->state().launcher.has_value());
+    NINHO_SIM_REQUIRE(session->tick().ok());
+    NINHO_SIM_REQUIRE(session->state().phase == SessionPhase::Inspection);
+    NINHO_SIM_REQUIRE(!session->state().launcher.has_value());
+    NINHO_SIM_REQUIRE(session->ability_readiness() == AbilityReadiness::Unavailable);
+    NINHO_SIM_REQUIRE(std::ranges::none_of(
+        session->snapshots(), &EntitySnapshot::is_projectile));
+
+    NINHO_SIM_REQUIRE(session->restart().ok());
+    NINHO_SIM_REQUIRE(session->state().phase == SessionPhase::Inspection);
+    NINHO_SIM_REQUIRE(!session->state().launcher.has_value());
+    NINHO_SIM_REQUIRE(session->reconfigure(
+        v2_materials(), v2_archetypes(), v2_level()).ok());
+    NINHO_SIM_REQUIRE(session->state().phase == SessionPhase::Inspection);
+    NINHO_SIM_REQUIRE(!session->state().launcher.has_value());
+}
+
+NINHO_SIM_TEST("launcher system canonical v3 retains released shot plane without launcher ghost")
+{
+    const auto release = [](SimulationSession& session,
+                             ninho::physics::Vec3 camera_right,
+                             double horizontal_pull) {
+        begin_grab(session, camera_right);
+        NINHO_SIM_REQUIRE(session.enqueue(
+            SetPullCommand{horizontal_pull, 0.0}).ok());
+        NINHO_SIM_REQUIRE(session.tick().ok());
+        NINHO_SIM_REQUIRE(session.enqueue(ReleaseBirdCommand{}).ok());
+        NINHO_SIM_REQUIRE(session.tick().ok());
+        NINHO_SIM_REQUIRE(!session.state().launcher.has_value());
+    };
+
+    auto positive_frame = create_session();
+    auto negative_frame = create_session();
+    release(*positive_frame, {1.0F, 0.0F, 0.0F}, -1.0);
+    release(*negative_frame, {-1.0F, 0.0F, 0.0F}, 1.0);
+
+    const EntitySnapshot& positive_projectile = projectile_snapshot(*positive_frame);
+    const EntitySnapshot& negative_projectile = projectile_snapshot(*negative_frame);
+    NINHO_SIM_REQUIRE(positive_projectile.transform
+        == negative_projectile.transform);
+    NINHO_SIM_REQUIRE(positive_projectile.linear_velocity_m_s
+        == negative_projectile.linear_velocity_m_s);
+    NINHO_SIM_REQUIRE(positive_frame->canonical_hash_v3()
+        != negative_frame->canonical_hash_v3());
 }
 
 NINHO_SIM_TEST("launcher system preview and release share solved uniform state and first impact")

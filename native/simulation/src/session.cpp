@@ -165,14 +165,14 @@ std::vector<ObjectiveTargetStatus> SimulationSession::objective_target_statuses(
 
 AbilityReadiness SimulationSession::ability_readiness() const noexcept
 {
-    if (!impl_->shot || primary_projectile(*impl_->shot) == nullptr) {
+    if (!impl_->shot || impl_->shot->primary_projectile() == nullptr) {
         return AbilityReadiness::Unavailable;
     }
     if (ability_runtime_active(impl_->shot->runtime)) {
         return AbilityReadiness::Active;
     }
     if (impl_->shot->activation_consumed
-        || primary_projectile(*impl_->shot)->finished
+        || impl_->shot->primary_projectile()->finished
         || impl_->session_state.phase != SessionPhase::FlightAbility) {
         return AbilityReadiness::Spent;
     }
@@ -233,14 +233,14 @@ std::uint64_t detail::SessionTestFacade::last_processed_command_sequence(
 
 bool detail::SessionTestFacade::projectile_is_bullet(const SimulationSession& session)
 {
-    return session.impl_->shot && primary_projectile(*session.impl_->shot)
-        && primary_projectile(*session.impl_->shot)->bullet;
+    return session.impl_->shot && session.impl_->shot->primary_projectile()
+        && session.impl_->shot->primary_projectile()->bullet;
 }
 
 void detail::SessionTestFacade::finish_projectile(SimulationSession& session)
 {
     if (session.impl_->shot) {
-        if (auto* projectile = primary_projectile(*session.impl_->shot)) {
+        if (auto* projectile = session.impl_->shot->primary_projectile()) {
             projectile->finished = true;
         }
         session.impl_->force_settled_for_testing = true;
@@ -269,7 +269,7 @@ void detail::SessionTestFacade::age_projectile(
     SimulationSession& session, std::uint32_t age_ticks)
 {
     if (session.impl_->shot) {
-        if (auto* projectile = primary_projectile(*session.impl_->shot)) {
+        if (auto* projectile = session.impl_->shot->primary_projectile()) {
             projectile->age_ticks = age_ticks;
         }
     }
@@ -534,22 +534,12 @@ bool detail::SessionTestFacade::append_projectile_for_testing(
     if (!session.impl_->shot) {
         return false;
     }
-    const auto* source = primary_projectile(*session.impl_->shot);
+    const auto* source = session.impl_->shot->primary_projectile();
     if (source == nullptr) {
         return false;
     }
-    ProjectileState appended = *source;
-    appended.entity_id = entity;
-    session.impl_->shot->projectiles.push_back(appended);
-    return true;
-}
-
-void detail::SessionTestFacade::reverse_projectiles_for_testing(
-    SimulationSession& session)
-{
-    if (session.impl_->shot) {
-        std::ranges::reverse(session.impl_->shot->projectiles);
-    }
+    return session.impl_->shot->insert_projectile(
+        source->copy_with_entity_id(entity));
 }
 
 void detail::SessionTestFacade::set_shot_runtime_for_testing(

@@ -10,6 +10,41 @@ O caminho schema v1 continua publicando somente `canonical_state_v2`, com os
 bytes e goldens anteriores preservados. O caminho schema v2 publica somente o
 novo `canonical_state_v3`; o contrato inativo permanece vazio e com hash zero.
 
+## Correções após revisão formal
+
+- `ProjectileState::entity_id` deixou de ser mutável externamente e
+  `ShotState` encapsula sua coleção. Inserção por `lower_bound` mantém ordem
+  estritamente crescente, duplicatas são rejeitadas sem mutação, replace
+  preserva identidade e erase não permite coleção vazia. O primário é sempre o
+  menor EntityId.
+- Copy/move assignment de ProjectileState preserva o EntityId do slot e copia
+  somente os campos runtime. Insert/erase usam rebuild+swap, fechando o bypass
+  que ainda permitiria trocar a identidade através do ponteiro mutável do
+  primário ou do move-assignment interno do vector.
+- ShotState é copy/move-constructible, porém não assignable; a sessão usa
+  `optional.emplace` ao publicar um disparo. Static asserts impedem que uma
+  futura atribuição de vector reabra o bypass de identidade.
+- O serializer v2/v3 valida ShotState não vazio, único e ordenado e itera a
+  coleção normalizada diretamente. Não ordena cópia, não aceita empate e não
+  pode publicar o mesmo hash para primários diferentes.
+- `complete_release` limpa o LauncherState público somente depois que plano e
+  pull aceitos foram copiados para ShotState. Cancel/deadzone, retorno a
+  Inspection, restart e reconfigure também deixam o launcher neutro e sem ghost
+  residual.
+- RED de invariantes: o build falhou pelos métodos encapsulados ainda ausentes;
+  depois, ordem de inserção, primário mínimo, replace/erase e duplicata atômica
+  ficaram verdes.
+- RED de lifecycle: três testes falharam exatamente porque LauncherState ainda
+  existia após release. Após a correção, release, settle/Inspection,
+  restart/reconfigure e o isolamento canônico ShotState-versus-launcher ficaram
+  verdes.
+- RED defensivo adicional: assignment no primário trocou o EntityId e quebrou a
+  ordem; o teste agora congela a identidade e permaneceu verde após tornar o
+  assignment identity-preserving.
+- RED de construção adicional: static asserts mostraram ShotState ainda
+  assignable; o contrato agora bloqueia copy/move assignment e mantém somente
+  construção/cópia/movimento seguros.
+
 ## TDD
 
 ### RED
@@ -82,7 +117,7 @@ exclusões, está registrado em `docs/gameplay/product-v2-content-schema.md`.
   `shot_state|canonical|launcher_system|legacy_orbital`: 4/4 PASS, 0 falhas.
 - Binário completo
   `build/debug/native/simulation/ninho_simulation_tests.exe`: exit 0;
-  168 testes registrados, todos PASS.
+  170 testes registrados, todos PASS.
 - `git diff --check`: exit 0.
 - Revisão do diff confirmou listas CMake explícitas, `add_test(NAME shot_state)`,
   ausência de `file(GLOB)` novo e isolamento entre caches v2/v3.

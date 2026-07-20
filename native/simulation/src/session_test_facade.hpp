@@ -69,7 +69,6 @@ public:
     static bool set_snapshot_exited_world(
         SimulationSession&, EntityId, PartId, bool exited_world);
     static bool append_projectile_for_testing(SimulationSession&, EntityId);
-    static void reverse_projectiles_for_testing(SimulationSession&);
     static void set_shot_runtime_for_testing(SimulationSession&, bool consumed,
         bool active, std::optional<TickIndex> start_tick,
         std::optional<TickIndex> end_tick);

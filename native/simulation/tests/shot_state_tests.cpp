@@ -15,6 +15,7 @@
 #include <sstream>
 #include <span>
 #include <string>
+#include <type_traits>
 #include <variant>
 
 namespace {
@@ -147,24 +148,55 @@ NINHO_SIM_TEST("shot state owns the locked plane runtime and ordered projectiles
         .end_tick = TickIndex{23},
         .active = true,
     };
-    shot.projectiles = {
-        ProjectileState{.entity_id = EntityId{0x80000002U}},
-        ProjectileState{.entity_id = EntityId{0x80000001U}},
-    };
+    NINHO_SIM_REQUIRE(shot.insert_projectile(
+        ProjectileState{EntityId{0x80000002U}, {}, false}));
+    NINHO_SIM_REQUIRE(shot.insert_projectile(
+        ProjectileState{EntityId{0x80000001U}, {}, true}));
 
-    sort_projectiles(shot);
+    ShotState alternate;
+    NINHO_SIM_REQUIRE(alternate.insert_projectile(
+        ProjectileState{EntityId{0x80000001U}, {}, true}));
+    NINHO_SIM_REQUIRE(alternate.insert_projectile(
+        ProjectileState{EntityId{0x80000002U}, {}, false}));
 
     NINHO_SIM_REQUIRE(shot.shot_id == 7U);
     NINHO_SIM_REQUIRE(shot.bird_archetype_id == BirdArchetypeId{9});
     NINHO_SIM_REQUIRE(shot.activation_consumed);
     NINHO_SIM_REQUIRE(std::holds_alternative<GravityFieldAbilityRuntime>(shot.runtime));
-    NINHO_SIM_REQUIRE(shot.projectiles.size() == 2U);
-    NINHO_SIM_REQUIRE(shot.projectiles[0].entity_id == EntityId{0x80000001U});
-    NINHO_SIM_REQUIRE(shot.projectiles[1].entity_id == EntityId{0x80000002U});
+    NINHO_SIM_REQUIRE(shot.has_valid_projectiles());
+    NINHO_SIM_REQUIRE(shot.projectiles().size() == 2U);
+    NINHO_SIM_REQUIRE(std::ranges::equal(
+        shot.projectiles(), alternate.projectiles()));
+    NINHO_SIM_REQUIRE(shot.primary_projectile() != nullptr);
+    NINHO_SIM_REQUIRE(shot.primary_projectile()->entity_id()
+        == EntityId{0x80000001U});
+
+    const std::vector<ProjectileState> before_duplicate{
+        shot.projectiles().begin(), shot.projectiles().end()};
+    NINHO_SIM_REQUIRE(!shot.insert_projectile(
+        ProjectileState{EntityId{0x80000001U}, {9U, 9U}, false}));
+    NINHO_SIM_REQUIRE(std::ranges::equal(
+        shot.projectiles(), before_duplicate));
+
+    *shot.primary_projectile() =
+        shot.primary_projectile()->copy_with_entity_id(EntityId{0x80000002U});
+    NINHO_SIM_REQUIRE(shot.primary_projectile()->entity_id()
+        == EntityId{0x80000001U});
+    NINHO_SIM_REQUIRE(shot.has_valid_projectiles());
+
+    NINHO_SIM_REQUIRE(shot.replace_projectile(
+        ProjectileState{EntityId{0x80000001U}, {9U, 9U}, false}));
+    NINHO_SIM_REQUIRE(!shot.primary_projectile()->bullet);
+    NINHO_SIM_REQUIRE(shot.erase_projectile(EntityId{0x80000002U}));
+    NINHO_SIM_REQUIRE(shot.projectiles().size() == 1U);
+    NINHO_SIM_REQUIRE(!shot.erase_projectile(EntityId{0x80000001U}));
+    NINHO_SIM_REQUIRE(shot.has_valid_projectiles());
 }
 
 NINHO_SIM_TEST("shot state canonical v3 api is separate from legacy v2")
 {
+    static_assert(!std::is_copy_assignable_v<ShotState>);
+    static_assert(!std::is_move_assignable_v<ShotState>);
     static_assert(requires(const SimulationSession& session) {
         session.canonical_state_v3();
         session.canonical_hash_v3();
@@ -300,18 +332,37 @@ NINHO_SIM_TEST("shot state canonical v3 serializes exited world runtime and proj
     SessionTestFacade::refresh_canonical_state(*session);
     NINHO_SIM_REQUIRE(session->canonical_state_v3() == inside);
 
-    NINHO_SIM_REQUIRE(session->enqueue(BeginGrabCommand{{1.0F, 0.0F, 0.0F}}).ok());
-    NINHO_SIM_REQUIRE(session->enqueue(SetPullCommand{-1.0, 0.0}).ok());
-    NINHO_SIM_REQUIRE(session->tick().ok());
-    NINHO_SIM_REQUIRE(session->enqueue(ReleaseBirdCommand{}).ok());
-    NINHO_SIM_REQUIRE(session->tick().ok());
+    const auto launch = [](SimulationSession& target) {
+        NINHO_SIM_REQUIRE(target.enqueue(
+            BeginGrabCommand{{1.0F, 0.0F, 0.0F}}).ok());
+        NINHO_SIM_REQUIRE(target.enqueue(SetPullCommand{-1.0, 0.0}).ok());
+        NINHO_SIM_REQUIRE(target.tick().ok());
+        NINHO_SIM_REQUIRE(target.enqueue(ReleaseBirdCommand{}).ok());
+        NINHO_SIM_REQUIRE(target.tick().ok());
+    };
+    launch(*session);
+    NINHO_SIM_REQUIRE(SessionTestFacade::append_projectile_for_testing(
+        *session, EntityId{0x80000003U}));
     NINHO_SIM_REQUIRE(SessionTestFacade::append_projectile_for_testing(
         *session, EntityId{0x80000002U}));
     SessionTestFacade::refresh_canonical_state(*session);
     const auto ordered = session->canonical_state_v3();
-    SessionTestFacade::reverse_projectiles_for_testing(*session);
+    NINHO_SIM_REQUIRE(!SessionTestFacade::append_projectile_for_testing(
+        *session, EntityId{0x80000002U}));
     SessionTestFacade::refresh_canonical_state(*session);
     NINHO_SIM_REQUIRE(session->canonical_state_v3() == ordered);
+
+    auto alternate_order = create_session();
+    NINHO_SIM_REQUIRE(SessionTestFacade::add_static_sphere(
+        *alternate_order, EntityId{9000}, {2.0F, 2.0F, 0.0F}, 0.5));
+    NINHO_SIM_REQUIRE(alternate_order->tick().ok());
+    launch(*alternate_order);
+    NINHO_SIM_REQUIRE(SessionTestFacade::append_projectile_for_testing(
+        *alternate_order, EntityId{0x80000002U}));
+    NINHO_SIM_REQUIRE(SessionTestFacade::append_projectile_for_testing(
+        *alternate_order, EntityId{0x80000003U}));
+    SessionTestFacade::refresh_canonical_state(*alternate_order);
+    NINHO_SIM_REQUIRE(alternate_order->canonical_state_v3() == ordered);
 
     const auto runtime_base = session->canonical_state_v3();
     SessionTestFacade::set_shot_runtime_for_testing(

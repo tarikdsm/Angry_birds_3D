@@ -618,22 +618,16 @@ SessionStatus SimulationSession::Impl::create_projectile(const AimState& launch_
         pull_horizontal_m = session_state.launcher->pull_horizontal_m;
         pull_vertical_m = session_state.launcher->pull_vertical_m;
     }
-    shot = ShotState{
-        .shot_id = static_cast<std::uint64_t>(shot_ordinal) + 1U,
-        .bird_archetype_id = bird->id,
-        .ability_id = ability->id,
-        .launch_tick = session_state.tick,
-        .locked_plane = locked_plane,
-        .pull_horizontal_m = pull_horizontal_m,
-        .pull_vertical_m = pull_vertical_m,
-        .runtime = make_ability_runtime(ability->kind_v2),
-        .projectiles = {ProjectileState{
-            .entity_id = entity,
-            .physics_handle = created.value,
-            .bullet = bird->bullet,
-        }},
-    };
-    sort_projectiles(*shot);
+    ShotState next_shot{ProjectileState{entity, created.value, bird->bullet}};
+    next_shot.shot_id = static_cast<std::uint64_t>(shot_ordinal) + 1U;
+    next_shot.bird_archetype_id = bird->id;
+    next_shot.ability_id = ability->id;
+    next_shot.launch_tick = session_state.tick;
+    next_shot.locked_plane = locked_plane;
+    next_shot.pull_horizontal_m = pull_horizontal_m;
+    next_shot.pull_vertical_m = pull_vertical_m;
+    next_shot.runtime = make_ability_runtime(ability->kind_v2);
+    shot.emplace(std::move(next_shot));
     if (legacy) {
         for (BirdRosterEntry& entry : roster_remaining) {
             if (entry.bird_archetype_id == bird->id && entry.count > 0U) {
@@ -787,7 +781,7 @@ SessionStatus SimulationSession::Impl::process_commands()
             launcher_system->complete_release();
             session_state.launcher = launcher_system->state();
         } else if (std::holds_alternative<ActivateAbilityCommand>(queued.command)) {
-            auto* projectile = shot ? primary_projectile(*shot) : nullptr;
+            auto* projectile = shot ? shot->primary_projectile() : nullptr;
             const AbilityArchetype* ability = shot
                 ? ability_archetype(shot->ability_id)
                 : nullptr;
@@ -827,11 +821,15 @@ void SimulationSession::Impl::update_fsm_before_step()
             session_state.phase = SessionPhase::Inspection;
             session_state.outcome = Outcome::None;
             session_state.aim.reset();
+            if (launcher_system) {
+                launcher_system->cancel_grab();
+            }
+            session_state.launcher.reset();
             session_state.last_impact_m.reset();
             shot.reset();
         }
     }
-    auto* projectile = shot ? primary_projectile(*shot) : nullptr;
+    auto* projectile = shot ? shot->primary_projectile() : nullptr;
     if (projectile && !ability_runtime_active(shot->runtime)
         && projectile->finished
         && session_state.phase == SessionPhase::FlightAbility) {
@@ -849,7 +847,7 @@ void SimulationSession::Impl::update_fsm_after_step()
         || session_state.phase == SessionPhase::Faulted) {
         return;
     }
-    auto* projectile = shot ? primary_projectile(*shot) : nullptr;
+    auto* projectile = shot ? shot->primary_projectile() : nullptr;
     if (!projectile) {
         return;
     }

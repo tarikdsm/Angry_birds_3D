@@ -217,6 +217,7 @@ void LauncherSystem::cancel_grab() noexcept
 
 void LauncherSystem::complete_release() noexcept
 {
+    state_.reset();
     grabbed_ = false;
 }
 

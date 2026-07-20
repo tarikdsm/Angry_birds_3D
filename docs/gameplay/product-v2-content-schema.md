@@ -416,6 +416,11 @@ LauncherState escreve rest position, camera_right aceita, up, horizontal,
 plane_normal, pull horizontal/vertical, extension, spring/launch energy,
 launch_direction, predicted speed, deadzone e extensão máxima. Assim, uma
 camera_right aceita diferente muda v3, embora input rejeitado não altere o plano.
+Esse bloco público existe somente durante `Grabbed`: cancel, release abaixo da
+deadzone e release válido o removem. No release válido, o plano e pull aceitos
+já foram copiados para ShotState; portanto o stream pós-release usa ShotState e
+não conserva ghost/frame residual no launcher. A transição seguinte para
+`Inspection`, restart e reconfigure também publicam launcher ausente.
 
 Cada comando pendente preserva a ordem da deque e escreve sequence, tag e seu
 payload: SetAim escreve aim completo; BeginGrab escreve camera_right; SetPull
@@ -424,9 +429,18 @@ escreve os dois componentes; os demais não têm payload.
 ShotState escreve `shot_id`, bird, ability, launch_tick, plano travado
 (camera_right/up/horizontal/plane_normal), pull aceito, activation_consumed,
 AbilityRuntime e projéteis. O runtime escreve tag, start/end ticks opcionais e
-active. Projéteis são sempre serializados por EntityId crescente e escrevem
-EntityId, bullet, age/rest ticks, finished e pending_destroy. O BodyHandle é
-deliberadamente excluído.
+active. ShotState encapsula a coleção: `insert` mantém ordem estritamente
+crescente por EntityId e rejeita duplicatas sem mutação; `replace` preserva a
+identidade; `erase` nunca deixa um ShotState vazio; e o primário é sempre o
+menor EntityId. Assignment de ProjectileState copia somente o runtime e preserva
+a identidade do slot, inclusive através do acesso mutável ao primário. Insert e
+erase publicam a nova coleção por rebuild+swap, sem usar assignment para mover
+identidades. ShotState pode ser construído/copiado/movido, mas não atribuído; a
+sessão publica um novo disparo com `optional.emplace`, evitando assignment da
+coleção encapsulada. O serializer valida essas invariantes e falha sem publicar cache
+parcial se o estado estiver vazio, duplicado ou fora de ordem; ele não ordena
+uma cópia nem resolve empates. Cada projétil escreve EntityId, bullet, age/rest
+ticks, finished e pending_destroy. O BodyHandle é deliberadamente excluído.
 
 Snapshots são serializados por `(EntityId, PartId)` e incluem todos os campos
 publicados, inclusive `ejected`, `exited_world` e `is_projectile`. Damage states,

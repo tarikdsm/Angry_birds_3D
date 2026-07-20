@@ -26,8 +26,8 @@ void SimulationSession::Impl::publish_ability_event(DomainEventKind kind,
     event.tick = session_state.tick;
     event.kind = kind;
     if (shot) {
-        if (const auto* projectile = primary_projectile(*shot)) {
-            event.entity_id = projectile->entity_id;
+        if (const auto* projectile = shot->primary_projectile()) {
+            event.entity_id = projectile->entity_id();
         }
         event.bird_archetype_id = shot->bird_archetype_id;
         event.ability_id = shot->ability_id;
@@ -47,7 +47,7 @@ SessionStatus SimulationSession::Impl::apply_gravity_field_before_step()
     if (!shot || !ability_runtime_active(shot->runtime)) {
         return {};
     }
-    const auto* projectile = primary_projectile(*shot);
+    const auto* projectile = shot->primary_projectile();
     if (projectile == nullptr) {
         return ability_failure("active gravity field projectile is unavailable");
     }
@@ -57,7 +57,7 @@ SessionStatus SimulationSession::Impl::apply_gravity_field_before_step()
     }
     const auto projectile_snapshot = std::ranges::find_if(entity_snapshots,
         [&](const EntitySnapshot& snapshot) {
-            return snapshot.entity_id == projectile->entity_id;
+            return snapshot.entity_id == projectile->entity_id();
         });
     if (projectile_snapshot == entity_snapshots.end()) {
         return ability_failure("active gravity field projectile is unavailable");
@@ -91,7 +91,7 @@ SessionStatus SimulationSession::Impl::apply_gravity_field_before_step()
             break;
         }
         if (snapshot.body_type != BodyType::Dynamic
-            || snapshot.entity_id == projectile->entity_id || snapshot.ejected
+            || snapshot.entity_id == projectile->entity_id() || snapshot.ejected
             || !std::isfinite(snapshot.mass_kg) || snapshot.mass_kg <= 0.0
             || snapshot.mass_kg > maximum_mass) {
             continue;
