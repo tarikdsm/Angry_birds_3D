@@ -81,7 +81,10 @@ AbilityArchetype parse_ability(const json& item, const std::string& pointer)
         result.kind_v2 = AbilityKind::SpeedBoost;
         keys(payload, payload_pointer, {"impulse_m_s"});
         result.payload = AbilityArchetype::SpeedBoostPayload{
-            number(payload, "impulse_m_s", payload_pointer, 0.0, 1000.0, false)};
+            number(payload, "impulse_m_s", payload_pointer,
+                -std::numeric_limits<double>::max(),
+                std::numeric_limits<double>::max())};
+        result.arm_ticks = 9U;
     }
     else if (result.kind == "explosion")
     {

@@ -439,6 +439,7 @@ namespace {
     case JointBroken: return "joint_broken";
     case PieceFractured: return "piece_fractured";
     case MassChanged: return "mass_changed";
+    case SpeedChanged: return "speed_changed";
     }
     return "unknown";
 }
@@ -523,6 +524,9 @@ namespace {
     result["material_id"] = static_cast<std::int64_t>(event.material_id.value());
     result["joint_load_ratio"] = event.joint_load_ratio;
     result["fracture_ratio"] = event.fracture_ratio;
+    if (event.kind == simulation::DomainEventKind::SpeedChanged) {
+        result["delta_velocity"] = detail::to_godot(event.delta_velocity_m_s);
+    }
     return result;
 }
 

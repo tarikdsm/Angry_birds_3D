@@ -39,6 +39,7 @@ public:
         SimulationSession&, EntityId, std::uint32_t age_ticks);
     static bool ability_requested(const SimulationSession&);
     static bool ability_active(const SimulationSession&);
+    static void clear_speed_boost_direction_for_testing(SimulationSession&);
     static bool impulse_entity(SimulationSession&, EntityId, ninho::physics::Vec3);
     static bool add_static_sphere(
         SimulationSession&, EntityId, ninho::physics::Vec3, double radius_m);

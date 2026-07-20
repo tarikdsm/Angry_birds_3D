@@ -28,8 +28,8 @@ namespace {
     case AbilityKind::LegacyGravityField:
     case AbilityKind::GravityField:
     case AbilityKind::MassBoost:
-        return true;
     case AbilityKind::SpeedBoost:
+        return true;
     case AbilityKind::Explosion:
     case AbilityKind::Split:
         return false;
@@ -148,6 +148,7 @@ SessionStatus dispatch(const AbilityArchetype& ability, ShotState& shot,
     case AbilityKind::MassBoost:
         return std::get<MassBoostAbilityDefinition>(ability.payload).duration_ticks;
     case AbilityKind::SpeedBoost:
+        return 1U;
     case AbilityKind::Explosion:
     case AbilityKind::Split:
         return 1U;
@@ -229,6 +230,20 @@ std::optional<ContentError> AbilitySystem::validate_definition(
                 payload_pointer + "/mass_multiplier", "number out of range"};
         }
     }
+    if (ability.kind_v2 == AbilityKind::SpeedBoost) {
+        const auto& definition =
+            std::get<SpeedBoostAbilityDefinition>(ability.payload);
+        const std::string payload_pointer = std::string{pointer} + "/payload";
+        if (!std::isfinite(definition.impulse_m_s)) {
+            return ContentError{ContentErrorCode::InvalidNumber,
+                payload_pointer + "/impulse_m_s", "number must be finite"};
+        }
+        if (definition.impulse_m_s <= 0.0
+            || definition.impulse_m_s > 1000.0) {
+            return ContentError{ContentErrorCode::OutOfRange,
+                payload_pointer + "/impulse_m_s", "number out of range"};
+        }
+    }
     return std::nullopt;
 }
 
@@ -246,7 +261,9 @@ std::optional<ContentError> AbilitySystem::validate_session_support(
 std::uint32_t AbilitySystem::activation_arm_ticks(
     const AbilityArchetype& ability) noexcept
 {
-    return ability.kind_v2 == AbilityKind::MassBoost ? 9U : ability.arm_ticks;
+    return ability.kind_v2 == AbilityKind::MassBoost
+            || ability.kind_v2 == AbilityKind::SpeedBoost
+        ? 9U : ability.arm_ticks;
 }
 
 SessionStatus AbilitySystem::activate(const AbilityArchetype& ability,
@@ -262,6 +279,15 @@ SessionStatus AbilitySystem::activate(const AbilityArchetype& ability,
     const std::uint32_t duration = duration_ticks(ability);
     if (duration == 0U) {
         return dispatch_failure("ability duration is unavailable");
+    }
+    if (ability.kind_v2 == AbilityKind::SpeedBoost) {
+        const auto& runtime = std::get<SpeedBoostAbilityRuntime>(shot.runtime);
+        if (!runtime.last_valid_flight_direction
+            || !valid_speed_boost_direction(
+                *runtime.last_valid_flight_direction)) {
+            return {{ContentErrorCode::InvalidInvariant, "/ability/direction",
+                "speed boost has no valid flight direction"}};
+        }
     }
     shot.activation_consumed = true;
     set_ability_runtime_active(shot.runtime, true);
@@ -333,7 +359,14 @@ namespace {
 
 SessionStatus SimulationSession::Impl::apply_ability_before_step()
 {
-    if (!shot || !ability_runtime_active(shot->runtime)) {
+    if (!shot) {
+        return {};
+    }
+    if (auto* runtime = std::get_if<SpeedBoostAbilityRuntime>(
+            &shot->runtime)) {
+        observe_speed_boost_direction(*shot, *runtime);
+    }
+    if (!ability_runtime_active(shot->runtime)) {
         return {};
     }
     const AbilityArchetype* ability = ability_archetype(shot->ability_id);

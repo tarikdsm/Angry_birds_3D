@@ -74,6 +74,7 @@ std::uint8_t canonical_tag_of(DomainEventKind value)
     case DomainEventKind::JointBroken: return 11U;
     case DomainEventKind::PieceFractured: return 12U;
     case DomainEventKind::MassChanged: return 13U;
+    case DomainEventKind::SpeedChanged: return 14U;
     }
     throw std::invalid_argument("unknown canonical domain event");
 }
@@ -461,6 +462,12 @@ void write_ability_runtime(CanonicalWriter& writer, const AbilityRuntime& runtim
     write_optional_tick(writer, ability_runtime_start_tick(runtime));
     write_optional_tick(writer, ability_runtime_end_tick(runtime));
     writer.boolean(ability_runtime_active(runtime));
+    if (const auto* speed = std::get_if<SpeedBoostAbilityRuntime>(&runtime)) {
+        writer.boolean(speed->last_valid_flight_direction.has_value());
+        if (speed->last_valid_flight_direction) {
+            writer.vector(*speed->last_valid_flight_direction);
+        }
+    }
 }
 
 void write_player_command(CanonicalWriter& writer, const PlayerCommand& command)
@@ -1198,6 +1205,9 @@ std::vector<std::uint8_t> SimulationSession::Impl::serialize_canonical_state_v3(
         identifier(writer, event.material_id);
         writer.quantized(event.joint_load_ratio);
         writer.quantized(event.fracture_ratio);
+        if (event.kind == DomainEventKind::SpeedChanged) {
+            writer.vector(event.delta_velocity_m_s);
+        }
     }
 
     std::vector<const detail::DamageState*> damage_states;

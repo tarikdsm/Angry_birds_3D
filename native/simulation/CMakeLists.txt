@@ -14,6 +14,7 @@ add_library(ninho_simulation_kernel STATIC
   src/ability_system.cpp
   src/gravity_field_ability_system.cpp
   src/mass_boost_ability_system.cpp
+  src/speed_boost_ability_system.cpp
   src/damage_system.cpp
   src/fracture_system.cpp
   src/objective_system.cpp
@@ -53,6 +54,7 @@ if(BUILD_TESTING)
     tests/ability_dispatch_tests.cpp
     tests/gravity_field_ability_tests.cpp
     tests/mass_boost_ability_tests.cpp
+    tests/speed_boost_ability_tests.cpp
     tests/damage_anchor_tests.cpp
     tests/fracture_objective_tests.cpp
     tests/playthrough_tests.cpp
@@ -107,6 +109,10 @@ if(BUILD_TESTING)
   add_test(
     NAME mass_boost_ability
     COMMAND ninho_simulation_tests --filter "mass boost ability"
+  )
+  add_test(
+    NAME speed_boost_ability
+    COMMAND ninho_simulation_tests --filter "speed boost ability"
   )
   add_test(
     NAME damage_anchor

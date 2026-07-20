@@ -20,6 +20,7 @@ enum class DomainEventKind : std::uint8_t {
     JointBroken = 11,
     PieceFractured = 12,
     MassChanged = 13,
+    SpeedChanged = 14,
 };
 
 enum class CommandRejectionReason : std::uint8_t {
@@ -67,6 +68,7 @@ struct DomainEvent {
     MaterialId material_id{};
     double joint_load_ratio{};
     double fracture_ratio{};
+    ninho::physics::Vec3 delta_velocity_m_s{};
 
     bool operator==(const DomainEvent&) const = default;
 };

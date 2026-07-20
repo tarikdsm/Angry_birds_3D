@@ -403,6 +403,18 @@ bool detail::SessionTestFacade::ability_active(const SimulationSession& session)
         && ability_runtime_active(session.impl_->shot->runtime);
 }
 
+void detail::SessionTestFacade::clear_speed_boost_direction_for_testing(
+    SimulationSession& session)
+{
+    if (!session.impl_->shot) {
+        return;
+    }
+    if (auto* runtime = std::get_if<SpeedBoostAbilityRuntime>(
+            &session.impl_->shot->runtime)) {
+        runtime->last_valid_flight_direction.reset();
+    }
+}
+
 bool detail::SessionTestFacade::impulse_entity(
     SimulationSession& session, EntityId entity, ninho::physics::Vec3 impulse)
 {

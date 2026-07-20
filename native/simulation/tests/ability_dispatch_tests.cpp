@@ -318,8 +318,7 @@ NINHO_SIM_TEST("ability dispatch rejects unknown and incompatible definitions du
 
 NINHO_SIM_TEST("ability dispatch rejects activation for abilities without a concrete system")
 {
-    const std::array unsupported{AbilityKind::SpeedBoost,
-        AbilityKind::Explosion, AbilityKind::Split};
+    const std::array unsupported{AbilityKind::Explosion, AbilityKind::Split};
     for (const AbilityKind kind : unsupported) {
         RecordingHooks hooks;
         AbilitySystem system{hooks};
@@ -340,19 +339,21 @@ NINHO_SIM_TEST("ability dispatch rejects activation for abilities without a conc
     }
 }
 
-NINHO_SIM_TEST("ability dispatch fixes mass boost arming at nine ticks")
+NINHO_SIM_TEST("ability dispatch fixes mass and speed boost arming at nine ticks")
 {
-    AbilityArchetype selected = ability(AbilityKind::MassBoost);
-    selected.arm_ticks = 0U;
-    NINHO_SIM_REQUIRE(AbilitySystem::activation_arm_ticks(selected) == 9U);
-    selected.arm_ticks = 999U;
-    NINHO_SIM_REQUIRE(AbilitySystem::activation_arm_ticks(selected) == 9U);
+    for (const AbilityKind kind
+        : {AbilityKind::MassBoost, AbilityKind::SpeedBoost}) {
+        AbilityArchetype selected = ability(kind);
+        selected.arm_ticks = 0U;
+        NINHO_SIM_REQUIRE(AbilitySystem::activation_arm_ticks(selected) == 9U);
+        selected.arm_ticks = 999U;
+        NINHO_SIM_REQUIRE(AbilitySystem::activation_arm_ticks(selected) == 9U);
+    }
 }
 
 NINHO_SIM_TEST("ability dispatch fails closed for unimplemented session abilities")
 {
-    const std::array unsupported{AbilityKind::SpeedBoost,
-        AbilityKind::Explosion, AbilityKind::Split};
+    const std::array unsupported{AbilityKind::Explosion, AbilityKind::Split};
     auto session = create_session();
     launch(*session);
     advance_to_armed(*session);

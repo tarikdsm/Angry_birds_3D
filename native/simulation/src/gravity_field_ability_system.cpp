@@ -19,7 +19,7 @@ namespace {
 
 void SimulationSession::Impl::publish_ability_event(DomainEventKind kind,
     const BodyRecord* affected, double weight, ninho::physics::Vec3 force,
-    ninho::physics::Vec3 impulse)
+    ninho::physics::Vec3 impulse, ninho::physics::Vec3 delta_velocity)
 {
     DomainEvent event;
     event.id = EventId{next_event_sequence++};
@@ -39,6 +39,7 @@ void SimulationSession::Impl::publish_ability_event(DomainEventKind kind,
     event.weight = weight;
     event.force_n = force;
     event.impulse_n_s = impulse;
+    event.delta_velocity_m_s = delta_velocity;
     domain_events.push_back(event);
 }
 

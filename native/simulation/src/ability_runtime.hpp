@@ -2,12 +2,23 @@
 
 #include "ninho/simulation/content.hpp"
 
+#include <ninho/physics/physics_types.hpp>
+
 #include <optional>
 #include <stdexcept>
 #include <type_traits>
 #include <variant>
 
 namespace ninho::simulation {
+
+inline constexpr float speed_boost_direction_speed_threshold_m_s = 1.0e-4F;
+
+[[nodiscard]] inline bool valid_speed_boost_direction(
+    ninho::physics::Vec3 direction) noexcept
+{
+    return ninho::physics::is_finite(direction)
+        && std::abs(ninho::physics::length(direction) - 1.0F) <= 1.0e-4F;
+}
 
 // Runtime alternatives are intentionally append-only. Canonical serialization
 // maps each type to an explicit tag and never depends on variant position.
@@ -30,6 +41,7 @@ struct MassBoostAbilityRuntime {
 struct SpeedBoostAbilityRuntime {
     std::optional<TickIndex> start_tick;
     std::optional<TickIndex> end_tick;
+    std::optional<ninho::physics::Vec3> last_valid_flight_direction;
     bool active{};
 
     bool operator==(const SpeedBoostAbilityRuntime&) const = default;

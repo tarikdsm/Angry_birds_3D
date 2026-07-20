@@ -98,6 +98,12 @@ struct SimulationSession::Impl : detail::AbilityLifecycleHooks {
         const MassBoostAbilityDefinition&, MassBoostAbilityRuntime&) override;
     [[nodiscard]] SessionStatus finish_after_step(ShotState&,
         const MassBoostAbilityDefinition&, MassBoostAbilityRuntime&) override;
+    void observe_speed_boost_direction(
+        ShotState&, SpeedBoostAbilityRuntime&) noexcept;
+    [[nodiscard]] SessionStatus apply_before_step(ShotState&,
+        const SpeedBoostAbilityDefinition&, SpeedBoostAbilityRuntime&) override;
+    [[nodiscard]] SessionStatus finish_after_step(ShotState&,
+        const SpeedBoostAbilityDefinition&, SpeedBoostAbilityRuntime&) override;
     void retire_finished_projectiles();
     void process_damage_after_step();
     void publish_damage_outcomes(std::span<const detail::DamageOutcome>);
@@ -109,7 +115,8 @@ struct SimulationSession::Impl : detail::AbilityLifecycleHooks {
         CommandRejectionReason = CommandRejectionReason::None);
     void publish_ability_event(DomainEventKind, const BodyRecord* = nullptr,
         double weight = 0.0, ninho::physics::Vec3 force = {},
-        ninho::physics::Vec3 impulse = {});
+        ninho::physics::Vec3 impulse = {},
+        ninho::physics::Vec3 delta_velocity = {});
     [[nodiscard]] const BirdArchetype* next_bird_archetype() const noexcept;
     [[nodiscard]] const AbilityArchetype* ability_archetype(AbilityId) const noexcept;
     [[nodiscard]] std::optional<JointEndpoint> domain_identity(
