@@ -397,9 +397,53 @@ if ([regex]::Matches(
 $inlineFixedFpsCount = [regex]::Matches(
     $runnerText,
     [regex]::Escape("'--fixed-fps', '60'")).Count
-$registeredFixedFpsCount = @($smokeRegistry | Where-Object { [int]$_.FixedFps -eq 60 }).Count
-if (($inlineFixedFpsCount + $registeredFixedFpsCount) -ne 6) {
-    throw 'Logical and feedback smokes plus foundation and playable captures must use fixed 60 FPS'
+$fixedFpsLiteral = "'--fixed-fps', '60'"
+$godotArgumentBlocks = @([regex]::Matches(
+        $runnerText,
+        '(?ms)-GodotArguments\s+@\((?<arguments>.*?)^\s*\)') |
+    ForEach-Object { $_.Groups['arguments'].Value })
+$expectedFixedCaptureBlocks = @(
+    [pscustomobject]@{
+        Scene = "'res://scenes/physics_spike.tscn'"
+        Marker = "'--', '--ninho-capture-300'"
+        Count = 2
+    },
+    [pscustomobject]@{
+        Scene = "'res://scenes/vertical_slice.tscn'"
+        Marker = "'--', '--vertical-slice-capture'"
+        Count = 2
+    }
+)
+foreach ($capture in $expectedFixedCaptureBlocks) {
+    $matchingBlocks = @($godotArgumentBlocks | Where-Object {
+            $_.Contains([string]$capture.Scene) -and
+            $_.Contains([string]$capture.Marker)
+        })
+    if ($matchingBlocks.Count -ne [int]$capture.Count -or
+            @($matchingBlocks | Where-Object { -not $_.Contains($fixedFpsLiteral) }).Count -ne 0) {
+        throw "Capture blocks must use fixed 60 FPS: $($capture.Marker)"
+    }
+}
+if ($inlineFixedFpsCount -ne 4) {
+    throw 'Only foundation and playable capture blocks may declare inline fixed 60 FPS'
+}
+$expectedRegisteredFixedFpsNames = @(
+    'gameplay-session-smoke',
+    'vertical-slice-smoke',
+    'feedback-smoke'
+)
+$registeredFixedFpsNames = @(
+    $smokeRegistry |
+        Where-Object { [int]$_.FixedFps -eq 60 } |
+        ForEach-Object { [string]$_.Name }
+)
+if ($registeredFixedFpsNames.Count -ne $expectedRegisteredFixedFpsNames.Count) {
+    throw 'Registered fixed 60 FPS smoke set has drifted'
+}
+for ($index = 0; $index -lt $expectedRegisteredFixedFpsNames.Count; ++$index) {
+    if ($registeredFixedFpsNames[$index] -cne $expectedRegisteredFixedFpsNames[$index]) {
+        throw 'Registered fixed 60 FPS smoke set has drifted'
+    }
 }
 if ([regex]::Matches(
         $runnerText,
