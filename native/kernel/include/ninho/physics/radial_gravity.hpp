@@ -2,6 +2,7 @@
 
 #include <ninho/physics/gravity_field.hpp>
 #include <ninho/physics/physics_types.hpp>
+#include <ninho/physics/world_bounds.hpp>
 
 #include <cstdint>
 #include <unordered_map>
@@ -50,5 +51,26 @@ public:
 private:
     std::unordered_map<std::uint64_t, float> elapsed_;
 };
+
+namespace detail {
+
+class WorldExitTracker {
+public:
+    explicit WorldExitTracker(WorldBoundsConfig bounds);
+
+    [[nodiscard]] WorldExitKind update(
+        BodyHandle body,
+        Vec3 position_m,
+        Vec3 linear_velocity_m_s,
+        float dt,
+        float planet_radius_m);
+    void reset(BodyHandle body);
+
+private:
+    WorldBounds bounds_;
+    EjectionTracker radial_ejection_;
+};
+
+}
 
 }

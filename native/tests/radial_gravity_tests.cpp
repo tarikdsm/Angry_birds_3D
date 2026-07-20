@@ -148,3 +148,33 @@ NINHO_TEST("radial ejection tracker resets and recovers after a non finite sampl
     require_reset(41.0f, 2.1f, nan, 10.0f);
     require_reset(41.0f, 2.1f, valid_dt, nan);
 }
+
+NINHO_TEST("world exit classifier separates bounds exits from radial ejection")
+{
+    constexpr float dt = 1.0f / 60.0f;
+    const BodyHandle body{12, 1};
+    detail::WorldExitTracker earth{AabbWorldBounds{
+        .minimum_m = {-24.0f, -12.0f, -12.0f},
+        .maximum_m = {48.0f, 32.0f, 12.0f},
+    }};
+
+    NINHO_REQUIRE(earth.update(body, {48.001f, 0.0f, 0.0f}, {3.0f, 0.0f, 0.0f}, dt, 10.0f)
+        == detail::WorldExitKind::BoundsExit);
+
+    detail::WorldExitTracker orbital{SphericalWorldBounds{
+        .center_m = {10.0f, 0.0f, 0.0f},
+        .removal_radius_m = 60.0f,
+    }};
+    for (int tick = 0; tick < 29; ++tick) {
+        NINHO_REQUIRE(orbital.update(body, {51.0f, 0.0f, 0.0f}, {3.0f, 0.0f, 0.0f}, dt, 10.0f)
+            == detail::WorldExitKind::None);
+    }
+    NINHO_REQUIRE(orbital.update(body, {51.0f, 0.0f, 0.0f}, {3.0f, 0.0f, 0.0f}, dt, 10.0f)
+        == detail::WorldExitKind::RadialEjection);
+    NINHO_REQUIRE(orbital.update(body, {70.0f, 0.0f, 0.0f}, {}, dt, 10.0f)
+        == detail::WorldExitKind::BoundsExit);
+
+    detail::WorldExitTracker unbounded{NoWorldBounds{}};
+    NINHO_REQUIRE(unbounded.update(body, {100.0f, 0.0f, 0.0f}, {}, dt, 10.0f)
+        == detail::WorldExitKind::None);
+}
