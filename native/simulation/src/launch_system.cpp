@@ -5,10 +5,13 @@
 #include <ninho/physics/world_bounds.hpp>
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstdint>
 #include <numbers>
+#include <optional>
 #include <ranges>
+#include <type_traits>
 
 namespace ninho::simulation {
 namespace {
@@ -45,6 +48,99 @@ constexpr std::uint32_t runtime_entity_bit = 0x80000000U;
         hash *= 1099511628211ULL;
     }
     return hash;
+}
+
+constexpr double event_fraction_quantum = 1.0e-6;
+
+[[nodiscard]] std::int64_t event_fraction_bucket(float fraction) noexcept
+{
+    return std::llround(std::clamp(
+        static_cast<double>(fraction), 0.0, 1.0) / event_fraction_quantum);
+}
+
+[[nodiscard]] std::optional<float> first_aabb_exit_fraction(
+    const ninho::physics::AabbWorldBounds& bounds,
+    ninho::physics::Vec3 origin, ninho::physics::Vec3 translation) noexcept
+{
+    const std::array origins{origin.x, origin.y, origin.z};
+    const std::array translations{translation.x, translation.y, translation.z};
+    const std::array minimums{
+        bounds.minimum_m.x, bounds.minimum_m.y, bounds.minimum_m.z};
+    const std::array maximums{
+        bounds.maximum_m.x, bounds.maximum_m.y, bounds.maximum_m.z};
+    float first_exit = 1.0F;
+    bool exits = false;
+    for (std::size_t axis = 0; axis < origins.size(); ++axis) {
+        if (origins[axis] < minimums[axis] || origins[axis] > maximums[axis]) {
+            return 0.0F;
+        }
+        if (translations[axis] > 0.0F) {
+            const float fraction =
+                (maximums[axis] - origins[axis]) / translations[axis];
+            if (fraction >= 0.0F && fraction <= first_exit) {
+                first_exit = fraction;
+                exits = fraction <= 1.0F;
+            }
+        } else if (translations[axis] < 0.0F) {
+            const float fraction =
+                (minimums[axis] - origins[axis]) / translations[axis];
+            if (fraction >= 0.0F && fraction <= first_exit) {
+                first_exit = fraction;
+                exits = fraction <= 1.0F;
+            }
+        }
+    }
+    return exits ? std::optional<float>{first_exit} : std::nullopt;
+}
+
+[[nodiscard]] std::optional<float> first_sphere_exit_fraction(
+    const ninho::physics::SphericalWorldBounds& bounds,
+    ninho::physics::Vec3 origin, ninho::physics::Vec3 translation) noexcept
+{
+    const auto offset = origin - bounds.center_m;
+    const double radius_squared = static_cast<double>(bounds.removal_radius_m)
+        * bounds.removal_radius_m;
+    const double distance_squared = static_cast<double>(offset.x) * offset.x
+        + static_cast<double>(offset.y) * offset.y
+        + static_cast<double>(offset.z) * offset.z;
+    if (!std::isfinite(distance_squared) || distance_squared >= radius_squared) {
+        return 0.0F;
+    }
+    const double a = static_cast<double>(translation.x) * translation.x
+        + static_cast<double>(translation.y) * translation.y
+        + static_cast<double>(translation.z) * translation.z;
+    const double b = 2.0 * (static_cast<double>(offset.x) * translation.x
+        + static_cast<double>(offset.y) * translation.y
+        + static_cast<double>(offset.z) * translation.z);
+    const double c = distance_squared - radius_squared;
+    const double discriminant = b * b - 4.0 * a * c;
+    if (a <= 0.0 || discriminant < 0.0 || !std::isfinite(discriminant)) {
+        return std::nullopt;
+    }
+    const double fraction = (-b + std::sqrt(discriminant)) / (2.0 * a);
+    if (!std::isfinite(fraction) || fraction < 0.0 || fraction > 1.0) {
+        return std::nullopt;
+    }
+    return static_cast<float>(fraction);
+}
+
+[[nodiscard]] std::optional<float> first_bounds_exit_fraction(
+    const ninho::physics::WorldBoundsConfig& bounds,
+    ninho::physics::Vec3 origin, ninho::physics::Vec3 translation) noexcept
+{
+    return std::visit(
+        [origin, translation](const auto& selected) -> std::optional<float> {
+            using Bounds = std::decay_t<decltype(selected)>;
+            if constexpr (std::is_same_v<Bounds, ninho::physics::NoWorldBounds>) {
+                return std::nullopt;
+            } else if constexpr (
+                std::is_same_v<Bounds, ninho::physics::AabbWorldBounds>) {
+                return first_aabb_exit_fraction(selected, origin, translation);
+            } else {
+                return first_sphere_exit_fraction(selected, origin, translation);
+            }
+        },
+        bounds);
 }
 
 [[nodiscard]] const PhysicsSurfaceDefinition* find_surface(
@@ -320,7 +416,6 @@ TrajectoryPreview SimulationSession::preview() const
         }
         const auto maximum_ticks = static_cast<std::uint32_t>(
             std::floor(preview_seconds / static_cast<double>(dt) + 1.0e-6));
-        const ninho::physics::WorldBounds bounds{world_config.bounds};
         auto position = solved.value.origin_m;
         auto velocity = solved.value.direction * static_cast<float>(solved.value.speed_m_s);
         result.samples.reserve(static_cast<std::size_t>(maximum_ticks) + 1U);
@@ -337,7 +432,13 @@ TrajectoryPreview SimulationSession::preview() const
             }
             const auto hit = impl_->physics.cast_sphere(position,
                 static_cast<float>(preview_bird->radius_m), translation);
-            if (hit) {
+            const auto bounds_exit = first_bounds_exit_fraction(
+                world_config.bounds, position, translation);
+            const bool hit_precedes_bounds = hit
+                && (!bounds_exit
+                    || event_fraction_bucket(hit->fraction)
+                        < event_fraction_bucket(*bounds_exit));
+            if (hit_precedes_bounds) {
                 const auto identity = impl_->domain_identity(hit->body);
                 if (!identity) {
                     result.status.error = error(ContentErrorCode::InternalError, "/preview",
@@ -350,11 +451,13 @@ TrajectoryPreview SimulationSession::preview() const
                 result.samples.push_back(position);
                 break;
             }
-            position = position + translation;
-            result.samples.push_back(position);
-            if (!bounds.contains(position)) {
+            if (bounds_exit) {
+                position = position + translation * *bounds_exit;
+                result.samples.push_back(position);
                 break;
             }
+            position = position + translation;
+            result.samples.push_back(position);
         }
         for (const auto sample : result.samples) {
             hash = fnv_mix(hash, std::llround(static_cast<double>(sample.x) * 100000.0));

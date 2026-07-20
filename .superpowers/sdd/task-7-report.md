@@ -21,7 +21,7 @@ DONE. O launcher v2 foi implementado no kernel C++ sem dependência de Godot, co
 
 - `tools/build.ps1 -Configuration Debug`: PASS, build MSVC `/fp:precise` sem warnings de compilação.
 - CTest focado `^launcher_system$`: PASS após cada correção RED.
-- Binário completo `build/debug/native/simulation/ninho_simulation_tests.exe`: exit 0; 155 casos registrados, todos PASS.
+- Binário completo `build/debug/native/simulation/ninho_simulation_tests.exe`: exit 0; 153 casos registrados, todos PASS.
 - CTest oficial final:
   - `launcher_system`: PASS;
   - `launch_fsm`: PASS;
@@ -70,6 +70,30 @@ Modificados:
 - Ghost sem body, cancel/deadzone sem consumo, release único e visual v2: cobertos.
 - Solved state compartilhado, gravidade uniforme/radial, parada por bounds/3 s e erro de primeiro impacto <= 0,10 m: cobertos.
 - Índices/comandos e playthrough/canonical do adaptador v1: cobertos pelas regressões oficiais.
+
+## Correções da revisão
+
+### RED observado
+
+1. Dois previews com colisão e saída de bounds no mesmo tick reproduziram a precedência incorreta sem reduzir o timestep de `1/60 s`:
+   - AABB: o limite em `x=-3,75` vinha antes do contato em `x=-3,70`, mas `first_hit` era publicado;
+   - esfera radial: o raio de remoção `3,25 m` vinha antes do contato no raio `3,30 m`, mas `first_hit` era publicado.
+2. O cap autorado não múltiplo `15,007 m/s` era publicado diretamente como `predicted_speed_m_s`, quebrando o quantum contratual de `0,01 m/s`. O RED foi observado tanto no cap da ave quanto em `speed_ceiling_m_s` do estilingue; as energias de `10.400 J` e `9.360 J` permaneceram coerentes.
+
+### Correção
+
+- Cada segmento agora calcula a primeira fração de saída dos bounds tipados: interseção por eixo para AABB e raiz positiva da quadrática para esfera radial.
+- Hit e bounds são comparados em buckets determinísticos de fração a `1e-6`. A fração estritamente menor vence; empate pertence ao bounds como regra fail-closed. A amostra terminal é a interseção exata com a fronteira.
+- A cobertura inclui, para AABB e radial, os três casos no mesmo segmento: bounds antes, hit antes e empate.
+- O cap efetivo é quantizado conservadoramente para baixo antes do `min` com a velocidade de Hooke quantizada. Assim a velocidade publicada permanece no grid de `0,01 m/s` e nunca excede nenhum cap autorado.
+
+### GREEN final fresco
+
+- `tools/build.ps1 -Configuration Debug`: PASS.
+- CTest oficial `launcher_system|launch_fsm|vertical_slice_playthrough|legacy_orbital`: 4/4 PASS, 0 falhas, 24,15 s.
+- Binário completo `build/debug/native/simulation/ninho_simulation_tests.exe`: exit 0; 156 casos registrados, todos PASS.
+- `git diff --check`: exit 0.
+- O adaptador v1, canonical v1/v2, Godot e evidências permaneceram fora do diff desta correção.
 
 ## Concerns
 

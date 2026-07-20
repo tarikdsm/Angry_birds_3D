@@ -24,6 +24,16 @@ constexpr double speed_quantum = 1.0e-2;
     return std::round(value / quantum) * quantum;
 }
 
+[[nodiscard]] double quantize_down(double value, double quantum) noexcept
+{
+    double units = std::floor(value / quantum);
+    double result = units * quantum;
+    if (result > value) {
+        result = (--units) * quantum;
+    }
+    return std::max(0.0, result);
+}
+
 [[nodiscard]] ninho::physics::Vec3 quantized_vector(
     ninho::physics::Vec3 value) noexcept
 {
@@ -181,7 +191,8 @@ void LauncherSystem::update_solved_state() noexcept
     const double effective_cap = std::min(
         projectile_.speed_cap_m_s, definition_.speed_ceiling_m_s);
     state.predicted_speed_m_s = std::min(
-        effective_cap, quantize(uncapped_speed, speed_quantum));
+        quantize_down(effective_cap, speed_quantum),
+        quantize(uncapped_speed, speed_quantum));
 }
 
 ContentResult<LauncherSolution> LauncherSystem::solution() const

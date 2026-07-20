@@ -272,6 +272,31 @@ NINHO_SIM_TEST("launcher system solves Hooke energy mass direction and dissipati
     NINHO_SIM_REQUIRE(close(capped.state()->predicted_speed_m_s, 15.0));
 }
 
+NINHO_SIM_TEST("launcher system floors nonquantized authored speed caps")
+{
+    const auto verify = [](SlingshotDefinition definition,
+                            detail::LauncherProjectile selected_projectile) {
+        detail::LauncherSystem launcher{
+            uniform_world(), std::move(definition)};
+        NINHO_SIM_REQUIRE(launcher.begin_grab(
+            {1.0F, 0.0F, 0.0F}, selected_projectile).ok());
+        NINHO_SIM_REQUIRE(launcher.set_pull(1.2, -1.6).ok());
+        const auto& state = *launcher.state();
+        NINHO_SIM_REQUIRE(close(state.spring_energy_j, 10400.0));
+        NINHO_SIM_REQUIRE(close(state.launch_energy_j, 9360.0));
+        NINHO_SIM_REQUIRE(close(state.predicted_speed_m_s, 15.0));
+        NINHO_SIM_REQUIRE(state.predicted_speed_m_s <= 15.007);
+        NINHO_SIM_REQUIRE(close(
+            state.predicted_speed_m_s * 100.0,
+            std::round(state.predicted_speed_m_s * 100.0)));
+    };
+
+    verify(slingshot(), projectile(5.0, 15.007));
+    auto capped_slingshot = slingshot();
+    capped_slingshot.speed_ceiling_m_s = 15.007;
+    verify(capped_slingshot, projectile());
+}
+
 NINHO_SIM_TEST("launcher system grabbed session publishes only a ghost and keeps its locked frame")
 {
     auto session = create_session();
@@ -393,5 +418,70 @@ NINHO_SIM_TEST("launcher system preview stops at bounds before an out of bounds 
     const auto preview = session->preview();
     NINHO_SIM_REQUIRE(preview.status.ok());
     NINHO_SIM_REQUIRE(!preview.first_hit.has_value());
-    NINHO_SIM_REQUIRE(preview.samples.back().x > 48.0F);
+    NINHO_SIM_REQUIRE(close(preview.samples.back().x, 48.0, 1.0e-5));
+}
+
+NINHO_SIM_TEST("launcher system preview orders same segment AABB boundary and hit")
+{
+    const auto preview_with_maximum_x = [](double maximum_x) {
+        auto bounded = std::get<UniformWorldDefinition>(uniform_world());
+        bounded.acceleration_m_s2 = {0.0, 0.0, 0.0};
+        bounded.bounds_max_m[0] = maximum_x;
+        auto session = create_session(WorldDefinition{bounded});
+        NINHO_SIM_REQUIRE(detail::SessionTestFacade::add_static_sphere(
+            *session, EntityId{9010}, {-2.95F, 2.0F, 0.0F}, 0.5));
+        NINHO_SIM_REQUIRE(session->tick().ok());
+        begin_grab(*session, {1.0F, 0.0F, 0.0F});
+        NINHO_SIM_REQUIRE(session->enqueue(SetPullCommand{-1.0, 0.0}).ok());
+        NINHO_SIM_REQUIRE(session->tick().ok());
+        return session->preview();
+    };
+
+    const auto bounds_first = preview_with_maximum_x(-3.75);
+    NINHO_SIM_REQUIRE(bounds_first.status.ok());
+    NINHO_SIM_REQUIRE(!bounds_first.first_hit.has_value());
+    NINHO_SIM_REQUIRE(close(bounds_first.samples.back().x, -3.75, 1.0e-5));
+
+    const auto hit_first = preview_with_maximum_x(-3.60);
+    NINHO_SIM_REQUIRE(hit_first.status.ok());
+    NINHO_SIM_REQUIRE(hit_first.first_hit.has_value());
+    NINHO_SIM_REQUIRE(hit_first.first_hit->entity_id == EntityId{9010});
+    NINHO_SIM_REQUIRE(hit_first.samples.back().x < -3.60F);
+
+    const auto tied = preview_with_maximum_x(-3.70);
+    NINHO_SIM_REQUIRE(tied.status.ok());
+    NINHO_SIM_REQUIRE(!tied.first_hit.has_value());
+    NINHO_SIM_REQUIRE(close(tied.samples.back().x, -3.70, 1.0e-5));
+}
+
+NINHO_SIM_TEST("launcher system preview orders same segment radial boundary and hit")
+{
+    const auto preview_with_radius = [](double bounds_radius_m) {
+        auto bounded = std::get<RadialWorldDefinition>(radial_world());
+        bounded.bounds_radius_m = bounds_radius_m;
+        auto session = create_session(WorldDefinition{bounded});
+        NINHO_SIM_REQUIRE(detail::SessionTestFacade::add_static_sphere(
+            *session, EntityId{9011}, {14.05F, 0.0F, 0.0F}, 0.5));
+        NINHO_SIM_REQUIRE(session->tick().ok());
+        begin_grab(*session, {0.0F, 1.0F, 0.0F});
+        NINHO_SIM_REQUIRE(session->enqueue(SetPullCommand{0.0, -1.0}).ok());
+        NINHO_SIM_REQUIRE(session->tick().ok());
+        return session->preview();
+    };
+
+    const auto bounds_first = preview_with_radius(3.25);
+    NINHO_SIM_REQUIRE(bounds_first.status.ok());
+    NINHO_SIM_REQUIRE(!bounds_first.first_hit.has_value());
+    NINHO_SIM_REQUIRE(close(bounds_first.samples.back().x, 13.25, 1.0e-5));
+
+    const auto hit_first = preview_with_radius(3.40);
+    NINHO_SIM_REQUIRE(hit_first.status.ok());
+    NINHO_SIM_REQUIRE(hit_first.first_hit.has_value());
+    NINHO_SIM_REQUIRE(hit_first.first_hit->entity_id == EntityId{9011});
+    NINHO_SIM_REQUIRE(hit_first.samples.back().x < 13.40F);
+
+    const auto tied = preview_with_radius(3.30);
+    NINHO_SIM_REQUIRE(tied.status.ok());
+    NINHO_SIM_REQUIRE(!tied.first_hit.has_value());
+    NINHO_SIM_REQUIRE(close(tied.samples.back().x, 13.30, 1.0e-5));
 }
