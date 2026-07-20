@@ -298,8 +298,8 @@
                           "step_ms":  {
                                           "min":  0.0019,
                                           "p50":  0.002,
-                                          "p95":  0.057799999999999997,
-                                          "max":  0.38900000000000001
+                                          "p95":  0.061699999999999998,
+                                          "max":  0.2571
                                       },
                           "memory":  {
                                          "gate_scope":  "release_mt",
@@ -713,10 +713,10 @@
                           "peak_awake_count":  121,
                           "peak_contact_count":  221,
                           "step_ms":  {
-                                          "min":  4.3728999999999996,
-                                          "p50":  4.4459,
-                                          "p95":  14.7736,
-                                          "max":  14.7736
+                                          "min":  4.7919,
+                                          "p50":  5.0411999999999999,
+                                          "p95":  16.683,
+                                          "max":  16.683
                                       },
                           "memory":  {
                                          "gate_scope":  "release_mt",
@@ -1118,10 +1118,10 @@
                           "peak_awake_count":  80,
                           "peak_contact_count":  204,
                           "step_ms":  {
-                                          "min":  0.035999999999999997,
-                                          "p50":  0.038899999999999997,
-                                          "p95":  0.060900000000000003,
-                                          "max":  17.001899999999999
+                                          "min":  0.040300000000000002,
+                                          "p50":  0.048099999999999997,
+                                          "p95":  0.085000000000000006,
+                                          "max":  23.019600000000001
                                       },
                           "memory":  {
                                          "gate_scope":  "release_mt",
@@ -1567,10 +1567,10 @@
                           "peak_awake_count":  80,
                           "peak_contact_count":  227,
                           "step_ms":  {
-                                          "min":  0.035900000000000001,
-                                          "p50":  0.038699999999999998,
-                                          "p95":  0.060499999999999998,
-                                          "max":  16.608699999999999
+                                          "min":  0.039300000000000002,
+                                          "p50":  0.0441,
+                                          "p95":  0.090300000000000005,
+                                          "max":  18.950900000000001
                                       },
                           "memory":  {
                                          "gate_scope":  "release_mt",
@@ -1800,101 +1800,101 @@
                                                                                                 "available":  true,
                                                                                                 "stable":  false,
                                                                                                 "terminal_growth":  false,
-                                                                                                "baseline_last_bytes":  5074944,
-                                                                                                "baseline_full_min_bytes":  4694016,
-                                                                                                "baseline_central_min_bytes":  4694016,
-                                                                                                "baseline_median_bytes":  5074944,
-                                                                                                "baseline_central_max_bytes":  5169152,
-                                                                                                "baseline_full_max_bytes":  6520832,
-                                                                                                "final_last_bytes":  4411392,
-                                                                                                "final_full_min_bytes":  4411392,
-                                                                                                "final_central_min_bytes":  6438912,
-                                                                                                "final_median_bytes":  6438912,
-                                                                                                "final_central_max_bytes":  6811648,
-                                                                                                "final_full_max_bytes":  6811648,
-                                                                                                "peak_bytes":  6811648,
-                                                                                                "growth_ratio":  0.26876513317191281,
-                                                                                                "instant_growth_ratio":  0,
-                                                                                                "warmup_trimmed_span_ratio":  0.093623890234059731,
-                                                                                                "warmup_full_span_ratio":  0.35996771589991927,
-                                                                                                "measured_trimmed_span_ratio":  0.05788804071246819,
-                                                                                                "measured_full_span_ratio":  0.37277353689567427,
+                                                                                                "baseline_last_bytes":  5025792,
+                                                                                                "baseline_full_min_bytes":  4571136,
+                                                                                                "baseline_central_min_bytes":  5025792,
+                                                                                                "baseline_median_bytes":  6492160,
+                                                                                                "baseline_central_max_bytes":  6537216,
+                                                                                                "baseline_full_max_bytes":  6549504,
+                                                                                                "final_last_bytes":  6303744,
+                                                                                                "final_full_min_bytes":  6275072,
+                                                                                                "final_central_min_bytes":  6275072,
+                                                                                                "final_median_bytes":  6303744,
+                                                                                                "final_central_max_bytes":  6303744,
+                                                                                                "final_full_max_bytes":  6303744,
+                                                                                                "peak_bytes":  6549504,
+                                                                                                "growth_ratio":  0,
+                                                                                                "instant_growth_ratio":  0.25427872860635697,
+                                                                                                "warmup_trimmed_span_ratio":  0.23280757097791799,
+                                                                                                "warmup_full_span_ratio":  0.30473186119873819,
+                                                                                                "measured_trimmed_span_ratio":  0.0045484080571799868,
+                                                                                                "measured_full_span_ratio":  0.0045484080571799868,
                                                                                                 "warmup_samples":  [
-                                                                                                                       4407296,
-                                                                                                                       4714496,
-                                                                                                                       5169152,
-                                                                                                                       4694016,
-                                                                                                                       4714496,
-                                                                                                                       4694016,
-                                                                                                                       5169152,
-                                                                                                                       4694016,
-                                                                                                                       6520832,
-                                                                                                                       5074944
+                                                                                                                       5398528,
+                                                                                                                       5476352,
+                                                                                                                       4874240,
+                                                                                                                       6504448,
+                                                                                                                       5074944,
+                                                                                                                       4571136,
+                                                                                                                       6492160,
+                                                                                                                       6549504,
+                                                                                                                       6537216,
+                                                                                                                       5025792
                                                                                                                    ],
                                                                                                 "measured_samples":  [
-                                                                                                                         4919296,
-                                                                                                                         4411392,
-                                                                                                                         6811648,
-                                                                                                                         6438912,
-                                                                                                                         5378048,
-                                                                                                                         6438912,
-                                                                                                                         6811648,
-                                                                                                                         6438912,
-                                                                                                                         6811648,
-                                                                                                                         4411392
+                                                                                                                         6275072,
+                                                                                                                         6303744,
+                                                                                                                         6275072,
+                                                                                                                         6303744,
+                                                                                                                         6275072,
+                                                                                                                         6303744,
+                                                                                                                         6275072,
+                                                                                                                         6303744,
+                                                                                                                         6275072,
+                                                                                                                         6303744
                                                                                                                      ]
                                                                                             },
                                                                          "working_set":  {
                                                                                              "available":  true,
-                                                                                             "stable":  true,
+                                                                                             "stable":  false,
                                                                                              "terminal_growth":  false,
-                                                                                             "assessment_status":  "growth",
+                                                                                             "assessment_status":  "unstable",
                                                                                              "gate_status":  "diagnostic",
                                                                                              "gate_applied":  false,
                                                                                              "budget_qualified":  false,
                                                                                              "budget_scope":  "future_packaged_reference_hardware",
-                                                                                             "baseline_last_bytes":  13922304,
-                                                                                             "baseline_full_min_bytes":  13733888,
-                                                                                             "baseline_central_min_bytes":  13733888,
-                                                                                             "baseline_median_bytes":  13922304,
-                                                                                             "baseline_central_max_bytes":  13955072,
-                                                                                             "baseline_full_max_bytes":  14626816,
-                                                                                             "final_last_bytes":  13733888,
-                                                                                             "final_full_min_bytes":  13733888,
-                                                                                             "final_central_min_bytes":  14618624,
-                                                                                             "final_median_bytes":  14618624,
-                                                                                             "final_central_max_bytes":  14643200,
-                                                                                             "final_full_max_bytes":  14643200,
-                                                                                             "peak_bytes":  16142336,
-                                                                                             "growth_ratio":  0.050014710208884969,
-                                                                                             "instant_growth_ratio":  0,
-                                                                                             "warmup_trimmed_span_ratio":  0.015887025595763458,
-                                                                                             "warmup_full_span_ratio":  0.064136510738452487,
-                                                                                             "measured_trimmed_span_ratio":  0.0016811431773606051,
-                                                                                             "measured_full_span_ratio":  0.062202297562342392,
+                                                                                             "baseline_last_bytes":  7303168,
+                                                                                             "baseline_full_min_bytes":  7290880,
+                                                                                             "baseline_central_min_bytes":  7303168,
+                                                                                             "baseline_median_bytes":  8200192,
+                                                                                             "baseline_central_max_bytes":  8212480,
+                                                                                             "baseline_full_max_bytes":  8216576,
+                                                                                             "final_last_bytes":  8237056,
+                                                                                             "final_full_min_bytes":  8220672,
+                                                                                             "final_central_min_bytes":  8220672,
+                                                                                             "final_median_bytes":  8237056,
+                                                                                             "final_central_max_bytes":  8237056,
+                                                                                             "final_full_max_bytes":  8237056,
+                                                                                             "peak_bytes":  9699328,
+                                                                                             "growth_ratio":  0.0044955044955044959,
+                                                                                             "instant_growth_ratio":  0.12787436904094224,
+                                                                                             "warmup_trimmed_span_ratio":  0.1108891108891109,
+                                                                                             "warmup_full_span_ratio":  0.11288711288711288,
+                                                                                             "measured_trimmed_span_ratio":  0.0019890601690701142,
+                                                                                             "measured_full_span_ratio":  0.0019890601690701142,
                                                                                              "warmup_samples":  [
-                                                                                                                    13717504,
-                                                                                                                    13742080,
-                                                                                                                    13955072,
-                                                                                                                    13733888,
-                                                                                                                    13758464,
-                                                                                                                    13733888,
-                                                                                                                    13955072,
-                                                                                                                    13733888,
-                                                                                                                    14626816,
-                                                                                                                    13922304
+                                                                                                                    7258112,
+                                                                                                                    7315456,
+                                                                                                                    7335936,
+                                                                                                                    8208384,
+                                                                                                                    7335936,
+                                                                                                                    7290880,
+                                                                                                                    8216576,
+                                                                                                                    8200192,
+                                                                                                                    8212480,
+                                                                                                                    7303168
                                                                                                                 ],
                                                                                              "measured_samples":  [
-                                                                                                                      13737984,
-                                                                                                                      13733888,
-                                                                                                                      14618624,
-                                                                                                                      14643200,
-                                                                                                                      13938688,
-                                                                                                                      14643200,
-                                                                                                                      14618624,
-                                                                                                                      14643200,
-                                                                                                                      14618624,
-                                                                                                                      13733888
+                                                                                                                      8220672,
+                                                                                                                      8237056,
+                                                                                                                      8220672,
+                                                                                                                      8237056,
+                                                                                                                      8220672,
+                                                                                                                      8237056,
+                                                                                                                      8220672,
+                                                                                                                      8237056,
+                                                                                                                      8220672,
+                                                                                                                      8237056
                                                                                                                   ]
                                                                                          }
                                                                      },
@@ -1948,109 +1948,109 @@
                                                           "memory":  {
                                                                          "gate_scope":  "release_mt",
                                                                          "gate_status":  "diagnostic",
-                                                                         "assessment_status":  "unstable",
+                                                                         "assessment_status":  "growth",
                                                                          "gate_applied":  false,
                                                                          "budget_qualified":  false,
                                                                          "budget_scope":  "future_packaged_reference_hardware",
                                                                          "private_commit":  {
                                                                                                 "available":  true,
                                                                                                 "stable":  false,
-                                                                                                "terminal_growth":  false,
-                                                                                                "baseline_last_bytes":  6737920,
-                                                                                                "baseline_full_min_bytes":  4399104,
-                                                                                                "baseline_central_min_bytes":  6316032,
-                                                                                                "baseline_median_bytes":  6316032,
-                                                                                                "baseline_central_max_bytes":  6737920,
-                                                                                                "baseline_full_max_bytes":  6737920,
-                                                                                                "final_last_bytes":  5869568,
-                                                                                                "final_full_min_bytes":  4485120,
-                                                                                                "final_central_min_bytes":  5869568,
-                                                                                                "final_median_bytes":  6328320,
-                                                                                                "final_central_max_bytes":  6328320,
-                                                                                                "final_full_max_bytes":  6488064,
-                                                                                                "peak_bytes":  6737920,
-                                                                                                "growth_ratio":  0.0019455252918287938,
-                                                                                                "instant_growth_ratio":  0,
-                                                                                                "warmup_trimmed_span_ratio":  0.066796368352788585,
-                                                                                                "warmup_full_span_ratio":  0.37029831387808043,
-                                                                                                "measured_trimmed_span_ratio":  0.072491909385113268,
-                                                                                                "measured_full_span_ratio":  0.31650485436893205,
+                                                                                                "terminal_growth":  true,
+                                                                                                "baseline_last_bytes":  6553600,
+                                                                                                "baseline_full_min_bytes":  5996544,
+                                                                                                "baseline_central_min_bytes":  6365184,
+                                                                                                "baseline_median_bytes":  6529024,
+                                                                                                "baseline_central_max_bytes":  6553600,
+                                                                                                "baseline_full_max_bytes":  6553600,
+                                                                                                "final_last_bytes":  7196672,
+                                                                                                "final_full_min_bytes":  4866048,
+                                                                                                "final_central_min_bytes":  6361088,
+                                                                                                "final_median_bytes":  6549504,
+                                                                                                "final_central_max_bytes":  7196672,
+                                                                                                "final_full_max_bytes":  7196672,
+                                                                                                "peak_bytes":  7196672,
+                                                                                                "growth_ratio":  0.0031367628607277291,
+                                                                                                "instant_growth_ratio":  0.098125000000000004,
+                                                                                                "warmup_trimmed_span_ratio":  0.028858218318695106,
+                                                                                                "warmup_full_span_ratio":  0.085319949811794235,
+                                                                                                "measured_trimmed_span_ratio":  0.12757973733583489,
+                                                                                                "measured_full_span_ratio":  0.35584740462789244,
                                                                                                 "warmup_samples":  [
                                                                                                                        6537216,
-                                                                                                                       6721536,
-                                                                                                                       6516736,
-                                                                                                                       5373952,
-                                                                                                                       6316032,
-                                                                                                                       6737920,
-                                                                                                                       6316032,
-                                                                                                                       4399104,
-                                                                                                                       6316032,
-                                                                                                                       6737920
+                                                                                                                       6549504,
+                                                                                                                       6049792,
+                                                                                                                       5996544,
+                                                                                                                       6365184,
+                                                                                                                       6553600,
+                                                                                                                       6529024,
+                                                                                                                       5996544,
+                                                                                                                       6365184,
+                                                                                                                       6553600
                                                                                                                    ],
                                                                                                 "measured_samples":  [
-                                                                                                                         6488064,
-                                                                                                                         6328320,
-                                                                                                                         6488064,
-                                                                                                                         6328320,
-                                                                                                                         4415488,
-                                                                                                                         6328320,
-                                                                                                                         6488064,
-                                                                                                                         6328320,
-                                                                                                                         4485120,
-                                                                                                                         5869568
+                                                                                                                         6356992,
+                                                                                                                         5881856,
+                                                                                                                         6549504,
+                                                                                                                         7196672,
+                                                                                                                         4878336,
+                                                                                                                         6361088,
+                                                                                                                         6549504,
+                                                                                                                         4866048,
+                                                                                                                         7196672,
+                                                                                                                         7196672
                                                                                                                      ]
                                                                                             },
                                                                          "working_set":  {
                                                                                              "available":  true,
-                                                                                             "stable":  true,
-                                                                                             "terminal_growth":  false,
-                                                                                             "assessment_status":  "pass",
+                                                                                             "stable":  false,
+                                                                                             "terminal_growth":  true,
+                                                                                             "assessment_status":  "growth",
                                                                                              "gate_status":  "diagnostic",
                                                                                              "gate_applied":  false,
                                                                                              "budget_qualified":  false,
                                                                                              "budget_scope":  "future_packaged_reference_hardware",
-                                                                                             "baseline_last_bytes":  14630912,
-                                                                                             "baseline_full_min_bytes":  13721600,
-                                                                                             "baseline_central_min_bytes":  14602240,
-                                                                                             "baseline_median_bytes":  14602240,
-                                                                                             "baseline_central_max_bytes":  14630912,
-                                                                                             "baseline_full_max_bytes":  14630912,
-                                                                                             "final_last_bytes":  14630912,
-                                                                                             "final_full_min_bytes":  13807616,
-                                                                                             "final_central_min_bytes":  14618624,
-                                                                                             "final_median_bytes":  14618624,
-                                                                                             "final_central_max_bytes":  14630912,
-                                                                                             "final_full_max_bytes":  14647296,
-                                                                                             "peak_bytes":  16203776,
-                                                                                             "growth_ratio":  0.0011220196353436186,
-                                                                                             "instant_growth_ratio":  0,
-                                                                                             "warmup_trimmed_span_ratio":  0.0019635343618513326,
-                                                                                             "warmup_full_span_ratio":  0.06227208976157083,
-                                                                                             "measured_trimmed_span_ratio":  0.00084057158868030256,
-                                                                                             "measured_full_span_ratio":  0.057439058559820677,
+                                                                                             "baseline_last_bytes":  8220672,
+                                                                                             "baseline_full_min_bytes":  8192000,
+                                                                                             "baseline_central_min_bytes":  8220672,
+                                                                                             "baseline_median_bytes":  8220672,
+                                                                                             "baseline_central_max_bytes":  8224768,
+                                                                                             "baseline_full_max_bytes":  8224768,
+                                                                                             "final_last_bytes":  9728000,
+                                                                                             "final_full_min_bytes":  7307264,
+                                                                                             "final_central_min_bytes":  8216576,
+                                                                                             "final_median_bytes":  8228864,
+                                                                                             "final_central_max_bytes":  9691136,
+                                                                                             "final_full_max_bytes":  9728000,
+                                                                                             "peak_bytes":  9744384,
+                                                                                             "growth_ratio":  0.00099651220727453907,
+                                                                                             "instant_growth_ratio":  0.1833582461385152,
+                                                                                             "warmup_trimmed_span_ratio":  0.00049825610363726954,
+                                                                                             "warmup_full_span_ratio":  0.0039860488290981563,
+                                                                                             "measured_trimmed_span_ratio":  0.1791936286709806,
+                                                                                             "measured_full_span_ratio":  0.29417620706819314,
                                                                                              "warmup_samples":  [
-                                                                                                                    14614528,
-                                                                                                                    14626816,
-                                                                                                                    14606336,
-                                                                                                                    13950976,
-                                                                                                                    14602240,
-                                                                                                                    14630912,
-                                                                                                                    14602240,
-                                                                                                                    13721600,
-                                                                                                                    14602240,
-                                                                                                                    14630912
+                                                                                                                    8196096,
+                                                                                                                    8208384,
+                                                                                                                    8192000,
+                                                                                                                    8224768,
+                                                                                                                    8224768,
+                                                                                                                    8220672,
+                                                                                                                    8192000,
+                                                                                                                    8224768,
+                                                                                                                    8224768,
+                                                                                                                    8220672
                                                                                                                 ],
                                                                                              "measured_samples":  [
-                                                                                                                      14647296,
-                                                                                                                      14618624,
-                                                                                                                      14647296,
-                                                                                                                      14618624,
-                                                                                                                      13737984,
-                                                                                                                      14618624,
-                                                                                                                      14647296,
-                                                                                                                      14618624,
-                                                                                                                      13807616,
-                                                                                                                      14630912
+                                                                                                                      8261632,
+                                                                                                                      8220672,
+                                                                                                                      8232960,
+                                                                                                                      9691136,
+                                                                                                                      7356416,
+                                                                                                                      8216576,
+                                                                                                                      8228864,
+                                                                                                                      7307264,
+                                                                                                                      9691136,
+                                                                                                                      9728000
                                                                                                                   ]
                                                                                          }
                                                                      },
@@ -2118,10 +2118,10 @@
                           "peak_awake_count":  500,
                           "peak_contact_count":  0,
                           "step_ms":  {
-                                          "min":  0.51259999999999994,
-                                          "p50":  0.5444,
-                                          "p95":  0.60650000000000004,
-                                          "max":  1.5418000000000001
+                                          "min":  0.52290000000000003,
+                                          "p50":  0.57230000000000003,
+                                          "p95":  0.76759999999999995,
+                                          "max":  3.4026000000000001
                                       },
                           "memory":  {
                                          "gate_scope":  "release_mt",
@@ -2134,101 +2134,101 @@
                                                                 "available":  true,
                                                                 "stable":  false,
                                                                 "terminal_growth":  false,
-                                                                "baseline_last_bytes":  5074944,
-                                                                "baseline_full_min_bytes":  4694016,
-                                                                "baseline_central_min_bytes":  4694016,
-                                                                "baseline_median_bytes":  5074944,
-                                                                "baseline_central_max_bytes":  5169152,
-                                                                "baseline_full_max_bytes":  6520832,
-                                                                "final_last_bytes":  4411392,
-                                                                "final_full_min_bytes":  4411392,
-                                                                "final_central_min_bytes":  6438912,
-                                                                "final_median_bytes":  6438912,
-                                                                "final_central_max_bytes":  6811648,
-                                                                "final_full_max_bytes":  6811648,
-                                                                "peak_bytes":  6811648,
-                                                                "growth_ratio":  0.26876513317191281,
-                                                                "instant_growth_ratio":  0,
-                                                                "warmup_trimmed_span_ratio":  0.093623890234059731,
-                                                                "warmup_full_span_ratio":  0.35996771589991927,
-                                                                "measured_trimmed_span_ratio":  0.05788804071246819,
-                                                                "measured_full_span_ratio":  0.37277353689567427,
+                                                                "baseline_last_bytes":  5025792,
+                                                                "baseline_full_min_bytes":  4571136,
+                                                                "baseline_central_min_bytes":  5025792,
+                                                                "baseline_median_bytes":  6492160,
+                                                                "baseline_central_max_bytes":  6537216,
+                                                                "baseline_full_max_bytes":  6549504,
+                                                                "final_last_bytes":  6303744,
+                                                                "final_full_min_bytes":  6275072,
+                                                                "final_central_min_bytes":  6275072,
+                                                                "final_median_bytes":  6303744,
+                                                                "final_central_max_bytes":  6303744,
+                                                                "final_full_max_bytes":  6303744,
+                                                                "peak_bytes":  6549504,
+                                                                "growth_ratio":  0,
+                                                                "instant_growth_ratio":  0.25427872860635697,
+                                                                "warmup_trimmed_span_ratio":  0.23280757097791799,
+                                                                "warmup_full_span_ratio":  0.30473186119873819,
+                                                                "measured_trimmed_span_ratio":  0.0045484080571799868,
+                                                                "measured_full_span_ratio":  0.0045484080571799868,
                                                                 "warmup_samples":  [
-                                                                                       4407296,
-                                                                                       4714496,
-                                                                                       5169152,
-                                                                                       4694016,
-                                                                                       4714496,
-                                                                                       4694016,
-                                                                                       5169152,
-                                                                                       4694016,
-                                                                                       6520832,
-                                                                                       5074944
+                                                                                       5398528,
+                                                                                       5476352,
+                                                                                       4874240,
+                                                                                       6504448,
+                                                                                       5074944,
+                                                                                       4571136,
+                                                                                       6492160,
+                                                                                       6549504,
+                                                                                       6537216,
+                                                                                       5025792
                                                                                    ],
                                                                 "measured_samples":  [
-                                                                                         4919296,
-                                                                                         4411392,
-                                                                                         6811648,
-                                                                                         6438912,
-                                                                                         5378048,
-                                                                                         6438912,
-                                                                                         6811648,
-                                                                                         6438912,
-                                                                                         6811648,
-                                                                                         4411392
+                                                                                         6275072,
+                                                                                         6303744,
+                                                                                         6275072,
+                                                                                         6303744,
+                                                                                         6275072,
+                                                                                         6303744,
+                                                                                         6275072,
+                                                                                         6303744,
+                                                                                         6275072,
+                                                                                         6303744
                                                                                      ]
                                                             },
                                          "working_set":  {
                                                              "available":  true,
-                                                             "stable":  true,
+                                                             "stable":  false,
                                                              "terminal_growth":  false,
-                                                             "assessment_status":  "growth",
+                                                             "assessment_status":  "unstable",
                                                              "gate_status":  "diagnostic",
                                                              "gate_applied":  false,
                                                              "budget_qualified":  false,
                                                              "budget_scope":  "future_packaged_reference_hardware",
-                                                             "baseline_last_bytes":  13922304,
-                                                             "baseline_full_min_bytes":  13733888,
-                                                             "baseline_central_min_bytes":  13733888,
-                                                             "baseline_median_bytes":  13922304,
-                                                             "baseline_central_max_bytes":  13955072,
-                                                             "baseline_full_max_bytes":  14626816,
-                                                             "final_last_bytes":  13733888,
-                                                             "final_full_min_bytes":  13733888,
-                                                             "final_central_min_bytes":  14618624,
-                                                             "final_median_bytes":  14618624,
-                                                             "final_central_max_bytes":  14643200,
-                                                             "final_full_max_bytes":  14643200,
-                                                             "peak_bytes":  16142336,
-                                                             "growth_ratio":  0.050014710208884969,
-                                                             "instant_growth_ratio":  0,
-                                                             "warmup_trimmed_span_ratio":  0.015887025595763458,
-                                                             "warmup_full_span_ratio":  0.064136510738452487,
-                                                             "measured_trimmed_span_ratio":  0.0016811431773606051,
-                                                             "measured_full_span_ratio":  0.062202297562342392,
+                                                             "baseline_last_bytes":  7303168,
+                                                             "baseline_full_min_bytes":  7290880,
+                                                             "baseline_central_min_bytes":  7303168,
+                                                             "baseline_median_bytes":  8200192,
+                                                             "baseline_central_max_bytes":  8212480,
+                                                             "baseline_full_max_bytes":  8216576,
+                                                             "final_last_bytes":  8237056,
+                                                             "final_full_min_bytes":  8220672,
+                                                             "final_central_min_bytes":  8220672,
+                                                             "final_median_bytes":  8237056,
+                                                             "final_central_max_bytes":  8237056,
+                                                             "final_full_max_bytes":  8237056,
+                                                             "peak_bytes":  9699328,
+                                                             "growth_ratio":  0.0044955044955044959,
+                                                             "instant_growth_ratio":  0.12787436904094224,
+                                                             "warmup_trimmed_span_ratio":  0.1108891108891109,
+                                                             "warmup_full_span_ratio":  0.11288711288711288,
+                                                             "measured_trimmed_span_ratio":  0.0019890601690701142,
+                                                             "measured_full_span_ratio":  0.0019890601690701142,
                                                              "warmup_samples":  [
-                                                                                    13717504,
-                                                                                    13742080,
-                                                                                    13955072,
-                                                                                    13733888,
-                                                                                    13758464,
-                                                                                    13733888,
-                                                                                    13955072,
-                                                                                    13733888,
-                                                                                    14626816,
-                                                                                    13922304
+                                                                                    7258112,
+                                                                                    7315456,
+                                                                                    7335936,
+                                                                                    8208384,
+                                                                                    7335936,
+                                                                                    7290880,
+                                                                                    8216576,
+                                                                                    8200192,
+                                                                                    8212480,
+                                                                                    7303168
                                                                                 ],
                                                              "measured_samples":  [
-                                                                                      13737984,
-                                                                                      13733888,
-                                                                                      14618624,
-                                                                                      14643200,
-                                                                                      13938688,
-                                                                                      14643200,
-                                                                                      14618624,
-                                                                                      14643200,
-                                                                                      14618624,
-                                                                                      13733888
+                                                                                      8220672,
+                                                                                      8237056,
+                                                                                      8220672,
+                                                                                      8237056,
+                                                                                      8220672,
+                                                                                      8237056,
+                                                                                      8220672,
+                                                                                      8237056,
+                                                                                      8220672,
+                                                                                      8237056
                                                                                   ]
                                                          }
                                      },
@@ -2318,67 +2318,67 @@
                                           },
                                           {
                                               "name":  "private_commit_baseline_median_bytes",
-                                              "value":  5074944,
+                                              "value":  6492160,
                                               "unit":  "bytes"
                                           },
                                           {
                                               "name":  "private_commit_final_median_bytes",
-                                              "value":  6438912,
+                                              "value":  6303744,
                                               "unit":  "bytes"
                                           },
                                           {
                                               "name":  "private_commit_growth_ratio",
-                                              "value":  0.26876513317191281,
+                                              "value":  0,
                                               "unit":  "ratio"
                                           },
                                           {
                                               "name":  "private_commit_instant_growth_ratio",
-                                              "value":  0,
+                                              "value":  0.25427872860635697,
                                               "unit":  "ratio"
                                           },
                                           {
                                               "name":  "private_commit_warmup_trimmed_span_ratio",
-                                              "value":  0.093623890234059731,
+                                              "value":  0.23280757097791799,
                                               "unit":  "ratio"
                                           },
                                           {
                                               "name":  "private_commit_measured_trimmed_span_ratio",
-                                              "value":  0.05788804071246819,
+                                              "value":  0.0045484080571799868,
                                               "unit":  "ratio"
                                           },
                                           {
                                               "name":  "working_set_baseline_bytes",
-                                              "value":  13922304,
+                                              "value":  7303168,
                                               "unit":  "bytes"
                                           },
                                           {
                                               "name":  "working_set_baseline_low_bytes",
-                                              "value":  13733888,
+                                              "value":  7290880,
                                               "unit":  "bytes"
                                           },
                                           {
                                               "name":  "working_set_peak_bytes",
-                                              "value":  16142336,
+                                              "value":  9699328,
                                               "unit":  "bytes"
                                           },
                                           {
                                               "name":  "working_set_final_bytes",
-                                              "value":  13733888,
+                                              "value":  8237056,
                                               "unit":  "bytes"
                                           },
                                           {
                                               "name":  "working_set_final_low_bytes",
-                                              "value":  13733888,
+                                              "value":  8220672,
                                               "unit":  "bytes"
                                           },
                                           {
                                               "name":  "working_set_growth_ratio",
-                                              "value":  0.050014710208884969,
+                                              "value":  0.0044955044955044959,
                                               "unit":  "ratio"
                                           },
                                           {
                                               "name":  "working_set_instant_growth_ratio",
-                                              "value":  0,
+                                              "value":  0.12787436904094224,
                                               "unit":  "ratio"
                                           },
                                           {
@@ -2660,10 +2660,10 @@
                           "peak_awake_count":  121,
                           "peak_contact_count":  221,
                           "step_ms":  {
-                                          "min":  0.035499999999999997,
-                                          "p50":  0.038199999999999998,
-                                          "p95":  0.055899999999999998,
-                                          "max":  16.603200000000001
+                                          "min":  0.036200000000000003,
+                                          "p50":  0.039399999999999998,
+                                          "p95":  0.065600000000000006,
+                                          "max":  18.323399999999999
                                       },
                           "memory":  {
                                          "gate_scope":  "release_mt",
@@ -3162,22 +3162,22 @@
                                                             },
                                                             {
                                                                 "name":  "private_commit_baseline_bytes",
-                                                                "value":  4612096,
+                                                                "value":  4538368,
                                                                 "unit":  "bytes"
                                                             },
                                                             {
                                                                 "name":  "private_commit_final_bytes",
-                                                                "value":  4612096,
+                                                                "value":  4538368,
                                                                 "unit":  "bytes"
                                                             },
                                                             {
                                                                 "name":  "working_set_baseline_bytes",
-                                                                "value":  13832192,
+                                                                "value":  7401472,
                                                                 "unit":  "bytes"
                                                             },
                                                             {
                                                                 "name":  "working_set_final_bytes",
-                                                                "value":  13832192,
+                                                                "value":  7405568,
                                                                 "unit":  "bytes"
                                                             },
                                                             {
@@ -3670,22 +3670,22 @@
                                       },
                                       {
                                           "name":  "private_commit_baseline_bytes",
-                                          "value":  4612096,
+                                          "value":  4538368,
                                           "unit":  "bytes"
                                       },
                                       {
                                           "name":  "private_commit_final_bytes",
-                                          "value":  4612096,
+                                          "value":  4538368,
                                           "unit":  "bytes"
                                       },
                                       {
                                           "name":  "working_set_baseline_bytes",
-                                          "value":  13832192,
+                                          "value":  7401472,
                                           "unit":  "bytes"
                                       },
                                       {
                                           "name":  "working_set_final_bytes",
-                                          "value":  13832192,
+                                          "value":  7405568,
                                           "unit":  "bytes"
                                       },
                                       {
@@ -3781,9 +3781,9 @@
 
                    ],
     "recommendation":  "prosseguir_com_limites",
-    "source_revision":  "b542c1bc971566abd27bd5095aae2e1e8c26a791",
+    "source_revision":  "a0ad7e85c575ae89b0d3cb1ad399151599274d97",
     "tested_inputs_schema":  "ninho.tested-inputs.v2",
-    "tested_inputs_sha256":  "9a90ba2f4b0c78c436f0b3c7bea4a4f4f53f85d3a2412e144ddcfe40209c30c0",
+    "tested_inputs_sha256":  "d8457faf75cbae7594eebaad591e0c65b6b6ec9d96f6abb2a52b37a5f99dc268",
     "tested_inputs":  [
                           {
                               "path":  "CMakeLists.txt",
@@ -3830,8 +3830,8 @@
                           {
                               "path":  "native/extension/CMakeLists.txt",
                               "mode":  "text_utf8_lf",
-                              "size_bytes":  3755,
-                              "sha256":  "1254a1d7611d1af4f6f2525351851a68325229e09331870f56f7428e807b1466"
+                              "size_bytes":  5401,
+                              "sha256":  "43f3c8024a5039b5f4c4ea0e9299fd9896bb86bae72a9d49887f9a1b63da6d33"
                           },
                           {
                               "path":  "native/extension/include/ninho/extension/adapter_helpers.hpp",
@@ -3846,16 +3846,28 @@
                               "sha256":  "7b85101813d8137daa510b3febdd2846a4bb2989c3dc03447593f132f3bd37e9"
                           },
                           {
+                              "path":  "native/extension/include/ninho/extension/gameplay_session_node.hpp",
+                              "mode":  "text_utf8_lf",
+                              "size_bytes":  3185,
+                              "sha256":  "2212dd5f5e0b85592d1dcecf9bb50e89e76f28bbda28d2d47739a36181b68bda"
+                          },
+                          {
                               "path":  "native/extension/include/ninho/extension/orbital_session_node.hpp",
                               "mode":  "text_utf8_lf",
-                              "size_bytes":  6359,
-                              "sha256":  "f710cc9d3c8a220428c1d2992f3510f3f7b278dd91081d0729b180f193720ff5"
+                              "size_bytes":  3080,
+                              "sha256":  "37e7de3917ccd08b393c5e12b0e28f87d4ff2d85e64fdfe1c4d5e500d4071471"
                           },
                           {
                               "path":  "native/extension/include/ninho/extension/register_types.hpp",
                               "mode":  "text_utf8_lf",
                               "size_bytes":  531,
                               "sha256":  "3177e4fe903ea362d3da888f09df187417c28dce67a7c1c6c7db621afafc40bb"
+                          },
+                          {
+                              "path":  "native/extension/include/ninho/extension/session_adapter_services.hpp",
+                              "mode":  "text_utf8_lf",
+                              "size_bytes":  4984,
+                              "sha256":  "042e61b8bce9c77869dd038aabbcfc873d7f465db8dbad73e1d3d448104cd694"
                           },
                           {
                               "path":  "native/extension/src/adapter_helpers.cpp",
@@ -3870,22 +3882,40 @@
                               "sha256":  "3be56d58cbc7afdce0e0731ad6413adb084b84ff7ae1bed115f330819e13dd78"
                           },
                           {
+                              "path":  "native/extension/src/gameplay_session_node.cpp",
+                              "mode":  "text_utf8_lf",
+                              "size_bytes":  33770,
+                              "sha256":  "033fcb099d39679a1c95d76afc8a26bafaf211233eff9bfb823785b2f5cab0bf"
+                          },
+                          {
                               "path":  "native/extension/src/orbital_session_node.cpp",
                               "mode":  "text_utf8_lf",
-                              "size_bytes":  31793,
-                              "sha256":  "3d17a7af772f6a96a7d36e8a1c9136f8f030a78a0cb239e40e64ae85bcf19180"
+                              "size_bytes":  26858,
+                              "sha256":  "61729cc8c8c9b3c84cddef9c091eb8821141ec49cf5be88c2f1a01bf97c74db9"
                           },
                           {
                               "path":  "native/extension/src/register_types.cpp",
                               "mode":  "text_utf8_lf",
-                              "size_bytes":  2314,
-                              "sha256":  "779af837acf7f131da90b1906fe57540ede5c6ba1fcbf0aad759467bdad000c0"
+                              "size_bytes":  2414,
+                              "sha256":  "cfe8cd24bea5486312918098304c612a3628e6c4cc72c9eeb29bb323020cdb76"
+                          },
+                          {
+                              "path":  "native/extension/src/session_adapter_services.cpp",
+                              "mode":  "text_utf8_lf",
+                              "size_bytes":  5774,
+                              "sha256":  "e59424b51e6ddc07ae4519ae505c7ba164069a4e9eccca59e06c532a52229397"
                           },
                           {
                               "path":  "native/extension/tests/adapter_helpers_tests.cpp",
                               "mode":  "text_utf8_lf",
                               "size_bytes":  10483,
                               "sha256":  "13490bf980bd2a9cd80b0f2e6903720f49dd064fce8215e3d18fc65b7b18306f"
+                          },
+                          {
+                              "path":  "native/extension/tests/gameplay_session_adapter_tests.cpp",
+                              "mode":  "text_utf8_lf",
+                              "size_bytes":  19565,
+                              "sha256":  "84fa9bc05a5cfdcbf43dcbeeb3d5707d4e86ae799cffd331aaf693d45a7cd0d4"
                           },
                           {
                               "path":  "native/extension/tests/legacy_orbital_frame_contract_tests.cpp",
@@ -3896,20 +3926,20 @@
                           {
                               "path":  "native/extension/tests/orbital_session_adapter_tests.cpp",
                               "mode":  "text_utf8_lf",
-                              "size_bytes":  9485,
-                              "sha256":  "1356b5a30edccbd48c3bfa4816cb39da662bd87a5288e27a8849b28793a4d371"
+                              "size_bytes":  10410,
+                              "sha256":  "f88e652f45a73f71309cc061a358a3e785ca81a37354464dc1fff32d150c8719"
                           },
                           {
                               "path":  "native/extension/tests/registration_contract_tests.cpp",
                               "mode":  "text_utf8_lf",
-                              "size_bytes":  856,
-                              "sha256":  "e4a69e3ab72e5b88e660740f5b3309be3e5f46cb14f02e2c08c6175a92715c4b"
+                              "size_bytes":  3094,
+                              "sha256":  "f3782e0a72fd246675b2798b7f73e2050a5e56d9317d2a8b018840b649c5f481"
                           },
                           {
                               "path":  "native/extension/tests/session_frame_batch_tests.cpp",
                               "mode":  "text_utf8_lf",
-                              "size_bytes":  8254,
-                              "sha256":  "007856c724bba9cdcb81a79b192284ba55e7e0be2adde11ddaa4cbb6ee1e37e4"
+                              "size_bytes":  8371,
+                              "sha256":  "eb7af002511061549ab1661567e3a6e19cd31f4a5c1f8c7861003842f2d2e21a"
                           },
                           {
                               "path":  "native/kernel/CMakeLists.txt",
@@ -4040,44 +4070,62 @@
                           {
                               "path":  "native/simulation/CMakeLists.txt",
                               "mode":  "text_utf8_lf",
-                              "size_bytes":  4549,
-                              "sha256":  "78a65fc503672d5ec696420a018b1a360b83602d66abf66a9a3ae0b68d0a104a"
+                              "size_bytes":  5436,
+                              "sha256":  "1722f5f462f8b574f341d3eb6bf09e8a7c6b8e87aab1060e6c39f9050827f5f5"
                           },
                           {
                               "path":  "native/simulation/include/ninho/simulation/commands.hpp",
                               "mode":  "text_utf8_lf",
-                              "size_bytes":  906,
-                              "sha256":  "be02293941c60d0e4d598a13bfb789a14515d77d0d977be83b1d657a5162537d"
+                              "size_bytes":  1446,
+                              "sha256":  "f73e35656519b0298e138d5f994ff79b2de0bc929d1f76b8448b770e43b8f1ad"
                           },
                           {
                               "path":  "native/simulation/include/ninho/simulation/content.hpp",
                               "mode":  "text_utf8_lf",
-                              "size_bytes":  7629,
-                              "sha256":  "575de7bd5a6a12a636197ba384cd22a3efc48e52069f496f148332ab3320b114"
+                              "size_bytes":  14814,
+                              "sha256":  "f78218d189bf595039351021e67092b39f26cba6bdc9bf7d400ef99e5793f31e"
                           },
                           {
                               "path":  "native/simulation/include/ninho/simulation/events.hpp",
                               "mode":  "text_utf8_lf",
-                              "size_bytes":  1675,
-                              "sha256":  "b26bcbcb85c59394ade20e65f889976e0994fd17fe68dcfba6ad868d553591d5"
+                              "size_bytes":  1774,
+                              "sha256":  "4a25c8008e7369f261220535a90a74d2c8493223190b994645ef56594e41fdbf"
                           },
                           {
                               "path":  "native/simulation/include/ninho/simulation/session.hpp",
                               "mode":  "text_utf8_lf",
-                              "size_bytes":  5196,
-                              "sha256":  "eb2b6a7261c322d71cd6a7e0680936282d6fb989923977f32222c0c72dd75205"
+                              "size_bytes":  7505,
+                              "sha256":  "a9e49093177348c2f69353618a0bbe9272e50726156bbfba0c367bc4153dbfc7"
+                          },
+                          {
+                              "path":  "native/simulation/src/ability_runtime.hpp",
+                              "mode":  "text_utf8_lf",
+                              "size_bytes":  3119,
+                              "sha256":  "c2d0290e3b81df9e51975661031dd8ad16402c0936c2cc3fe648179cf27ff894"
                           },
                           {
                               "path":  "native/simulation/src/canonical_state.cpp",
                               "mode":  "text_utf8_lf",
-                              "size_bytes":  22123,
-                              "sha256":  "7db3a11f11ca40880c4689824341a9870803d39eaffdd4d90caff154671b0f7a"
+                              "size_bytes":  55494,
+                              "sha256":  "28429e2f305dce4082551a889c450c49825ebcc3adbbaec2578f5557b17d488c"
                           },
                           {
                               "path":  "native/simulation/src/content.cpp",
                               "mode":  "text_utf8_lf",
-                              "size_bytes":  63519,
-                              "sha256":  "1a92c0529f66cdd8a762cff1c93ae52be4276faab3ee1986a7118eeb2c600020"
+                              "size_bytes":  66254,
+                              "sha256":  "83f5e5262839223209335c61abb4e8c14d198b2ebea7c4d2ca4803cee50bafc0"
+                          },
+                          {
+                              "path":  "native/simulation/src/content_semantic_validation.cpp",
+                              "mode":  "text_utf8_lf",
+                              "size_bytes":  16725,
+                              "sha256":  "5b1af68e4f2a608893eda3aebfd878fe426ca2a305a89044e825a068742c7dc3"
+                          },
+                          {
+                              "path":  "native/simulation/src/content_semantic_validation.hpp",
+                              "mode":  "text_utf8_lf",
+                              "size_bytes":  393,
+                              "sha256":  "f14365f5378b5de11aefbcf8e8b5868c1b2d87f35a2db772d2193d4416f92f08"
                           },
                           {
                               "path":  "native/simulation/src/damage_system.cpp",
@@ -4088,8 +4136,8 @@
                           {
                               "path":  "native/simulation/src/damage_system.hpp",
                               "mode":  "text_utf8_lf",
-                              "size_bytes":  2015,
-                              "sha256":  "3ec71c08d1347854cae553be7f75269fa011b47f94958974836efbf6a6eb1b17"
+                              "size_bytes":  2026,
+                              "sha256":  "cc6556122db333a32cb4808ec8dbb99189468aea109a5180f3c356e33299cec3"
                           },
                           {
                               "path":  "native/simulation/src/fracture_system.cpp",
@@ -4100,20 +4148,32 @@
                           {
                               "path":  "native/simulation/src/gravity_field_ability_system.cpp",
                               "mode":  "text_utf8_lf",
-                              "size_bytes":  6488,
-                              "sha256":  "f49f549bea6f67065f78a7aca587b539e760e3f9b477ad3c8285eca155a61735"
+                              "size_bytes":  6874,
+                              "sha256":  "6cc2de1d7e1e02c645c4c1ba93a586676606a916ef2c414563b3a23022114239"
                           },
                           {
                               "path":  "native/simulation/src/launch_system.cpp",
                               "mode":  "text_utf8_lf",
-                              "size_bytes":  25456,
-                              "sha256":  "c90a5b42f5c5d7521857a01450d6a14186645a2c9cf9db88f4f2dbf8787e9d10"
+                              "size_bytes":  41976,
+                              "sha256":  "75039fe419df5d5725c080180767a272f47d578cda6b75d7fb23b1d6abdd03ca"
+                          },
+                          {
+                              "path":  "native/simulation/src/launcher_system.cpp",
+                              "mode":  "text_utf8_lf",
+                              "size_bytes":  8051,
+                              "sha256":  "6548234f6a63a1495cf07b5281acd254b340c65ab29cdbc18c9d665bc8638088"
+                          },
+                          {
+                              "path":  "native/simulation/src/launcher_system.hpp",
+                              "mode":  "text_utf8_lf",
+                              "size_bytes":  1107,
+                              "sha256":  "946eca3447c99bbccab4ed910db46a8c837d1b9b600ebc64406b06e8a4347d41"
                           },
                           {
                               "path":  "native/simulation/src/material_mapping.hpp",
                               "mode":  "text_utf8_lf",
-                              "size_bytes":  609,
-                              "sha256":  "bfc3f67e77dfec752fbf0f745a721475d0ed3f26dd4fcf865571306366542fcf"
+                              "size_bytes":  842,
+                              "sha256":  "cd45707eaac8db72156cbcbda4363c2c21181f1094a7f537695c8a4931a602d9"
                           },
                           {
                               "path":  "native/simulation/src/objective_system.cpp",
@@ -4122,34 +4182,82 @@
                               "sha256":  "82528ac4de52229c59b9d5773fbd6ae6de276692131f1a795d119c44c03e7356"
                           },
                           {
+                              "path":  "native/simulation/src/product_v2_campaign.cpp",
+                              "mode":  "text_utf8_lf",
+                              "size_bytes":  10815,
+                              "sha256":  "1abd6d201c2d79127ecbd05910820ea2e293f6de715020060474bc8a9e727ea3"
+                          },
+                          {
+                              "path":  "native/simulation/src/product_v2_catalogs.cpp",
+                              "mode":  "text_utf8_lf",
+                              "size_bytes":  15796,
+                              "sha256":  "c8e843eea0f0320bd9d447dca235a25118efb344754cb469076793cd44396b73"
+                          },
+                          {
+                              "path":  "native/simulation/src/product_v2_content.cpp",
+                              "mode":  "text_utf8_lf",
+                              "size_bytes":  30782,
+                              "sha256":  "a8de13406faf516371b7031b34764bd6a6c5b86a75d61b6b72c996bfae7f0c3e"
+                          },
+                          {
+                              "path":  "native/simulation/src/product_v2_reader.cpp",
+                              "mode":  "text_utf8_lf",
+                              "size_bytes":  9691,
+                              "sha256":  "be6ced793de83385b1048f947669c4435570049c46d23124a24a4568bb8d8de0"
+                          },
+                          {
+                              "path":  "native/simulation/src/product_v2_reader.hpp",
+                              "mode":  "text_utf8_lf",
+                              "size_bytes":  4356,
+                              "sha256":  "ab4892fd612f51ca58496c79c1c4368c5f415d1a9604d7505ddda679ccb973a9"
+                          },
+                          {
+                              "path":  "native/simulation/src/product_v2_serialization.cpp",
+                              "mode":  "text_utf8_lf",
+                              "size_bytes":  15610,
+                              "sha256":  "13062f5fd2815800dfbd83cf055f0574f4849d35dba516b9ed8749e67831de42"
+                          },
+                          {
                               "path":  "native/simulation/src/session.cpp",
                               "mode":  "text_utf8_lf",
-                              "size_bytes":  16157,
-                              "sha256":  "4ba94a74b769618e962717b86adb7a8bdbb706b2b6ee653e4112d6f95ecd760a"
+                              "size_bytes":  20305,
+                              "sha256":  "b64b5d355ba502762a60004bf0eba2f149133559832dea488d5b42548bb34930"
                           },
                           {
                               "path":  "native/simulation/src/session_builder.cpp",
                               "mode":  "text_utf8_lf",
-                              "size_bytes":  17723,
-                              "sha256":  "f0b0ac148cec6cfc53161ba33903c72384a8967da9751cb7daa49b81c851f472"
+                              "size_bytes":  37316,
+                              "sha256":  "ff9d2aa9b48f1ed1c6f52e3465a58556300a8d3460f739a26546f79b8b43ad39"
                           },
                           {
                               "path":  "native/simulation/src/session_internal.hpp",
                               "mode":  "text_utf8_lf",
-                              "size_bytes":  6467,
-                              "sha256":  "670bd18fe94ecee1c6e3282bff050368e8f87e141ce5722a1ac8bd3caaf4853b"
+                              "size_bytes":  7371,
+                              "sha256":  "9860a467577bfc3f4fc1a9d11110db39a064ee6731fb400cf77231f500231067"
                           },
                           {
                               "path":  "native/simulation/src/session_test_facade.hpp",
                               "mode":  "text_utf8_lf",
-                              "size_bytes":  3042,
-                              "sha256":  "fecb6cd51c6fefba0adc238f04bdfc56dc429043b4a00e6ab07b0afcc7890679"
+                              "size_bytes":  3740,
+                              "sha256":  "a93cbaed8cdde53865962c8ac42daf7f6fdb4510ebb6e5449428ccfb3613ae48"
+                          },
+                          {
+                              "path":  "native/simulation/src/shot_state.hpp",
+                              "mode":  "text_utf8_lf",
+                              "size_bytes":  5666,
+                              "sha256":  "6c9c2f12476a2125a580d62c496f24a885886249fbcdfb1ede88e9d92b94a281"
+                          },
+                          {
+                              "path":  "native/simulation/tests/compound_shape_tests.cpp",
+                              "mode":  "text_utf8_lf",
+                              "size_bytes":  15439,
+                              "sha256":  "e63eee700dcd5c20c5233af000a1cf237a61183c19de707d8c8883d6012414d0"
                           },
                           {
                               "path":  "native/simulation/tests/content_tests.cpp",
                               "mode":  "text_utf8_lf",
-                              "size_bytes":  35677,
-                              "sha256":  "796a08013d6651a274acdaadb97f3f6eb9d1a20f218816c87edfbfab160ddddf"
+                              "size_bytes":  36105,
+                              "sha256":  "db3aff1305376a77ad3aa7edbd11c80b1227147934707e9833a457109bfaefcd"
                           },
                           {
                               "path":  "native/simulation/tests/damage_anchor_tests.cpp",
@@ -4172,32 +4280,50 @@
                           {
                               "path":  "native/simulation/tests/kernel_contract_tests.cpp",
                               "mode":  "text_utf8_lf",
-                              "size_bytes":  2743,
-                              "sha256":  "8882676ade374cdf8b76d1866e47e4adeeaf76c78f664002c5c5be093b5eae85"
+                              "size_bytes":  3047,
+                              "sha256":  "ad7bf0b183c607d0adc01d75decadc7513a21bddca90eac511144e53691efb30"
                           },
                           {
                               "path":  "native/simulation/tests/launch_fsm_tests.cpp",
                               "mode":  "text_utf8_lf",
-                              "size_bytes":  34247,
-                              "sha256":  "60bf5278a375a18024aa2adb8bec7e3dc2d98602b31602f1cc9adfcb355f089f"
+                              "size_bytes":  34824,
+                              "sha256":  "eb606d0cb200722375b0534e11c1fe4f53c241f7f9d8f4737659e754d518f053"
+                          },
+                          {
+                              "path":  "native/simulation/tests/launcher_system_tests.cpp",
+                              "mode":  "text_utf8_lf",
+                              "size_bytes":  25936,
+                              "sha256":  "c98ab494d63fbe382410e2c1f76b998d1e6045514370bfa87f9408a779530969"
                           },
                           {
                               "path":  "native/simulation/tests/legacy_orbital_characterization_tests.cpp",
                               "mode":  "text_utf8_lf",
-                              "size_bytes":  18114,
-                              "sha256":  "a1e5a78f2b023f1776f9a533baecb3bd516521fa30c8225421657d49b2c3eb55"
+                              "size_bytes":  18237,
+                              "sha256":  "f50ed6c56f642e5a1e54f70d07c9730fc5f9db63e79a3ed0821d553d7dfe36d5"
                           },
                           {
                               "path":  "native/simulation/tests/playthrough_tests.cpp",
                               "mode":  "text_utf8_lf",
-                              "size_bytes":  20246,
-                              "sha256":  "d0d0987f9ab8dca70d6f18cb185bf84ee7eabff2f3ff21f56e2cec382e6575f9"
+                              "size_bytes":  20602,
+                              "sha256":  "44782f546a42e5d8bd9c940d54ae7b56a14d437ab269f1b308552423e3fccfd4"
+                          },
+                          {
+                              "path":  "native/simulation/tests/product_v2_content_tests.cpp",
+                              "mode":  "text_utf8_lf",
+                              "size_bytes":  32490,
+                              "sha256":  "5957097b1e43c1d0110bb05326eb60a4370ad13d7f55bcbd92f6f2ce31845f7c"
                           },
                           {
                               "path":  "native/simulation/tests/session_tests.cpp",
                               "mode":  "text_utf8_lf",
-                              "size_bytes":  41817,
-                              "sha256":  "6c54f23a92e5d80df845bc6ec5e13f7c624969f2387560fbe000a600ca99ecc4"
+                              "size_bytes":  43351,
+                              "sha256":  "2e09b752cdc578f8f1a2d58160697d9435c3fd6c978e84c07939f6b6e9328313"
+                          },
+                          {
+                              "path":  "native/simulation/tests/shot_state_tests.cpp",
+                              "mode":  "text_utf8_lf",
+                              "size_bytes":  23252,
+                              "sha256":  "200db2511a07be68a682020b241899f98db5170c460a4492d6f26b31e5a94537"
                           },
                           {
                               "path":  "native/simulation/tests/test_framework.hpp",
@@ -4210,6 +4336,12 @@
                               "mode":  "text_utf8_lf",
                               "size_bytes":  1240,
                               "sha256":  "0fe1a9742c2b031787df553caa0d1d513decea1dd45c1ef3054eb23a640dddfb"
+                          },
+                          {
+                              "path":  "native/simulation/tests/world_mode_tests.cpp",
+                              "mode":  "text_utf8_lf",
+                              "size_bytes":  15590,
+                              "sha256":  "821c5eb27b9a7efc254c6f038e78fa7bd2cc227bea8c3bfe22563ad500a6ff44"
                           },
                           {
                               "path":  "native/spike/CMakeLists.txt",
@@ -4310,8 +4442,8 @@
                           {
                               "path":  "tools/GodotSmokeRegistry.psm1",
                               "mode":  "text_utf8_lf",
-                              "size_bytes":  5268,
-                              "sha256":  "82319b1f009954a5632b7991d4ca291091d2619d762ff5df44b4cc0330857b32"
+                              "size_bytes":  5624,
+                              "sha256":  "80a8eb68997a1fd39ab7852917de524884bbc22a8a8b0a6cbd2ded5acf5bec28"
                           },
                           {
                               "path":  "tools/GodotSpikeGate.psm1",
