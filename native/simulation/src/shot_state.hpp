@@ -84,15 +84,13 @@ private:
 };
 
 struct ShotState {
-    ShotState() = default;
-
     explicit ShotState(ProjectileState primary)
         : projectiles_{std::move(primary)}
     {
     }
 
     ShotState(const ShotState&) = default;
-    ShotState(ShotState&&) noexcept = default;
+    ShotState(ShotState&&) = delete;
     ShotState& operator=(const ShotState&) = delete;
     ShotState& operator=(ShotState&&) = delete;
 

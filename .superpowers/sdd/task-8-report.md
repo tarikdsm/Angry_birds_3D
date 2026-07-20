@@ -21,9 +21,10 @@ novo `canonical_state_v3`; o contrato inativo permanece vazio e com hash zero.
   somente os campos runtime. Insert/erase usam rebuild+swap, fechando o bypass
   que ainda permitiria trocar a identidade através do ponteiro mutável do
   primário ou do move-assignment interno do vector.
-- ShotState é copy/move-constructible, porém não assignable; a sessão usa
-  `optional.emplace` ao publicar um disparo. Static asserts impedem que uma
-  futura atribuição de vector reabra o bypass de identidade.
+- ShotState não é default-constructible, move-constructible ou assignable. Ele
+  exige o primeiro ProjectileState no construtor, permanece copy-constructible
+  e a sessão o cria diretamente com `optional.emplace`. Static asserts impedem
+  tanto coleção vazia na origem quanto origem esvaziada por move.
 - O serializer v2/v3 valida ShotState não vazio, único e ordenado e itera a
   coleção normalizada diretamente. Não ordena cópia, não aceita empate e não
   pode publicar o mesmo hash para primários diferentes.
@@ -43,7 +44,11 @@ novo `canonical_state_v3`; o contrato inativo permanece vazio e com hash zero.
   assignment identity-preserving.
 - RED de construção adicional: static asserts mostraram ShotState ainda
   assignable; o contrato agora bloqueia copy/move assignment e mantém somente
-  construção/cópia/movimento seguros.
+  construção e cópia seguras.
+- RED final de rereview: static asserts mostraram que ShotState ainda podia
+  nascer vazio ou ser esvaziado por move. O construtor agora exige o primeiro
+  projétil, move construction foi removido e somente copy construction continua
+  disponível; publicação/restart/reconfigure exercitam o emplace direto.
 
 ## TDD
 

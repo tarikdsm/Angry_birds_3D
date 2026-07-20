@@ -618,7 +618,8 @@ SessionStatus SimulationSession::Impl::create_projectile(const AimState& launch_
         pull_horizontal_m = session_state.launcher->pull_horizontal_m;
         pull_vertical_m = session_state.launcher->pull_vertical_m;
     }
-    ShotState next_shot{ProjectileState{entity, created.value, bird->bullet}};
+    ShotState& next_shot = shot.emplace(
+        ProjectileState{entity, created.value, bird->bullet});
     next_shot.shot_id = static_cast<std::uint64_t>(shot_ordinal) + 1U;
     next_shot.bird_archetype_id = bird->id;
     next_shot.ability_id = ability->id;
@@ -627,7 +628,6 @@ SessionStatus SimulationSession::Impl::create_projectile(const AimState& launch_
     next_shot.pull_horizontal_m = pull_horizontal_m;
     next_shot.pull_vertical_m = pull_vertical_m;
     next_shot.runtime = make_ability_runtime(ability->kind_v2);
-    shot.emplace(std::move(next_shot));
     if (legacy) {
         for (BirdRosterEntry& entry : roster_remaining) {
             if (entry.bird_archetype_id == bird->id && entry.count > 0U) {

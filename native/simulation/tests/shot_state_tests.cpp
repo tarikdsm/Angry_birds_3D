@@ -131,7 +131,10 @@ std::unique_ptr<SimulationSession> create_session(LevelManifest source = level()
 
 NINHO_SIM_TEST("shot state owns the locked plane runtime and ordered projectiles")
 {
-    ShotState shot;
+    ShotState shot{
+        ProjectileState{EntityId{0x80000002U}, {}, false}};
+    NINHO_SIM_REQUIRE(shot.has_valid_projectiles());
+    NINHO_SIM_REQUIRE(shot.projectiles().size() == 1U);
     shot.shot_id = 7U;
     shot.bird_archetype_id = BirdArchetypeId{9};
     shot.ability_id = AbilityId{11};
@@ -149,13 +152,10 @@ NINHO_SIM_TEST("shot state owns the locked plane runtime and ordered projectiles
         .active = true,
     };
     NINHO_SIM_REQUIRE(shot.insert_projectile(
-        ProjectileState{EntityId{0x80000002U}, {}, false}));
-    NINHO_SIM_REQUIRE(shot.insert_projectile(
         ProjectileState{EntityId{0x80000001U}, {}, true}));
 
-    ShotState alternate;
-    NINHO_SIM_REQUIRE(alternate.insert_projectile(
-        ProjectileState{EntityId{0x80000001U}, {}, true}));
+    ShotState alternate{
+        ProjectileState{EntityId{0x80000001U}, {}, true}};
     NINHO_SIM_REQUIRE(alternate.insert_projectile(
         ProjectileState{EntityId{0x80000002U}, {}, false}));
 
@@ -191,10 +191,17 @@ NINHO_SIM_TEST("shot state owns the locked plane runtime and ordered projectiles
     NINHO_SIM_REQUIRE(shot.projectiles().size() == 1U);
     NINHO_SIM_REQUIRE(!shot.erase_projectile(EntityId{0x80000001U}));
     NINHO_SIM_REQUIRE(shot.has_valid_projectiles());
+
+    const ShotState copied{shot};
+    NINHO_SIM_REQUIRE(copied == shot);
+    NINHO_SIM_REQUIRE(copied.has_valid_projectiles());
 }
 
 NINHO_SIM_TEST("shot state canonical v3 api is separate from legacy v2")
 {
+    static_assert(!std::is_default_constructible_v<ShotState>);
+    static_assert(std::is_copy_constructible_v<ShotState>);
+    static_assert(!std::is_move_constructible_v<ShotState>);
     static_assert(!std::is_copy_assignable_v<ShotState>);
     static_assert(!std::is_move_assignable_v<ShotState>);
     static_assert(requires(const SimulationSession& session) {

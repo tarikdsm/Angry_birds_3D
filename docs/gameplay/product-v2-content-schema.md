@@ -435,10 +435,13 @@ identidade; `erase` nunca deixa um ShotState vazio; e o primário é sempre o
 menor EntityId. Assignment de ProjectileState copia somente o runtime e preserva
 a identidade do slot, inclusive através do acesso mutável ao primário. Insert e
 erase publicam a nova coleção por rebuild+swap, sem usar assignment para mover
-identidades. ShotState pode ser construído/copiado/movido, mas não atribuído; a
-sessão publica um novo disparo com `optional.emplace`, evitando assignment da
-coleção encapsulada. O serializer valida essas invariantes e falha sem publicar cache
-parcial se o estado estiver vazio, duplicado ou fora de ordem; ele não ordena
+identidades. ShotState não possui construtor default nem move construction e
+não pode ser atribuído; ele nasce com um ProjectileState obrigatório, pode ser
+copiado e a sessão o constrói diretamente com `optional.emplace`. Assim, até o
+caminho legado/default significa "um disparo com um projétil", nunca uma coleção
+vazia ou uma origem esvaziada por move. O serializer valida essas invariantes e
+falha sem publicar cache parcial se o estado estiver vazio, duplicado ou fora de
+ordem; ele não ordena
 uma cópia nem resolve empates. Cada projétil escreve EntityId, bullet, age/rest
 ticks, finished e pending_destroy. O BodyHandle é deliberadamente excluído.
 
