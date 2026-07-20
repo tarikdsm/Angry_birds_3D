@@ -646,6 +646,18 @@ void detail::SessionTestFacade::set_launch_ordinal(
     session.impl_->launch_count = ordinal;
 }
 
+std::uint32_t detail::SessionTestFacade::launch_ordinal(
+    const SimulationSession& session)
+{
+    return session.impl_->launch_count;
+}
+
+std::size_t detail::SessionTestFacade::remaining_body_capacity(
+    const SimulationSession& session)
+{
+    return session.impl_->physics.remaining_body_capacity();
+}
+
 std::size_t detail::SessionTestFacade::body_record_count(const SimulationSession& session)
 {
     return session.impl_->body_records.size();

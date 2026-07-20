@@ -76,6 +76,8 @@ public:
     static BirdArchetypeId next_bird_archetype_id(const SimulationSession&);
     static AbilityId ability_id(const SimulationSession&);
     static void set_launch_ordinal(SimulationSession&, std::uint32_t);
+    static std::uint32_t launch_ordinal(const SimulationSession&);
+    static std::size_t remaining_body_capacity(const SimulationSession&);
     static std::size_t body_record_count(const SimulationSession&);
     static std::size_t canonical_static_content_build_count(const SimulationSession&);
     static std::vector<std::uint8_t> canonical_state_uncached(const SimulationSession&);

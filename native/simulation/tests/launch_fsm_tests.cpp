@@ -715,17 +715,52 @@ NINHO_SIM_TEST("launch fsm allocates three stable runtime ids and restart resets
     NINHO_SIM_REQUIRE(session->events()[0].entity_id == EntityId{0x80000000U});
 }
 
-NINHO_SIM_TEST("launch fsm rejects runtime entity ordinal overflow before physics mutation")
+NINHO_SIM_TEST("launch fsm accepts the final original projectile ordinal")
+{
+    auto session = create_session();
+    detail::SessionTestFacade::set_launch_ordinal(*session, 0x3FFFFFFFU);
+    launch(*session);
+    NINHO_SIM_REQUIRE(session->events().size() == 1U);
+    NINHO_SIM_REQUIRE(session->events().front().kind
+        == DomainEventKind::BirdLaunched);
+    NINHO_SIM_REQUIRE(session->events().front().entity_id
+        == EntityId{0xBFFFFFFFU});
+    NINHO_SIM_REQUIRE(detail::SessionTestFacade::launch_ordinal(*session)
+        == 0x40000000U);
+}
+
+NINHO_SIM_TEST("launch fsm rejects the split child namespace before any launch mutation")
 {
     auto session = create_session();
     const auto bodies_before = session->physics_metrics().body_count;
-    detail::SessionTestFacade::set_launch_ordinal(*session, 0x80000000U);
+    const auto capacity_before =
+        detail::SessionTestFacade::remaining_body_capacity(*session);
+    const auto records_before =
+        detail::SessionTestFacade::body_record_count(*session);
+    const auto birds_before = session->birds_remaining();
+    const auto next_bird_before =
+        detail::SessionTestFacade::next_bird_archetype_id(*session);
+    NINHO_SIM_REQUIRE(!session->shot_state().has_value());
+    detail::SessionTestFacade::set_launch_ordinal(*session, 0x40000000U);
     enter_aim(*session);
     NINHO_SIM_REQUIRE(session->enqueue(LaunchCommand{}).ok());
     const auto status = session->tick();
     NINHO_SIM_REQUIRE(!status.ok());
     NINHO_SIM_REQUIRE(status.error.code == ContentErrorCode::ResourceLimit);
     NINHO_SIM_REQUIRE(session->physics_metrics().body_count == bodies_before);
+    NINHO_SIM_REQUIRE(detail::SessionTestFacade::remaining_body_capacity(*session)
+        == capacity_before);
+    NINHO_SIM_REQUIRE(detail::SessionTestFacade::body_record_count(*session)
+        == records_before);
+    NINHO_SIM_REQUIRE(session->birds_remaining() == birds_before);
+    NINHO_SIM_REQUIRE(detail::SessionTestFacade::next_bird_archetype_id(*session)
+        == next_bird_before);
+    NINHO_SIM_REQUIRE(detail::SessionTestFacade::launch_ordinal(*session)
+        == 0x40000000U);
+    NINHO_SIM_REQUIRE(!session->shot_state().has_value());
+    NINHO_SIM_REQUIRE(std::ranges::none_of(session->events(), [](const auto& event) {
+        return event.kind == DomainEventKind::BirdLaunched;
+    }));
 }
 
 NINHO_SIM_TEST("launch fsm removes obsolete projectile records across multiple launches")

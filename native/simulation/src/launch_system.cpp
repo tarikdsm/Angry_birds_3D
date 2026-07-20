@@ -22,7 +22,6 @@ constexpr std::uint32_t watchdog_ticks = 1800U;
 constexpr std::uint32_t rest_required_ticks = 60U;
 constexpr float linear_rest_speed = 0.15f;
 constexpr float angular_rest_speed = 0.20f;
-constexpr std::uint32_t runtime_entity_bit = 0x80000000U;
 
 [[nodiscard]] ContentError error(
     ContentErrorCode code, std::string pointer, std::string message)
@@ -532,7 +531,7 @@ std::optional<JointEndpoint> SimulationSession::Impl::domain_identity(
 void SimulationSession::Impl::remove_confirmed_runtime_body_records()
 {
     std::erase_if(body_records, [&](const BodyRecord& record) {
-        return (record.entity_id.value() & runtime_entity_bit) != 0U
+        return (record.entity_id.value() & detail::runtime_entity_namespace_bit) != 0U
             && !physics.state(record.physics_handle).has_value();
     });
 }
@@ -557,7 +556,7 @@ SessionStatus SimulationSession::Impl::create_projectile(const AimState& launch_
         return {error(ContentErrorCode::MissingReference, "/launch/ability_id",
             "bird ability is unavailable")};
     }
-    if (launch_count >= runtime_entity_bit) {
+    if (launch_count >= detail::original_projectile_ordinal_limit) {
         return {error(ContentErrorCode::ResourceLimit, "/launch/entity_id",
             "runtime projectile entity ordinal capacity was reached")};
     }
@@ -594,7 +593,7 @@ SessionStatus SimulationSession::Impl::create_projectile(const AimState& launch_
     }
 
     const std::uint32_t shot_ordinal = launch_count;
-    const EntityId entity{runtime_entity_bit | shot_ordinal};
+    const EntityId entity{detail::runtime_entity_namespace_bit | shot_ordinal};
     ++launch_count;
     body_records.push_back({.entity_id = entity,
         .part_id = PartId{1},

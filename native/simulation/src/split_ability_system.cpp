@@ -15,8 +15,8 @@
 namespace ninho::simulation {
 namespace {
 
-constexpr std::uint32_t child_namespace = 0xC0000000U;
-constexpr std::uint32_t child_ordinal_mask = 0x3FFFFFFFU;
+constexpr std::uint32_t child_ordinal_mask =
+    ~detail::split_child_entity_namespace_begin;
 constexpr std::size_t split_child_count = 3U;
 constexpr double split_angle_deg = 11.0;
 
@@ -78,9 +78,9 @@ constexpr double split_angle_deg = 11.0;
     const std::uint32_t first = static_cast<std::uint32_t>(
         shot_ordinal * split_child_count);
     return std::array{
-        EntityId{child_namespace | first},
-        EntityId{child_namespace | (first + 1U)},
-        EntityId{child_namespace | (first + 2U)},
+        EntityId{detail::split_child_entity_namespace_begin | first},
+        EntityId{detail::split_child_entity_namespace_begin | (first + 1U)},
+        EntityId{detail::split_child_entity_namespace_begin | (first + 2U)},
     };
 }
 

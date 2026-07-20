@@ -19,6 +19,11 @@
 namespace ninho::simulation {
 
 namespace detail {
+inline constexpr std::uint32_t runtime_entity_namespace_bit = 0x80000000U;
+inline constexpr std::uint32_t split_child_entity_namespace_begin = 0xC0000000U;
+inline constexpr std::uint32_t original_projectile_ordinal_limit =
+    split_child_entity_namespace_begin - runtime_entity_namespace_bit;
+
 [[nodiscard]] std::int64_t canonical_quantize(double value);
 [[nodiscard]] std::uint8_t canonical_tag_of(SessionPhase value);
 [[nodiscard]] std::uint8_t canonical_tag_of(Outcome value);
