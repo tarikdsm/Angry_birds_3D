@@ -3783,7 +3783,7 @@
     "recommendation":  "prosseguir_com_limites",
     "source_revision":  "2c7e3b5afa296df1d37b376eac6b41ffeffc4fcb",
     "tested_inputs_schema":  "ninho.tested-inputs.v2",
-    "tested_inputs_sha256":  "b57609320548051ee32f317a70b42ab306c367bd99f6fadb9211f09ac3da9d61",
+    "tested_inputs_sha256":  "7471846c39b1ad6da160f534a4760dbf0320372409d6d851f2301bd6c5097aba",
     "tested_inputs":  [
                           {
                               "path":  "CMakeLists.txt",
@@ -3830,8 +3830,8 @@
                           {
                               "path":  "native/extension/CMakeLists.txt",
                               "mode":  "text_utf8_lf",
-                              "size_bytes":  3567,
-                              "sha256":  "697f38e9980865286c11fb2161edb84b0918f140aeda5cb92f34408f2a4928b1"
+                              "size_bytes":  3755,
+                              "sha256":  "1254a1d7611d1af4f6f2525351851a68325229e09331870f56f7428e807b1466"
                           },
                           {
                               "path":  "native/extension/include/ninho/extension/adapter_helpers.hpp",
@@ -3886,6 +3886,12 @@
                               "mode":  "text_utf8_lf",
                               "size_bytes":  10223,
                               "sha256":  "2ed3fe212d45e1bdab27304ecfea940bd65bd09833630123cef72ebe705ef53e"
+                          },
+                          {
+                              "path":  "native/extension/tests/legacy_orbital_frame_contract_tests.cpp",
+                              "mode":  "text_utf8_lf",
+                              "size_bytes":  3274,
+                              "sha256":  "0c0ca5c3ea5f248d32fda30e9533f57efc46c70c80eb17d3a46100fb53b77625"
                           },
                           {
                               "path":  "native/extension/tests/orbital_session_adapter_tests.cpp",
@@ -4010,8 +4016,8 @@
                           {
                               "path":  "native/simulation/CMakeLists.txt",
                               "mode":  "text_utf8_lf",
-                              "size_bytes":  4362,
-                              "sha256":  "32863b3949d68f34eadeeef964c29cd31c3769dca3ca61be5192216cbb28b146"
+                              "size_bytes":  4549,
+                              "sha256":  "78a65fc503672d5ec696420a018b1a360b83602d66abf66a9a3ae0b68d0a104a"
                           },
                           {
                               "path":  "native/simulation/include/ninho/simulation/commands.hpp",
@@ -4150,6 +4156,12 @@
                               "mode":  "text_utf8_lf",
                               "size_bytes":  34247,
                               "sha256":  "60bf5278a375a18024aa2adb8bec7e3dc2d98602b31602f1cc9adfcb355f089f"
+                          },
+                          {
+                              "path":  "native/simulation/tests/legacy_orbital_characterization_tests.cpp",
+                              "mode":  "text_utf8_lf",
+                              "size_bytes":  17894,
+                              "sha256":  "9100dd4290b529b36ec6cb11fcedd486bb0828760e644e2b2ed836cf21117a8b"
                           },
                           {
                               "path":  "native/simulation/tests/playthrough_tests.cpp",

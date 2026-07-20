@@ -52,6 +52,7 @@ if(BUILD_TESTING)
     tests/orbital_session_adapter_tests.cpp
     tests/registration_contract_tests.cpp
     tests/session_frame_batch_tests.cpp
+    tests/legacy_orbital_frame_contract_tests.cpp
   )
   target_include_directories(ninho_extension_adapter_tests PRIVATE
     include
@@ -74,6 +75,10 @@ if(BUILD_TESTING)
     )
   endif()
   add_test(NAME gdextension_adapter_helpers COMMAND ninho_extension_adapter_tests)
+  add_test(
+    NAME legacy_orbital_frame_contract
+    COMMAND ninho_extension_adapter_tests --filter "legacy orbital frame contract"
+  )
 
   add_test(
     NAME gdextension_project_import

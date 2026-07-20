@@ -40,6 +40,7 @@ if(BUILD_TESTING)
     tests/damage_anchor_tests.cpp
     tests/fracture_objective_tests.cpp
     tests/playthrough_tests.cpp
+    tests/legacy_orbital_characterization_tests.cpp
   )
 
   # The local test framework is intentionally isolated; see native/tests/CMakeLists.txt
@@ -90,6 +91,10 @@ if(BUILD_TESTING)
   add_test(
     NAME vertical_slice_determinism
     COMMAND ninho_simulation_tests --filter "vertical slice determinism"
+  )
+  add_test(
+    NAME legacy_orbital_characterization
+    COMMAND ninho_simulation_tests --filter "legacy orbital characterization"
   )
   add_test(
     NAME simulation_contracts

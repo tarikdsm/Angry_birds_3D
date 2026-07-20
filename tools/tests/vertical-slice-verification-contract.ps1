@@ -30,4 +30,6 @@ $runner = [IO.File]::ReadAllText((Join-Path $root 'tools\test.ps1'))
 Assert-True ($runner.Contains("tests\vertical-slice-verification-contract.ps1")) `
     'Official gate must enforce the verification workspace contract'
 
+& (Join-Path $root 'tools\tests\vertical-slice-explicit-scene-contract.ps1')
+
 Write-Output 'vertical slice verification workspace contract: PASS'
