@@ -511,6 +511,7 @@ void append_primitives(const ShapeDefinition& shape,
 SimulationSession::Impl::Impl(ContentBundle source)
     : bundle(std::move(source))
     , physics(make_world_config(bundle.level))
+    , ability_system(*this)
 {
 }
 

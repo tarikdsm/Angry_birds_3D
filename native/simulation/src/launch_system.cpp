@@ -790,11 +790,11 @@ SessionStatus SimulationSession::Impl::process_commands()
                 && session_state.tick.value()
                     >= shot->launch_tick.value() + ability->arm_ticks
                 && !shot->activation_consumed && !projectile->finished) {
-                shot->activation_consumed = true;
-                set_ability_runtime_active(shot->runtime, true);
-                set_ability_runtime_window(shot->runtime, session_state.tick,
-                    TickIndex{session_state.tick.value()
-                        + static_cast<std::uint64_t>(ability->duration_ticks) - 1U});
+                const SessionStatus activation_status = detail::AbilitySystem::activate(
+                    *ability, *shot, session_state.tick);
+                if (!activation_status.ok()) {
+                    return activation_status;
+                }
                 publish_ability_event(DomainEventKind::AbilityStarted);
             } else {
                 const auto reason = session_state.phase != SessionPhase::FlightAbility
@@ -829,15 +829,50 @@ void SimulationSession::Impl::update_fsm_before_step()
             shot.reset();
         }
     }
-    auto* projectile = shot ? shot->primary_projectile() : nullptr;
-    if (projectile && !ability_runtime_active(shot->runtime)
-        && projectile->finished
-        && session_state.phase == SessionPhase::FlightAbility) {
+    if (!shot || session_state.phase != SessionPhase::FlightAbility) {
+        return;
+    }
+    if (!ability_runtime_active(shot->runtime)) {
+        retire_finished_projectiles();
+    }
+    const bool all_finished = std::ranges::all_of(
+        shot->projectiles(), &ProjectileState::finished);
+    if (!ability_runtime_active(shot->runtime) && all_finished) {
         session_state.phase = SessionPhase::Resolution;
-        if (!projectile->pending_destroy) {
-            static_cast<void>(physics.destroy_body(projectile->physics_handle));
-            projectile->pending_destroy = true;
+    }
+}
+
+void SimulationSession::Impl::retire_finished_projectiles()
+{
+    if (!shot || ability_runtime_active(shot->runtime)) {
+        return;
+    }
+    std::vector<EntityId> finished;
+    finished.reserve(shot->projectiles().size());
+    for (const ProjectileState& current : shot->projectiles()) {
+        if (!current.finished) {
+            continue;
         }
+        ProjectileState replacement = current;
+        if (!replacement.pending_destroy) {
+            static_cast<void>(physics.destroy_body(replacement.physics_handle));
+            replacement.pending_destroy = true;
+            static_cast<void>(shot->replace_projectile(replacement));
+        }
+        finished.push_back(current.entity_id());
+    }
+    const bool has_unfinished = std::ranges::any_of(
+        shot->projectiles(), [](const ProjectileState& projectile) {
+            return !projectile.finished;
+        });
+    const EntityId retained = has_unfinished
+        ? EntityId{} : shot->projectiles().front().entity_id();
+    for (const EntityId entity : finished) {
+        if ((!has_unfinished && entity == retained)
+            || shot->projectiles().size() == 1U) {
+            continue;
+        }
+        static_cast<void>(shot->erase_projectile(entity));
     }
 }
 
@@ -847,68 +882,96 @@ void SimulationSession::Impl::update_fsm_after_step()
         || session_state.phase == SessionPhase::Faulted) {
         return;
     }
-    auto* projectile = shot ? shot->primary_projectile() : nullptr;
-    if (!projectile) {
+    if (!shot) {
         return;
     }
-    ++projectile->age_ticks;
-    if (objective_complete && !ability_runtime_active(shot->runtime)) {
-        if (!projectile->pending_destroy) {
-            static_cast<void>(physics.destroy_body(projectile->physics_handle));
-            projectile->pending_destroy = true;
+    std::vector<ProjectileState> updated{
+        shot->projectiles().begin(), shot->projectiles().end()};
+    for (ProjectileState& projectile : updated) {
+        ++projectile.age_ticks;
+        if (projectile.finished) {
+            continue;
         }
-        projectile->finished = true;
+        const auto state = physics.state(projectile.physics_handle);
+        if (!state) {
+            projectile.finished = true;
+            continue;
+        }
+        if (state->ejected) {
+            projectile.finished = true;
+        }
+        if (ninho::physics::length(state->linear_velocity) < linear_rest_speed
+            && ninho::physics::length(state->angular_velocity) < angular_rest_speed) {
+            ++projectile.rest_ticks;
+            if (projectile.rest_ticks >= rest_required_ticks) {
+                projectile.finished = true;
+            }
+        } else {
+            projectile.rest_ticks = 0U;
+        }
+        const auto contact = std::ranges::find_if(
+            physics.contact_hits(), [&](const auto& value) {
+                return is_projectile_contact(value, projectile.physics_handle);
+            });
+        if (contact != physics.contact_hits().end()) {
+            projectile.finished = true;
+            if (!session_state.last_impact_m) {
+                session_state.last_impact_m = contact->point;
+            }
+        }
+        if (projectile.age_ticks >= projectile_lifetime_ticks) {
+            projectile.finished = true;
+        }
+    }
+    for (ProjectileState& projectile : updated) {
+        static_cast<void>(shot->replace_projectile(std::move(projectile)));
+    }
+
+    if (objective_complete && !ability_runtime_active(shot->runtime)) {
+        std::vector<ProjectileState> completed{
+            shot->projectiles().begin(), shot->projectiles().end()};
+        for (ProjectileState& projectile : completed) {
+            projectile.finished = true;
+            static_cast<void>(shot->replace_projectile(std::move(projectile)));
+        }
+        retire_finished_projectiles();
         session_state.phase = SessionPhase::Evaluation;
         resolution_rest_ticks = rest_required_ticks;
         return;
     }
-    if (projectile->age_ticks >= watchdog_ticks) {
-        if (!projectile->pending_destroy) {
-            static_cast<void>(physics.destroy_body(projectile->physics_handle));
-            projectile->pending_destroy = true;
+
+    const std::uint32_t configured_watchdog =
+        bundle.level.source_schema_version == 2U && bundle.level.watchdog_ticks != 0U
+        ? bundle.level.watchdog_ticks : watchdog_ticks;
+    const bool watchdog_expired = std::ranges::any_of(
+        shot->projectiles(), [configured_watchdog](const ProjectileState& projectile) {
+            return projectile.age_ticks >= configured_watchdog;
+        });
+    const auto ability_end_tick = ability_runtime_end_tick(shot->runtime);
+    const bool bounded_active_ability = ability_runtime_active(shot->runtime)
+        && ability_end_tick && session_state.tick <= *ability_end_tick;
+    if (watchdog_expired && !bounded_active_ability) {
+        std::vector<ProjectileState> completed{
+            shot->projectiles().begin(), shot->projectiles().end()};
+        for (ProjectileState& projectile : completed) {
+            projectile.finished = true;
+            static_cast<void>(shot->replace_projectile(std::move(projectile)));
         }
         set_ability_runtime_active(shot->runtime, false);
-        projectile->finished = true;
+        retire_finished_projectiles();
         session_state.phase = SessionPhase::Evaluation;
         resolution_rest_ticks = rest_required_ticks;
         return;
     }
 
-    if (!projectile->finished) {
-        const auto state = physics.state(projectile->physics_handle);
-        if (state) {
-            if (state->ejected) {
-                projectile->finished = true;
-            }
-            if (ninho::physics::length(state->linear_velocity) < linear_rest_speed
-                && ninho::physics::length(state->angular_velocity) < angular_rest_speed) {
-                ++projectile->rest_ticks;
-                if (projectile->rest_ticks >= rest_required_ticks) {
-                    projectile->finished = true;
-                }
-            } else {
-                projectile->rest_ticks = 0U;
-            }
-        }
-        const auto contact = std::ranges::find_if(physics.contact_hits(), [&](const auto& value) {
-            return is_projectile_contact(value, projectile->physics_handle);
-        });
-        if (contact != physics.contact_hits().end()) {
-            projectile->finished = true;
-            session_state.last_impact_m = contact->point;
-        }
-        if (projectile->age_ticks >= projectile_lifetime_ticks) {
-            projectile->finished = true;
-        }
+    if (!ability_runtime_active(shot->runtime)) {
+        retire_finished_projectiles();
     }
-
-    if (projectile->finished && !ability_runtime_active(shot->runtime)
+    const bool all_finished = std::ranges::all_of(
+        shot->projectiles(), &ProjectileState::finished);
+    if (all_finished && !ability_runtime_active(shot->runtime)
         && session_state.phase == SessionPhase::FlightAbility) {
         session_state.phase = SessionPhase::Resolution;
-        if (!projectile->pending_destroy) {
-            static_cast<void>(physics.destroy_body(projectile->physics_handle));
-            projectile->pending_destroy = true;
-        }
     }
     if (session_state.phase == SessionPhase::Resolution) {
         bool settled = true;

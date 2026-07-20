@@ -56,7 +56,7 @@ SessionStatus SimulationSession::tick()
             return command_status;
         }
         impl_->update_fsm_before_step();
-        const SessionStatus ability_status = impl_->apply_gravity_field_before_step();
+        const SessionStatus ability_status = impl_->apply_ability_before_step();
         if (!ability_status.ok()) {
             impl_->session_state.phase = SessionPhase::Faulted;
             impl_->session_state.outcome = Outcome::None;
@@ -64,10 +64,23 @@ SessionStatus SimulationSession::tick()
             return ability_status;
         }
         impl_->physics.step();
+        const SessionStatus contact_status = impl_->process_ability_after_step();
+        if (!contact_status.ok()) {
+            impl_->session_state.phase = SessionPhase::Faulted;
+            impl_->session_state.outcome = Outcome::None;
+            impl_->latched_fault = contact_status;
+            return contact_status;
+        }
         impl_->process_damage_after_step();
         impl_->evaluate_fractures_after_step();
         impl_->evaluate_objectives_after_step();
-        impl_->finish_gravity_field_after_step();
+        const SessionStatus finish_status = impl_->finish_ability_after_step();
+        if (!finish_status.ok()) {
+            impl_->session_state.phase = SessionPhase::Faulted;
+            impl_->session_state.outcome = Outcome::None;
+            impl_->latched_fault = finish_status;
+            return finish_status;
+        }
         impl_->remove_confirmed_runtime_body_records();
         impl_->update_fsm_after_step();
         impl_->rebuild_snapshots();
@@ -268,12 +281,71 @@ bool detail::SessionTestFacade::projectile_is_bullet(const SimulationSession& se
 
 void detail::SessionTestFacade::finish_projectile(SimulationSession& session)
 {
-    if (session.impl_->shot) {
-        if (auto* projectile = session.impl_->shot->primary_projectile()) {
-            projectile->finished = true;
-        }
-        session.impl_->force_settled_for_testing = true;
+    if (session.impl_->shot && session.impl_->shot->primary_projectile()) {
+        finish_projectile(
+            session, session.impl_->shot->primary_projectile()->entity_id());
     }
+}
+
+void detail::SessionTestFacade::finish_projectile(
+    SimulationSession& session, EntityId entity)
+{
+    if (!session.impl_->shot) {
+        return;
+    }
+    const auto found = std::ranges::find(
+        session.impl_->shot->projectiles(), entity, &ProjectileState::entity_id);
+    if (found == session.impl_->shot->projectiles().end()) {
+        return;
+    }
+    ProjectileState replacement = *found;
+    replacement.finished = true;
+    static_cast<void>(session.impl_->shot->replace_projectile(std::move(replacement)));
+    session.impl_->force_settled_for_testing = true;
+}
+
+bool detail::SessionTestFacade::append_projectile_body_for_testing(
+    SimulationSession& session, EntityId entity,
+    ninho::physics::Vec3 position, ninho::physics::Vec3 linear_velocity)
+{
+    if (!session.impl_->shot
+        || !add_dynamic_sphere(session, entity, PartId{1}, position,
+            6.0, linear_velocity, 0.25)) {
+        return false;
+    }
+    const auto record = std::ranges::find(
+        session.impl_->body_records, entity,
+        &SimulationSession::Impl::BodyRecord::entity_id);
+    if (record == session.impl_->body_records.end()) {
+        return false;
+    }
+    record->is_projectile = true;
+    if (session.impl_->shot->insert_projectile(
+            ProjectileState{entity, record->physics_handle, true})) {
+        return true;
+    }
+    static_cast<void>(session.impl_->physics.destroy_body(record->physics_handle));
+    session.impl_->body_records.erase(record);
+    return false;
+}
+
+std::uint32_t detail::SessionTestFacade::projectile_age(
+    const SimulationSession& session, EntityId entity)
+{
+    if (!session.impl_->shot) {
+        return 0U;
+    }
+    const auto found = std::ranges::find(
+        session.impl_->shot->projectiles(), entity, &ProjectileState::entity_id);
+    return found == session.impl_->shot->projectiles().end()
+        ? 0U : found->age_ticks;
+}
+
+bool detail::SessionTestFacade::has_body_record(
+    const SimulationSession& session, EntityId entity)
+{
+    return std::ranges::any_of(session.impl_->body_records,
+        [&](const auto& record) { return record.entity_id == entity; });
 }
 
 void detail::SessionTestFacade::complete_objective(SimulationSession& session)

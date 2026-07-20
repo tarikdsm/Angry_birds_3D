@@ -27,6 +27,11 @@ public:
     static std::uint64_t last_processed_command_sequence(const SimulationSession&);
     static bool projectile_is_bullet(const SimulationSession&);
     static void finish_projectile(SimulationSession&);
+    static void finish_projectile(SimulationSession&, EntityId);
+    static bool append_projectile_body_for_testing(SimulationSession&, EntityId,
+        ninho::physics::Vec3 position, ninho::physics::Vec3 linear_velocity);
+    static std::uint32_t projectile_age(const SimulationSession&, EntityId);
+    static bool has_body_record(const SimulationSession&, EntityId);
     static void complete_objective(SimulationSession&);
     static void set_ability_active(SimulationSession&, bool);
     static void age_projectile(SimulationSession&, std::uint32_t age_ticks);

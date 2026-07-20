@@ -11,6 +11,7 @@ add_library(ninho_simulation_kernel STATIC
   src/session_builder.cpp
   src/launcher_system.cpp
   src/launch_system.cpp
+  src/ability_system.cpp
   src/gravity_field_ability_system.cpp
   src/damage_system.cpp
   src/fracture_system.cpp
@@ -48,6 +49,7 @@ if(BUILD_TESTING)
     tests/shot_state_tests.cpp
     tests/session_tests.cpp
     tests/launch_fsm_tests.cpp
+    tests/ability_dispatch_tests.cpp
     tests/gravity_field_ability_tests.cpp
     tests/damage_anchor_tests.cpp
     tests/fracture_objective_tests.cpp
@@ -91,6 +93,10 @@ if(BUILD_TESTING)
   add_test(
     NAME launch_fsm
     COMMAND ninho_simulation_tests --filter "launch fsm"
+  )
+  add_test(
+    NAME ability_dispatch
+    COMMAND ninho_simulation_tests --filter "ability dispatch"
   )
   add_test(
     NAME gravity_field_ability

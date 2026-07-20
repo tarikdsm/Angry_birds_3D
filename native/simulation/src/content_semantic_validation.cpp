@@ -1,4 +1,5 @@
 #include "content_semantic_validation.hpp"
+#include "ability_system.hpp"
 
 #include <array>
 #include <queue>
@@ -237,6 +238,10 @@ std::optional<ContentError> validate_product_v2_session_content(
         }
     }
     for (std::size_t index = 0; index < archetypes.abilities.size(); ++index) {
+        if (const auto definition_error = AbilitySystem::validate_definition(
+                archetypes.abilities[index], indexed("/abilities", index))) {
+            return definition_error;
+        }
         if (!ability_ids.insert(archetypes.abilities[index].id.value()).second) {
             return duplicate(indexed("/abilities", index) + "/id", "ability");
         }

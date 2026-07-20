@@ -1,9 +1,9 @@
 #pragma once
 
 #include "ninho/simulation/session.hpp"
+#include "ability_system.hpp"
 #include "damage_system.hpp"
 #include "launcher_system.hpp"
-#include "shot_state.hpp"
 
 #include <ninho/physics/physics_world.hpp>
 
@@ -38,7 +38,7 @@ namespace detail {
 [[nodiscard]] std::uint8_t canonical_tag_of(const AbilityRuntime& value);
 }
 
-struct SimulationSession::Impl {
+struct SimulationSession::Impl : detail::AbilityLifecycleHooks {
     struct QueuedCommand {
         std::uint64_t sequence{};
         PlayerCommand command;
@@ -87,8 +87,14 @@ struct SimulationSession::Impl {
     [[nodiscard]] SessionStatus create_projectile(const AimState& launch_state);
     void update_fsm_before_step();
     void update_fsm_after_step();
-    [[nodiscard]] SessionStatus apply_gravity_field_before_step();
-    void finish_gravity_field_after_step();
+    [[nodiscard]] SessionStatus apply_ability_before_step();
+    [[nodiscard]] SessionStatus process_ability_after_step();
+    [[nodiscard]] SessionStatus finish_ability_after_step();
+    [[nodiscard]] SessionStatus apply_before_step(ShotState&,
+        const GravityFieldAbilityDefinition&, GravityFieldAbilityRuntime&) override;
+    [[nodiscard]] SessionStatus finish_after_step(ShotState&,
+        const GravityFieldAbilityDefinition&, GravityFieldAbilityRuntime&) override;
+    void retire_finished_projectiles();
     void process_damage_after_step();
     void publish_damage_outcomes(std::span<const detail::DamageOutcome>);
     void apply_pending_fractures_before_step();
@@ -120,6 +126,7 @@ struct SimulationSession::Impl {
     ninho::physics::PhysicsWorld physics;
     detail::DamageSystem damage_system;
     std::optional<detail::LauncherSystem> launcher_system;
+    detail::AbilitySystem ability_system;
     SessionState session_state;
     std::optional<SessionStatus> latched_fault;
     std::optional<SessionStatus> emergency_fault{
