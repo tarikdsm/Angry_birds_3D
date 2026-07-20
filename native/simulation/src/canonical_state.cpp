@@ -32,6 +32,201 @@ std::int64_t canonical_quantize(double value)
     return fixed == 0 ? std::int64_t{0} : fixed;
 }
 
+std::uint8_t canonical_tag_of(SessionPhase value)
+{
+    switch (value) {
+    case SessionPhase::Inspection: return 0U;
+    case SessionPhase::Aim: return 1U;
+    case SessionPhase::FlightAbility: return 2U;
+    case SessionPhase::Resolution: return 3U;
+    case SessionPhase::Evaluation: return 4U;
+    case SessionPhase::Result: return 5U;
+    case SessionPhase::Faulted: return 6U;
+    case SessionPhase::Grabbed: return 7U;
+    }
+    throw std::invalid_argument("unknown canonical session phase");
+}
+
+std::uint8_t canonical_tag_of(Outcome value)
+{
+    switch (value) {
+    case Outcome::None: return 0U;
+    case Outcome::Victory: return 1U;
+    case Outcome::Defeat: return 2U;
+    }
+    throw std::invalid_argument("unknown canonical outcome");
+}
+
+std::uint8_t canonical_tag_of(DomainEventKind value)
+{
+    switch (value) {
+    case DomainEventKind::BirdLaunched: return 0U;
+    case DomainEventKind::AbilityActivationRequested: return 1U;
+    case DomainEventKind::CommandRejected: return 2U;
+    case DomainEventKind::AbilityStarted: return 3U;
+    case DomainEventKind::AbilityAffectedBody: return 4U;
+    case DomainEventKind::AbilityPulse: return 5U;
+    case DomainEventKind::AbilityEnded: return 6U;
+    case DomainEventKind::DamageApplied: return 7U;
+    case DomainEventKind::EntityNeutralized: return 8U;
+    case DomainEventKind::JointOverloaded: return 9U;
+    case DomainEventKind::PieceFractureTriggered: return 10U;
+    case DomainEventKind::JointBroken: return 11U;
+    case DomainEventKind::PieceFractured: return 12U;
+    }
+    throw std::invalid_argument("unknown canonical domain event");
+}
+
+std::uint8_t canonical_tag_of(CommandRejectionReason value)
+{
+    switch (value) {
+    case CommandRejectionReason::None: return 0U;
+    case CommandRejectionReason::InvalidPhase: return 1U;
+    case CommandRejectionReason::InvalidAim: return 2U;
+    case CommandRejectionReason::NotArmed: return 3U;
+    case CommandRejectionReason::NoBirdAvailable: return 4U;
+    }
+    throw std::invalid_argument("unknown canonical command rejection reason");
+}
+
+std::uint8_t canonical_tag_of(NeutralizationCause value)
+{
+    switch (value) {
+    case NeutralizationCause::None: return 0U;
+    case NeutralizationCause::IntegrityDepleted: return 1U;
+    case NeutralizationCause::Ejection: return 2U;
+    }
+    throw std::invalid_argument("unknown canonical neutralization cause");
+}
+
+std::uint8_t canonical_tag_of(DamageClassification value)
+{
+    switch (value) {
+    case DamageClassification::None: return 0U;
+    case DamageClassification::Protected: return 1U;
+    case DamageClassification::Vulnerable: return 2U;
+    }
+    throw std::invalid_argument("unknown canonical damage classification");
+}
+
+std::uint8_t canonical_tag_of(MaterialResponse value)
+{
+    switch (value) {
+    case MaterialResponse::Fibrous: return 0U;
+    case MaterialResponse::Masonry: return 1U;
+    case MaterialResponse::Brittle: return 2U;
+    case MaterialResponse::Compressible: return 3U;
+    case MaterialResponse::Ductile: return 4U;
+    }
+    throw std::invalid_argument("unknown canonical material response");
+}
+
+std::uint8_t canonical_tag_of(BodyType value)
+{
+    switch (value) {
+    case BodyType::Static: return 0U;
+    case BodyType::Dynamic: return 1U;
+    }
+    throw std::invalid_argument("unknown canonical body type");
+}
+
+std::uint8_t canonical_tag_of(ShapeType value)
+{
+    switch (value) {
+    case ShapeType::Box: return 0U;
+    case ShapeType::Sphere: return 1U;
+    case ShapeType::Capsule: return 2U;
+    case ShapeType::ConvexHull: return 3U;
+    case ShapeType::Compound: return 4U;
+    }
+    throw std::invalid_argument("unknown canonical shape type");
+}
+
+std::uint8_t canonical_tag_of(JointKind value)
+{
+    switch (value) {
+    case JointKind::PineFit: return 0U;
+    case JointKind::GlassClamp: return 1U;
+    case JointKind::Mortar: return 2U;
+    }
+    throw std::invalid_argument("unknown canonical joint kind");
+}
+
+std::uint8_t canonical_tag_of(ObjectiveKind value)
+{
+    switch (value) {
+    case ObjectiveKind::NeutralizeEntity: return 0U;
+    }
+    throw std::invalid_argument("unknown canonical objective kind");
+}
+
+std::uint8_t canonical_tag_of(AbilityKind value)
+{
+    switch (value) {
+    case AbilityKind::LegacyGravityField: return 0U;
+    case AbilityKind::GravityField: return 1U;
+    case AbilityKind::MassBoost: return 2U;
+    case AbilityKind::SpeedBoost: return 3U;
+    case AbilityKind::Explosion: return 4U;
+    case AbilityKind::Split: return 5U;
+    }
+    throw std::invalid_argument("unknown canonical ability kind");
+}
+
+std::uint8_t canonical_tag_of(EnvironmentalTriggerKind value)
+{
+    switch (value) {
+    case EnvironmentalTriggerKind::DamageThreshold: return 0U;
+    }
+    throw std::invalid_argument("unknown canonical environmental trigger kind");
+}
+
+std::uint8_t canonical_tag_of(const PlayerCommand& value)
+{
+    if (std::holds_alternative<BeginAimCommand>(value)) return 0U;
+    if (std::holds_alternative<SetAimCommand>(value)) return 1U;
+    if (std::holds_alternative<LaunchCommand>(value)) return 2U;
+    if (std::holds_alternative<ActivateAbilityCommand>(value)) return 3U;
+    if (std::holds_alternative<CancelAimCommand>(value)) return 4U;
+    if (std::holds_alternative<BeginGrabCommand>(value)) return 5U;
+    if (std::holds_alternative<SetPullCommand>(value)) return 6U;
+    if (std::holds_alternative<ReleaseBirdCommand>(value)) return 7U;
+    if (std::holds_alternative<CancelGrabCommand>(value)) return 8U;
+    throw std::invalid_argument("unknown canonical player command");
+}
+
+std::uint8_t canonical_tag_of(const WorldDefinition& value)
+{
+    return std::visit([](const auto& world) -> std::uint8_t {
+        using World = std::decay_t<decltype(world)>;
+        if constexpr (std::is_same_v<World, UniformWorldDefinition>) {
+            return 0U;
+        } else {
+            static_assert(std::is_same_v<World, RadialWorldDefinition>);
+            return 1U;
+        }
+    }, value);
+}
+
+std::uint8_t canonical_tag_of(const AbilityRuntime& value)
+{
+    return std::visit([](const auto& runtime) -> std::uint8_t {
+        using Runtime = std::decay_t<decltype(runtime)>;
+        if constexpr (std::is_same_v<Runtime, GravityFieldAbilityRuntime>) {
+            return 0U;
+        } else if constexpr (std::is_same_v<Runtime, MassBoostAbilityRuntime>) {
+            return 1U;
+        } else if constexpr (std::is_same_v<Runtime, SpeedBoostAbilityRuntime>) {
+            return 2U;
+        } else if constexpr (std::is_same_v<Runtime, ExplosionAbilityRuntime>) {
+            return 3U;
+        } else {
+            static_assert(std::is_same_v<Runtime, SplitAbilityRuntime>);
+            return 4U;
+        }
+    }, value);
+}
+
 }
 
 namespace ninho::simulation {
@@ -146,11 +341,140 @@ void write_transform(CanonicalWriter& writer, const TransformDefinition& transfo
 
 void write_shape(CanonicalWriter& writer, const ShapeDefinition& shape)
 {
-    writer.integer(static_cast<std::uint8_t>(shape.type));
+    writer.integer(detail::canonical_tag_of(shape.type));
     for (const double value : shape.half_extents_m) {
         writer.quantized(value);
     }
     writer.quantized(shape.radius_m);
+}
+
+void write_vector(CanonicalWriter& writer, const std::array<double, 3>& value)
+{
+    for (const double component : value) {
+        writer.quantized(component);
+    }
+}
+
+void write_rotation(CanonicalWriter& writer, const std::array<double, 4>& value)
+{
+    for (const double component : value) {
+        writer.quantized(component);
+    }
+}
+
+void write_shape_v3(CanonicalWriter& writer, const ShapeDefinition& shape)
+{
+    writer.integer(detail::canonical_tag_of(shape.type));
+    write_vector(writer, shape.local_position_m);
+    write_rotation(writer, shape.local_rotation_xyzw);
+    switch (shape.type) {
+    case ShapeType::Box:
+        write_vector(writer, shape.half_extents_m);
+        break;
+    case ShapeType::Sphere:
+        writer.quantized(shape.radius_m);
+        break;
+    case ShapeType::Capsule:
+        writer.quantized(shape.radius_m);
+        writer.quantized(shape.half_height_m);
+        break;
+    case ShapeType::ConvexHull:
+        writer.integer<std::uint32_t>(static_cast<std::uint32_t>(shape.vertices_m.size()));
+        for (const auto& vertex : shape.vertices_m) {
+            write_vector(writer, vertex);
+        }
+        break;
+    case ShapeType::Compound:
+        writer.integer<std::uint32_t>(static_cast<std::uint32_t>(shape.children.size()));
+        for (const ShapeDefinition& child : shape.children) {
+            write_shape_v3(writer, child);
+        }
+        break;
+    }
+}
+
+void write_optional_tick(CanonicalWriter& writer, std::optional<TickIndex> value)
+{
+    writer.boolean(value.has_value());
+    if (value) {
+        identifier(writer, *value);
+    }
+}
+
+[[nodiscard]] std::uint8_t ability_payload_tag(
+    const AbilityArchetype::Payload& payload)
+{
+    return std::visit([](const auto& value) -> std::uint8_t {
+        using Payload = std::decay_t<decltype(value)>;
+        if constexpr (std::is_same_v<Payload, GravityFieldAbilityDefinition>) {
+            return 0U;
+        } else if constexpr (std::is_same_v<Payload, MassBoostAbilityDefinition>) {
+            return 1U;
+        } else if constexpr (std::is_same_v<Payload, SpeedBoostAbilityDefinition>) {
+            return 2U;
+        } else if constexpr (std::is_same_v<Payload, ExplosionAbilityDefinition>) {
+            return 3U;
+        } else {
+            static_assert(std::is_same_v<Payload, SplitAbilityDefinition>);
+            return 4U;
+        }
+    }, payload);
+}
+
+void write_ability_payload(
+    CanonicalWriter& writer, const AbilityArchetype::Payload& payload)
+{
+    writer.integer(ability_payload_tag(payload));
+    std::visit([&](const auto& value) {
+        using Payload = std::decay_t<decltype(value)>;
+        if constexpr (std::is_same_v<Payload, GravityFieldAbilityDefinition>) {
+            writer.integer(value.arm_ticks);
+            writer.integer(value.duration_ticks);
+            writer.quantized(value.radius_m);
+            writer.quantized(value.max_body_mass_kg);
+            writer.integer(value.max_bodies);
+            writer.quantized(value.max_acceleration_m_s2);
+            writer.quantized(value.pulse_speed_m_s);
+        } else if constexpr (std::is_same_v<Payload, MassBoostAbilityDefinition>) {
+            writer.integer(value.duration_ticks);
+            writer.quantized(value.mass_multiplier);
+        } else if constexpr (std::is_same_v<Payload, SpeedBoostAbilityDefinition>) {
+            writer.quantized(value.impulse_m_s);
+        } else if constexpr (std::is_same_v<Payload, ExplosionAbilityDefinition>) {
+            writer.quantized(value.radius_m);
+            writer.quantized(value.impulse_n_s);
+            writer.quantized(value.energy_j);
+            writer.integer(value.max_bodies);
+        } else {
+            static_assert(std::is_same_v<Payload, SplitAbilityDefinition>);
+            writer.integer(value.child_count);
+            writer.quantized(value.spread_angle_deg);
+            writer.quantized(value.child_speed_multiplier);
+        }
+    }, payload);
+}
+
+void write_ability_runtime(CanonicalWriter& writer, const AbilityRuntime& runtime)
+{
+    writer.integer(detail::canonical_tag_of(runtime));
+    write_optional_tick(writer, ability_runtime_start_tick(runtime));
+    write_optional_tick(writer, ability_runtime_end_tick(runtime));
+    writer.boolean(ability_runtime_active(runtime));
+}
+
+void write_player_command(CanonicalWriter& writer, const PlayerCommand& command)
+{
+    writer.integer(detail::canonical_tag_of(command));
+    if (const auto* update = std::get_if<SetAimCommand>(&command)) {
+        writer.vector(update->aim.origin_m);
+        writer.vector(update->aim.tangent_direction);
+        writer.quantized(update->aim.speed_m_s);
+    } else if (const auto* begin = std::get_if<BeginGrabCommand>(&command)) {
+        writer.vector(begin->camera_right);
+    } else if (const auto* pull = std::get_if<SetPullCommand>(&command)) {
+        writer.quantized(pull->horizontal_m);
+        writer.quantized(pull->vertical_m);
+    }
 }
 
 std::vector<std::uint8_t> canonical_material_catalog(const MaterialCatalog& catalog)
@@ -165,7 +489,7 @@ std::vector<std::uint8_t> canonical_material_catalog(const MaterialCatalog& cata
     for (const MaterialDefinition* material : materials) {
         identifier(writer, material->id);
         writer.text(material->key);
-        writer.integer(static_cast<std::uint8_t>(material->response));
+        writer.integer(detail::canonical_tag_of(material->response));
         writer.quantized(material->density_kg_m3);
         writer.quantized(material->friction);
         writer.quantized(material->restitution);
@@ -286,7 +610,7 @@ std::vector<std::uint8_t> canonical_level_manifest(const LevelManifest& level)
         writer.integer(body->body_id);
         identifier(writer, body->entity_id);
         identifier(writer, body->part_id);
-        writer.integer(static_cast<std::uint8_t>(body->body_type));
+        writer.integer(detail::canonical_tag_of(body->body_type));
         optional_identifier(writer, body->material_id);
         optional_identifier(writer, body->surface_id);
         optional_identifier(writer, body->enemy_archetype_id);
@@ -308,7 +632,7 @@ std::vector<std::uint8_t> canonical_level_manifest(const LevelManifest& level)
     for (const JointDefinition* joint : joints) {
         identifier(writer, joint->id);
         writer.integer(joint->assembly_id);
-        writer.integer(static_cast<std::uint8_t>(joint->kind));
+        writer.integer(detail::canonical_tag_of(joint->kind));
         writer.integer(joint->body_a_id);
         writer.integer(joint->body_b_id);
         writer.quantized(joint->force_limit_n);
@@ -336,10 +660,230 @@ std::vector<std::uint8_t> canonical_level_manifest(const LevelManifest& level)
     writer.integer<std::uint32_t>(static_cast<std::uint32_t>(objectives.size()));
     for (const ObjectiveDefinition* objective : objectives) {
         writer.integer(objective->id);
-        writer.integer(static_cast<std::uint8_t>(objective->kind));
+        writer.integer(detail::canonical_tag_of(objective->kind));
         identifier(writer, objective->target_entity_id);
     }
     return std::move(writer.bytes);
+}
+
+void write_canonical_v3_content(CanonicalWriter& writer, const ContentBundle& bundle)
+{
+    const MaterialCatalog& materials = bundle.materials;
+    writer.integer(materials.schema_version);
+    writer.integer(materials.source_schema_version);
+    const auto ordered_materials = ordered_by(
+        materials.materials, &MaterialDefinition::id);
+    writer.integer<std::uint32_t>(static_cast<std::uint32_t>(ordered_materials.size()));
+    for (const MaterialDefinition* material : ordered_materials) {
+        identifier(writer, material->id);
+        writer.text(material->key);
+        writer.integer(detail::canonical_tag_of(material->response));
+        writer.quantized(material->density_kg_m3);
+        writer.quantized(material->friction);
+        writer.quantized(material->restitution);
+        writer.quantized(material->toughness);
+    }
+    const auto surfaces = ordered_by(materials.surfaces, &PhysicsSurfaceDefinition::id);
+    writer.integer<std::uint32_t>(static_cast<std::uint32_t>(surfaces.size()));
+    for (const PhysicsSurfaceDefinition* surface : surfaces) {
+        identifier(writer, surface->id);
+        writer.text(surface->key);
+        writer.quantized(surface->density_kg_m3);
+        writer.quantized(surface->friction);
+        writer.quantized(surface->restitution);
+    }
+
+    const ArchetypeCatalog& archetypes = bundle.archetypes;
+    writer.integer(archetypes.schema_version);
+    writer.integer(archetypes.source_schema_version);
+    auto presentation_ids = archetypes.presentation_ids;
+    std::ranges::sort(presentation_ids);
+    writer.integer<std::uint32_t>(static_cast<std::uint32_t>(presentation_ids.size()));
+    for (const std::string& value : presentation_ids) writer.text(value);
+    auto score_ids = archetypes.score_ids;
+    std::ranges::sort(score_ids);
+    writer.integer<std::uint32_t>(static_cast<std::uint32_t>(score_ids.size()));
+    for (const std::string& value : score_ids) writer.text(value);
+
+    const auto abilities = ordered_by(archetypes.abilities, &AbilityArchetype::id);
+    writer.integer<std::uint32_t>(static_cast<std::uint32_t>(abilities.size()));
+    for (const AbilityArchetype* ability : abilities) {
+        identifier(writer, ability->id);
+        writer.text(ability->key);
+        writer.text(ability->kind);
+        writer.integer(ability->arm_ticks);
+        writer.integer(ability->duration_ticks);
+        writer.quantized(ability->radius_m);
+        writer.quantized(ability->max_body_mass_kg);
+        writer.integer(ability->max_bodies);
+        writer.quantized(ability->max_acceleration_m_s2);
+        writer.quantized(ability->pulse_speed_m_s);
+        writer.integer(detail::canonical_tag_of(ability->kind_v2));
+        write_ability_payload(writer, ability->payload);
+    }
+    const auto birds = ordered_by(archetypes.birds, &BirdArchetype::id);
+    writer.integer<std::uint32_t>(static_cast<std::uint32_t>(birds.size()));
+    for (const BirdArchetype* bird : birds) {
+        identifier(writer, bird->id);
+        writer.text(bird->key);
+        identifier(writer, bird->ability_id);
+        identifier(writer, bird->surface_id);
+        writer.quantized(bird->mass_kg);
+        writer.quantized(bird->density_kg_m3);
+        writer.quantized(bird->radius_m);
+        writer.quantized(bird->friction);
+        writer.quantized(bird->restitution);
+        writer.boolean(bird->bullet);
+        writer.text(bird->projectile_visual_id);
+        writer.quantized(bird->launch_speed_cap_m_s);
+        writer.text(bird->score_id);
+        writer.text(bird->icon_id);
+        writer.text(bird->animation_id);
+    }
+    const auto weakpoints = ordered_by(archetypes.weakpoints, &WeakpointProfile::id);
+    writer.integer<std::uint32_t>(static_cast<std::uint32_t>(weakpoints.size()));
+    for (const WeakpointProfile* weakpoint : weakpoints) {
+        identifier(writer, weakpoint->id);
+        writer.text(weakpoint->key);
+        write_vector(writer, weakpoint->protected_direction);
+        writer.quantized(weakpoint->protected_cone_deg);
+        writer.quantized(weakpoint->protected_multiplier);
+        writer.quantized(weakpoint->exposed_multiplier);
+    }
+    const auto enemies = ordered_by(archetypes.enemies, &EnemyArchetype::id);
+    writer.integer<std::uint32_t>(static_cast<std::uint32_t>(enemies.size()));
+    for (const EnemyArchetype* enemy : enemies) {
+        identifier(writer, enemy->id);
+        writer.text(enemy->key);
+        identifier(writer, enemy->weakpoint_id);
+        identifier(writer, enemy->surface_id);
+        writer.quantized(enemy->mass_kg);
+        writer.quantized(enemy->integrity);
+        writer.quantized(enemy->damage_energy_j_per_kg);
+        writer.quantized(enemy->max_damage);
+    }
+
+    const LevelManifest& level = bundle.level;
+    writer.integer(level.schema_version);
+    writer.integer(level.source_schema_version);
+    writer.text(level.id);
+    writer.text(level.world_id);
+    writer.text(level.region_id);
+    writer.text(level.camera_profile_id);
+    writer.text(level.presentation_profile_id);
+    writer.integer(detail::canonical_tag_of(level.world));
+    std::visit([&](const auto& world) {
+        using World = std::decay_t<decltype(world)>;
+        if constexpr (std::is_same_v<World, UniformWorldDefinition>) {
+            write_vector(writer, world.acceleration_m_s2);
+            writer.integer<std::uint8_t>(0U); // AABB bounds.
+            write_vector(writer, world.bounds_min_m);
+            write_vector(writer, world.bounds_max_m);
+        } else {
+            static_assert(std::is_same_v<World, RadialWorldDefinition>);
+            write_vector(writer, world.center_m);
+            writer.quantized(world.reference_radius_m);
+            writer.quantized(world.reference_acceleration_m_s2);
+            writer.integer<std::uint8_t>(1U); // Spherical bounds.
+            write_vector(writer, world.center_m);
+            writer.quantized(world.bounds_radius_m);
+        }
+    }, level.world);
+
+    writer.text(level.slingshot.asset_id);
+    write_vector(writer, level.slingshot.rest_position_m);
+    write_rotation(writer, level.slingshot.rest_rotation_xyzw);
+    writer.quantized(level.slingshot.spring_constant_n_m);
+    writer.quantized(level.slingshot.energy_efficiency);
+    writer.quantized(level.slingshot.minimum_extension_m);
+    writer.quantized(level.slingshot.maximum_extension_m);
+    writer.text(level.slingshot.plane_policy);
+    writer.quantized(level.slingshot.projectile_clearance_m);
+    writer.quantized(level.slingshot.speed_ceiling_m_s);
+
+    writer.integer<std::uint32_t>(static_cast<std::uint32_t>(level.bird_queue.size()));
+    for (const BirdArchetypeId bird : level.bird_queue) identifier(writer, bird);
+    writer.integer(level.scoring.pig_points);
+    writer.integer(level.scoring.unused_bird_points);
+    for (const std::uint32_t threshold : level.scoring.star_thresholds) {
+        writer.integer(threshold);
+    }
+    writer.integer(level.scoring.chain_window_ticks);
+    writer.quantized(level.scoring.chain_multiplier_step);
+    writer.quantized(level.scoring.max_chain_multiplier);
+
+    const auto free_body_ids = ordered_values(level.free_body_ids);
+    writer.integer<std::uint32_t>(static_cast<std::uint32_t>(free_body_ids.size()));
+    for (const std::uint32_t id : free_body_ids) writer.integer(id);
+    const auto bodies = ordered_by(level.bodies, &BodyDefinition::body_id);
+    writer.integer<std::uint32_t>(static_cast<std::uint32_t>(bodies.size()));
+    for (const BodyDefinition* body : bodies) {
+        writer.integer(body->body_id);
+        identifier(writer, body->entity_id);
+        identifier(writer, body->part_id);
+        writer.integer(detail::canonical_tag_of(body->body_type));
+        optional_identifier(writer, body->material_id);
+        optional_identifier(writer, body->surface_id);
+        optional_identifier(writer, body->enemy_archetype_id);
+        writer.boolean(body->assembly_id.has_value());
+        if (body->assembly_id) writer.integer(*body->assembly_id);
+        writer.quantized(body->density_kg_m3);
+        write_transform(writer, body->transform);
+        write_shape_v3(writer, body->shape);
+        writer.text(body->visual.asset_id);
+        write_vector(writer, body->visual.bounds_m);
+        writer.boolean(body->affected_by_world_gravity);
+    }
+
+    const auto joints = ordered_by(level.joints, &JointDefinition::id);
+    writer.integer<std::uint32_t>(static_cast<std::uint32_t>(joints.size()));
+    for (const JointDefinition* joint : joints) {
+        identifier(writer, joint->id);
+        writer.integer(joint->assembly_id);
+        writer.integer(detail::canonical_tag_of(joint->kind));
+        writer.integer(joint->body_a_id);
+        writer.integer(joint->body_b_id);
+        writer.quantized(joint->force_limit_n);
+        writer.quantized(joint->torque_limit_nm);
+    }
+    const auto assemblies = ordered_by(level.assemblies, &AssemblyDefinition::id);
+    writer.integer<std::uint32_t>(static_cast<std::uint32_t>(assemblies.size()));
+    for (const AssemblyDefinition* assembly : assemblies) {
+        writer.integer(assembly->id);
+        writer.text(assembly->key);
+        const auto body_ids = ordered_values(assembly->body_ids);
+        writer.integer<std::uint32_t>(static_cast<std::uint32_t>(body_ids.size()));
+        for (const std::uint32_t id : body_ids) writer.integer(id);
+        const auto joint_ids = ordered_values(assembly->joint_ids);
+        writer.integer<std::uint32_t>(static_cast<std::uint32_t>(joint_ids.size()));
+        for (const JointId id : joint_ids) identifier(writer, id);
+    }
+    const auto objectives = ordered_by(level.objectives, &ObjectiveDefinition::id);
+    writer.integer<std::uint32_t>(static_cast<std::uint32_t>(objectives.size()));
+    for (const ObjectiveDefinition* objective : objectives) {
+        writer.integer(objective->id);
+        writer.integer(detail::canonical_tag_of(objective->kind));
+        identifier(writer, objective->target_entity_id);
+    }
+    const auto triggers = ordered_by(level.triggers, &EnvironmentalTriggerDefinition::id);
+    writer.integer<std::uint32_t>(static_cast<std::uint32_t>(triggers.size()));
+    for (const EnvironmentalTriggerDefinition* trigger : triggers) {
+        writer.integer(trigger->id);
+        identifier(writer, trigger->target_entity_id);
+        writer.integer(detail::canonical_tag_of(trigger->kind));
+        writer.quantized(trigger->damage_threshold);
+        writer.integer(trigger->fuse_ticks);
+        writer.integer(trigger->cooldown_ticks);
+        writer.quantized(trigger->pressure_burst.radius_m);
+        writer.quantized(trigger->pressure_burst.impulse_n_s);
+        writer.quantized(trigger->pressure_burst.energy_j);
+        writer.boolean(trigger->pressure_burst.line_of_sight);
+        writer.integer(trigger->pressure_burst.max_bodies);
+    }
+    writer.quantized(level.settle_policy.linear_speed_m_s);
+    writer.quantized(level.settle_policy.angular_speed_rad_s);
+    writer.integer(level.settle_policy.rest_ticks);
+    writer.integer(level.watchdog_ticks);
 }
 
 std::uint64_t fnv1a64(const std::vector<std::uint8_t>& bytes) noexcept
@@ -375,8 +919,8 @@ std::vector<std::uint8_t> SimulationSession::Impl::serialize_canonical_state(
     CanonicalWriter writer{canonical_bytes.size()};
     writer.text("canonical_state_v2");
     identifier(writer, session_state.tick);
-    writer.integer(static_cast<std::uint8_t>(session_state.phase));
-    writer.integer(static_cast<std::uint8_t>(session_state.outcome));
+    writer.integer(detail::canonical_tag_of(session_state.phase));
+    writer.integer(detail::canonical_tag_of(session_state.outcome));
     writer.integer(remaining_birds);
     writer.integer(next_command_sequence);
     writer.integer(next_event_sequence);
@@ -389,7 +933,7 @@ std::vector<std::uint8_t> SimulationSession::Impl::serialize_canonical_state(
     for (const EntitySnapshot& snapshot : entity_snapshots) {
         identifier(writer, snapshot.entity_id);
         identifier(writer, snapshot.part_id);
-        writer.integer(static_cast<std::uint8_t>(snapshot.body_type));
+        writer.integer(detail::canonical_tag_of(snapshot.body_type));
         optional_identifier(writer, snapshot.material_id);
         optional_identifier(writer, snapshot.surface_id);
         optional_identifier(writer, snapshot.enemy_archetype_id);
@@ -411,7 +955,7 @@ std::vector<std::uint8_t> SimulationSession::Impl::serialize_canonical_state(
         identifier(writer, joint.a.part_id);
         identifier(writer, joint.b.entity_id);
         identifier(writer, joint.b.part_id);
-        writer.integer(static_cast<std::uint8_t>(joint.kind));
+        writer.integer(detail::canonical_tag_of(joint.kind));
         writer.transform(joint.frame_a);
         writer.transform(joint.frame_b);
         writer.quantized(joint.force_limit_n);
@@ -423,10 +967,10 @@ std::vector<std::uint8_t> SimulationSession::Impl::serialize_canonical_state(
     for (const DomainEvent& event : domain_events) {
         identifier(writer, event.tick);
         identifier(writer, event.id);
-        writer.integer(static_cast<std::uint8_t>(event.kind));
+        writer.integer(detail::canonical_tag_of(event.kind));
         identifier(writer, event.entity_id);
         identifier(writer, event.bird_archetype_id);
-        writer.integer(static_cast<std::uint8_t>(event.rejection_reason));
+        writer.integer(detail::canonical_tag_of(event.rejection_reason));
         identifier(writer, event.ability_id);
         identifier(writer, event.affected_entity_id);
         identifier(writer, event.affected_part_id);
@@ -438,8 +982,8 @@ std::vector<std::uint8_t> SimulationSession::Impl::serialize_canonical_state(
         writer.vector(event.normal);
         writer.quantized(event.energy_j);
         writer.quantized(event.damage);
-        writer.integer(static_cast<std::uint8_t>(event.damage_classification));
-        writer.integer(static_cast<std::uint8_t>(event.neutralization_cause));
+        writer.integer(detail::canonical_tag_of(event.damage_classification));
+        writer.integer(detail::canonical_tag_of(event.neutralization_cause));
         identifier(writer, event.cause_event_id);
         identifier(writer, event.joint_id);
         identifier(writer, event.material_id);
@@ -501,35 +1045,247 @@ std::vector<std::uint8_t> SimulationSession::Impl::serialize_canonical_state(
     writer.integer<std::uint32_t>(static_cast<std::uint32_t>(command_queue.size()));
     for (const QueuedCommand& queued : command_queue) {
         writer.integer(queued.sequence);
-        writer.integer<std::uint8_t>(static_cast<std::uint8_t>(queued.command.index()));
+        writer.integer(detail::canonical_tag_of(queued.command));
         if (const auto* update = std::get_if<SetAimCommand>(&queued.command)) {
             writer.vector(update->aim.origin_m);
             writer.vector(update->aim.tangent_direction);
             writer.quantized(update->aim.speed_m_s);
         }
     }
-    writer.boolean(projectile.has_value());
-    if (projectile) {
-        identifier(writer, projectile->entity_id);
-        identifier(writer, projectile->archetype_id);
-        identifier(writer, projectile->ability_id);
-        writer.boolean(projectile->bullet);
-        identifier(writer, projectile->launch_tick);
-        writer.boolean(projectile->ability_start_tick.has_value());
-        if (projectile->ability_start_tick) {
-            identifier(writer, *projectile->ability_start_tick);
+    writer.boolean(shot.has_value());
+    if (shot) {
+        const auto* projectile = primary_projectile(*shot);
+        if (projectile == nullptr) {
+            throw std::logic_error("canonical shot must own a projectile");
         }
-        writer.boolean(projectile->ability_end_tick.has_value());
-        if (projectile->ability_end_tick) {
-            identifier(writer, *projectile->ability_end_tick);
+        identifier(writer, projectile->entity_id);
+        identifier(writer, shot->bird_archetype_id);
+        identifier(writer, shot->ability_id);
+        writer.boolean(projectile->bullet);
+        identifier(writer, shot->launch_tick);
+        const auto ability_start_tick = ability_runtime_start_tick(shot->runtime);
+        writer.boolean(ability_start_tick.has_value());
+        if (ability_start_tick) {
+            identifier(writer, *ability_start_tick);
+        }
+        const auto ability_end_tick = ability_runtime_end_tick(shot->runtime);
+        writer.boolean(ability_end_tick.has_value());
+        if (ability_end_tick) {
+            identifier(writer, *ability_end_tick);
         }
         writer.integer(projectile->age_ticks);
         writer.integer(projectile->rest_ticks);
         writer.boolean(projectile->finished);
         writer.boolean(projectile->pending_destroy);
-        writer.boolean(projectile->ability_requested);
-        writer.boolean(projectile->ability_active);
+        writer.boolean(shot->activation_consumed);
+        writer.boolean(ability_runtime_active(shot->runtime));
     }
+    writer.integer<std::uint32_t>(static_cast<std::uint32_t>(joint_records.size()));
+    for (const JointRecord& joint : joint_records) {
+        identifier(writer, joint.snapshot.id);
+        writer.integer(joint.consecutive_overload_ticks);
+    }
+    return std::move(writer.bytes);
+}
+
+std::vector<std::uint8_t> SimulationSession::Impl::serialize_canonical_state_v3() const
+{
+    CanonicalWriter writer{canonical_v3_bytes.size()};
+    writer.text("canonical_state_v3");
+    writer.integer<std::uint32_t>(3U);
+    write_canonical_v3_content(writer, bundle);
+
+    identifier(writer, session_state.tick);
+    writer.integer(detail::canonical_tag_of(session_state.phase));
+    writer.integer(detail::canonical_tag_of(session_state.outcome));
+    writer.integer(remaining_birds);
+    writer.integer(next_command_sequence);
+    writer.integer(next_event_sequence);
+    writer.integer(last_processed_command_sequence);
+    writer.integer(launch_count);
+    writer.integer(resolution_rest_ticks);
+    writer.boolean(objective_complete);
+    writer.integer<std::uint64_t>(0U); // current_score, reserved until Task 16.
+    writer.integer<std::uint8_t>(0U);  // stars, reserved until Task 16.
+
+    writer.boolean(session_state.aim.has_value());
+    if (session_state.aim) {
+        writer.vector(session_state.aim->origin_m);
+        writer.vector(session_state.aim->tangent_direction);
+        writer.quantized(session_state.aim->speed_m_s);
+    }
+    writer.boolean(session_state.launcher.has_value());
+    if (session_state.launcher) {
+        const LauncherState& launcher = *session_state.launcher;
+        writer.vector(launcher.rest_position_m);
+        writer.vector(launcher.camera_right);
+        writer.vector(launcher.up);
+        writer.vector(launcher.horizontal);
+        writer.vector(launcher.plane_normal);
+        writer.quantized(launcher.pull_horizontal_m);
+        writer.quantized(launcher.pull_vertical_m);
+        writer.quantized(launcher.extension_m);
+        writer.quantized(launcher.spring_energy_j);
+        writer.quantized(launcher.launch_energy_j);
+        writer.vector(launcher.launch_direction);
+        writer.quantized(launcher.predicted_speed_m_s);
+        writer.quantized(launcher.deadzone_m);
+        writer.quantized(launcher.maximum_extension_m);
+    }
+    writer.boolean(session_state.last_impact_m.has_value());
+    if (session_state.last_impact_m) writer.vector(*session_state.last_impact_m);
+
+    writer.integer<std::uint32_t>(static_cast<std::uint32_t>(entity_snapshots.size()));
+    for (const EntitySnapshot& snapshot : entity_snapshots) {
+        identifier(writer, snapshot.entity_id);
+        identifier(writer, snapshot.part_id);
+        writer.integer(detail::canonical_tag_of(snapshot.body_type));
+        optional_identifier(writer, snapshot.material_id);
+        optional_identifier(writer, snapshot.surface_id);
+        optional_identifier(writer, snapshot.enemy_archetype_id);
+        write_shape_v3(writer, snapshot.shape);
+        writer.text(snapshot.visual_id);
+        writer.transform(snapshot.transform);
+        writer.vector(snapshot.linear_velocity_m_s);
+        writer.vector(snapshot.angular_velocity_rad_s);
+        writer.quantized(snapshot.mass_kg);
+        writer.boolean(snapshot.awake);
+        writer.boolean(snapshot.ejected);
+        writer.boolean(snapshot.exited_world);
+        writer.boolean(snapshot.is_projectile);
+    }
+
+    writer.integer<std::uint32_t>(static_cast<std::uint32_t>(joint_snapshots.size()));
+    for (const StructuralJointSnapshot& joint : joint_snapshots) {
+        identifier(writer, joint.id);
+        identifier(writer, joint.a.entity_id);
+        identifier(writer, joint.a.part_id);
+        identifier(writer, joint.b.entity_id);
+        identifier(writer, joint.b.part_id);
+        writer.integer(detail::canonical_tag_of(joint.kind));
+        writer.transform(joint.frame_a);
+        writer.transform(joint.frame_b);
+        writer.quantized(joint.force_limit_n);
+        writer.quantized(joint.torque_limit_nm);
+        writer.boolean(joint.active);
+    }
+
+    writer.integer<std::uint32_t>(static_cast<std::uint32_t>(domain_events.size()));
+    for (const DomainEvent& event : domain_events) {
+        identifier(writer, event.tick);
+        identifier(writer, event.id);
+        writer.integer(detail::canonical_tag_of(event.kind));
+        identifier(writer, event.entity_id);
+        identifier(writer, event.bird_archetype_id);
+        writer.integer(detail::canonical_tag_of(event.rejection_reason));
+        identifier(writer, event.ability_id);
+        identifier(writer, event.affected_entity_id);
+        identifier(writer, event.affected_part_id);
+        writer.quantized(event.weight);
+        writer.vector(event.force_n);
+        writer.vector(event.impulse_n_s);
+        identifier(writer, event.part_id);
+        writer.vector(event.position_m);
+        writer.vector(event.normal);
+        writer.quantized(event.energy_j);
+        writer.quantized(event.damage);
+        writer.integer(detail::canonical_tag_of(event.damage_classification));
+        writer.integer(detail::canonical_tag_of(event.neutralization_cause));
+        identifier(writer, event.cause_event_id);
+        identifier(writer, event.joint_id);
+        identifier(writer, event.material_id);
+        writer.quantized(event.joint_load_ratio);
+        writer.quantized(event.fracture_ratio);
+    }
+
+    std::vector<const detail::DamageState*> damage_states;
+    damage_states.reserve(damage_system.states().size());
+    for (const detail::DamageState& damage : damage_system.states()) {
+        damage_states.push_back(&damage);
+    }
+    std::ranges::sort(damage_states, [](const auto* lhs, const auto* rhs) {
+        return std::pair{lhs->entity_id, lhs->part_id}
+            < std::pair{rhs->entity_id, rhs->part_id};
+    });
+    writer.integer<std::uint32_t>(static_cast<std::uint32_t>(damage_states.size()));
+    for (const detail::DamageState* damage : damage_states) {
+        identifier(writer, damage->entity_id);
+        identifier(writer, damage->part_id);
+        optional_identifier(writer, damage->material_id);
+        optional_identifier(writer, damage->enemy_archetype_id);
+        writer.quantized(damage->material_damage_energy_j);
+        writer.quantized(damage->remaining_integrity);
+        writer.boolean(damage->was_ejected);
+        writer.boolean(damage->neutralized);
+    }
+
+    auto fractured = fractured_pieces;
+    std::ranges::sort(fractured);
+    writer.integer<std::uint32_t>(static_cast<std::uint32_t>(fractured.size()));
+    for (const auto& [entity, part] : fractured) {
+        identifier(writer, entity);
+        identifier(writer, part);
+    }
+    auto pending_breaks = pending_joint_breaks;
+    std::ranges::sort(pending_breaks, {}, &PendingJointBreak::joint_id);
+    writer.integer<std::uint32_t>(static_cast<std::uint32_t>(pending_breaks.size()));
+    for (const PendingJointBreak& pending : pending_breaks) {
+        identifier(writer, pending.joint_id);
+        identifier(writer, pending.cause_event_id);
+    }
+    auto pending_fractures = pending_piece_fractures;
+    std::ranges::sort(pending_fractures, [](const auto& lhs, const auto& rhs) {
+        return std::pair{lhs.entity_id, lhs.part_id}
+            < std::pair{rhs.entity_id, rhs.part_id};
+    });
+    writer.integer<std::uint32_t>(static_cast<std::uint32_t>(pending_fractures.size()));
+    for (const PendingPieceFracture& pending : pending_fractures) {
+        identifier(writer, pending.entity_id);
+        identifier(writer, pending.part_id);
+        identifier(writer, pending.material_id);
+        identifier(writer, pending.incident_joint_id);
+        identifier(writer, pending.cause_event_id);
+        writer.vector(pending.position_m);
+    }
+
+    writer.integer<std::uint32_t>(static_cast<std::uint32_t>(command_queue.size()));
+    for (const QueuedCommand& queued : command_queue) {
+        writer.integer(queued.sequence);
+        write_player_command(writer, queued.command);
+    }
+
+    writer.boolean(shot.has_value());
+    if (shot) {
+        writer.integer(shot->shot_id);
+        identifier(writer, shot->bird_archetype_id);
+        identifier(writer, shot->ability_id);
+        identifier(writer, shot->launch_tick);
+        writer.vector(shot->locked_plane.camera_right);
+        writer.vector(shot->locked_plane.up);
+        writer.vector(shot->locked_plane.horizontal);
+        writer.vector(shot->locked_plane.plane_normal);
+        writer.quantized(shot->pull_horizontal_m);
+        writer.quantized(shot->pull_vertical_m);
+        writer.boolean(shot->activation_consumed);
+        write_ability_runtime(writer, shot->runtime);
+
+        std::vector<const ProjectileState*> projectiles;
+        projectiles.reserve(shot->projectiles.size());
+        for (const ProjectileState& projectile : shot->projectiles) {
+            projectiles.push_back(&projectile);
+        }
+        std::ranges::sort(projectiles, {}, &ProjectileState::entity_id);
+        writer.integer<std::uint32_t>(static_cast<std::uint32_t>(projectiles.size()));
+        for (const ProjectileState* projectile : projectiles) {
+            identifier(writer, projectile->entity_id);
+            writer.boolean(projectile->bullet);
+            writer.integer(projectile->age_ticks);
+            writer.integer(projectile->rest_ticks);
+            writer.boolean(projectile->finished);
+            writer.boolean(projectile->pending_destroy);
+        }
+    }
+
     writer.integer<std::uint32_t>(static_cast<std::uint32_t>(joint_records.size()));
     for (const JointRecord& joint : joint_records) {
         identifier(writer, joint.snapshot.id);
@@ -550,10 +1306,15 @@ std::vector<std::uint8_t> SimulationSession::Impl::canonical_state_uncached_for_
 
 void SimulationSession::Impl::refresh_canonical_state()
 {
-    if (bundle.level.source_schema_version != 1U) {
+    const std::uint32_t schema = bundle.level.source_schema_version;
+    if (schema == 1U) {
+        canonical_v3_bytes.clear();
+        canonical_v3_hash = 0U;
+    } else if (schema == 2U) {
         canonical_bytes.clear();
         canonical_hash = 0U;
-        return;
+    } else {
+        throw std::invalid_argument("canonical state requires schema version 1 or 2");
     }
 #if defined(NINHO_ENABLE_TEST_FACADES)
     if (canonical_refresh_failure_for_testing) {
@@ -562,11 +1323,18 @@ void SimulationSession::Impl::refresh_canonical_state()
         throw std::runtime_error(message);
     }
 #endif
-    std::vector<std::uint8_t> next_bytes = serialize_canonical_state(
-        canonical_material_blob, canonical_archetype_blob, canonical_level_blob);
-    const std::uint64_t next_hash = fnv1a64(next_bytes);
-    canonical_bytes = std::move(next_bytes);
-    canonical_hash = next_hash;
+    if (schema == 1U) {
+        std::vector<std::uint8_t> next_bytes = serialize_canonical_state(
+            canonical_material_blob, canonical_archetype_blob, canonical_level_blob);
+        const std::uint64_t next_hash = fnv1a64(next_bytes);
+        canonical_bytes = std::move(next_bytes);
+        canonical_hash = next_hash;
+    } else {
+        std::vector<std::uint8_t> next_bytes = serialize_canonical_state_v3();
+        const std::uint64_t next_hash = fnv1a64(next_bytes);
+        canonical_v3_bytes = std::move(next_bytes);
+        canonical_v3_hash = next_hash;
+    }
 }
 
 }

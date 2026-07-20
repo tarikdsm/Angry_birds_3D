@@ -53,23 +53,23 @@ using JointId = detail::StrongId<detail::JointIdTag, std::uint32_t>;
 using EventId = detail::StrongId<detail::EventIdTag, std::uint64_t>;
 using TickIndex = detail::StrongId<detail::TickIndexTag, std::uint64_t>;
 
-enum class ContentErrorCode {
-    None,
-    InvalidJson,
-    DuplicateKey,
-    ResourceLimit,
-    InvalidType,
-    InvalidNumber,
-    MissingField,
-    UnknownKey,
-    InvalidEnum,
-    OutOfRange,
-    DuplicateId,
-    MissingReference,
-    EmptyAssembly,
-    VisualMismatch,
-    InvalidInvariant,
-    InternalError,
+enum class ContentErrorCode : std::uint8_t {
+    None = 0,
+    InvalidJson = 1,
+    DuplicateKey = 2,
+    ResourceLimit = 3,
+    InvalidType = 4,
+    InvalidNumber = 5,
+    MissingField = 6,
+    UnknownKey = 7,
+    InvalidEnum = 8,
+    OutOfRange = 9,
+    DuplicateId = 10,
+    MissingReference = 11,
+    EmptyAssembly = 12,
+    VisualMismatch = 13,
+    InvalidInvariant = 14,
+    InternalError = 15,
 };
 
 struct ContentError {
@@ -86,13 +86,22 @@ struct ContentResult {
     explicit operator bool() const noexcept { return ok(); }
 };
 
-enum class MaterialResponse { Fibrous, Masonry, Brittle, Compressible, Ductile };
-enum class BodyType { Static, Dynamic };
-enum class ShapeType { Box, Sphere, Capsule, ConvexHull, Compound };
-enum class JointKind { PineFit, GlassClamp, Mortar };
-enum class ObjectiveKind { NeutralizeEntity };
-enum class AbilityKind { LegacyGravityField, GravityField, MassBoost, SpeedBoost, Explosion, Split };
-enum class EnvironmentalTriggerKind { DamageThreshold };
+enum class MaterialResponse : std::uint8_t {
+    Fibrous = 0, Masonry = 1, Brittle = 2, Compressible = 3, Ductile = 4};
+enum class BodyType : std::uint8_t { Static = 0, Dynamic = 1 };
+enum class ShapeType : std::uint8_t {
+    Box = 0, Sphere = 1, Capsule = 2, ConvexHull = 3, Compound = 4};
+enum class JointKind : std::uint8_t { PineFit = 0, GlassClamp = 1, Mortar = 2 };
+enum class ObjectiveKind : std::uint8_t { NeutralizeEntity = 0 };
+enum class AbilityKind : std::uint8_t {
+    LegacyGravityField = 0,
+    GravityField = 1,
+    MassBoost = 2,
+    SpeedBoost = 3,
+    Explosion = 4,
+    Split = 5,
+};
+enum class EnvironmentalTriggerKind : std::uint8_t { DamageThreshold = 0 };
 
 struct MaterialDefinition {
     MaterialId id;

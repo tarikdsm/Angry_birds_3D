@@ -596,6 +596,44 @@ NINHO_SIM_TEST("session canonical state contract is explicitly versioned as v2")
     }
 }
 
+NINHO_SIM_TEST("session canonical v2 freezes every pending legacy command and queue order")
+{
+    const std::array commands{
+        PlayerCommand{BeginAimCommand{}},
+        PlayerCommand{SetAimCommand{AimState{
+            {-13.0F, 0.0F, 0.0F}, {0.0F, 1.0F, 0.0F}, 10.5}}},
+        PlayerCommand{LaunchCommand{}},
+        PlayerCommand{ActivateAbilityCommand{}},
+        PlayerCommand{CancelAimCommand{}},
+    };
+    std::array<std::uint64_t, 6> actual{};
+    for (std::size_t index = 0; index < commands.size(); ++index) {
+        auto session = create_real_session();
+        NINHO_SIM_REQUIRE(session->enqueue(commands[index]).ok());
+        actual[index] = session->canonical_hash_v2();
+    }
+    auto ordered_queue = create_real_session();
+    for (const PlayerCommand& command : commands) {
+        NINHO_SIM_REQUIRE(ordered_queue->enqueue(command).ok());
+    }
+    actual.back() = ordered_queue->canonical_hash_v2();
+
+    constexpr std::array<std::uint64_t, 6> golden{
+        5744874256725084803ULL,
+        515178963462208224ULL,
+        3869036764581120913ULL,
+        8268707775012186916ULL,
+        15779464696783206375ULL,
+        11212476156426193241ULL,
+    };
+    if (actual != golden) {
+        std::ostringstream message;
+        message << "pending canonical v2 goldens: actual=";
+        for (const std::uint64_t value : actual) message << value << ',';
+        test::fail(__FILE__, __LINE__, message.str());
+    }
+}
+
 NINHO_SIM_TEST("session canonical cache preserves v2 bytes and reuses immutable bundle blobs")
 {
     using detail::SessionTestFacade;

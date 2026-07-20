@@ -24,20 +24,20 @@ class SessionTestFacade;
 }
 
 enum class SessionPhase : std::uint8_t {
-    Inspection,
-    Aim,
-    FlightAbility,
-    Resolution,
-    Evaluation,
-    Result,
-    Faulted,
-    Grabbed,
+    Inspection = 0,
+    Aim = 1,
+    FlightAbility = 2,
+    Resolution = 3,
+    Evaluation = 4,
+    Result = 5,
+    Faulted = 6,
+    Grabbed = 7,
 };
 
 enum class Outcome : std::uint8_t {
-    None,
-    Victory,
-    Defeat,
+    None = 0,
+    Victory = 1,
+    Defeat = 2,
 };
 
 struct LauncherState {
@@ -78,11 +78,11 @@ struct ObjectiveTargetStatus {
 };
 
 enum class AbilityReadiness : std::uint8_t {
-    Unavailable,
-    Arming,
-    Armed,
-    Active,
-    Spent,
+    Unavailable = 0,
+    Arming = 1,
+    Armed = 2,
+    Active = 3,
+    Spent = 4,
 };
 
 struct SessionStatus {
@@ -188,10 +188,13 @@ public:
     [[nodiscard]] std::vector<ObjectiveTargetStatus> objective_target_statuses() const;
     [[nodiscard]] AbilityReadiness ability_readiness() const noexcept;
     [[nodiscard]] ninho::physics::WorldMetrics physics_metrics() const noexcept;
-    // Legacy-only contract. Schema v2 sessions return an empty span/hash 0 until
-    // canonical_state_v3 is introduced by its dedicated task.
+    // Versioned contracts never alias one another: schema-v1 sessions publish
+    // only v2, while schema-v2 sessions publish only v3. The inactive version
+    // is always an empty byte vector with hash zero.
     [[nodiscard]] const std::vector<std::uint8_t>& canonical_state_v2() const noexcept;
     [[nodiscard]] std::uint64_t canonical_hash_v2() const noexcept;
+    [[nodiscard]] const std::vector<std::uint8_t>& canonical_state_v3() const noexcept;
+    [[nodiscard]] std::uint64_t canonical_hash_v3() const noexcept;
 
 private:
     friend struct detail::FractureAccess;

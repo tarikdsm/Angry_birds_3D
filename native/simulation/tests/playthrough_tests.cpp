@@ -330,6 +330,15 @@ NINHO_SIM_TEST("playthrough Virela route wins through public commands and physic
     require_resolved_causes(trace);
 }
 
+NINHO_SIM_TEST("playthrough legacy fixture publishes canonical v2 only")
+{
+    auto session = make_session();
+    NINHO_SIM_REQUIRE(!session->canonical_state_v2().empty());
+    NINHO_SIM_REQUIRE(session->canonical_hash_v2() != 0U);
+    NINHO_SIM_REQUIRE(session->canonical_state_v3().empty());
+    NINHO_SIM_REQUIRE(session->canonical_hash_v3() == 0U);
+}
+
 NINHO_SIM_TEST("playthrough Virela route requires its ability to neutralize the objective")
 {
     const Trace active = virela_victory_script();

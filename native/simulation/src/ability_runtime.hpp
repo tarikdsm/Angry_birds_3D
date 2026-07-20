@@ -1,0 +1,107 @@
+#pragma once
+
+#include "ninho/simulation/content.hpp"
+
+#include <optional>
+#include <stdexcept>
+#include <type_traits>
+#include <variant>
+
+namespace ninho::simulation {
+
+// Runtime alternatives are intentionally append-only. Canonical serialization
+// maps each type to an explicit tag and never depends on variant position.
+struct GravityFieldAbilityRuntime {
+    std::optional<TickIndex> start_tick;
+    std::optional<TickIndex> end_tick;
+    bool active{};
+
+    bool operator==(const GravityFieldAbilityRuntime&) const = default;
+};
+
+struct MassBoostAbilityRuntime {
+    std::optional<TickIndex> start_tick;
+    std::optional<TickIndex> end_tick;
+    bool active{};
+
+    bool operator==(const MassBoostAbilityRuntime&) const = default;
+};
+
+struct SpeedBoostAbilityRuntime {
+    std::optional<TickIndex> start_tick;
+    std::optional<TickIndex> end_tick;
+    bool active{};
+
+    bool operator==(const SpeedBoostAbilityRuntime&) const = default;
+};
+
+struct ExplosionAbilityRuntime {
+    std::optional<TickIndex> start_tick;
+    std::optional<TickIndex> end_tick;
+    bool active{};
+
+    bool operator==(const ExplosionAbilityRuntime&) const = default;
+};
+
+struct SplitAbilityRuntime {
+    std::optional<TickIndex> start_tick;
+    std::optional<TickIndex> end_tick;
+    bool active{};
+
+    bool operator==(const SplitAbilityRuntime&) const = default;
+};
+
+using AbilityRuntime = std::variant<GravityFieldAbilityRuntime,
+    MassBoostAbilityRuntime, SpeedBoostAbilityRuntime, ExplosionAbilityRuntime,
+    SplitAbilityRuntime>;
+
+[[nodiscard]] inline AbilityRuntime make_ability_runtime(AbilityKind kind)
+{
+    switch (kind) {
+    case AbilityKind::LegacyGravityField:
+    case AbilityKind::GravityField:
+        return GravityFieldAbilityRuntime{};
+    case AbilityKind::MassBoost:
+        return MassBoostAbilityRuntime{};
+    case AbilityKind::SpeedBoost:
+        return SpeedBoostAbilityRuntime{};
+    case AbilityKind::Explosion:
+        return ExplosionAbilityRuntime{};
+    case AbilityKind::Split:
+        return SplitAbilityRuntime{};
+    }
+    throw std::invalid_argument("unknown ability kind for runtime");
+}
+
+[[nodiscard]] inline bool ability_runtime_active(const AbilityRuntime& runtime) noexcept
+{
+    return std::visit([](const auto& value) { return value.active; }, runtime);
+}
+
+inline void set_ability_runtime_active(AbilityRuntime& runtime, bool active) noexcept
+{
+    std::visit([active](auto& value) { value.active = active; }, runtime);
+}
+
+[[nodiscard]] inline std::optional<TickIndex> ability_runtime_start_tick(
+    const AbilityRuntime& runtime) noexcept
+{
+    return std::visit([](const auto& value) { return value.start_tick; }, runtime);
+}
+
+[[nodiscard]] inline std::optional<TickIndex> ability_runtime_end_tick(
+    const AbilityRuntime& runtime) noexcept
+{
+    return std::visit([](const auto& value) { return value.end_tick; }, runtime);
+}
+
+inline void set_ability_runtime_window(AbilityRuntime& runtime,
+    TickIndex start_tick, TickIndex end_tick) noexcept
+{
+    std::visit([=](auto& value) {
+        value.start_tick = start_tick;
+        value.end_tick = end_tick;
+    }, runtime);
+}
+
+}

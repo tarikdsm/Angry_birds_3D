@@ -25,10 +25,12 @@ void SimulationSession::Impl::publish_ability_event(DomainEventKind kind,
     event.id = EventId{next_event_sequence++};
     event.tick = session_state.tick;
     event.kind = kind;
-    if (projectile) {
-        event.entity_id = projectile->entity_id;
-        event.bird_archetype_id = projectile->archetype_id;
-        event.ability_id = projectile->ability_id;
+    if (shot) {
+        if (const auto* projectile = primary_projectile(*shot)) {
+            event.entity_id = projectile->entity_id;
+        }
+        event.bird_archetype_id = shot->bird_archetype_id;
+        event.ability_id = shot->ability_id;
     }
     if (affected != nullptr) {
         event.affected_entity_id = affected->entity_id;
@@ -42,10 +44,14 @@ void SimulationSession::Impl::publish_ability_event(DomainEventKind kind,
 
 SessionStatus SimulationSession::Impl::apply_gravity_field_before_step()
 {
-    if (!projectile || !projectile->ability_active) {
+    if (!shot || !ability_runtime_active(shot->runtime)) {
         return {};
     }
-    const AbilityArchetype* ability = ability_archetype(projectile->ability_id);
+    const auto* projectile = primary_projectile(*shot);
+    if (projectile == nullptr) {
+        return ability_failure("active gravity field projectile is unavailable");
+    }
+    const AbilityArchetype* ability = ability_archetype(shot->ability_id);
     if (ability == nullptr || ability->kind != "gravity_field") {
         return ability_failure("active gravity field archetype is unavailable");
     }
@@ -116,8 +122,8 @@ SessionStatus SimulationSession::Impl::apply_gravity_field_before_step()
             ninho::physics::normalized_or_zero(toward_center)});
     }
 
-    const bool final_tick = projectile->ability_end_tick
-        && session_state.tick == *projectile->ability_end_tick;
+    const auto ability_end_tick = ability_runtime_end_tick(shot->runtime);
+    const bool final_tick = ability_end_tick && session_state.tick == *ability_end_tick;
     for (const Candidate& candidate : candidates) {
         const auto record = std::ranges::find_if(body_records, [&](const BodyRecord& value) {
             return value.entity_id == candidate.snapshot->entity_id
@@ -151,13 +157,16 @@ SessionStatus SimulationSession::Impl::apply_gravity_field_before_step()
 
 void SimulationSession::Impl::finish_gravity_field_after_step()
 {
-    if (!projectile || !projectile->ability_active || !projectile->ability_end_tick
-        || session_state.tick != *projectile->ability_end_tick) {
+    if (!shot || !ability_runtime_active(shot->runtime)) {
+        return;
+    }
+    const auto ability_end_tick = ability_runtime_end_tick(shot->runtime);
+    if (!ability_end_tick || session_state.tick != *ability_end_tick) {
         return;
     }
     publish_ability_event(DomainEventKind::AbilityPulse);
     publish_ability_event(DomainEventKind::AbilityEnded);
-    projectile->ability_active = false;
+    set_ability_runtime_active(shot->runtime, false);
 }
 
 }

@@ -32,7 +32,8 @@ struct DamageContact {
     double energy_j{};
 };
 
-enum class DamageOutcomeKind : std::uint8_t { DamageApplied, EntityNeutralized };
+enum class DamageOutcomeKind : std::uint8_t {
+    DamageApplied = 0, EntityNeutralized = 1};
 
 struct DamageOutcome {
     DamageOutcomeKind kind{};

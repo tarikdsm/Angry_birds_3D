@@ -3,6 +3,7 @@
 #include "ninho/simulation/session.hpp"
 #include "damage_system.hpp"
 #include "launcher_system.hpp"
+#include "shot_state.hpp"
 
 #include <ninho/physics/physics_world.hpp>
 
@@ -19,29 +20,28 @@ namespace ninho::simulation {
 
 namespace detail {
 [[nodiscard]] std::int64_t canonical_quantize(double value);
+[[nodiscard]] std::uint8_t canonical_tag_of(SessionPhase value);
+[[nodiscard]] std::uint8_t canonical_tag_of(Outcome value);
+[[nodiscard]] std::uint8_t canonical_tag_of(DomainEventKind value);
+[[nodiscard]] std::uint8_t canonical_tag_of(CommandRejectionReason value);
+[[nodiscard]] std::uint8_t canonical_tag_of(NeutralizationCause value);
+[[nodiscard]] std::uint8_t canonical_tag_of(DamageClassification value);
+[[nodiscard]] std::uint8_t canonical_tag_of(MaterialResponse value);
+[[nodiscard]] std::uint8_t canonical_tag_of(BodyType value);
+[[nodiscard]] std::uint8_t canonical_tag_of(ShapeType value);
+[[nodiscard]] std::uint8_t canonical_tag_of(JointKind value);
+[[nodiscard]] std::uint8_t canonical_tag_of(ObjectiveKind value);
+[[nodiscard]] std::uint8_t canonical_tag_of(AbilityKind value);
+[[nodiscard]] std::uint8_t canonical_tag_of(EnvironmentalTriggerKind value);
+[[nodiscard]] std::uint8_t canonical_tag_of(const PlayerCommand& value);
+[[nodiscard]] std::uint8_t canonical_tag_of(const WorldDefinition& value);
+[[nodiscard]] std::uint8_t canonical_tag_of(const AbilityRuntime& value);
 }
 
 struct SimulationSession::Impl {
     struct QueuedCommand {
         std::uint64_t sequence{};
         PlayerCommand command;
-    };
-
-    struct ProjectileState {
-        EntityId entity_id;
-        BirdArchetypeId archetype_id;
-        AbilityId ability_id;
-        ninho::physics::BodyHandle physics_handle;
-        bool bullet{};
-        TickIndex launch_tick{};
-        std::optional<TickIndex> ability_start_tick;
-        std::optional<TickIndex> ability_end_tick;
-        std::uint32_t age_ticks{};
-        std::uint32_t rest_ticks{};
-        bool finished{};
-        bool pending_destroy{};
-        bool ability_requested{};
-        bool ability_active{};
     };
 
     struct BodyRecord {
@@ -110,6 +110,7 @@ struct SimulationSession::Impl {
         const std::vector<std::uint8_t>& material_blob,
         const std::vector<std::uint8_t>& archetype_blob,
         const std::vector<std::uint8_t>& level_blob) const;
+    [[nodiscard]] std::vector<std::uint8_t> serialize_canonical_state_v3() const;
     void refresh_canonical_state();
 #if defined(NINHO_ENABLE_TEST_FACADES)
     [[nodiscard]] std::vector<std::uint8_t> canonical_state_uncached_for_testing() const;
@@ -137,7 +138,7 @@ struct SimulationSession::Impl {
     bool objective_complete{};
     std::deque<QueuedCommand> command_queue;
     std::vector<BirdRosterEntry> roster_remaining;
-    std::optional<ProjectileState> projectile;
+    std::optional<ShotState> shot;
     std::vector<BodyRecord> body_records;
     std::vector<JointRecord> joint_records;
     std::vector<PendingJointBreak> pending_joint_breaks;
@@ -175,6 +176,8 @@ struct SimulationSession::Impl {
 #endif
     std::vector<std::uint8_t> canonical_bytes;
     std::uint64_t canonical_hash{};
+    std::vector<std::uint8_t> canonical_v3_bytes;
+    std::uint64_t canonical_v3_hash{};
 };
 
 }

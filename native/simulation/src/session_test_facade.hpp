@@ -66,6 +66,13 @@ public:
     static std::size_t snapshot_visual_copy_count(const SimulationSession&);
     static std::vector<EntitySnapshot> snapshots_uncached(const SimulationSession&);
     static void rebuild_snapshots(SimulationSession&);
+    static bool set_snapshot_exited_world(
+        SimulationSession&, EntityId, PartId, bool exited_world);
+    static bool append_projectile_for_testing(SimulationSession&, EntityId);
+    static void reverse_projectiles_for_testing(SimulationSession&);
+    static void set_shot_runtime_for_testing(SimulationSession&, bool consumed,
+        bool active, std::optional<TickIndex> start_tick,
+        std::optional<TickIndex> end_tick);
 };
 
 }

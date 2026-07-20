@@ -300,9 +300,14 @@ NINHO_SIM_TEST("launcher system floors nonquantized authored speed caps")
 NINHO_SIM_TEST("launcher system grabbed session publishes only a ghost and keeps its locked frame")
 {
     auto session = create_session();
+    const auto canonical_before_grab = session->canonical_hash_v3();
+    NINHO_SIM_REQUIRE(session->canonical_state_v2().empty());
+    NINHO_SIM_REQUIRE(canonical_before_grab != 0U);
     const int bodies_before = session->physics_metrics().body_count;
     const std::uint32_t birds_before = session->birds_remaining();
     begin_grab(*session, {1.0F, 0.25F, 0.0F});
+    const auto canonical_locked = session->canonical_hash_v3();
+    NINHO_SIM_REQUIRE(canonical_locked != canonical_before_grab);
     const LauncherState locked = *session->state().launcher;
     NINHO_SIM_REQUIRE(session->physics_metrics().body_count == bodies_before);
     NINHO_SIM_REQUIRE(session->birds_remaining() == birds_before);
@@ -311,6 +316,7 @@ NINHO_SIM_TEST("launcher system grabbed session publishes only a ghost and keeps
     NINHO_SIM_REQUIRE(session->enqueue(SetPullCommand{1.0, -0.5}).ok());
     NINHO_SIM_REQUIRE(session->enqueue(BeginGrabCommand{{0.0F, 0.0F, 1.0F}}).ok());
     NINHO_SIM_REQUIRE(session->tick().ok());
+    NINHO_SIM_REQUIRE(session->canonical_hash_v3() != canonical_locked);
     NINHO_SIM_REQUIRE(session->state().phase == SessionPhase::Grabbed);
     NINHO_SIM_REQUIRE(session->state().launcher->camera_right == locked.camera_right);
     NINHO_SIM_REQUIRE(session->state().launcher->up == locked.up);

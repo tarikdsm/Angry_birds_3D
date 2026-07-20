@@ -165,22 +165,23 @@ std::vector<ObjectiveTargetStatus> SimulationSession::objective_target_statuses(
 
 AbilityReadiness SimulationSession::ability_readiness() const noexcept
 {
-    if (!impl_->projectile) {
+    if (!impl_->shot || primary_projectile(*impl_->shot) == nullptr) {
         return AbilityReadiness::Unavailable;
     }
-    if (impl_->projectile->ability_active) {
+    if (ability_runtime_active(impl_->shot->runtime)) {
         return AbilityReadiness::Active;
     }
-    if (impl_->projectile->ability_requested || impl_->projectile->finished
+    if (impl_->shot->activation_consumed
+        || primary_projectile(*impl_->shot)->finished
         || impl_->session_state.phase != SessionPhase::FlightAbility) {
         return AbilityReadiness::Spent;
     }
     const AbilityArchetype* ability = impl_->ability_archetype(
-        impl_->projectile->ability_id);
+        impl_->shot->ability_id);
     if (ability == nullptr) {
         return AbilityReadiness::Unavailable;
     }
-    const auto armed_tick = impl_->projectile->launch_tick.value()
+    const auto armed_tick = impl_->shot->launch_tick.value()
         + static_cast<std::uint64_t>(ability->arm_ticks);
     return impl_->session_state.tick.value() >= armed_tick
         ? AbilityReadiness::Armed : AbilityReadiness::Arming;
@@ -199,6 +200,16 @@ const std::vector<std::uint8_t>& SimulationSession::canonical_state_v2() const n
 std::uint64_t SimulationSession::canonical_hash_v2() const noexcept
 {
     return impl_->canonical_hash;
+}
+
+const std::vector<std::uint8_t>& SimulationSession::canonical_state_v3() const noexcept
+{
+    return impl_->canonical_v3_bytes;
+}
+
+std::uint64_t SimulationSession::canonical_hash_v3() const noexcept
+{
+    return impl_->canonical_v3_hash;
 }
 
 #if defined(NINHO_ENABLE_TEST_FACADES)
@@ -222,13 +233,16 @@ std::uint64_t detail::SessionTestFacade::last_processed_command_sequence(
 
 bool detail::SessionTestFacade::projectile_is_bullet(const SimulationSession& session)
 {
-    return session.impl_->projectile && session.impl_->projectile->bullet;
+    return session.impl_->shot && primary_projectile(*session.impl_->shot)
+        && primary_projectile(*session.impl_->shot)->bullet;
 }
 
 void detail::SessionTestFacade::finish_projectile(SimulationSession& session)
 {
-    if (session.impl_->projectile) {
-        session.impl_->projectile->finished = true;
+    if (session.impl_->shot) {
+        if (auto* projectile = primary_projectile(*session.impl_->shot)) {
+            projectile->finished = true;
+        }
         session.impl_->force_settled_for_testing = true;
     }
 }
@@ -246,27 +260,30 @@ void detail::SessionTestFacade::complete_objective(SimulationSession& session)
 
 void detail::SessionTestFacade::set_ability_active(SimulationSession& session, bool active)
 {
-    if (session.impl_->projectile) {
-        session.impl_->projectile->ability_active = active;
+    if (session.impl_->shot) {
+        set_ability_runtime_active(session.impl_->shot->runtime, active);
     }
 }
 
 void detail::SessionTestFacade::age_projectile(
     SimulationSession& session, std::uint32_t age_ticks)
 {
-    if (session.impl_->projectile) {
-        session.impl_->projectile->age_ticks = age_ticks;
+    if (session.impl_->shot) {
+        if (auto* projectile = primary_projectile(*session.impl_->shot)) {
+            projectile->age_ticks = age_ticks;
+        }
     }
 }
 
 bool detail::SessionTestFacade::ability_requested(const SimulationSession& session)
 {
-    return session.impl_->projectile && session.impl_->projectile->ability_requested;
+    return session.impl_->shot && session.impl_->shot->activation_consumed;
 }
 
 bool detail::SessionTestFacade::ability_active(const SimulationSession& session)
 {
-    return session.impl_->projectile && session.impl_->projectile->ability_active;
+    return session.impl_->shot
+        && ability_runtime_active(session.impl_->shot->runtime);
 }
 
 bool detail::SessionTestFacade::impulse_entity(
@@ -394,14 +411,16 @@ void detail::SessionTestFacade::fracture_piece_at_incident_tie_after_solver(
 
 TickIndex detail::SessionTestFacade::projectile_launch_tick(const SimulationSession& session)
 {
-    return session.impl_->projectile ? session.impl_->projectile->launch_tick : TickIndex{};
+    return session.impl_->shot ? session.impl_->shot->launch_tick : TickIndex{};
 }
 
 TickIndex detail::SessionTestFacade::ability_end_tick(const SimulationSession& session)
 {
-    return session.impl_->projectile && session.impl_->projectile->ability_end_tick
-        ? *session.impl_->projectile->ability_end_tick
-        : TickIndex{};
+    if (!session.impl_->shot) {
+        return {};
+    }
+    const auto end_tick = ability_runtime_end_tick(session.impl_->shot->runtime);
+    return end_tick.value_or(TickIndex{});
 }
 
 BirdArchetypeId detail::SessionTestFacade::next_bird_archetype_id(
@@ -413,7 +432,7 @@ BirdArchetypeId detail::SessionTestFacade::next_bird_archetype_id(
 
 AbilityId detail::SessionTestFacade::ability_id(const SimulationSession& session)
 {
-    return session.impl_->projectile ? session.impl_->projectile->ability_id : AbilityId{};
+    return session.impl_->shot ? session.impl_->shot->ability_id : AbilityId{};
 }
 
 void detail::SessionTestFacade::set_launch_ordinal(
@@ -493,6 +512,59 @@ std::vector<EntitySnapshot> detail::SessionTestFacade::snapshots_uncached(
 void detail::SessionTestFacade::rebuild_snapshots(SimulationSession& session)
 {
     session.impl_->rebuild_snapshots();
+}
+
+bool detail::SessionTestFacade::set_snapshot_exited_world(
+    SimulationSession& session, EntityId entity, PartId part, bool exited_world)
+{
+    const auto snapshot = std::ranges::find_if(session.impl_->entity_snapshots,
+        [&](const EntitySnapshot& value) {
+            return value.entity_id == entity && value.part_id == part;
+        });
+    if (snapshot == session.impl_->entity_snapshots.end()) {
+        return false;
+    }
+    snapshot->exited_world = exited_world;
+    return true;
+}
+
+bool detail::SessionTestFacade::append_projectile_for_testing(
+    SimulationSession& session, EntityId entity)
+{
+    if (!session.impl_->shot) {
+        return false;
+    }
+    const auto* source = primary_projectile(*session.impl_->shot);
+    if (source == nullptr) {
+        return false;
+    }
+    ProjectileState appended = *source;
+    appended.entity_id = entity;
+    session.impl_->shot->projectiles.push_back(appended);
+    return true;
+}
+
+void detail::SessionTestFacade::reverse_projectiles_for_testing(
+    SimulationSession& session)
+{
+    if (session.impl_->shot) {
+        std::ranges::reverse(session.impl_->shot->projectiles);
+    }
+}
+
+void detail::SessionTestFacade::set_shot_runtime_for_testing(
+    SimulationSession& session, bool consumed, bool active,
+    std::optional<TickIndex> start_tick, std::optional<TickIndex> end_tick)
+{
+    if (!session.impl_->shot) {
+        return;
+    }
+    session.impl_->shot->activation_consumed = consumed;
+    std::visit([&](auto& runtime) {
+        runtime.start_tick = start_tick;
+        runtime.end_tick = end_tick;
+        runtime.active = active;
+    }, session.impl_->shot->runtime);
 }
 
 std::int64_t detail::SessionTestFacade::quantize_canonical(double value)

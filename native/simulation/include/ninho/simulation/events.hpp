@@ -6,39 +6,39 @@
 namespace ninho::simulation {
 
 enum class DomainEventKind : std::uint8_t {
-    BirdLaunched,
-    AbilityActivationRequested,
-    CommandRejected,
-    AbilityStarted,
-    AbilityAffectedBody,
-    AbilityPulse,
-    AbilityEnded,
-    DamageApplied,
-    EntityNeutralized,
-    JointOverloaded,
-    PieceFractureTriggered,
-    JointBroken,
-    PieceFractured,
+    BirdLaunched = 0,
+    AbilityActivationRequested = 1,
+    CommandRejected = 2,
+    AbilityStarted = 3,
+    AbilityAffectedBody = 4,
+    AbilityPulse = 5,
+    AbilityEnded = 6,
+    DamageApplied = 7,
+    EntityNeutralized = 8,
+    JointOverloaded = 9,
+    PieceFractureTriggered = 10,
+    JointBroken = 11,
+    PieceFractured = 12,
 };
 
 enum class CommandRejectionReason : std::uint8_t {
-    None,
-    InvalidPhase,
-    InvalidAim,
-    NotArmed,
-    NoBirdAvailable,
+    None = 0,
+    InvalidPhase = 1,
+    InvalidAim = 2,
+    NotArmed = 3,
+    NoBirdAvailable = 4,
 };
 
 enum class NeutralizationCause : std::uint8_t {
-    None,
-    IntegrityDepleted,
-    Ejection,
+    None = 0,
+    IntegrityDepleted = 1,
+    Ejection = 2,
 };
 
 enum class DamageClassification : std::uint8_t {
-    None,
-    Protected,
-    Vulnerable,
+    None = 0,
+    Protected = 1,
+    Vulnerable = 2,
 };
 
 struct DomainEvent {

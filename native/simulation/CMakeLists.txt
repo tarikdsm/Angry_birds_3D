@@ -45,6 +45,7 @@ if(BUILD_TESTING)
     tests/world_mode_tests.cpp
     tests/compound_shape_tests.cpp
     tests/launcher_system_tests.cpp
+    tests/shot_state_tests.cpp
     tests/session_tests.cpp
     tests/launch_fsm_tests.cpp
     tests/gravity_field_ability_tests.cpp
@@ -82,6 +83,10 @@ if(BUILD_TESTING)
   add_test(
     NAME launcher_system
     COMMAND ninho_simulation_tests --filter "launcher system"
+  )
+  add_test(
+    NAME shot_state
+    COMMAND ninho_simulation_tests --filter "shot state"
   )
   add_test(
     NAME launch_fsm

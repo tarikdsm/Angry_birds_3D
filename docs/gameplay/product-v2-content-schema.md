@@ -342,3 +342,98 @@ mesmos bytes JSON no round-trip seguinte.
 quatro valores com `source_schema_version = 2`: MaterialCatalog,
 ArchetypeCatalog, CampaignManifest e LevelManifest. O bundle legado aceita apenas
 v1. Assim, nenhum caminho interpreta um documento de uma versão como a outra.
+
+## Estado canônico binário v3
+
+Sessões com `source_schema_version = 2` publicam exclusivamente
+`canonical_state_v3`/`canonical_hash_v3`; nelas, v2 permanece vazio e com hash
+zero. Sessões v1 continuam publicando exclusivamente `canonical_state_v2`; v3
+fica vazio e com hash zero. Não existe conversão entre os dois layouts.
+
+O encoding v3 usa little-endian e os seguintes primitivos:
+
+- inteiros: largura declarada no campo (`u8`, `u32` ou `u64`);
+- booleano: `u8`, somente 0 ou 1;
+- texto: tamanho UTF-8 `u32`, seguido pelos bytes sem terminador;
+- ID: a largura da representação forte (`u32`, exceto Event/Tick `u64`);
+- opcional: booleano de presença seguido pelo payload quando presente;
+- real/vetor/quaternion: `i64 = round(valor * 100000)`; qualquer zero,
+  inclusive `-0`, vira `+0`; NaN, infinito e overflow falham sem substituir o
+  cache anteriormente publicado;
+- coleção: cardinalidade `u32` seguida pelos itens.
+
+Nenhuma tag depende da posição de `std::variant`. As tags são append-only:
+
+| Família | Tags v3 |
+|---|---|
+| world/gravity | `uniform=0`, `radial=1` |
+| bounds | `aabb=0`, `spherical=1` |
+| ability kind | `legacy_gravity_field=0`, `gravity_field=1`, `mass_boost=2`, `speed_boost=3`, `explosion=4`, `split=5` |
+| ability runtime/payload | `gravity_field=0`, `mass_boost=1`, `speed_boost=2`, `explosion=3`, `split=4` |
+| command | `begin_aim=0`, `set_aim=1`, `launch=2`, `activate_ability=3`, `cancel_aim=4`, `begin_grab=5`, `set_pull=6`, `release_bird=7`, `cancel_grab=8` |
+| phase | `inspection=0`, `aim=1`, `flight_ability=2`, `resolution=3`, `evaluation=4`, `result=5`, `faulted=6`, `grabbed=7` |
+| outcome | `none=0`, `victory=1`, `defeat=2` |
+| command rejection | `none=0`, `invalid_phase=1`, `invalid_aim=2`, `not_armed=3`, `no_bird_available=4` |
+| neutralization cause | `none=0`, `integrity_depleted=1`, `ejection=2` |
+| damage classification | `none=0`, `protected=1`, `vulnerable=2` |
+| material response | `fibrous=0`, `masonry=1`, `brittle=2`, `compressible=3`, `ductile=4` |
+| body | `static=0`, `dynamic=1` |
+| shape | `box=0`, `sphere=1`, `capsule=2`, `convex_hull=3`, `compound=4` |
+| joint | `pine_fit=0`, `glass_clamp=1`, `mortar=2` |
+| objective | `neutralize_entity=0` |
+| environmental trigger | `damage_threshold=0` |
+| event | `bird_launched=0`, `ability_activation_requested=1`, `command_rejected=2`, `ability_started=3`, `ability_affected_body=4`, `ability_pulse=5`, `ability_ended=6`, `damage_applied=7`, `entity_neutralized=8`, `joint_overloaded=9`, `piece_fracture_triggered=10`, `joint_broken=11`, `piece_fractured=12` |
+
+### Ordem do stream v3
+
+O stream possui exatamente esta ordem de blocos:
+
+1. texto `canonical_state_v3` e `u32` de versão igual a 3;
+2. conteúdo imutável: MaterialCatalog, ArchetypeCatalog e LevelManifest;
+3. `tick`, phase, outcome, birds_remaining, sequências do próximo comando e
+   evento, último comando processado, launch_count, resolution_rest_ticks e
+   objective_complete;
+4. `current_score u64` e `stars u8`, ambos reservados como zero até a Task 16;
+5. aim opcional, launcher/plano/pull opcional e last_impact opcional;
+6. snapshots, joints publicados, eventos e estados de dano;
+7. peças fraturadas, quebras/fraturas pendentes e fila de comandos;
+8. ShotState opcional e contadores runtime de joints.
+
+O bloco imutável escreve catálogos por ID crescente; registries de strings por
+ordem lexicográfica; e bodies, joints, assemblies, objectives e triggers por ID.
+A ordem autoral de `bird_queue` é preservada e nunca classificada. Cada ability
+inclui os campos normalizados usados pelo runtime, a tag e o payload fechado.
+World escreve gravity kind+payload e depois bounds kind+payload. Slingshot
+escreve asset, rest position/rotation, `k`, eficiência, deadzone, extensão
+máxima, plane policy, clearance e speed ceiling, nessa ordem.
+
+Shapes escrevem tag e local transform antes do payload: half-extents para box;
+radius para sphere; radius/half-height para capsule; vértices na ordem autoral
+para hull; filhos na ordem autoral e recursivamente para compound. Nenhum mesh,
+handle ou ponteiro entra no stream.
+
+LauncherState escreve rest position, camera_right aceita, up, horizontal,
+plane_normal, pull horizontal/vertical, extension, spring/launch energy,
+launch_direction, predicted speed, deadzone e extensão máxima. Assim, uma
+camera_right aceita diferente muda v3, embora input rejeitado não altere o plano.
+
+Cada comando pendente preserva a ordem da deque e escreve sequence, tag e seu
+payload: SetAim escreve aim completo; BeginGrab escreve camera_right; SetPull
+escreve os dois componentes; os demais não têm payload.
+
+ShotState escreve `shot_id`, bird, ability, launch_tick, plano travado
+(camera_right/up/horizontal/plane_normal), pull aceito, activation_consumed,
+AbilityRuntime e projéteis. O runtime escreve tag, start/end ticks opcionais e
+active. Projéteis são sempre serializados por EntityId crescente e escrevem
+EntityId, bullet, age/rest ticks, finished e pending_destroy. O BodyHandle é
+deliberadamente excluído.
+
+Snapshots são serializados por `(EntityId, PartId)` e incluem todos os campos
+publicados, inclusive `ejected`, `exited_world` e `is_projectile`. Damage states,
+peças e pendências são ordenados pela identidade de domínio; eventos e comandos
+preservam a ordem causal/de fila. Métricas de tempo, durações de frame, handles,
+endereços e estado de apresentação/save ficam fora do stream.
+
+`canonical_hash_v3` é FNV-1a 64 sobre os bytes acima. O fixture mínimo fica
+congelado independentemente dos goldens v2; 50 serializações sem mutação devem
+ser byte-idênticas.

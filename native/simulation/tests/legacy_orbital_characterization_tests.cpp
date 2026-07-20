@@ -1,6 +1,7 @@
 #include "test_framework.hpp"
 
 #include "session_test_facade.hpp"
+#include "session_internal.hpp"
 #include "ninho/physics/radial_gravity.hpp"
 #include "ninho/simulation/session.hpp"
 
@@ -387,13 +388,13 @@ NINHO_SIM_TEST("legacy orbital characterization freezes numeric tags")
     NINHO_SIM_REQUIRE((classification_tags == std::array<std::uint8_t, 3>{0, 1, 2}));
 
     const std::array command_tags{
-        PlayerCommand{BeginAimCommand{}}.index(),
-        PlayerCommand{SetAimCommand{}}.index(),
-        PlayerCommand{LaunchCommand{}}.index(),
-        PlayerCommand{ActivateAbilityCommand{}}.index(),
-        PlayerCommand{CancelAimCommand{}}.index(),
+        detail::canonical_tag_of(PlayerCommand{BeginAimCommand{}}),
+        detail::canonical_tag_of(PlayerCommand{SetAimCommand{}}),
+        detail::canonical_tag_of(PlayerCommand{LaunchCommand{}}),
+        detail::canonical_tag_of(PlayerCommand{ActivateAbilityCommand{}}),
+        detail::canonical_tag_of(PlayerCommand{CancelAimCommand{}}),
     };
-    NINHO_SIM_REQUIRE((command_tags == std::array<std::size_t, 5>{0, 1, 2, 3, 4}));
+    NINHO_SIM_REQUIRE((command_tags == std::array<std::uint8_t, 5>{0, 1, 2, 3, 4}));
 }
 
 NINHO_SIM_TEST("legacy orbital characterization freezes canonical state v2")
