@@ -1,5 +1,6 @@
 add_executable(ninho_physics_tests
   test_main.cpp
+  gravity_field_tests.cpp
   radial_gravity_tests.cpp
   world_lifecycle_tests.cpp
   capability_tests.cpp
@@ -28,6 +29,7 @@ if(MSVC)
 endif()
 
 add_test(NAME radial COMMAND ninho_physics_tests --filter radial)
+add_test(NAME gravity_field_modes COMMAND ninho_physics_tests --filter "gravity field modes")
 add_test(NAME world COMMAND ninho_physics_tests --filter world)
 add_test(NAME contracts COMMAND ninho_physics_tests --filter contract)
 add_test(NAME capability COMMAND ninho_physics_tests --filter capability)

@@ -1,6 +1,6 @@
 #pragma once
 
-#include <ninho/physics/physics_limits.hpp>
+#include <ninho/physics/gravity_field.hpp>
 #include <ninho/physics/physics_types.hpp>
 
 #include <cstdint>
@@ -8,23 +8,17 @@
 
 namespace ninho::physics {
 
-struct RadialGravityConfig {
-    Vec3 center{};
-    float radius{10.0f};
-    float surface_acceleration{9.0f};
-};
-
 class RadialGravity {
 public:
     explicit RadialGravity(RadialGravityConfig config)
-        : config_(config)
+        : gravity_(GravityFieldConfig{config})
     {
     }
 
     [[nodiscard]] Vec3 acceleration(Vec3 position) const noexcept;
 
 private:
-    RadialGravityConfig config_;
+    GravityField gravity_;
 };
 
 class EjectionTracker {
