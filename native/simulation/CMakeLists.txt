@@ -1,5 +1,6 @@
 add_library(ninho_simulation_kernel STATIC
   src/content.cpp
+  src/product_v2_content.cpp
   src/canonical_state.cpp
   src/session.cpp
   src/session_builder.cpp
@@ -34,6 +35,7 @@ if(BUILD_TESTING)
     tests/test_main.cpp
     tests/kernel_contract_tests.cpp
     tests/content_tests.cpp
+    tests/product_v2_content_tests.cpp
     tests/session_tests.cpp
     tests/launch_fsm_tests.cpp
     tests/gravity_field_ability_tests.cpp
@@ -103,6 +105,10 @@ if(BUILD_TESTING)
   add_test(
     NAME content_manifest
     COMMAND ninho_simulation_tests --filter content
+  )
+  add_test(
+    NAME product_v2_content
+    COMMAND ninho_simulation_tests --filter "product v2 content"
   )
   add_test(
     NAME session_bootstrap

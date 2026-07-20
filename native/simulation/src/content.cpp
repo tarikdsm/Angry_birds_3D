@@ -21,6 +21,11 @@ static_assert(NLOHMANN_JSON_VERSION_MINOR == 11);
 static_assert(NLOHMANN_JSON_VERSION_PATCH == 3);
 
 namespace ninho::simulation {
+namespace detail {
+std::string to_canonical_json_v2(const MaterialCatalog&);
+std::string to_canonical_json_v2(const ArchetypeCatalog&);
+std::string to_canonical_json_v2(const LevelManifest&);
+}
 namespace {
 
 using json = nlohmann::json;
@@ -378,9 +383,11 @@ json parse_json(std::string_view text, std::size_t byte_limit)
 MaterialCatalog parse_material_catalog_impl(std::string_view text)
 {
     const auto root = parse_json(text, kCatalogMaxBytes);
+    require_object(root, "");
+    const auto source_schema_version = read_uint(root, "schema_version", "", 1U, 1U);
     require_keys(root, "", {"schema_version", "materials", "surfaces"});
     MaterialCatalog result;
-    result.schema_version = read_uint(root, "schema_version", "", 1U, 1U);
+    result.schema_version = result.source_schema_version = source_schema_version;
 
     const auto& materials = member(root, "materials", "");
     require_collection(materials, "/materials", 64U, true);
@@ -437,9 +444,11 @@ MaterialCatalog parse_material_catalog_impl(std::string_view text)
 ArchetypeCatalog parse_archetype_catalog_impl(std::string_view text)
 {
     const auto root = parse_json(text, kCatalogMaxBytes);
+    require_object(root, "");
+    const auto source_schema_version = read_uint(root, "schema_version", "", 1U, 1U);
     require_keys(root, "", {"schema_version", "abilities", "birds", "weakpoints", "enemies"});
     ArchetypeCatalog result;
-    result.schema_version = read_uint(root, "schema_version", "", 1U, 1U);
+    result.schema_version = result.source_schema_version = source_schema_version;
 
     const auto& abilities = member(root, "abilities", "");
     require_collection(abilities, "/abilities", 16U);
@@ -578,10 +587,12 @@ ShapeDefinition parse_shape(const json& item, const std::string& pointer)
 LevelManifest parse_level_manifest_impl(std::string_view text)
 {
     const auto root = parse_json(text, kLevelMaxBytes);
+    require_object(root, "");
+    const auto source_schema_version = read_uint(root, "schema_version", "", 1U, 1U);
     require_keys(root, "", {"schema_version", "id", "planet", "launch_ring", "bird_roster", "free_body_ids",
         "bodies", "joints", "assemblies", "objectives"});
     LevelManifest result;
-    result.schema_version = read_uint(root, "schema_version", "", 1U, 1U);
+    result.schema_version = result.source_schema_version = source_schema_version;
     result.id = read_string(root, "id", "");
 
     const auto& planet = member(root, "planet", "");
@@ -811,6 +822,8 @@ const char* response_name(MaterialResponse value)
     case MaterialResponse::Fibrous: return "fibrous";
     case MaterialResponse::Masonry: return "masonry";
     case MaterialResponse::Brittle: return "brittle";
+    case MaterialResponse::Compressible: return "compressible";
+    case MaterialResponse::Ductile: return "ductile";
     }
     return "invalid";
 }
@@ -844,25 +857,61 @@ double body_volume_m3(const BodyDefinition& body)
 
 }
 
-ContentResult<MaterialCatalog> parse_material_catalog(std::string_view text) noexcept
+ContentResult<std::uint32_t> detect_schema_version(std::string_view text, std::size_t byte_limit) noexcept
+{
+    return boundary<std::uint32_t>([&] {
+        const auto root = parse_json(text, byte_limit);
+        require_object(root, "");
+        return read_uint(root, "schema_version", "", 1U, 2U);
+    });
+}
+
+ContentResult<MaterialCatalog> parse_material_catalog_v1(std::string_view text) noexcept
 {
     return boundary<MaterialCatalog>([&] { return parse_material_catalog_impl(text); });
 }
 
-ContentResult<ArchetypeCatalog> parse_archetype_catalog(std::string_view text) noexcept
+ContentResult<ArchetypeCatalog> parse_archetype_catalog_v1(std::string_view text) noexcept
 {
     return boundary<ArchetypeCatalog>([&] { return parse_archetype_catalog_impl(text); });
 }
 
-ContentResult<LevelManifest> parse_level_manifest(std::string_view text) noexcept
+ContentResult<LevelManifest> parse_level_manifest_v1(std::string_view text) noexcept
 {
     return boundary<LevelManifest>([&] { return parse_level_manifest_impl(text); });
+}
+
+ContentResult<MaterialCatalog> parse_material_catalog(std::string_view text) noexcept
+{
+    const auto version = detect_schema_version(text, kCatalogMaxBytes);
+    if (!version) return {{}, version.error};
+    return version.value == 1U ? parse_material_catalog_v1(text) : parse_material_catalog_v2(text);
+}
+
+ContentResult<ArchetypeCatalog> parse_archetype_catalog(std::string_view text) noexcept
+{
+    const auto version = detect_schema_version(text, kCatalogMaxBytes);
+    if (!version) return {{}, version.error};
+    return version.value == 1U ? parse_archetype_catalog_v1(text) : parse_archetype_catalog_v2(text);
+}
+
+ContentResult<LevelManifest> parse_level_manifest(std::string_view text) noexcept
+{
+    const auto version = detect_schema_version(text, kLevelMaxBytes);
+    if (!version) return {{}, version.error};
+    return version.value == 1U ? parse_level_manifest_v1(text) : parse_level_manifest_v2(text);
 }
 
 ContentResult<ContentBundle> make_content_bundle(const MaterialCatalog& materials,
     const ArchetypeCatalog& archetypes, const LevelManifest& level) noexcept
 {
     return boundary<ContentBundle>([&] {
+        if (materials.source_schema_version != 1U
+            || archetypes.source_schema_version != 1U
+            || level.source_schema_version != 1U) {
+            fail(ContentErrorCode::InvalidInvariant, "/schema_version",
+                "legacy bundle requires only schema version 1");
+        }
         std::unordered_map<std::uint32_t, const MaterialDefinition*> material_index;
         std::unordered_map<std::uint32_t, const PhysicsSurfaceDefinition*> surface_index;
         std::unordered_map<std::uint32_t, const BirdArchetype*> bird_index;
@@ -1167,6 +1216,7 @@ ContentResult<ContentBundle> make_content_bundle(const MaterialCatalog& material
 
 std::string to_canonical_json(const MaterialCatalog& catalog)
 {
+    if (catalog.source_schema_version == 2U) return detail::to_canonical_json_v2(catalog);
     json root{{"schema_version", catalog.schema_version}, {"materials", json::array()}, {"surfaces", json::array()}};
     for (const auto& item : catalog.materials) {
         root["materials"].push_back({{"id", item.id.value()}, {"key", item.key}, {"response", response_name(item.response)},
@@ -1182,6 +1232,7 @@ std::string to_canonical_json(const MaterialCatalog& catalog)
 
 std::string to_canonical_json(const ArchetypeCatalog& catalog)
 {
+    if (catalog.source_schema_version == 2U) return detail::to_canonical_json_v2(catalog);
     json root{{"schema_version", catalog.schema_version}, {"abilities", json::array()}, {"birds", json::array()},
         {"weakpoints", json::array()}, {"enemies", json::array()}};
     for (const auto& item : catalog.abilities) root["abilities"].push_back({{"id", item.id.value()}, {"key", item.key}, {"kind", item.kind},
@@ -1203,6 +1254,7 @@ std::string to_canonical_json(const ArchetypeCatalog& catalog)
 
 std::string to_canonical_json(const LevelManifest& level)
 {
+    if (level.source_schema_version == 2U) return detail::to_canonical_json_v2(level);
     json root{{"schema_version", level.schema_version}, {"id", level.id},
         {"planet", {{"entity_id", level.planet.entity_id.value()}, {"radius_m", level.planet.radius_m},
             {"surface_gravity_m_s2", level.planet.surface_gravity_m_s2}, {"surface_id", level.planet.surface_id.value()},

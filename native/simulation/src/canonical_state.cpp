@@ -155,6 +155,9 @@ void write_shape(CanonicalWriter& writer, const ShapeDefinition& shape)
 
 std::vector<std::uint8_t> canonical_material_catalog(const MaterialCatalog& catalog)
 {
+    if (catalog.source_schema_version != 1U) {
+        throw std::invalid_argument("canonical_state_v2 requires schema version 1 content");
+    }
     CanonicalWriter writer;
     writer.integer(catalog.schema_version);
     const auto materials = ordered_by(catalog.materials, &MaterialDefinition::id);
@@ -182,6 +185,9 @@ std::vector<std::uint8_t> canonical_material_catalog(const MaterialCatalog& cata
 
 std::vector<std::uint8_t> canonical_archetype_catalog(const ArchetypeCatalog& catalog)
 {
+    if (catalog.source_schema_version != 1U) {
+        throw std::invalid_argument("canonical_state_v2 requires schema version 1 content");
+    }
     CanonicalWriter writer;
     writer.integer(catalog.schema_version);
     const auto abilities = ordered_by(catalog.abilities, &AbilityArchetype::id);
@@ -241,6 +247,9 @@ std::vector<std::uint8_t> canonical_archetype_catalog(const ArchetypeCatalog& ca
 
 std::vector<std::uint8_t> canonical_level_manifest(const LevelManifest& level)
 {
+    if (level.source_schema_version != 1U) {
+        throw std::invalid_argument("canonical_state_v2 requires schema version 1 content");
+    }
     CanonicalWriter writer;
     writer.integer(level.schema_version);
     writer.text(level.id);

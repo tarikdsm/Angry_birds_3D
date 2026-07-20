@@ -8,6 +8,7 @@
 #include <concepts>
 #include <cstdint>
 #include <type_traits>
+#include <variant>
 
 namespace {
 
@@ -57,6 +58,10 @@ static_assert(std::is_trivially_copyable_v<EventId>);
 static_assert(std::is_trivially_copyable_v<TickIndex>);
 static_assert(std::is_enum_v<SessionPhase>);
 static_assert(std::is_enum_v<Outcome>);
+static_assert(std::variant_size_v<ninho::simulation::WorldDefinition> == 2U);
+static_assert(std::variant_size_v<ninho::simulation::AbilityArchetype::Payload> == 5U);
+static_assert(!std::same_as<ninho::simulation::UniformWorldDefinition,
+    ninho::simulation::RadialWorldDefinition>);
 
 NINHO_SIM_TEST("simulation contracts start in inspection without an outcome")
 {

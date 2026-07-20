@@ -288,6 +288,12 @@ NINHO_SIM_TEST("content canonical round trip preserves all three typed documents
     const auto archetypes = parse_archetype_catalog(files.archetypes_text);
     const auto level = parse_level_manifest(files.level_text);
     NINHO_SIM_REQUIRE(materials.ok() && archetypes.ok() && level.ok());
+    NINHO_SIM_REQUIRE(parse_material_catalog_v1(files.materials_text).ok());
+    NINHO_SIM_REQUIRE(parse_archetype_catalog_v1(files.archetypes_text).ok());
+    NINHO_SIM_REQUIRE(parse_level_manifest_v1(files.level_text).ok());
+    NINHO_SIM_REQUIRE(materials.value.source_schema_version == 1U);
+    NINHO_SIM_REQUIRE(archetypes.value.source_schema_version == 1U);
+    NINHO_SIM_REQUIRE(level.value.source_schema_version == 1U);
 
     const auto materials_again = parse_material_catalog(to_canonical_json(materials.value));
     const auto archetypes_again = parse_archetype_catalog(to_canonical_json(archetypes.value));

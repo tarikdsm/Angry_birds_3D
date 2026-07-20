@@ -6,6 +6,7 @@
 #include <optional>
 #include <string>
 #include <string_view>
+#include <variant>
 #include <vector>
 
 namespace ninho::simulation {
@@ -85,11 +86,13 @@ struct ContentResult {
     explicit operator bool() const noexcept { return ok(); }
 };
 
-enum class MaterialResponse { Fibrous, Masonry, Brittle };
+enum class MaterialResponse { Fibrous, Masonry, Brittle, Compressible, Ductile };
 enum class BodyType { Static, Dynamic };
-enum class ShapeType { Box, Sphere };
+enum class ShapeType { Box, Sphere, Capsule, ConvexHull, Compound };
 enum class JointKind { PineFit, GlassClamp, Mortar };
 enum class ObjectiveKind { NeutralizeEntity };
+enum class AbilityKind { LegacyGravityField, GravityField, MassBoost, SpeedBoost, Explosion, Split };
+enum class EnvironmentalTriggerKind { DamageThreshold };
 
 struct MaterialDefinition {
     MaterialId id;
@@ -111,6 +114,7 @@ struct PhysicsSurfaceDefinition {
 
 struct MaterialCatalog {
     std::uint32_t schema_version{};
+    std::uint32_t source_schema_version{};
     std::vector<MaterialDefinition> materials;
     std::vector<PhysicsSurfaceDefinition> surfaces;
 };
@@ -126,7 +130,49 @@ struct AbilityArchetype {
     std::uint32_t max_bodies{};
     double max_acceleration_m_s2{};
     double pulse_speed_m_s{};
+    AbilityKind kind_v2{AbilityKind::LegacyGravityField};
+    struct GravityFieldPayload {
+        std::uint32_t arm_ticks{};
+        std::uint32_t duration_ticks{};
+        double radius_m{};
+        double max_body_mass_kg{};
+        std::uint32_t max_bodies{};
+        double max_acceleration_m_s2{};
+        double pulse_speed_m_s{};
+        bool operator==(const GravityFieldPayload&) const = default;
+    };
+    struct MassBoostPayload {
+        std::uint32_t duration_ticks{};
+        double mass_multiplier{};
+        bool operator==(const MassBoostPayload&) const = default;
+    };
+    struct SpeedBoostPayload {
+        double impulse_m_s{};
+        bool operator==(const SpeedBoostPayload&) const = default;
+    };
+    struct ExplosionPayload {
+        double radius_m{};
+        double impulse_n_s{};
+        double energy_j{};
+        std::uint32_t max_bodies{};
+        bool operator==(const ExplosionPayload&) const = default;
+    };
+    struct SplitPayload {
+        std::uint32_t child_count{};
+        double spread_angle_deg{};
+        double child_speed_multiplier{};
+        bool operator==(const SplitPayload&) const = default;
+    };
+    using Payload = std::variant<GravityFieldPayload, MassBoostPayload, SpeedBoostPayload,
+        ExplosionPayload, SplitPayload>;
+    Payload payload{};
 };
+
+using GravityFieldAbilityDefinition = AbilityArchetype::GravityFieldPayload;
+using MassBoostAbilityDefinition = AbilityArchetype::MassBoostPayload;
+using SpeedBoostAbilityDefinition = AbilityArchetype::SpeedBoostPayload;
+using ExplosionAbilityDefinition = AbilityArchetype::ExplosionPayload;
+using SplitAbilityDefinition = AbilityArchetype::SplitPayload;
 
 struct BirdArchetype {
     BirdArchetypeId id;
@@ -139,6 +185,11 @@ struct BirdArchetype {
     double friction{};
     double restitution{};
     bool bullet{};
+    std::string projectile_visual_id;
+    double launch_speed_cap_m_s{};
+    std::string score_id;
+    std::string icon_id;
+    std::string animation_id;
 };
 
 struct WeakpointProfile {
@@ -163,6 +214,9 @@ struct EnemyArchetype {
 
 struct ArchetypeCatalog {
     std::uint32_t schema_version{};
+    std::uint32_t source_schema_version{};
+    std::vector<std::string> presentation_ids;
+    std::vector<std::string> score_ids;
     std::vector<AbilityArchetype> abilities;
     std::vector<BirdArchetype> birds;
     std::vector<WeakpointProfile> weakpoints;
@@ -202,6 +256,9 @@ struct ShapeDefinition {
     ShapeType type{};
     std::array<double, 3> half_extents_m{};
     double radius_m{};
+    double half_height_m{};
+    std::vector<std::array<double, 3>> vertices_m;
+    std::vector<ShapeDefinition> children;
 
     bool operator==(const ShapeDefinition&) const = default;
 };
@@ -224,6 +281,7 @@ struct BodyDefinition {
     TransformDefinition transform;
     ShapeDefinition shape;
     VisualDefinition visual;
+    bool affected_by_world_gravity{true};
 };
 
 struct JointDefinition {
@@ -249,8 +307,72 @@ struct ObjectiveDefinition {
     EntityId target_entity_id;
 };
 
+struct UniformWorldDefinition {
+    std::array<double, 3> acceleration_m_s2{};
+    std::array<double, 3> bounds_min_m{};
+    std::array<double, 3> bounds_max_m{};
+    bool operator==(const UniformWorldDefinition&) const = default;
+};
+
+struct RadialWorldDefinition {
+    std::array<double, 3> center_m{};
+    double reference_radius_m{};
+    double reference_acceleration_m_s2{};
+    double bounds_radius_m{};
+    bool operator==(const RadialWorldDefinition&) const = default;
+};
+
+using WorldDefinition = std::variant<UniformWorldDefinition, RadialWorldDefinition>;
+
+struct SlingshotDefinition {
+    std::string asset_id;
+    std::array<double, 3> rest_position_m{};
+    std::array<double, 4> rest_rotation_xyzw{};
+    double spring_constant_n_m{};
+    double energy_efficiency{};
+    double minimum_extension_m{};
+    double maximum_extension_m{};
+    std::string plane_policy;
+    double projectile_clearance_m{};
+    double speed_ceiling_m_s{};
+};
+
+struct ScoringDefinition {
+    std::uint32_t pig_points{};
+    std::uint32_t unused_bird_points{};
+    std::array<std::uint32_t, 3> star_thresholds{};
+    std::uint32_t chain_window_ticks{};
+    double chain_multiplier_step{};
+    double max_chain_multiplier{};
+};
+
+struct PressureBurstDefinition {
+    double radius_m{};
+    double impulse_n_s{};
+    double energy_j{};
+    bool line_of_sight{};
+    std::uint32_t max_bodies{};
+};
+
+struct EnvironmentalTriggerDefinition {
+    std::uint32_t id{};
+    EntityId target_entity_id;
+    EnvironmentalTriggerKind kind{EnvironmentalTriggerKind::DamageThreshold};
+    double damage_threshold{};
+    std::uint32_t fuse_ticks{};
+    std::uint32_t cooldown_ticks{};
+    PressureBurstDefinition pressure_burst;
+};
+
+struct SettlePolicyDefinition {
+    double linear_speed_m_s{};
+    double angular_speed_rad_s{};
+    std::uint32_t rest_ticks{};
+};
+
 struct LevelManifest {
     std::uint32_t schema_version{};
+    std::uint32_t source_schema_version{};
     std::string id;
     PlanetDefinition planet;
     LaunchRingDefinition launch_ring;
@@ -261,6 +383,46 @@ struct LevelManifest {
     std::vector<JointDefinition> joints;
     std::vector<AssemblyDefinition> assemblies;
     std::vector<ObjectiveDefinition> objectives;
+    std::string world_id;
+    std::string region_id;
+    std::string camera_profile_id;
+    std::string presentation_profile_id;
+    WorldDefinition world{};
+    SlingshotDefinition slingshot;
+    std::vector<BirdArchetypeId> bird_queue;
+    ScoringDefinition scoring;
+    std::vector<EnvironmentalTriggerDefinition> triggers;
+    SettlePolicyDefinition settle_policy;
+    std::uint32_t watchdog_ticks{};
+};
+
+struct CampaignLevelDefinition {
+    std::string id;
+    std::string region_id;
+    std::string camera_profile_id;
+    std::string presentation_profile_id;
+    std::string scene_id;
+    std::optional<std::string> unlock_after_level_id;
+};
+
+struct CampaignWorldDefinition {
+    std::string id;
+    std::string diorama_id;
+    std::string text_id;
+    std::string default_level_id;
+    std::vector<std::string> level_order;
+    std::vector<CampaignLevelDefinition> levels;
+};
+
+struct CampaignManifest {
+    std::uint32_t schema_version{};
+    std::uint32_t source_schema_version{};
+    std::string default_world_id;
+    std::vector<std::string> world_order;
+    std::vector<std::string> scene_ids;
+    std::vector<std::string> diorama_ids;
+    std::vector<std::string> text_ids;
+    std::vector<CampaignWorldDefinition> worlds;
 };
 
 struct ContentBundle {
@@ -269,15 +431,34 @@ struct ContentBundle {
     LevelManifest level;
 };
 
+struct ProductV2ContentBundle {
+    MaterialCatalog materials;
+    ArchetypeCatalog archetypes;
+    CampaignManifest campaign;
+    LevelManifest level;
+};
+
 [[nodiscard]] ContentResult<MaterialCatalog> parse_material_catalog(std::string_view text) noexcept;
 [[nodiscard]] ContentResult<ArchetypeCatalog> parse_archetype_catalog(std::string_view text) noexcept;
 [[nodiscard]] ContentResult<LevelManifest> parse_level_manifest(std::string_view text) noexcept;
+[[nodiscard]] ContentResult<MaterialCatalog> parse_material_catalog_v1(std::string_view text) noexcept;
+[[nodiscard]] ContentResult<MaterialCatalog> parse_material_catalog_v2(std::string_view text) noexcept;
+[[nodiscard]] ContentResult<ArchetypeCatalog> parse_archetype_catalog_v1(std::string_view text) noexcept;
+[[nodiscard]] ContentResult<ArchetypeCatalog> parse_archetype_catalog_v2(std::string_view text) noexcept;
+[[nodiscard]] ContentResult<LevelManifest> parse_level_manifest_v1(std::string_view text) noexcept;
+[[nodiscard]] ContentResult<LevelManifest> parse_level_manifest_v2(std::string_view text) noexcept;
+[[nodiscard]] ContentResult<CampaignManifest> parse_campaign_manifest(std::string_view text) noexcept;
+[[nodiscard]] ContentResult<CampaignManifest> parse_campaign_manifest_v2(std::string_view text) noexcept;
 [[nodiscard]] ContentResult<ContentBundle> make_content_bundle(
     const MaterialCatalog&, const ArchetypeCatalog&, const LevelManifest&) noexcept;
+[[nodiscard]] ContentResult<ProductV2ContentBundle> make_product_v2_content_bundle(
+    const MaterialCatalog&, const ArchetypeCatalog&, const CampaignManifest&,
+    const LevelManifest&) noexcept;
 
 [[nodiscard]] std::string to_canonical_json(const MaterialCatalog&);
 [[nodiscard]] std::string to_canonical_json(const ArchetypeCatalog&);
 [[nodiscard]] std::string to_canonical_json(const LevelManifest&);
+[[nodiscard]] std::string to_canonical_json(const CampaignManifest&);
 [[nodiscard]] std::string_view content_error_code_name(ContentErrorCode) noexcept;
 
 }
