@@ -195,7 +195,8 @@ AbilityReadiness SimulationSession::ability_readiness() const noexcept
         return AbilityReadiness::Unavailable;
     }
     const auto armed_tick = impl_->shot->launch_tick.value()
-        + static_cast<std::uint64_t>(ability->arm_ticks);
+        + static_cast<std::uint64_t>(
+            detail::AbilitySystem::activation_arm_ticks(*ability));
     return impl_->session_state.tick.value() >= armed_tick
         ? AbilityReadiness::Armed : AbilityReadiness::Arming;
 }

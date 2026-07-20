@@ -26,8 +26,8 @@ namespace {
     switch (kind) {
     case AbilityKind::LegacyGravityField:
     case AbilityKind::GravityField:
-        return true;
     case AbilityKind::MassBoost:
+        return true;
     case AbilityKind::SpeedBoost:
     case AbilityKind::Explosion:
     case AbilityKind::Split:
@@ -221,6 +221,12 @@ std::optional<ContentError> AbilitySystem::validate_session_support(
     return ContentError{ContentErrorCode::InvalidInvariant,
         std::string{pointer} + "/kind",
         "ability kind has no concrete simulation system"};
+}
+
+std::uint32_t AbilitySystem::activation_arm_ticks(
+    const AbilityArchetype& ability) noexcept
+{
+    return ability.kind_v2 == AbilityKind::MassBoost ? 9U : ability.arm_ticks;
 }
 
 SessionStatus AbilitySystem::activate(const AbilityArchetype& ability,

@@ -349,10 +349,12 @@ NINHO_TEST("gameplay frame follows authoritative shot lifecycle and ordered memb
     auto& session = GameplaySessionAdapterTestFacade::session(adapter);
     const auto authoritative = session.shot_state();
     NINHO_REQUIRE(authoritative.has_value());
-    NINHO_REQUIRE(SessionTestFacade::append_projectile_for_testing(
-        session, ninho::simulation::EntityId{0x80000003U}));
-    NINHO_REQUIRE(SessionTestFacade::append_projectile_for_testing(
-        session, ninho::simulation::EntityId{0x80000002U}));
+    NINHO_REQUIRE(SessionTestFacade::append_projectile_body_for_testing(
+        session, ninho::simulation::EntityId{0x80000003U},
+        Vec3{0.0F, 10.0F, 1.0F}, Vec3{5.0F, 0.0F, 0.0F}));
+    NINHO_REQUIRE(SessionTestFacade::append_projectile_body_for_testing(
+        session, ninho::simulation::EntityId{0x80000002U},
+        Vec3{0.0F, 10.0F, -1.0F}, Vec3{5.0F, 0.0F, 0.0F}));
     GameplaySessionAdapterTestFacade::refresh_frame(adapter);
 
     const auto expanded = adapter.peek_frame();
@@ -369,12 +371,29 @@ NINHO_TEST("gameplay frame follows authoritative shot lifecycle and ordered memb
 
     SessionTestFacade::finish_projectile(session);
     NINHO_REQUIRE(adapter.advance(1.0 / 60.0));
-    NINHO_REQUIRE(adapter.peek_frame().state.phase == SessionPhase::Resolution);
+    NINHO_REQUIRE(adapter.peek_frame().state.phase == SessionPhase::FlightAbility);
     NINHO_REQUIRE(adapter.peek_frame().shot.has_value());
     NINHO_REQUIRE(adapter.peek_frame().locked_plane.has_value());
+    NINHO_REQUIRE((adapter.peek_frame().shot->projectile_ids == std::vector{
+        ninho::simulation::EntityId{0x80000002U},
+        ninho::simulation::EntityId{0x80000003U}}));
+    NINHO_REQUIRE(adapter.peek_frame().projectiles.size() == 2U);
+
+    SessionTestFacade::finish_projectile(
+        session, ninho::simulation::EntityId{0x80000002U});
+    NINHO_REQUIRE(adapter.advance(1.0 / 60.0));
+    NINHO_REQUIRE(adapter.peek_frame().state.phase == SessionPhase::FlightAbility);
+    NINHO_REQUIRE((adapter.peek_frame().shot->projectile_ids == std::vector{
+        ninho::simulation::EntityId{0x80000003U}}));
+    NINHO_REQUIRE(adapter.peek_frame().projectiles.size() == 1U);
+
+    SessionTestFacade::finish_projectile(
+        session, ninho::simulation::EntityId{0x80000003U});
+    NINHO_REQUIRE(adapter.advance(1.0 / 60.0));
+    NINHO_REQUIRE(adapter.peek_frame().state.phase == SessionPhase::Resolution);
+    NINHO_REQUIRE((adapter.peek_frame().shot->projectile_ids == std::vector{
+        ninho::simulation::EntityId{0x80000003U}}));
     NINHO_REQUIRE(adapter.peek_frame().projectiles.empty());
-    NINHO_REQUIRE(adapter.peek_frame().shot->projectile_ids
-        == expanded.shot->projectile_ids);
 
     for (int tick = 0;
          tick < 64 && adapter.peek_frame().state.phase != SessionPhase::Evaluation;
@@ -406,6 +425,18 @@ NINHO_TEST("gameplay adapter has no external shot identity or event inference ca
     NINHO_REQUIRE(source.find("simulation::DomainEventKind::BirdLaunched")
         == std::string::npos);
     NINHO_REQUIRE(source.find("session_->shot_state()") != std::string::npos);
+}
+
+NINHO_TEST("gameplay nodes expose the mass changed domain event")
+{
+    const std::string gameplay = read_source_file(
+        "native/extension/src/gameplay_session_node.cpp");
+    const std::string orbital = read_source_file(
+        "native/extension/src/orbital_session_node.cpp");
+    constexpr std::string_view mapping =
+        "case MassChanged: return \"mass_changed\";";
+    NINHO_REQUIRE(gameplay.find(mapping) != std::string::npos);
+    NINHO_REQUIRE(orbital.find(mapping) != std::string::npos);
 }
 
 NINHO_TEST("gameplay frame schema freezes exact version two top level dictionary keys")

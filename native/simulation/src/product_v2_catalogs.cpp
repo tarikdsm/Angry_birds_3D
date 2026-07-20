@@ -64,9 +64,12 @@ AbilityArchetype parse_ability(const json& item, const std::string& pointer)
     {
         result.kind_v2 = AbilityKind::MassBoost;
         keys(payload, payload_pointer, {"duration_ticks", "mass_multiplier"});
-        result.payload = AbilityArchetype::MassBoostPayload{
+        const AbilityArchetype::MassBoostPayload value{
             uint(payload, "duration_ticks", payload_pointer, 1U, 3600U),
             number(payload, "mass_multiplier", payload_pointer, 1.0, 20.0, false)};
+        result.arm_ticks = 9U;
+        result.duration_ticks = value.duration_ticks;
+        result.payload = value;
     }
     else if (result.kind == "speed_boost")
     {

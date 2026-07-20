@@ -19,6 +19,7 @@ enum class DomainEventKind : std::uint8_t {
     PieceFractureTriggered = 10,
     JointBroken = 11,
     PieceFractured = 12,
+    MassChanged = 13,
 };
 
 enum class CommandRejectionReason : std::uint8_t {

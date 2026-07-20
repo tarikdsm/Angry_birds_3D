@@ -231,6 +231,7 @@ public:
     Status destroy_joint(JointHandle joint);
     Status apply_force(BodyHandle body, Vec3 force, Vec3 point, bool wake = true);
     Status apply_impulse(BodyHandle body, Vec3 impulse, Vec3 point, bool wake = true);
+    Status set_body_mass_scale(BodyHandle body, float scale);
     Status commit_pending_initial_state();
     void step();
     [[nodiscard]] std::optional<BodyState> state(BodyHandle body) const;

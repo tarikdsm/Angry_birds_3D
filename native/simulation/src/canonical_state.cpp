@@ -73,6 +73,7 @@ std::uint8_t canonical_tag_of(DomainEventKind value)
     case DomainEventKind::PieceFractureTriggered: return 10U;
     case DomainEventKind::JointBroken: return 11U;
     case DomainEventKind::PieceFractured: return 12U;
+    case DomainEventKind::MassChanged: return 13U;
     }
     throw std::invalid_argument("unknown canonical domain event");
 }

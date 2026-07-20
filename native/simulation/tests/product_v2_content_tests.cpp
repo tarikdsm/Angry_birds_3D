@@ -276,6 +276,9 @@ NINHO_SIM_TEST("product v2 content parses every closed variant")
     NINHO_SIM_REQUIRE(materials.value.source_schema_version == 2U);
     NINHO_SIM_REQUIRE(archetypes.value.abilities.size() == 5U);
     NINHO_SIM_REQUIRE(archetypes.value.abilities.at(0).kind_v2 == AbilityKind::GravityField);
+    NINHO_SIM_REQUIRE(archetypes.value.abilities.at(1).kind_v2 == AbilityKind::MassBoost);
+    NINHO_SIM_REQUIRE(archetypes.value.abilities.at(1).arm_ticks == 9U);
+    NINHO_SIM_REQUIRE(archetypes.value.abilities.at(1).duration_ticks == 60U);
     NINHO_SIM_REQUIRE(uniform.value.world.index() != radial.value.world.index());
     NINHO_SIM_REQUIRE(uniform.value.bird_queue ==
                       std::vector<BirdArchetypeId>({BirdArchetypeId{1}, BirdArchetypeId{1}}));

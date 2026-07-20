@@ -58,6 +58,8 @@ public:
         const AbilityArchetype&, std::string_view pointer);
     [[nodiscard]] static std::optional<ContentError> validate_session_support(
         const AbilityArchetype&, std::string_view pointer);
+    [[nodiscard]] static std::uint32_t activation_arm_ticks(
+        const AbilityArchetype&) noexcept;
     [[nodiscard]] static SessionStatus activate(
         const AbilityArchetype&, ShotState&, TickIndex activation_tick);
 

@@ -351,6 +351,7 @@ NINHO_SIM_TEST("shot state canonical tags are explicit and append only")
     NINHO_SIM_REQUIRE(canonical_tag_of(SessionPhase::Grabbed) == 7U);
     NINHO_SIM_REQUIRE(canonical_tag_of(DomainEventKind::BirdLaunched) == 0U);
     NINHO_SIM_REQUIRE(canonical_tag_of(DomainEventKind::PieceFractured) == 12U);
+    NINHO_SIM_REQUIRE(canonical_tag_of(DomainEventKind::MassChanged) == 13U);
 }
 
 NINHO_SIM_TEST("shot state canonical v3 publishes schema two without reviving v2")

@@ -94,6 +94,10 @@ struct SimulationSession::Impl : detail::AbilityLifecycleHooks {
         const GravityFieldAbilityDefinition&, GravityFieldAbilityRuntime&) override;
     [[nodiscard]] SessionStatus finish_after_step(ShotState&,
         const GravityFieldAbilityDefinition&, GravityFieldAbilityRuntime&) override;
+    [[nodiscard]] SessionStatus apply_before_step(ShotState&,
+        const MassBoostAbilityDefinition&, MassBoostAbilityRuntime&) override;
+    [[nodiscard]] SessionStatus finish_after_step(ShotState&,
+        const MassBoostAbilityDefinition&, MassBoostAbilityRuntime&) override;
     void retire_finished_projectiles();
     void process_damage_after_step();
     void publish_damage_outcomes(std::span<const detail::DamageOutcome>);

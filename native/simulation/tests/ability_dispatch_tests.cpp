@@ -318,7 +318,7 @@ NINHO_SIM_TEST("ability dispatch rejects unknown and incompatible definitions du
 
 NINHO_SIM_TEST("ability dispatch rejects activation for abilities without a concrete system")
 {
-    const std::array unsupported{AbilityKind::MassBoost, AbilityKind::SpeedBoost,
+    const std::array unsupported{AbilityKind::SpeedBoost,
         AbilityKind::Explosion, AbilityKind::Split};
     for (const AbilityKind kind : unsupported) {
         RecordingHooks hooks;
@@ -340,9 +340,18 @@ NINHO_SIM_TEST("ability dispatch rejects activation for abilities without a conc
     }
 }
 
+NINHO_SIM_TEST("ability dispatch fixes mass boost arming at nine ticks")
+{
+    AbilityArchetype selected = ability(AbilityKind::MassBoost);
+    selected.arm_ticks = 0U;
+    NINHO_SIM_REQUIRE(AbilitySystem::activation_arm_ticks(selected) == 9U);
+    selected.arm_ticks = 999U;
+    NINHO_SIM_REQUIRE(AbilitySystem::activation_arm_ticks(selected) == 9U);
+}
+
 NINHO_SIM_TEST("ability dispatch fails closed for unimplemented session abilities")
 {
-    const std::array unsupported{AbilityKind::MassBoost, AbilityKind::SpeedBoost,
+    const std::array unsupported{AbilityKind::SpeedBoost,
         AbilityKind::Explosion, AbilityKind::Split};
     auto session = create_session();
     launch(*session);

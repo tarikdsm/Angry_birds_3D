@@ -788,7 +788,8 @@ SessionStatus SimulationSession::Impl::process_commands()
             if (session_state.phase == SessionPhase::FlightAbility && shot
                 && projectile && ability
                 && session_state.tick.value()
-                    >= shot->launch_tick.value() + ability->arm_ticks
+                    >= shot->launch_tick.value()
+                        + detail::AbilitySystem::activation_arm_ticks(*ability)
                 && !shot->activation_consumed && !projectile->finished) {
                 const SessionStatus activation_status = detail::AbilitySystem::activate(
                     *ability, *shot, session_state.tick);

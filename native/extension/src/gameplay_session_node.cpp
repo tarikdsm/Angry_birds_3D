@@ -522,6 +522,7 @@ namespace {
     case PieceFractureTriggered: return "piece_fracture_triggered";
     case JointBroken: return "joint_broken";
     case PieceFractured: return "piece_fractured";
+    case MassChanged: return "mass_changed";
     }
     return "unknown";
 }
