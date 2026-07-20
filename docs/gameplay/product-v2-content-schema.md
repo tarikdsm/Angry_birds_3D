@@ -92,6 +92,16 @@ e único entre abilities. O payload é fechado pelo `kind`:
 Campos pertencentes a outro payload são chaves desconhecidas e invalidam o
 documento.
 
+O runtime atual implementa `split` de forma fail-closed somente para o preset
+`child_count=3`, `spread_angle_deg=11` e
+`child_speed_multiplier=3/(1+2*cos(11°))`, comparado na resolução canônica de
+`10^-5`. O multiplicador é recalculado pela simulação, não aceito como fonte de
+verdade física. Catálogos futuros com outros presets continuam parseáveis
+dentro das faixas acima, mas não podem criar uma sessão nesta versão. Toda ave
+que referencia `split` exige `CHR_BlueChild` em `presentation_ids`, e sua massa
+e raio também devem produzir filhas Box3D-seguras com `m/3` e
+`cbrt(1/3)*raio`.
+
 ### BirdArchetype
 
 | Campo | Tipo / unidade | Regra |
@@ -379,7 +389,7 @@ Nenhuma tag depende da posição de `std::variant`. As tags são append-only:
 | command | `begin_aim=0`, `set_aim=1`, `launch=2`, `activate_ability=3`, `cancel_aim=4`, `begin_grab=5`, `set_pull=6`, `release_bird=7`, `cancel_grab=8` |
 | phase | `inspection=0`, `aim=1`, `flight_ability=2`, `resolution=3`, `evaluation=4`, `result=5`, `faulted=6`, `grabbed=7` |
 | outcome | `none=0`, `victory=1`, `defeat=2` |
-| command rejection | `none=0`, `invalid_phase=1`, `invalid_aim=2`, `not_armed=3`, `no_bird_available=4` |
+| command rejection | `none=0`, `invalid_phase=1`, `invalid_aim=2`, `not_armed=3`, `no_bird_available=4`, `ability_unavailable=5` |
 | neutralization cause | `none=0`, `integrity_depleted=1`, `ejection=2` |
 | damage classification | `none=0`, `protected=1`, `vulnerable=2` |
 | material response | `fibrous=0`, `masonry=1`, `brittle=2`, `compressible=3`, `ductile=4` |
@@ -388,7 +398,7 @@ Nenhuma tag depende da posição de `std::variant`. As tags são append-only:
 | joint | `pine_fit=0`, `glass_clamp=1`, `mortar=2` |
 | objective | `neutralize_entity=0` |
 | environmental trigger | `damage_threshold=0` |
-| event | `bird_launched=0`, `ability_activation_requested=1`, `command_rejected=2`, `ability_started=3`, `ability_affected_body=4`, `ability_pulse=5`, `ability_ended=6`, `damage_applied=7`, `entity_neutralized=8`, `joint_overloaded=9`, `piece_fracture_triggered=10`, `joint_broken=11`, `piece_fractured=12` |
+| event | `bird_launched=0`, `ability_activation_requested=1`, `command_rejected=2`, `ability_started=3`, `ability_affected_body=4`, `ability_pulse=5`, `ability_ended=6`, `damage_applied=7`, `entity_neutralized=8`, `joint_overloaded=9`, `piece_fracture_triggered=10`, `joint_broken=11`, `piece_fractured=12`, `mass_changed=13`, `speed_changed=14`, `projectile_split=15`, `projectile_spawned=16` |
 
 ### Ordem do stream v3
 
@@ -435,10 +445,16 @@ escreve os dois componentes; os demais não têm payload.
 ShotState escreve `shot_id`, bird, ability, launch_tick, plano travado
 (camera_right/up/horizontal/plane_normal), pull aceito, activation_consumed,
 AbilityRuntime e projéteis. O runtime escreve tag, start/end ticks opcionais e
-active. ShotState encapsula a coleção: `insert` mantém ordem estritamente
+active. `speed_boost` anexa a última direção de voo válida. `split` anexa a
+identidade da fonte, os três child IDs em ordem angular, o fim opcional do grace,
+`applied` e `filters_restored`; nenhuma dessas extensões adiciona bytes às
+outras alternativas. ShotState encapsula a coleção: `insert` mantém ordem estritamente
 crescente por EntityId e rejeita duplicatas sem mutação; `replace` preserva a
 identidade; `erase` nunca deixa um ShotState vazio; e o primário é sempre o
-menor EntityId. Assignment de ProjectileState copia somente o runtime e preserva
+menor EntityId. `replace_all_projectiles` valida antecipadamente uma coleção
+não vazia, única e crescente e a publica por `swap` sem exceção, permitindo que
+o Split substitua a fonte pelas três filhas sem inserts alocantes. Assignment de
+ProjectileState copia somente o runtime e preserva
 a identidade do slot, inclusive através do acesso mutável ao primário. Insert e
 erase publicam a nova coleção por rebuild+swap, sem usar assignment para mover
 identidades. ShotState não possui construtor default nem move construction e

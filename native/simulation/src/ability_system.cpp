@@ -2,8 +2,10 @@
 #include "session_internal.hpp"
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstdint>
+#include <numbers>
 #include <string>
 #include <type_traits>
 #include <utility>
@@ -29,9 +31,9 @@ namespace {
     case AbilityKind::GravityField:
     case AbilityKind::MassBoost:
     case AbilityKind::SpeedBoost:
+    case AbilityKind::Split:
         return true;
     case AbilityKind::Explosion:
-    case AbilityKind::Split:
         return false;
     }
     return false;
@@ -150,8 +152,9 @@ SessionStatus dispatch(const AbilityArchetype& ability, ShotState& shot,
     case AbilityKind::SpeedBoost:
         return 1U;
     case AbilityKind::Explosion:
-    case AbilityKind::Split:
         return 1U;
+    case AbilityKind::Split:
+        return 3U;
     }
     return 0U;
 }
@@ -244,12 +247,59 @@ std::optional<ContentError> AbilitySystem::validate_definition(
                 payload_pointer + "/impulse_m_s", "number out of range"};
         }
     }
+    if (ability.kind_v2 == AbilityKind::Split) {
+        const auto& definition =
+            std::get<SplitAbilityDefinition>(ability.payload);
+        const std::string payload_pointer = std::string{pointer} + "/payload";
+        if (definition.child_count < 2U || definition.child_count > 16U) {
+            return ContentError{ContentErrorCode::OutOfRange,
+                payload_pointer + "/child_count", "integer out of range"};
+        }
+        const std::array values{
+            std::pair{definition.spread_angle_deg, "spread_angle_deg"},
+            std::pair{definition.child_speed_multiplier,
+                "child_speed_multiplier"},
+        };
+        for (const auto& [value, field] : values) {
+            if (!std::isfinite(value)) {
+                return ContentError{ContentErrorCode::InvalidNumber,
+                    payload_pointer + '/' + field, "number must be finite"};
+            }
+        }
+        if (definition.spread_angle_deg <= 0.0
+            || definition.spread_angle_deg > 180.0) {
+            return ContentError{ContentErrorCode::OutOfRange,
+                payload_pointer + "/spread_angle_deg", "number out of range"};
+        }
+        if (definition.child_speed_multiplier <= 0.0
+            || definition.child_speed_multiplier > 2.0) {
+            return ContentError{ContentErrorCode::OutOfRange,
+                payload_pointer + "/child_speed_multiplier", "number out of range"};
+        }
+    }
     return std::nullopt;
 }
 
 std::optional<ContentError> AbilitySystem::validate_session_support(
     const AbilityArchetype& ability, std::string_view pointer)
 {
+    if (ability.kind_v2 == AbilityKind::Split) {
+        const auto& definition =
+            std::get<SplitAbilityDefinition>(ability.payload);
+        constexpr double angle_deg = 11.0;
+        const double multiplier = 3.0 / (1.0 + 2.0
+            * std::cos(angle_deg * std::numbers::pi / 180.0));
+        if (definition.child_count != 3U
+            || canonical_quantize(definition.spread_angle_deg)
+                != canonical_quantize(angle_deg)
+            || canonical_quantize(definition.child_speed_multiplier)
+                != canonical_quantize(multiplier)) {
+            return ContentError{ContentErrorCode::InvalidInvariant,
+                std::string{pointer} + "/payload",
+                "split preset is not supported by this session runtime"};
+        }
+        return std::nullopt;
+    }
     if (has_concrete_system(ability.kind_v2)) {
         return std::nullopt;
     }
@@ -263,6 +313,7 @@ std::uint32_t AbilitySystem::activation_arm_ticks(
 {
     return ability.kind_v2 == AbilityKind::MassBoost
             || ability.kind_v2 == AbilityKind::SpeedBoost
+            || ability.kind_v2 == AbilityKind::Split
         ? 9U : ability.arm_ticks;
 }
 

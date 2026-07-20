@@ -75,6 +75,8 @@ std::uint8_t canonical_tag_of(DomainEventKind value)
     case DomainEventKind::PieceFractured: return 12U;
     case DomainEventKind::MassChanged: return 13U;
     case DomainEventKind::SpeedChanged: return 14U;
+    case DomainEventKind::ProjectileSplit: return 15U;
+    case DomainEventKind::ProjectileSpawned: return 16U;
     }
     throw std::invalid_argument("unknown canonical domain event");
 }
@@ -87,6 +89,7 @@ std::uint8_t canonical_tag_of(CommandRejectionReason value)
     case CommandRejectionReason::InvalidAim: return 2U;
     case CommandRejectionReason::NotArmed: return 3U;
     case CommandRejectionReason::NoBirdAvailable: return 4U;
+    case CommandRejectionReason::AbilityUnavailable: return 5U;
     }
     throw std::invalid_argument("unknown canonical command rejection reason");
 }
@@ -467,6 +470,17 @@ void write_ability_runtime(CanonicalWriter& writer, const AbilityRuntime& runtim
         if (speed->last_valid_flight_direction) {
             writer.vector(*speed->last_valid_flight_direction);
         }
+    } else if (const auto* split = std::get_if<SplitAbilityRuntime>(&runtime)) {
+        identifier(writer, split->source_entity_id);
+        for (const EntityId child : split->child_ids) {
+            identifier(writer, child);
+        }
+        writer.boolean(split->grace_end_tick.has_value());
+        if (split->grace_end_tick) {
+            identifier(writer, *split->grace_end_tick);
+        }
+        writer.boolean(split->applied);
+        writer.boolean(split->filters_restored);
     }
 }
 

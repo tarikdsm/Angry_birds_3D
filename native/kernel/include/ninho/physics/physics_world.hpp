@@ -79,6 +79,7 @@ struct ShapeDesc {
     float restitution{};
     std::uint64_t material_id{};
     bool hit_events{true};
+    int collision_group{};
 };
 
 struct BodyDesc {
@@ -225,13 +226,15 @@ public:
     PhysicsWorld(const PhysicsWorld&) = delete;
     PhysicsWorld& operator=(const PhysicsWorld&) = delete;
 
-    Result<BodyHandle> create_body(const BodyDesc& desc);
+    Result<BodyHandle> create_body(BodyDesc desc);
+    Status prepare_body_creations(std::size_t count);
     Status destroy_body(BodyHandle body);
     Result<JointHandle> create_joint(const JointDesc& desc);
     Status destroy_joint(JointHandle joint);
     Status apply_force(BodyHandle body, Vec3 force, Vec3 point, bool wake = true);
     Status apply_impulse(BodyHandle body, Vec3 impulse, Vec3 point, bool wake = true);
     Status set_body_mass_scale(BodyHandle body, float scale);
+    Status set_body_collision_group(BodyHandle body, int collision_group);
     Status commit_pending_initial_state();
     void step();
     [[nodiscard]] std::optional<BodyState> state(BodyHandle body) const;
@@ -254,6 +257,7 @@ public:
     [[nodiscard]] std::span<const JointReaction> joint_reactions() const;
     [[nodiscard]] std::optional<JointReaction> joint_reaction(JointHandle joint) const;
     [[nodiscard]] WorldMetrics metrics() const;
+    [[nodiscard]] std::size_t remaining_body_capacity() const noexcept;
     [[nodiscard]] Vec3 gravity_at(Vec3 position) const noexcept;
     [[nodiscard]] const WorldConfig& config() const;
 

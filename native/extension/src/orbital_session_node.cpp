@@ -406,6 +406,7 @@ namespace {
     case simulation::CommandRejectionReason::InvalidAim: return "invalid_aim";
     case simulation::CommandRejectionReason::NotArmed: return "not_armed";
     case simulation::CommandRejectionReason::NoBirdAvailable: return "no_bird_available";
+    case simulation::CommandRejectionReason::AbilityUnavailable: return "ability_unavailable";
     }
     return "unknown";
 }
@@ -440,6 +441,8 @@ namespace {
     case PieceFractured: return "piece_fractured";
     case MassChanged: return "mass_changed";
     case SpeedChanged: return "speed_changed";
+    case ProjectileSplit: return "projectile_split";
+    case ProjectileSpawned: return "projectile_spawned";
     }
     return "unknown";
 }

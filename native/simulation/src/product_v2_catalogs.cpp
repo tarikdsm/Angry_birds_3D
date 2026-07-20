@@ -4,6 +4,7 @@
 #include "content_semantic_validation.hpp"
 #include "product_v2_reader.hpp"
 
+#include <algorithm>
 #include <limits>
 #include <unordered_set>
 #include <utility>
@@ -245,6 +246,17 @@ ContentResult<ArchetypeCatalog> parse_archetype_catalog_v2(std::string_view inpu
                 if (!ability_ids.contains(value.ability_id.value()))
                     fail(ContentErrorCode::MissingReference, child(pointer, "ability_id"),
                          "ability reference not found");
+                const auto bird_ability = std::ranges::find(
+                    result.abilities, value.ability_id, &AbilityArchetype::id);
+                if (bird_ability != result.abilities.end()
+                    && bird_ability->kind_v2 == AbilityKind::Split) {
+                    if (const auto child_error =
+                            detail::validate_split_child_runtime_physics(value, pointer))
+                        fail(child_error->code, child_error->pointer, child_error->message);
+                    if (!presentation.contains("CHR_BlueChild"))
+                        fail(ContentErrorCode::MissingReference, "/presentation_ids",
+                            "split child presentation CHR_BlueChild is not registered");
+                }
                 for (const auto& [field, ref] :
                      std::array<std::pair<std::string_view, const std::string*>, 3>{
                          {{"projectile_visual_id", &value.projectile_visual_id},

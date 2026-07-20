@@ -4,6 +4,7 @@
 
 #include <ninho/physics/physics_types.hpp>
 
+#include <array>
 #include <optional>
 #include <stdexcept>
 #include <type_traits>
@@ -58,6 +59,11 @@ struct ExplosionAbilityRuntime {
 struct SplitAbilityRuntime {
     std::optional<TickIndex> start_tick;
     std::optional<TickIndex> end_tick;
+    EntityId source_entity_id{};
+    std::array<EntityId, 3> child_ids{};
+    std::optional<TickIndex> grace_end_tick;
+    bool applied{};
+    bool filters_restored{};
     bool active{};
 
     bool operator==(const SplitAbilityRuntime&) const = default;

@@ -893,6 +893,7 @@ struct PhysicsWorld::Impl {
             shape_def.baseMaterial.restitution = shape.restitution;
             shape_def.baseMaterial.userMaterialId = shape.material_id;
             shape_def.enableHitEvents = shape.hit_events;
+            shape_def.filter.groupIndex = shape.collision_group;
 
             if (const auto* compound = std::get_if<CompoundShape>(&shape.geometry)) {
                 for (const PrimitiveShape& child : compound->children) {
@@ -1522,7 +1523,22 @@ PhysicsWorld::~PhysicsWorld() = default;
 PhysicsWorld::PhysicsWorld(PhysicsWorld&&) noexcept = default;
 PhysicsWorld& PhysicsWorld::operator=(PhysicsWorld&&) noexcept = default;
 
-Result<BodyHandle> PhysicsWorld::create_body(const BodyDesc& desc)
+Status PhysicsWorld::prepare_body_creations(std::size_t count)
+{
+    if (count > remaining_body_capacity()) {
+        return {StatusCode::CapacityExceeded,
+            "physics body capacity has been reached"};
+    }
+    const std::size_t reusable = std::min(count, impl_->free_slots.size());
+    const std::size_t new_slots = count - reusable;
+    impl_->commands.reserve(impl_->commands.size() + count + 1U);
+    impl_->slots.reserve(impl_->slots.size() + new_slots);
+    impl_->free_slots.reserve(std::max(
+        impl_->free_slots.capacity(), impl_->slots.size() + new_slots));
+    return {};
+}
+
+Result<BodyHandle> PhysicsWorld::create_body(BodyDesc desc)
 {
     const Status validation = validate_body(desc);
     if (!validation.ok()) {
@@ -1532,7 +1548,7 @@ Result<BodyHandle> PhysicsWorld::create_body(const BodyDesc& desc)
         return {{}, {StatusCode::CapacityExceeded, "physics body capacity has been reached"}};
     }
 
-    Impl::CreateCommand command{{}, desc};
+    Impl::CreateCommand command{{}, std::move(desc)};
     const Impl::Reservation reservation = impl_->reserve_handle();
     command.handle = reservation.handle;
     try {
@@ -1804,6 +1820,28 @@ Status PhysicsWorld::set_body_mass_scale(BodyHandle body, float scale)
     return {};
 }
 
+Status PhysicsWorld::set_body_collision_group(BodyHandle body, int collision_group)
+{
+    Impl::Slot* slot = impl_->matching_slot(body);
+    if (slot == nullptr || slot->state != Impl::SlotState::Live
+        || B3_IS_NULL(slot->native) || !b3Body_IsValid(slot->native)) {
+        return invalid_handle_status();
+    }
+    if (slot->shapes.empty()
+        || !std::ranges::all_of(slot->shapes, [](const Impl::Slot::OwnedShape& shape) {
+            return B3_IS_NON_NULL(shape.native) && b3Shape_IsValid(shape.native);
+        })) {
+        return {StatusCode::Box3DFault,
+            "body collision group cannot be applied to every owned shape"};
+    }
+    for (const Impl::Slot::OwnedShape& shape : slot->shapes) {
+        b3Filter filter = b3Shape_GetFilter(shape.native);
+        filter.groupIndex = collision_group;
+        b3Shape_SetFilter(shape.native, filter, true);
+    }
+    return {};
+}
+
 Status PhysicsWorld::commit_pending_initial_state()
 {
     if (impl_->initialization_faulted) {
@@ -2022,6 +2060,11 @@ WorldMetrics PhysicsWorld::metrics() const
     return result;
 }
 
+std::size_t PhysicsWorld::remaining_body_capacity() const noexcept
+{
+    return impl_->config.max_bodies - impl_->reserved_body_count;
+}
+
 Vec3 PhysicsWorld::gravity_at(Vec3 position) const noexcept
 {
     return impl_->gravity.acceleration_at(position);
@@ -2137,6 +2180,43 @@ std::vector<float> detail::PhysicsWorldTestFacade::base_shape_densities(
         [](const PhysicsWorld::Impl::Slot::OwnedShape& shape) {
             return shape.base_density;
         });
+    return result;
+}
+
+std::vector<int> detail::PhysicsWorldTestFacade::shape_collision_groups(
+    const PhysicsWorld& world, BodyHandle handle)
+{
+    const PhysicsWorld::Impl::Slot* slot = world.impl_->matching_slot(handle);
+    std::vector<int> result;
+    if (slot == nullptr || slot->state != PhysicsWorld::Impl::SlotState::Live) {
+        return result;
+    }
+    result.reserve(slot->shapes.size());
+    for (const PhysicsWorld::Impl::Slot::OwnedShape& shape : slot->shapes) {
+        result.push_back(B3_IS_NON_NULL(shape.native) && b3Shape_IsValid(shape.native)
+            ? b3Shape_GetFilter(shape.native).groupIndex : 0);
+    }
+    return result;
+}
+
+std::vector<std::array<std::uint64_t, 2>>
+detail::PhysicsWorldTestFacade::shape_collision_bits(
+    const PhysicsWorld& world, BodyHandle handle)
+{
+    const PhysicsWorld::Impl::Slot* slot = world.impl_->matching_slot(handle);
+    std::vector<std::array<std::uint64_t, 2>> result;
+    if (slot == nullptr || slot->state != PhysicsWorld::Impl::SlotState::Live) {
+        return result;
+    }
+    result.reserve(slot->shapes.size());
+    for (const PhysicsWorld::Impl::Slot::OwnedShape& shape : slot->shapes) {
+        if (B3_IS_NULL(shape.native) || !b3Shape_IsValid(shape.native)) {
+            result.push_back({});
+            continue;
+        }
+        const b3Filter filter = b3Shape_GetFilter(shape.native);
+        result.push_back({filter.categoryBits, filter.maskBits});
+    }
     return result;
 }
 

@@ -44,6 +44,12 @@ public:
         SimulationSession&, ninho::physics::Vec3);
     static bool set_last_speed_changed_delta_for_testing(
         SimulationSession&, ninho::physics::Vec3);
+    static int collision_group(const SimulationSession&, EntityId);
+    static bool set_split_child_id_for_testing(
+        SimulationSession&, std::size_t index, EntityId);
+    static bool set_split_grace_end_for_testing(
+        SimulationSession&, TickIndex);
+    static void invalidate_locked_plane_for_testing(SimulationSession&);
     static bool impulse_entity(SimulationSession&, EntityId, ninho::physics::Vec3);
     static bool add_static_sphere(
         SimulationSession&, EntityId, ninho::physics::Vec3, double radius_m);

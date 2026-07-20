@@ -354,6 +354,34 @@ NINHO_SIM_TEST("shot state canonical tags are explicit and append only")
     NINHO_SIM_REQUIRE(canonical_tag_of(DomainEventKind::MassChanged) == 13U);
 }
 
+NINHO_SIM_TEST("shot state replaces the projectile collection atomically")
+{
+    ShotState shot{ProjectileState{EntityId{0x80000000U},
+        ninho::physics::BodyHandle{1U, 1U}, true}};
+    const std::vector<ProjectileState> before(
+        shot.projectiles().begin(), shot.projectiles().end());
+
+    std::vector<ProjectileState> duplicate;
+    duplicate.emplace_back(EntityId{0xC0000000U},
+        ninho::physics::BodyHandle{2U, 1U}, true);
+    duplicate.emplace_back(EntityId{0xC0000000U},
+        ninho::physics::BodyHandle{3U, 1U}, true);
+    NINHO_SIM_REQUIRE(!shot.replace_all_projectiles(std::move(duplicate)));
+    NINHO_SIM_REQUIRE(std::ranges::equal(shot.projectiles(), before));
+
+    std::vector<ProjectileState> children;
+    children.emplace_back(EntityId{0xC0000000U},
+        ninho::physics::BodyHandle{2U, 1U}, true);
+    children.emplace_back(EntityId{0xC0000001U},
+        ninho::physics::BodyHandle{3U, 1U}, true);
+    children.emplace_back(EntityId{0xC0000002U},
+        ninho::physics::BodyHandle{4U, 1U}, true);
+    NINHO_SIM_REQUIRE(shot.replace_all_projectiles(std::move(children)));
+    NINHO_SIM_REQUIRE(shot.projectiles().size() == 3U);
+    NINHO_SIM_REQUIRE(shot.primary_projectile()->entity_id()
+        == EntityId{0xC0000000U});
+}
+
 NINHO_SIM_TEST("shot state canonical v3 publishes schema two without reviving v2")
 {
     auto first = create_session();

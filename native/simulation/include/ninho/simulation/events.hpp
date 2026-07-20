@@ -21,6 +21,8 @@ enum class DomainEventKind : std::uint8_t {
     PieceFractured = 12,
     MassChanged = 13,
     SpeedChanged = 14,
+    ProjectileSplit = 15,
+    ProjectileSpawned = 16,
 };
 
 enum class CommandRejectionReason : std::uint8_t {
@@ -29,6 +31,7 @@ enum class CommandRejectionReason : std::uint8_t {
     InvalidAim = 2,
     NotArmed = 3,
     NoBirdAvailable = 4,
+    AbilityUnavailable = 5,
 };
 
 enum class NeutralizationCause : std::uint8_t {

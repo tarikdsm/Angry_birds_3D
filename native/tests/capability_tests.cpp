@@ -1,4 +1,5 @@
 #include "test_framework.hpp"
+#include "physics_world_test_facade.hpp"
 
 #include <ninho/physics/physics_world.hpp>
 
@@ -628,4 +629,87 @@ NINHO_TEST("capability metrics reuse contact scratch after warmup")
 
     NINHO_REQUIRE(repeated_contact_count == expected_contact_count);
     NINHO_REQUIRE(allocation_count == 0);
+}
+
+NINHO_TEST("capability remaining body slots count reservations until destruction commits")
+{
+    WorldConfig config = make_legacy_radial_world_config({.surface_gravity = 0});
+    config.max_bodies = 2;
+    PhysicsWorld world(config);
+
+    NINHO_REQUIRE(world.remaining_body_capacity() == 2U);
+    NINHO_REQUIRE(world.prepare_body_creations(2U).ok());
+    NINHO_REQUIRE(world.prepare_body_creations(3U).code
+        == StatusCode::CapacityExceeded);
+    NINHO_REQUIRE(world.remaining_body_capacity() == 2U);
+    const auto first = world.create_body(BodyDesc::dynamic_sphere(0.5f, {}, 10));
+    NINHO_REQUIRE(first.status.ok());
+    NINHO_REQUIRE(world.remaining_body_capacity() == 1U);
+    NINHO_REQUIRE(world.destroy_body(first.value).ok());
+    NINHO_REQUIRE(world.remaining_body_capacity() == 1U);
+
+    const auto second = world.create_body(
+        BodyDesc::dynamic_sphere(0.5f, {{2, 0, 0}, {}}, 10));
+    NINHO_REQUIRE(second.status.ok());
+    NINHO_REQUIRE(world.remaining_body_capacity() == 0U);
+    NINHO_REQUIRE(world.create_body(
+        BodyDesc::dynamic_sphere(0.5f, {{4, 0, 0}, {}}, 10)).status.code
+        == StatusCode::CapacityExceeded);
+
+    world.step();
+    NINHO_REQUIRE(world.remaining_body_capacity() == 1U);
+}
+
+NINHO_TEST("capability negative collision group suppresses siblings and zero restores collision")
+{
+    PhysicsWorld world(make_legacy_radial_world_config({.surface_gravity = 0}));
+    const BodyHandle scenario =
+        world.create_body(BodyDesc::static_sphere(1.0f, {})).value;
+    auto sibling_desc = BodyDesc::dynamic_sphere(0.75f, {}, 10);
+    sibling_desc.shapes.front().collision_group = -71;
+    const BodyHandle first = world.create_body(sibling_desc).value;
+    sibling_desc.transform.position = {0.5f, 0, 0};
+    const BodyHandle second = world.create_body(sibling_desc).value;
+
+    world.step();
+    NINHO_REQUIRE(world.metrics().contact_count == 2);
+    NINHO_REQUIRE(world.set_body_collision_group(first, 0).ok());
+    NINHO_REQUIRE(world.set_body_collision_group(second, 0).ok());
+    world.step();
+    NINHO_REQUIRE(world.metrics().contact_count == 3);
+    NINHO_REQUIRE(world.state(scenario).has_value());
+}
+
+NINHO_TEST("capability collision group update covers compounds and rejects invalid handle atomically")
+{
+    PhysicsWorld world(make_legacy_radial_world_config({.surface_gravity = 0}));
+    BodyDesc compound{.type = BodyType::Dynamic};
+    compound.shapes.push_back(ShapeDesc{
+        .geometry = CompoundShape{{
+            SphereShape{.radius = 0.25f, .local = {{-0.5f, 0, 0}, {}}},
+            SphereShape{.radius = 0.25f, .local = {{0.5f, 0, 0}, {}}},
+        }},
+        .density = 10,
+        .collision_group = -3,
+    });
+    const BodyHandle body = world.create_body(compound).value;
+    world.step();
+    NINHO_REQUIRE(ninho::physics::detail::PhysicsWorldTestFacade::shape_collision_groups(
+        world, body) == std::vector<int>({-3, -3}));
+    const auto filter_bits_before =
+        ninho::physics::detail::PhysicsWorldTestFacade::shape_collision_bits(
+            world, body);
+
+    NINHO_REQUIRE(world.set_body_collision_group(body, -9).ok());
+    NINHO_REQUIRE(ninho::physics::detail::PhysicsWorldTestFacade::shape_collision_groups(
+        world, body) == std::vector<int>({-9, -9}));
+    NINHO_REQUIRE(
+        ninho::physics::detail::PhysicsWorldTestFacade::shape_collision_bits(
+            world, body) == filter_bits_before);
+    NINHO_REQUIRE(world.set_body_collision_group({}, 0).code == StatusCode::InvalidHandle);
+    NINHO_REQUIRE(ninho::physics::detail::PhysicsWorldTestFacade::shape_collision_groups(
+        world, body) == std::vector<int>({-9, -9}));
+
+    NINHO_REQUIRE(world.destroy_body(body).ok());
+    NINHO_REQUIRE(world.set_body_collision_group(body, 0).code == StatusCode::InvalidHandle);
 }

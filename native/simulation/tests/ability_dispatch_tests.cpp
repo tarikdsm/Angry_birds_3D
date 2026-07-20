@@ -154,7 +154,7 @@ AbilityArchetype ability(AbilityKind kind)
         break;
     case AbilityKind::Split:
         result.key = result.kind = "split";
-        result.payload = SplitAbilityDefinition{3U, 11.0, 1.0};
+        result.payload = SplitAbilityDefinition{3U, 11.0, 1.012400431604922};
         break;
     }
     result.kind_v2 = kind;
@@ -190,7 +190,7 @@ ArchetypeCatalog archetypes(AbilityArchetype selected = ability(AbilityKind::Gra
 {
     ArchetypeCatalog result;
     result.schema_version = result.source_schema_version = 2U;
-    result.presentation_ids = {"bird", "icon", "animation"};
+    result.presentation_ids = {"bird", "icon", "animation", "CHR_BlueChild"};
     result.score_ids = {"bird_score"};
     selected.id = AbilityId{1};
     result.abilities.push_back(std::move(selected));
@@ -318,7 +318,7 @@ NINHO_SIM_TEST("ability dispatch rejects unknown and incompatible definitions du
 
 NINHO_SIM_TEST("ability dispatch rejects activation for abilities without a concrete system")
 {
-    const std::array unsupported{AbilityKind::Explosion, AbilityKind::Split};
+    const std::array unsupported{AbilityKind::Explosion};
     for (const AbilityKind kind : unsupported) {
         RecordingHooks hooks;
         AbilitySystem system{hooks};
@@ -339,10 +339,10 @@ NINHO_SIM_TEST("ability dispatch rejects activation for abilities without a conc
     }
 }
 
-NINHO_SIM_TEST("ability dispatch fixes mass and speed boost arming at nine ticks")
+NINHO_SIM_TEST("ability dispatch fixes mass speed and split arming at nine ticks")
 {
     for (const AbilityKind kind
-        : {AbilityKind::MassBoost, AbilityKind::SpeedBoost}) {
+        : {AbilityKind::MassBoost, AbilityKind::SpeedBoost, AbilityKind::Split}) {
         AbilityArchetype selected = ability(kind);
         selected.arm_ticks = 0U;
         NINHO_SIM_REQUIRE(AbilitySystem::activation_arm_ticks(selected) == 9U);
@@ -353,7 +353,7 @@ NINHO_SIM_TEST("ability dispatch fixes mass and speed boost arming at nine ticks
 
 NINHO_SIM_TEST("ability dispatch fails closed for unimplemented session abilities")
 {
-    const std::array unsupported{AbilityKind::Explosion, AbilityKind::Split};
+    const std::array unsupported{AbilityKind::Explosion};
     auto session = create_session();
     launch(*session);
     advance_to_armed(*session);

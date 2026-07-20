@@ -427,7 +427,7 @@ NINHO_TEST("gameplay adapter has no external shot identity or event inference ca
     NINHO_REQUIRE(source.find("session_->shot_state()") != std::string::npos);
 }
 
-NINHO_TEST("gameplay nodes expose typed mass and speed changed domain events")
+NINHO_TEST("gameplay nodes expose typed mass speed and split domain events")
 {
     const std::string gameplay = read_source_file(
         "native/extension/src/gameplay_session_node.cpp");
@@ -437,12 +437,20 @@ NINHO_TEST("gameplay nodes expose typed mass and speed changed domain events")
         "case MassChanged: return \"mass_changed\";";
     constexpr std::string_view speed_mapping =
         "case SpeedChanged: return \"speed_changed\";";
+    constexpr std::string_view split_mapping =
+        "case ProjectileSplit: return \"projectile_split\";";
+    constexpr std::string_view spawned_mapping =
+        "case ProjectileSpawned: return \"projectile_spawned\";";
     constexpr std::string_view delta_mapping =
         "result[\"delta_velocity\"] = detail::to_godot(event.delta_velocity_m_s);";
     NINHO_REQUIRE(gameplay.find(mass_mapping) != std::string::npos);
     NINHO_REQUIRE(orbital.find(mass_mapping) != std::string::npos);
     NINHO_REQUIRE(gameplay.find(speed_mapping) != std::string::npos);
     NINHO_REQUIRE(orbital.find(speed_mapping) != std::string::npos);
+    NINHO_REQUIRE(gameplay.find(split_mapping) != std::string::npos);
+    NINHO_REQUIRE(orbital.find(split_mapping) != std::string::npos);
+    NINHO_REQUIRE(gameplay.find(spawned_mapping) != std::string::npos);
+    NINHO_REQUIRE(orbital.find(spawned_mapping) != std::string::npos);
     NINHO_REQUIRE(gameplay.find(delta_mapping) != std::string::npos);
     NINHO_REQUIRE(orbital.find(delta_mapping) != std::string::npos);
 }

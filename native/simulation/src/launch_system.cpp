@@ -801,6 +801,15 @@ SessionStatus SimulationSession::Impl::process_commands()
                     >= shot->launch_tick.value()
                         + detail::AbilitySystem::activation_arm_ticks(*ability)
                 && !shot->activation_consumed && !projectile->finished) {
+                if (ability->kind_v2 == AbilityKind::Split) {
+                    const SessionStatus preflight = preflight_split_ability(
+                        *shot, std::get<SplitAbilityDefinition>(ability->payload));
+                    if (!preflight.ok()) {
+                        publish_event(DomainEventKind::CommandRejected, {}, {},
+                            CommandRejectionReason::AbilityUnavailable);
+                        continue;
+                    }
+                }
                 const SessionStatus activation_status = detail::AbilitySystem::activate(
                     *ability, *shot, session_state.tick);
                 if (!activation_status.ok()) {

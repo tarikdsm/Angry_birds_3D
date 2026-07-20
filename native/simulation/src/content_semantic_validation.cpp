@@ -91,6 +91,19 @@ std::optional<ContentError> validate_bird_runtime_physics(
     return std::nullopt;
 }
 
+std::optional<ContentError> validate_split_child_runtime_physics(
+    const BirdArchetype& bird, std::string_view pointer)
+{
+    const double child_mass_kg = bird.mass_kg / 3.0;
+    const double child_radius_m = bird.radius_m * std::cbrt(1.0 / 3.0);
+    if (!box3d_sphere_mass_is_safe(child_mass_kg, child_radius_m)) {
+        return error(ContentErrorCode::OutOfRange,
+            std::string{pointer} + "/mass_kg",
+            "split child mass and radius are unsafe for the Box3D runtime");
+    }
+    return std::nullopt;
+}
+
 std::optional<ContentError> validate_level_semantics(
     const ArchetypeCatalog& archetypes, const LevelManifest& level)
 {
@@ -328,6 +341,20 @@ std::optional<ContentError> validate_product_v2_session_content(
         if (!ability_ids.contains(bird.ability_id.value())) {
             return error(ContentErrorCode::MissingReference, pointer + "/ability_id",
                 "ability reference not found");
+        }
+        const auto bird_ability = std::ranges::find(
+            archetypes.abilities, bird.ability_id, &AbilityArchetype::id);
+        if (bird_ability != archetypes.abilities.end()
+            && bird_ability->kind_v2 == AbilityKind::Split) {
+            if (const auto child_error =
+                    validate_split_child_runtime_physics(bird, pointer)) {
+                return child_error;
+            }
+            if (!presentation_ids.contains("CHR_BlueChild")) {
+                return error(ContentErrorCode::MissingReference,
+                    "/presentation_ids",
+                    "split child presentation CHR_BlueChild is not registered");
+            }
         }
         if (!surface_ids.contains(bird.surface_id.value())) {
             return error(ContentErrorCode::MissingReference, pointer + "/surface_id",

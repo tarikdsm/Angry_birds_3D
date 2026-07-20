@@ -31,6 +31,10 @@ public:
         const PhysicsWorld&, BodyHandle);
     [[nodiscard]] static std::vector<float> base_shape_densities(
         const PhysicsWorld&, BodyHandle);
+    [[nodiscard]] static std::vector<int> shape_collision_groups(
+        const PhysicsWorld&, BodyHandle);
+    [[nodiscard]] static std::vector<std::array<std::uint64_t, 2>>
+        shape_collision_bits(const PhysicsWorld&, BodyHandle);
     [[nodiscard]] static float base_mass(const PhysicsWorld&, BodyHandle);
     [[nodiscard]] static float mass_scale(const PhysicsWorld&, BodyHandle);
     static void set_base_density(

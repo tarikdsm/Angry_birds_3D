@@ -3,6 +3,7 @@
 #include "session_internal.hpp"
 #if defined(NINHO_ENABLE_TEST_FACADES)
 #include "session_test_facade.hpp"
+#include "../../kernel/src/physics_world_test_facade.hpp"
 #endif
 
 #include <algorithm>
@@ -438,6 +439,56 @@ bool detail::SessionTestFacade::set_last_speed_changed_delta_for_testing(
     }
     event->delta_velocity_m_s = delta_velocity;
     return true;
+}
+
+int detail::SessionTestFacade::collision_group(
+    const SimulationSession& session, EntityId entity)
+{
+    const auto record = std::ranges::find(
+        session.impl_->body_records, entity,
+        &SimulationSession::Impl::BodyRecord::entity_id);
+    if (record == session.impl_->body_records.end()) {
+        return 0;
+    }
+    const auto groups = ninho::physics::detail::PhysicsWorldTestFacade::
+        shape_collision_groups(session.impl_->physics, record->physics_handle);
+    return groups.empty() ? 0 : groups.front();
+}
+
+bool detail::SessionTestFacade::set_split_child_id_for_testing(
+    SimulationSession& session, std::size_t index, EntityId entity)
+{
+    if (!session.impl_->shot || index >= 3U) {
+        return false;
+    }
+    auto* runtime = std::get_if<SplitAbilityRuntime>(&session.impl_->shot->runtime);
+    if (runtime == nullptr || !runtime->applied) {
+        return false;
+    }
+    runtime->child_ids[index] = entity;
+    return true;
+}
+
+bool detail::SessionTestFacade::set_split_grace_end_for_testing(
+    SimulationSession& session, TickIndex tick)
+{
+    if (!session.impl_->shot) {
+        return false;
+    }
+    auto* runtime = std::get_if<SplitAbilityRuntime>(&session.impl_->shot->runtime);
+    if (runtime == nullptr || !runtime->applied) {
+        return false;
+    }
+    runtime->grace_end_tick = tick;
+    return true;
+}
+
+void detail::SessionTestFacade::invalidate_locked_plane_for_testing(
+    SimulationSession& session)
+{
+    if (session.impl_->shot) {
+        session.impl_->shot->locked_plane.plane_normal = {};
+    }
 }
 
 bool detail::SessionTestFacade::impulse_entity(

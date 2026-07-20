@@ -137,6 +137,22 @@ struct ShotState {
         return true;
     }
 
+    [[nodiscard]] bool replace_all_projectiles(
+        std::vector<ProjectileState> replacements) noexcept
+    {
+        if (replacements.empty()) {
+            return false;
+        }
+        for (std::size_t index = 1U; index < replacements.size(); ++index) {
+            if (replacements[index - 1U].entity_id()
+                >= replacements[index].entity_id()) {
+                return false;
+            }
+        }
+        projectiles_.swap(replacements);
+        return true;
+    }
+
     [[nodiscard]] bool erase_projectile(EntityId entity_id)
     {
         const auto position = std::ranges::lower_bound(

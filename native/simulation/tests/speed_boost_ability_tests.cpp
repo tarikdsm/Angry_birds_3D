@@ -789,7 +789,7 @@ NINHO_SIM_TEST("speed boost ability canonical bytes and hash distinguish only ev
     NINHO_SIM_REQUIRE(session->canonical_hash_v3() != first_hash);
 }
 
-NINHO_SIM_TEST("speed boost ability is the only newly promoted kind and appends event tag fourteen")
+NINHO_SIM_TEST("speed boost ability preserves event tag fourteen after split promotion")
 {
     static_assert(static_cast<std::uint8_t>(DomainEventKind::MassChanged) == 13U);
     static_assert(static_cast<std::uint8_t>(DomainEventKind::SpeedChanged) == 14U);
@@ -800,24 +800,15 @@ NINHO_SIM_TEST("speed boost ability is the only newly promoted kind and appends 
 
     NINHO_SIM_REQUIRE(SimulationSession::create(
         materials(), archetypes(), level()).ok());
-    const std::array future_kinds{AbilityKind::Explosion, AbilityKind::Split};
-    for (const AbilityKind future : future_kinds) {
-        ArchetypeCatalog unsupported = archetypes();
-        AbilityArchetype& ability = unsupported.abilities.front();
-        if (future == AbilityKind::Explosion) {
-            ability.key = ability.kind = "explosion";
-            ability.kind_v2 = future;
-            ability.payload = ExplosionAbilityDefinition{4.0, 12.0, 90.0, 32U};
-        } else {
-            ability.key = ability.kind = "split";
-            ability.kind_v2 = future;
-            ability.payload = SplitAbilityDefinition{3U, 11.0, 0.9};
-        }
-        const auto created = SimulationSession::create(
-            materials(), unsupported, level());
-        NINHO_SIM_REQUIRE(!created.ok());
-        NINHO_SIM_REQUIRE(created.error.pointer == "/abilities/0/kind");
-    }
+    ArchetypeCatalog unsupported = archetypes();
+    AbilityArchetype& ability = unsupported.abilities.front();
+    ability.key = ability.kind = "explosion";
+    ability.kind_v2 = AbilityKind::Explosion;
+    ability.payload = ExplosionAbilityDefinition{4.0, 12.0, 90.0, 32U};
+    const auto created = SimulationSession::create(
+        materials(), unsupported, level());
+    NINHO_SIM_REQUIRE(!created.ok());
+    NINHO_SIM_REQUIRE(created.error.pointer == "/abilities/0/kind");
 }
 
 }
