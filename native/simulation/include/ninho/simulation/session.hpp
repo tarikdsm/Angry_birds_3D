@@ -88,6 +88,9 @@ struct EntitySnapshot {
     double mass_kg{};
     bool awake{};
     bool ejected{};
+    // Prepared for canonical_state_v3. The legacy canonical_state_v2 serializer
+    // deliberately continues to omit this field.
+    bool exited_world{};
     bool is_projectile{};
 
     bool operator==(const EntitySnapshot&) const = default;

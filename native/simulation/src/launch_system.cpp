@@ -363,7 +363,8 @@ SessionStatus SimulationSession::Impl::create_projectile()
         .shape = {.type = ShapeType::Sphere, .radius_m = bird->radius_m},
         .visual_id = "CHR_LaunchBird",
         .physics_handle = created.value,
-        .is_projectile = true});
+        .is_projectile = true,
+        .affected_by_world_gravity = true});
     projectile = ProjectileState{.entity_id = entity,
         .archetype_id = bird->id,
         .ability_id = ability->id,

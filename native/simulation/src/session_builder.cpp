@@ -2,6 +2,7 @@
 #include "material_mapping.hpp"
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <exception>
 #include <ranges>
@@ -75,32 +76,281 @@ namespace {
     return found == catalog.surfaces.end() ? nullptr : &*found;
 }
 
+[[nodiscard]] ninho::physics::WorldConfig make_world_config(const LevelManifest& level)
+{
+    if (level.source_schema_version == 1U) {
+        return ninho::physics::make_legacy_radial_world_config({
+            .planet_radius = static_cast<float>(level.planet.radius_m),
+            .surface_gravity = static_cast<float>(level.planet.surface_gravity_m_s2),
+        });
+    }
+    return std::visit(
+        [](const auto& world) -> ninho::physics::WorldConfig {
+            using World = std::decay_t<decltype(world)>;
+            if constexpr (std::is_same_v<World, UniformWorldDefinition>) {
+                return {
+                    .max_bodies = 500U,
+                    .gravity = ninho::physics::UniformGravityConfig{
+                        vector_from(world.acceleration_m_s2)},
+                    .bounds = ninho::physics::AabbWorldBounds{
+                        vector_from(world.bounds_min_m), vector_from(world.bounds_max_m)},
+                };
+            } else {
+                return {
+                    .max_bodies = 500U,
+                    .gravity = ninho::physics::RadialGravityConfig{
+                        .center_m = vector_from(world.center_m),
+                        .reference_radius_m = static_cast<float>(world.reference_radius_m),
+                        .reference_acceleration_m_s2 =
+                            static_cast<float>(world.reference_acceleration_m_s2),
+                    },
+                    .bounds = ninho::physics::SphericalWorldBounds{
+                        .center_m = vector_from(world.center_m),
+                        .removal_radius_m = static_cast<float>(world.bounds_radius_m),
+                    },
+                };
+            }
+        },
+        level.world);
+}
+
+[[nodiscard]] bool finite_vector(const std::array<double, 3>& value) noexcept
+{
+    return std::ranges::all_of(value, [](double component) {
+        return std::isfinite(component);
+    });
+}
+
+[[nodiscard]] std::array<double, 3> subtract(
+    const std::array<double, 3>& lhs, const std::array<double, 3>& rhs) noexcept
+{
+    return {lhs[0] - rhs[0], lhs[1] - rhs[1], lhs[2] - rhs[2]};
+}
+
+[[nodiscard]] double determinant(const std::array<double, 3>& a,
+    const std::array<double, 3>& b, const std::array<double, 3>& c) noexcept
+{
+    return a[0] * (b[1] * c[2] - b[2] * c[1])
+        - a[1] * (b[0] * c[2] - b[2] * c[0])
+        + a[2] * (b[0] * c[1] - b[1] * c[0]);
+}
+
+[[nodiscard]] bool contained_by_tetrahedron(const std::array<double, 3>& point,
+    const std::array<double, 3>& a, const std::array<double, 3>& b,
+    const std::array<double, 3>& c, const std::array<double, 3>& d) noexcept
+{
+    const auto ba = subtract(b, a);
+    const auto ca = subtract(c, a);
+    const auto da = subtract(d, a);
+    const auto pa = subtract(point, a);
+    const double denominator = determinant(ba, ca, da);
+    constexpr double epsilon = 1.0e-10;
+    if (std::abs(denominator) <= epsilon) {
+        return false;
+    }
+    const double u = determinant(pa, ca, da) / denominator;
+    const double v = determinant(ba, pa, da) / denominator;
+    const double w = determinant(ba, ca, pa) / denominator;
+    const double t = 1.0 - u - v - w;
+    return u >= -epsilon && v >= -epsilon && w >= -epsilon && t >= -epsilon
+        && u <= 1.0 + epsilon && v <= 1.0 + epsilon
+        && w <= 1.0 + epsilon && t <= 1.0 + epsilon;
+}
+
+[[nodiscard]] bool has_redundant_hull_vertex(
+    const std::vector<std::array<double, 3>>& vertices) noexcept
+{
+    if (vertices.size() <= 4U) {
+        return false;
+    }
+    for (std::size_t candidate = 0; candidate < vertices.size(); ++candidate) {
+        for (std::size_t a = 0; a < vertices.size(); ++a) {
+            if (a == candidate) continue;
+            for (std::size_t b = a + 1U; b < vertices.size(); ++b) {
+                if (b == candidate) continue;
+                for (std::size_t c = b + 1U; c < vertices.size(); ++c) {
+                    if (c == candidate) continue;
+                    for (std::size_t d = c + 1U; d < vertices.size(); ++d) {
+                        if (d == candidate) continue;
+                        if (contained_by_tetrahedron(vertices[candidate],
+                                vertices[a], vertices[b], vertices[c], vertices[d])) {
+                            return true;
+                        }
+                    }
+                }
+            }
+        }
+    }
+    return false;
+}
+
+[[nodiscard]] std::optional<ContentError> validate_shape(
+    const ShapeDefinition& shape, const std::string& pointer, std::size_t depth = 0U)
+{
+    const auto positive = [](double value) {
+        return std::isfinite(value) && value > 0.0;
+    };
+    switch (shape.type) {
+    case ShapeType::Box:
+        if (!std::ranges::all_of(shape.half_extents_m, positive)) {
+            return ContentError{ContentErrorCode::InvalidInvariant,
+                pointer + "/half_extents_m", "box half extents must be positive and finite"};
+        }
+        return std::nullopt;
+    case ShapeType::Sphere:
+        if (!positive(shape.radius_m)) {
+            return ContentError{ContentErrorCode::InvalidInvariant,
+                pointer + "/radius_m", "sphere radius must be positive and finite"};
+        }
+        return std::nullopt;
+    case ShapeType::Capsule:
+        if (!positive(shape.radius_m) || !positive(shape.half_height_m)) {
+            return ContentError{ContentErrorCode::InvalidInvariant, pointer,
+                "capsule dimensions must be positive and finite"};
+        }
+        return std::nullopt;
+    case ShapeType::ConvexHull: {
+        const std::string vertices_pointer = pointer + "/vertices_m";
+        if (shape.vertices_m.size() > 64U) {
+            return ContentError{ContentErrorCode::ResourceLimit, vertices_pointer,
+                "convex hull vertex capacity exceeded"};
+        }
+        if (shape.vertices_m.size() < 4U
+            || !std::ranges::all_of(shape.vertices_m, finite_vector)) {
+            return ContentError{ContentErrorCode::InvalidInvariant, vertices_pointer,
+                "convex hull requires at least four finite vertices"};
+        }
+        for (std::size_t index = 0; index < shape.vertices_m.size(); ++index) {
+            if (std::ranges::find(shape.vertices_m.begin(),
+                    shape.vertices_m.begin() + static_cast<std::ptrdiff_t>(index),
+                    shape.vertices_m[index])
+                != shape.vertices_m.begin() + static_cast<std::ptrdiff_t>(index)) {
+                return ContentError{ContentErrorCode::InvalidInvariant, vertices_pointer,
+                    "convex hull vertices must be unique"};
+            }
+        }
+        bool has_volume = false;
+        for (std::size_t b = 1U; b + 2U < shape.vertices_m.size() && !has_volume; ++b) {
+            for (std::size_t c = b + 1U; c + 1U < shape.vertices_m.size() && !has_volume; ++c) {
+                for (std::size_t d = c + 1U; d < shape.vertices_m.size(); ++d) {
+                    has_volume = std::abs(determinant(
+                        subtract(shape.vertices_m[b], shape.vertices_m[0]),
+                        subtract(shape.vertices_m[c], shape.vertices_m[0]),
+                        subtract(shape.vertices_m[d], shape.vertices_m[0]))) > 1.0e-10;
+                    if (has_volume) break;
+                }
+            }
+        }
+        if (!has_volume || has_redundant_hull_vertex(shape.vertices_m)) {
+            return ContentError{ContentErrorCode::InvalidInvariant, vertices_pointer,
+                "vertices must be the vertices of a convex volume"};
+        }
+        return std::nullopt;
+    }
+    case ShapeType::Compound:
+        if (depth >= 4U) {
+            return ContentError{ContentErrorCode::ResourceLimit, pointer,
+                "compound shape depth exceeded"};
+        }
+        if (shape.children.empty()) {
+            return ContentError{ContentErrorCode::InvalidInvariant, pointer + "/children",
+                "compound shape requires children"};
+        }
+        if (shape.children.size() > 16U) {
+            return ContentError{ContentErrorCode::ResourceLimit, pointer + "/children",
+                "compound child capacity exceeded"};
+        }
+        for (std::size_t index = 0; index < shape.children.size(); ++index) {
+            if (const auto error = validate_shape(shape.children[index],
+                    pointer + "/children/" + std::to_string(index), depth + 1U)) {
+                return error;
+            }
+        }
+        return std::nullopt;
+    }
+    return ContentError{ContentErrorCode::InvalidInvariant, pointer + "/type",
+        "shape type is invalid"};
+}
+
+void append_primitives(const ShapeDefinition& shape,
+    std::vector<ninho::physics::PrimitiveShape>& output)
+{
+    switch (shape.type) {
+    case ShapeType::Box:
+        output.push_back(ninho::physics::BoxShape{vector_from(shape.half_extents_m), {}});
+        break;
+    case ShapeType::Sphere:
+        output.push_back(ninho::physics::SphereShape{
+            static_cast<float>(shape.radius_m), {}});
+        break;
+    case ShapeType::Capsule:
+        output.push_back(ninho::physics::CapsuleShape{
+            static_cast<float>(shape.half_height_m),
+            static_cast<float>(shape.radius_m), {}});
+        break;
+    case ShapeType::ConvexHull: {
+        std::vector<ninho::physics::Vec3> vertices;
+        vertices.reserve(shape.vertices_m.size());
+        std::ranges::transform(shape.vertices_m, std::back_inserter(vertices), vector_from);
+        output.push_back(ninho::physics::HullShape{std::move(vertices), {}});
+        break;
+    }
+    case ShapeType::Compound:
+        for (const ShapeDefinition& child : shape.children) {
+            append_primitives(child, output);
+        }
+        break;
+    }
+}
+
 [[nodiscard]] ninho::physics::ShapeDesc make_shape(
     const BodyDefinition& body, const MaterialCatalog& materials)
 {
     ninho::physics::ShapeDesc result;
-    if (body.shape.type == ShapeType::Box) {
-        result.geometry = ninho::physics::BoxShape{vector_from(body.shape.half_extents_m), {}};
+    std::vector<ninho::physics::PrimitiveShape> primitives;
+    append_primitives(body.shape, primitives);
+    if (body.shape.type == ShapeType::Compound) {
+        result.geometry = ninho::physics::CompoundShape{std::move(primitives)};
     } else {
-        result.geometry = ninho::physics::SphereShape{static_cast<float>(body.shape.radius_m), {}};
+        result.geometry = std::visit([](auto primitive) -> ninho::physics::ShapeGeometry {
+            return primitive;
+        }, std::move(primitives.front()));
     }
-    result.density = static_cast<float>(body.density_kg_m3);
+    // Box3D requires a positive shape density even for static bodies, whose
+    // solver mass remains zero. Schema v2 deliberately permits static density 0.
+    result.density = static_cast<float>(
+        body.body_type == BodyType::Static && body.density_kg_m3 == 0.0
+            ? 1.0 : body.density_kg_m3);
     if (body.material_id) {
         const auto* material = find_material(materials, *body.material_id);
         result.friction = static_cast<float>(material->friction);
         result.restitution = static_cast<float>(material->restitution);
-        result.material_id = detail::physics_material_tag(*body.material_id);
     } else {
         const auto* surface = find_surface(materials, *body.surface_id);
         result.friction = static_cast<float>(surface->friction);
         result.restitution = static_cast<float>(surface->restitution);
-        result.material_id = detail::physics_surface_tag(*body.surface_id);
     }
+    result.material_id = detail::physics_material_tag(body);
     return result;
 }
 
+[[nodiscard]] ninho::physics::WorldExitPolicy world_exit_policy_for(
+    const LevelManifest& level, const BodyDefinition& body, bool participates_in_joint) noexcept
+{
+    if (body.body_type == BodyType::Static || participates_in_joint) {
+        return ninho::physics::WorldExitPolicy::KeepOutsideBounds;
+    }
+    if (level.source_schema_version == 1U) {
+        return ninho::physics::WorldExitPolicy::RemoveOutsideBounds;
+    }
+    return std::visit([](const auto&) {
+        return ninho::physics::WorldExitPolicy::RemoveOutsideBounds;
+    }, level.world);
+}
+
 [[nodiscard]] ninho::physics::BodyDesc make_body(
-    const BodyDefinition& body, const MaterialCatalog& materials, bool participates_in_joint)
+    const BodyDefinition& body, const MaterialCatalog& materials,
+    const LevelManifest& level, bool participates_in_joint)
 {
     ninho::physics::BodyDesc result;
     result.type = body.body_type == BodyType::Dynamic
@@ -108,14 +358,12 @@ namespace {
         : ninho::physics::BodyType::Static;
     result.transform = transform_from(body.transform);
     result.shapes.push_back(make_shape(body, materials));
-    result.affected_by_world_gravity = body.body_type == BodyType::Dynamic;
+    result.affected_by_world_gravity = body.body_type == BodyType::Dynamic
+        ? body.affected_by_world_gravity : false;
     // A physics-side body removal also invalidates every attached solver joint.
     // Keep jointed bodies under simulation ownership so public/canonical joint
     // state can never claim an invalid solver constraint is still active.
-    result.world_exit_policy = body.body_type == BodyType::Dynamic
-            && !participates_in_joint
-        ? ninho::physics::WorldExitPolicy::RemoveOutsideBounds
-        : ninho::physics::WorldExitPolicy::KeepOutsideBounds;
+    result.world_exit_policy = world_exit_policy_for(level, body, participates_in_joint);
     result.name = body.visual.asset_id;
     return result;
 }
@@ -135,21 +383,22 @@ namespace {
 
 SimulationSession::Impl::Impl(ContentBundle source)
     : bundle(std::move(source))
-    , physics(ninho::physics::make_legacy_radial_world_config({
-          .planet_radius = static_cast<float>(bundle.level.planet.radius_m),
-          .surface_gravity = static_cast<float>(bundle.level.planet.surface_gravity_m_s2),
-      }))
+    , physics(make_world_config(bundle.level))
 {
 }
 
 SessionStatus SimulationSession::Impl::build() noexcept
 {
     try {
-        remaining_birds = 0;
-        roster_remaining = bundle.level.bird_roster;
-        std::ranges::sort(roster_remaining, {}, &BirdRosterEntry::bird_archetype_id);
-        for (const BirdRosterEntry& entry : bundle.level.bird_roster) {
-            remaining_birds += entry.count;
+        remaining_birds = 0U;
+        if (bundle.level.source_schema_version == 1U) {
+            roster_remaining = bundle.level.bird_roster;
+            std::ranges::sort(roster_remaining, {}, &BirdRosterEntry::bird_archetype_id);
+            for (const BirdRosterEntry& entry : bundle.level.bird_roster) {
+                remaining_birds += entry.count;
+            }
+        } else {
+            remaining_birds = static_cast<std::uint32_t>(bundle.level.bird_queue.size());
         }
 
         std::unordered_map<std::uint32_t, ninho::physics::BodyHandle> handles_by_body_id;
@@ -170,9 +419,12 @@ SessionStatus SimulationSession::Impl::build() noexcept
             std::size_t source_index{};
         };
         std::vector<PendingBody> pending_bodies;
-        pending_bodies.reserve(bundle.level.bodies.size() + 1U);
-        pending_bodies.push_back(
-            {bundle.level.planet.entity_id, PartId{0}, nullptr, 0U});
+        const bool legacy = bundle.level.source_schema_version == 1U;
+        pending_bodies.reserve(bundle.level.bodies.size() + (legacy ? 1U : 0U));
+        if (legacy) {
+            pending_bodies.push_back(
+                {bundle.level.planet.entity_id, PartId{0}, nullptr, 0U});
+        }
         for (std::size_t index = 0; index < bundle.level.bodies.size(); ++index) {
             const BodyDefinition& body = bundle.level.bodies[index];
             pending_bodies.push_back({body.entity_id, body.part_id, &body, index});
@@ -193,11 +445,9 @@ SessionStatus SimulationSession::Impl::build() noexcept
             }
         }
 
-        const auto* planet_surface = find_surface(
-            bundle.materials, bundle.level.planet.surface_id);
-        if (planet_surface == nullptr) {
-            return build_failure("planet surface was not resolved");
-        }
+        const auto* planet_surface = legacy
+            ? find_surface(bundle.materials, bundle.level.planet.surface_id) : nullptr;
+        if (legacy && planet_surface == nullptr) return build_failure("planet surface was not resolved");
         for (const PendingBody& pending : pending_bodies) {
             if (pending.level_body == nullptr) {
                 ninho::physics::BodyDesc planet = ninho::physics::BodyDesc::static_sphere(
@@ -221,13 +471,13 @@ SessionStatus SimulationSession::Impl::build() noexcept
                     std::nullopt,
                     {.type = ShapeType::Sphere, .radius_m = bundle.level.planet.radius_m},
                     bundle.level.planet.visual_id,
-                    created.value});
+                    created.value, false, false, false});
                 continue;
             }
 
             const BodyDefinition& body = *pending.level_body;
             const auto created = physics.create_body(make_body(body, bundle.materials,
-                jointed_body_ids.contains(body.body_id)));
+                bundle.level, jointed_body_ids.contains(body.body_id)));
             if (!created) {
                 return build_failure(created.status.message);
             }
@@ -241,7 +491,10 @@ SessionStatus SimulationSession::Impl::build() noexcept
                 body.enemy_archetype_id,
                 body.shape,
                 body.visual.asset_id,
-                created.value});
+                created.value,
+                false,
+                false,
+                body.body_type == BodyType::Dynamic && body.affected_by_world_gravity});
         }
 
         std::vector<const JointDefinition*> ordered_joints;
@@ -289,7 +542,9 @@ SessionStatus SimulationSession::Impl::build() noexcept
             return build_failure(committed.message);
         }
         rebuild_snapshots();
-        rebuild_canonical_static_content();
+        if (legacy) {
+            rebuild_canonical_static_content();
+        }
         refresh_canonical_state();
         return {};
     } catch (const std::exception& error) {
@@ -354,6 +609,7 @@ void SimulationSession::Impl::rebuild_snapshots()
                 state->mass,
                 state->awake,
                 state->ejected,
+                state->exited_world,
                 record.is_projectile});
 #if defined(NINHO_ENABLE_TEST_FACADES)
             ++snapshot_visual_id_copies;
@@ -383,6 +639,7 @@ void SimulationSession::Impl::rebuild_snapshots()
         snapshot.mass_kg = state->mass;
         snapshot.awake = state->awake;
         snapshot.ejected = state->ejected;
+        snapshot.exited_world = state->exited_world;
         snapshot.is_projectile = record.is_projectile;
     }
     std::ranges::sort(entity_snapshot_scratch, [](const auto& lhs, const auto& rhs) {
@@ -404,12 +661,54 @@ ContentResult<std::unique_ptr<SimulationSession>> SimulationSession::create(
     const ArchetypeCatalog& archetypes,
     const LevelManifest& level)
 {
-    const auto content = make_content_bundle(materials, archetypes, level);
-    if (!content.ok()) {
-        return {{}, content.error};
+    ContentBundle content;
+    if (materials.source_schema_version == 1U
+        && archetypes.source_schema_version == 1U
+        && level.source_schema_version == 1U) {
+        const auto legacy = make_content_bundle(materials, archetypes, level);
+        if (!legacy.ok()) return {{}, legacy.error};
+        content = legacy.value;
+    } else if (materials.source_schema_version == 2U
+        && archetypes.source_schema_version == 2U
+        && level.source_schema_version == 2U) {
+        if (level.bodies.size() > 500U) {
+            return {{}, {ContentErrorCode::ResourceLimit, "/bodies",
+                "physics body capacity has been exceeded"}};
+        }
+        for (std::size_t index = 0; index < level.bodies.size(); ++index) {
+            const BodyDefinition& body = level.bodies[index];
+            const std::string pointer = "/bodies/" + std::to_string(index);
+            if (body.body_type == BodyType::Dynamic && !body.affected_by_world_gravity) {
+                return {{}, {ContentErrorCode::InvalidInvariant,
+                    pointer + "/affected_by_world_gravity",
+                    "dynamic bodies must use world gravity"}};
+            }
+            if (const auto error = validate_shape(body.shape, pointer + "/shape")) {
+                return {{}, *error};
+            }
+            if (!std::isfinite(body.density_kg_m3) || body.density_kg_m3 < 0.0
+                || (body.body_type == BodyType::Dynamic && body.density_kg_m3 == 0.0)) {
+                return {{}, {ContentErrorCode::InvalidInvariant, pointer + "/density_kg_m3",
+                    "body density must be positive and finite"}};
+            }
+            if (body.material_id) {
+                if (find_material(materials, *body.material_id) == nullptr) {
+                    return {{}, {ContentErrorCode::MissingReference,
+                        pointer + "/material_id", "material reference not found"}};
+                }
+            } else if (!body.surface_id
+                || find_surface(materials, *body.surface_id) == nullptr) {
+                return {{}, {ContentErrorCode::MissingReference,
+                    pointer + "/surface_id", "surface reference not found"}};
+            }
+        }
+        content = {materials, archetypes, level};
+    } else {
+        return {{}, {ContentErrorCode::InvalidInvariant, "/schema_version",
+            "session content documents must use one schema version"}};
     }
     try {
-        auto implementation = std::make_unique<Impl>(content.value);
+        auto implementation = std::make_unique<Impl>(std::move(content));
         const SessionStatus status = implementation->build();
         if (!status.ok()) {
             return {{}, status.error};

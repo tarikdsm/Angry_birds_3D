@@ -41,6 +41,8 @@ if(BUILD_TESTING)
     tests/kernel_contract_tests.cpp
     tests/content_tests.cpp
     tests/product_v2_content_tests.cpp
+    tests/world_mode_tests.cpp
+    tests/compound_shape_tests.cpp
     tests/session_tests.cpp
     tests/launch_fsm_tests.cpp
     tests/gravity_field_ability_tests.cpp
@@ -114,6 +116,14 @@ if(BUILD_TESTING)
   add_test(
     NAME product_v2_content
     COMMAND ninho_simulation_tests --filter "product v2 content"
+  )
+  add_test(
+    NAME world_mode
+    COMMAND ninho_simulation_tests --filter "world mode"
+  )
+  add_test(
+    NAME compound_shape
+    COMMAND ninho_simulation_tests --filter "compound shape"
   )
   add_test(
     NAME session_bootstrap

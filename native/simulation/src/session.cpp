@@ -295,7 +295,7 @@ bool detail::SessionTestFacade::add_static_sphere(SimulationSession& session,
     session.impl_->body_records.push_back({0U, entity, PartId{1}, BodyType::Static,
         std::nullopt, SurfaceId{1002}, std::nullopt,
         {.type = ShapeType::Sphere, .radius_m = radius_m},
-        "TEST_StaticPreviewTarget", created.value});
+        "TEST_StaticPreviewTarget", created.value, false, false, false});
     return true;
 }
 
@@ -317,8 +317,38 @@ bool detail::SessionTestFacade::add_dynamic_sphere(SimulationSession& session,
     session.impl_->body_records.push_back({0U, entity, part, BodyType::Dynamic,
         std::nullopt, std::nullopt, std::nullopt,
         {.type = ShapeType::Sphere, .radius_m = radius_m},
-        "TEST_AbilityCandidate", created.value});
+        "TEST_AbilityCandidate", created.value, false, false, true});
     return true;
+}
+
+bool detail::SessionTestFacade::affected_by_world_gravity(
+    const SimulationSession& session, EntityId entity, PartId part)
+{
+    const auto record = std::ranges::find_if(session.impl_->body_records,
+        [&](const auto& value) {
+            return value.entity_id == entity && value.part_id == part;
+        });
+    return record != session.impl_->body_records.end()
+        && record->affected_by_world_gravity;
+}
+
+ninho::physics::Vec3 detail::SessionTestFacade::gravity_at(
+    const SimulationSession& session, ninho::physics::Vec3 position)
+{
+    return session.impl_->physics.gravity_at(position);
+}
+
+std::optional<ninho::physics::Aabb> detail::SessionTestFacade::body_bounds(
+    const SimulationSession& session, EntityId entity, PartId part)
+{
+    const auto record = std::ranges::find_if(session.impl_->body_records,
+        [&](const auto& value) {
+            return value.entity_id == entity && value.part_id == part;
+        });
+    if (record == session.impl_->body_records.end()) {
+        return std::nullopt;
+    }
+    return session.impl_->physics.body_bounds(record->physics_handle);
 }
 
 bool detail::SessionTestFacade::set_body_neutralized(SimulationSession& session,
@@ -450,6 +480,7 @@ std::vector<EntitySnapshot> detail::SessionTestFacade::snapshots_uncached(
             state->mass,
             state->awake,
             state->ejected,
+            state->exited_world,
             record.is_projectile});
     }
     std::ranges::sort(result, [](const auto& lhs, const auto& rhs) {

@@ -56,6 +56,7 @@ struct SimulationSession::Impl {
         ninho::physics::BodyHandle physics_handle;
         bool neutralized{};
         bool is_projectile{};
+        bool affected_by_world_gravity{};
     };
 
     struct JointRecord {

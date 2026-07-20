@@ -6,9 +6,10 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <optional>
 #include <string>
 #include <vector>
-#include <ninho/physics/physics_types.hpp>
+#include <ninho/physics/physics_world.hpp>
 #include "ninho/simulation/content.hpp"
 
 namespace ninho::simulation {
@@ -37,6 +38,12 @@ public:
     static bool add_dynamic_sphere(SimulationSession&, EntityId, PartId,
         ninho::physics::Vec3, double mass_kg,
         ninho::physics::Vec3 linear_velocity = {}, double radius_m = 0.1);
+    static bool affected_by_world_gravity(
+        const SimulationSession&, EntityId, PartId);
+    static ninho::physics::Vec3 gravity_at(
+        const SimulationSession&, ninho::physics::Vec3);
+    static std::optional<ninho::physics::Aabb> body_bounds(
+        const SimulationSession&, EntityId, PartId);
     static bool set_body_neutralized(
         SimulationSession&, EntityId, PartId, bool neutralized);
     static void override_joint_ratio_after_solver(SimulationSession&, JointId, double ratio);

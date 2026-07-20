@@ -20,4 +20,12 @@ static_assert(physics_surface_namespace > std::numeric_limits<std::uint32_t>::ma
     return physics_surface_namespace | static_cast<std::uint64_t>(id.value());
 }
 
+[[nodiscard]] constexpr std::uint64_t physics_material_tag(
+    const BodyDefinition& body) noexcept
+{
+    return body.material_id
+        ? physics_material_tag(*body.material_id)
+        : physics_surface_tag(*body.surface_id);
+}
+
 }

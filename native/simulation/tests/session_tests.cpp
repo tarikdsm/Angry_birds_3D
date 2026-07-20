@@ -291,6 +291,7 @@ NINHO_SIM_TEST("session bootstrap creates ordered domain snapshots and weld regi
     NINHO_SIM_REQUIRE(planet.shape.type == ShapeType::Sphere);
     NINHO_SIM_REQUIRE(std::abs(planet.shape.radius_m - 10.0) <= 1.0e-9);
     NINHO_SIM_REQUIRE(planet.visual_id == "AST_AsterPlanet");
+    NINHO_SIM_REQUIRE(!planet.exited_world);
     NINHO_SIM_REQUIRE(!planet.is_projectile);
 
     const auto platform = std::ranges::find(
@@ -331,6 +332,7 @@ NINHO_SIM_TEST("session bootstrap creates ordered domain snapshots and weld regi
         NINHO_SIM_REQUIRE(found->shape.half_extents_m == definition.shape.half_extents_m);
         NINHO_SIM_REQUIRE(found->shape.radius_m == definition.shape.radius_m);
         NINHO_SIM_REQUIRE(found->visual_id == definition.visual.asset_id);
+        NINHO_SIM_REQUIRE(!found->exited_world);
         const double expected_mass = definition.body_type == BodyType::Static
             ? 0.0
             : definition.density_kg_m3 * 8.0 * definition.shape.half_extents_m[0]
