@@ -152,40 +152,103 @@ namespace {
     return lhs[0] * rhs[0] + lhs[1] * rhs[1] + lhs[2] * rhs[2];
 }
 
-// Every true 3D hull vertex belongs to at least one supporting plane. This
-// bounded O(n^4) check rejects volume-interior points without invoking Box3D;
-// n is independently capped at 64 by the schema.
-[[nodiscard]] bool every_hull_vertex_has_supporting_plane(
+[[nodiscard]] bool is_strict_vertex_on_supporting_face(
+    const std::vector<std::array<double, 3>>& vertices,
+    std::size_t candidate, const std::array<double, 3>& unit_normal) noexcept
+{
+    constexpr double epsilon = 1.0e-9;
+    std::vector<std::size_t> coplanar;
+    coplanar.reserve(vertices.size());
+    for (std::size_t index = 0; index < vertices.size(); ++index) {
+        if (index == candidate) continue;
+        const auto offset = subtract(vertices[index], vertices[candidate]);
+        const double tolerance = epsilon
+            * std::max(1.0, std::sqrt(dot(offset, offset)));
+        if (std::abs(dot(unit_normal, offset)) <= tolerance) {
+            coplanar.push_back(index);
+        }
+    }
+
+    for (const std::size_t boundary : coplanar) {
+        const auto boundary_offset =
+            subtract(vertices[boundary], vertices[candidate]);
+        const double boundary_length_squared = dot(boundary_offset, boundary_offset);
+        bool clockwise = false;
+        bool counter_clockwise = false;
+        bool has_opposite_collinear = false;
+        for (const std::size_t other : coplanar) {
+            if (other == boundary) continue;
+            const auto other_offset = subtract(vertices[other], vertices[candidate]);
+            const double other_length_squared = dot(other_offset, other_offset);
+            const double orientation =
+                dot(unit_normal, cross(boundary_offset, other_offset));
+            const double orientation_tolerance = epsilon * std::sqrt(
+                boundary_length_squared * other_length_squared);
+            clockwise = clockwise || orientation < -orientation_tolerance;
+            counter_clockwise = counter_clockwise || orientation > orientation_tolerance;
+            if (std::abs(orientation) <= orientation_tolerance) {
+                const double alignment_tolerance = epsilon * std::sqrt(
+                    boundary_length_squared * other_length_squared);
+                has_opposite_collinear = has_opposite_collinear
+                    || dot(boundary_offset, other_offset) < -alignment_tolerance;
+            }
+            if ((clockwise && counter_clockwise) || has_opposite_collinear) break;
+        }
+        if (!(clockwise && counter_clockwise) && !has_opposite_collinear) {
+            return true;
+        }
+    }
+    return false;
+}
+
+// A point is an extreme 3D hull vertex iff it is a strict 2D vertex of at
+// least one supporting face. Supporting planes are deduplicated by unit normal,
+// keeping the bounded worst case at O(n^4); n is capped at 64 by the schema.
+[[nodiscard]] bool every_hull_vertex_is_extreme(
     const std::vector<std::array<double, 3>>& vertices) noexcept
 {
     constexpr double epsilon = 1.0e-9;
     for (std::size_t candidate = 0; candidate < vertices.size(); ++candidate) {
-        bool supported = false;
-        for (std::size_t first = 0; first < vertices.size() && !supported; ++first) {
+        bool extreme = false;
+        std::vector<std::array<double, 3>> supporting_normals;
+        supporting_normals.reserve(vertices.size());
+        for (std::size_t first = 0; first < vertices.size() && !extreme; ++first) {
             if (first == candidate) continue;
             for (std::size_t second = first + 1U;
-                 second < vertices.size() && !supported; ++second) {
+                 second < vertices.size() && !extreme; ++second) {
                 if (second == candidate) continue;
-                const auto normal = cross(
+                auto normal = cross(
                     subtract(vertices[first], vertices[candidate]),
                     subtract(vertices[second], vertices[candidate]));
-                if (dot(normal, normal) <= epsilon * epsilon) continue;
+                const double normal_length_squared = dot(normal, normal);
+                if (normal_length_squared <= epsilon * epsilon) continue;
                 bool positive = false;
                 bool negative = false;
                 for (const auto& vertex : vertices) {
-                    const double side = dot(normal, subtract(vertex, vertices[candidate]));
-                    positive = positive || side > epsilon;
-                    negative = negative || side < -epsilon;
+                    const auto offset = subtract(vertex, vertices[candidate]);
+                    const double side = dot(normal, offset);
+                    const double tolerance = epsilon * std::sqrt(normal_length_squared)
+                        * std::max(1.0, std::sqrt(dot(offset, offset)));
+                    positive = positive || side > tolerance;
+                    negative = negative || side < -tolerance;
                     if (positive && negative) break;
                 }
-                if (!(positive && negative)) {
-                    supported = true;
+                if (positive && negative) continue;
+                const double inverse_length = 1.0 / std::sqrt(normal_length_squared);
+                for (double& component : normal) component *= inverse_length;
+                if (positive) {
+                    for (double& component : normal) component = -component;
                 }
+                if (std::ranges::any_of(supporting_normals,
+                        [&](const auto& prior) {
+                            return dot(prior, normal) >= 1.0 - epsilon;
+                        })) continue;
+                supporting_normals.push_back(normal);
+                extreme = is_strict_vertex_on_supporting_face(
+                    vertices, candidate, normal);
             }
         }
-        if (!supported) {
-            return false;
-        }
+        if (!extreme) return false;
     }
     return true;
 }
@@ -251,7 +314,7 @@ void append_primitives(const ShapeDefinition& shape,
     std::size_t& expanded_primitives, const std::string& budget_pointer,
     std::size_t depth = 0U)
 {
-    constexpr std::size_t maximum_expanded_primitives = 512U;
+    constexpr std::size_t maximum_expanded_primitives = 256U;
     const auto consume_primitive = [&]() -> std::optional<ContentError> {
         ++expanded_primitives;
         if (expanded_primitives > maximum_expanded_primitives) {
@@ -334,7 +397,7 @@ void append_primitives(const ShapeDefinition& shape,
                 }
             }
         }
-        if (!has_volume || !every_hull_vertex_has_supporting_plane(shape.vertices_m)) {
+        if (!has_volume || !every_hull_vertex_is_extreme(shape.vertices_m)) {
             return ContentError{ContentErrorCode::InvalidInvariant, vertices_pointer,
                 "vertices must be the vertices of a convex volume"};
         }

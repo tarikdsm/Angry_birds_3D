@@ -28,7 +28,7 @@ conteúdo v1.
 | Vértices por convex hull | 64 |
 | Children por compound | 16 |
 | Profundidade de compound | 4 |
-| Primitivas expandidas por sessão | 512 |
+| Primitivas expandidas por sessão | 256 |
 | Bird queue | 32 |
 | Triggers / objectives | 64 / 64 |
 | Worlds / levels por world | 16 / 64 |

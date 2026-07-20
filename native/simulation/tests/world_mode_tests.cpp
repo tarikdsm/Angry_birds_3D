@@ -1,5 +1,6 @@
 #include "test_framework.hpp"
 
+#include "box3d_allocator_probe.hpp"
 #include "session_test_facade.hpp"
 #include "ninho/simulation/session.hpp"
 
@@ -28,6 +29,32 @@ ArchetypeCatalog v2_archetypes()
 {
     ArchetypeCatalog result;
     result.schema_version = result.source_schema_version = 2U;
+    result.presentation_ids = {"bird", "icon", "animation"};
+    result.score_ids = {"bird_score"};
+    AbilityArchetype ability;
+    ability.id = AbilityId{1};
+    ability.key = "gravity_field";
+    ability.kind = "gravity_field";
+    ability.kind_v2 = AbilityKind::GravityField;
+    ability.payload = GravityFieldAbilityDefinition{9U, 75U, 6.0, 1000.0,
+        20U, 25.0, 10.0};
+    result.abilities.push_back(std::move(ability));
+    BirdArchetype bird;
+    bird.id = BirdArchetypeId{1};
+    bird.key = "bird";
+    bird.ability_id = AbilityId{1};
+    bird.surface_id = SurfaceId{1002};
+    bird.mass_kg = 1.0;
+    bird.density_kg_m3 = 1000.0;
+    bird.radius_m = 0.25;
+    bird.friction = 0.4;
+    bird.restitution = 0.1;
+    bird.projectile_visual_id = "bird";
+    bird.launch_speed_cap_m_s = 30.0;
+    bird.score_id = "bird_score";
+    bird.icon_id = "icon";
+    bird.animation_id = "animation";
+    result.birds.push_back(std::move(bird));
     return result;
 }
 
@@ -78,6 +105,7 @@ LevelManifest uniform_level()
         .bounds_min_m = {-24.0, -12.0, -12.0},
         .bounds_max_m = {48.0, 32.0, 12.0},
     };
+    result.bird_queue = {BirdArchetypeId{1}};
     return result;
 }
 
@@ -93,6 +121,7 @@ LevelManifest radial_level()
         .reference_acceleration_m_s2 = 9.0,
         .bounds_radius_m = 12.0,
     };
+    result.bird_queue = {BirdArchetypeId{1}};
     return result;
 }
 
@@ -233,7 +262,7 @@ NINHO_SIM_TEST("world mode v2 rejects orphan queue enemy weakpoint and enemy bod
     auto rejected = create(orphan_queue);
     NINHO_SIM_REQUIRE(!rejected.ok());
     NINHO_SIM_REQUIRE(rejected.error.code == ContentErrorCode::MissingReference);
-    NINHO_SIM_REQUIRE(rejected.error.pointer == "/bird_queue/0");
+    NINHO_SIM_REQUIRE(rejected.error.pointer == "/bird_queue/1");
 
     auto orphan_weakpoint_archetypes = v2_archetypes();
     orphan_weakpoint_archetypes.enemies.push_back({EnemyArchetypeId{1}, "pig",
@@ -252,6 +281,39 @@ NINHO_SIM_TEST("world mode v2 rejects orphan queue enemy weakpoint and enemy bod
     NINHO_SIM_REQUIRE(!rejected.ok());
     NINHO_SIM_REQUIRE(rejected.error.code == ContentErrorCode::MissingReference);
     NINHO_SIM_REQUIRE(rejected.error.pointer == "/bodies/0/enemy_archetype_id");
+}
+
+NINHO_SIM_TEST("world mode v2 enforces typed bird queue cardinality one through thirty two")
+{
+    auto empty = uniform_level();
+    empty.bird_queue.clear();
+    const auto allocator_before_empty =
+        ninho::physics::detail::box3d_allocator_byte_count();
+    auto result = create(empty);
+    NINHO_SIM_REQUIRE(!result.ok());
+    NINHO_SIM_REQUIRE(result.error.code == ContentErrorCode::OutOfRange);
+    NINHO_SIM_REQUIRE(result.error.pointer == "/bird_queue");
+    NINHO_SIM_REQUIRE(ninho::physics::detail::box3d_allocator_byte_count()
+        == allocator_before_empty);
+
+    auto one = uniform_level();
+    one.bird_queue.assign(1U, BirdArchetypeId{1});
+    NINHO_SIM_REQUIRE(create(one).ok());
+
+    auto thirty_two = uniform_level();
+    thirty_two.bird_queue.assign(32U, BirdArchetypeId{1});
+    NINHO_SIM_REQUIRE(create(thirty_two).ok());
+
+    auto thirty_three = uniform_level();
+    thirty_three.bird_queue.assign(33U, BirdArchetypeId{1});
+    const auto allocator_before_thirty_three =
+        ninho::physics::detail::box3d_allocator_byte_count();
+    result = create(thirty_three);
+    NINHO_SIM_REQUIRE(!result.ok());
+    NINHO_SIM_REQUIRE(result.error.code == ContentErrorCode::ResourceLimit);
+    NINHO_SIM_REQUIRE(result.error.pointer == "/bird_queue");
+    NINHO_SIM_REQUIRE(ninho::physics::detail::box3d_allocator_byte_count()
+        == allocator_before_thirty_three);
 }
 
 NINHO_SIM_TEST("world mode rejects v2 dynamic body with gravity disabled at build boundary")

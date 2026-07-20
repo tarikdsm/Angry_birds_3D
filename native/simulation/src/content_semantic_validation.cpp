@@ -296,6 +296,14 @@ std::optional<ContentError> validate_product_v2_session_content(
                 "surface reference not found");
         }
     }
+    if (level.bird_queue.empty()) {
+        return error(ContentErrorCode::OutOfRange, "/bird_queue",
+            "bird queue must contain at least one bird");
+    }
+    if (level.bird_queue.size() > 32U) {
+        return error(ContentErrorCode::ResourceLimit, "/bird_queue",
+            "bird queue capacity exceeded");
+    }
     for (std::size_t index = 0; index < level.bird_queue.size(); ++index) {
         if (!bird_ids.contains(level.bird_queue[index].value())) {
             return error(ContentErrorCode::MissingReference,

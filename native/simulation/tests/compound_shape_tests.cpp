@@ -28,6 +28,32 @@ ArchetypeCatalog archetypes()
 {
     ArchetypeCatalog result;
     result.schema_version = result.source_schema_version = 2U;
+    result.presentation_ids = {"bird", "icon", "animation"};
+    result.score_ids = {"bird_score"};
+    AbilityArchetype ability;
+    ability.id = AbilityId{1};
+    ability.key = "gravity_field";
+    ability.kind = "gravity_field";
+    ability.kind_v2 = AbilityKind::GravityField;
+    ability.payload = GravityFieldAbilityDefinition{9U, 75U, 6.0, 1000.0,
+        20U, 25.0, 10.0};
+    result.abilities.push_back(std::move(ability));
+    BirdArchetype bird;
+    bird.id = BirdArchetypeId{1};
+    bird.key = "bird";
+    bird.ability_id = AbilityId{1};
+    bird.surface_id = SurfaceId{1002};
+    bird.mass_kg = 1.0;
+    bird.density_kg_m3 = 1000.0;
+    bird.radius_m = 0.25;
+    bird.friction = 0.4;
+    bird.restitution = 0.1;
+    bird.projectile_visual_id = "bird";
+    bird.launch_speed_cap_m_s = 30.0;
+    bird.score_id = "bird_score";
+    bird.icon_id = "icon";
+    bird.animation_id = "animation";
+    result.birds.push_back(std::move(bird));
     return result;
 }
 
@@ -102,6 +128,7 @@ LevelManifest level_with(std::vector<BodyDefinition> bodies)
         .bounds_min_m = {-100.0, -100.0, -100.0},
         .bounds_max_m = {100.0, 100.0, 100.0},
     };
+    result.bird_queue = {BirdArchetypeId{1}};
     result.bodies = std::move(bodies);
     return result;
 }
@@ -231,28 +258,29 @@ NINHO_SIM_TEST("compound shape accepts a valid convex hull at the 64 vertex limi
     NINHO_SIM_REQUIRE(created.value->physics_metrics().shape_count == 1);
 }
 
-NINHO_SIM_TEST("compound shape rejects expanded primitive budget before physics creation")
+NINHO_SIM_TEST("compound shape accepts 256 expanded primitives and rejects 257 atomically")
 {
-    std::vector<ShapeDefinition> root_children;
-    root_children.reserve(16U);
+    std::vector<ShapeDefinition> groups;
+    groups.reserve(16U);
     for (std::size_t group = 0; group < 16U; ++group) {
-        std::vector<ShapeDefinition> leaf_compounds;
-        leaf_compounds.reserve(16U);
-        for (std::size_t leaf = 0; leaf < 16U; ++leaf) {
-            const std::size_t leaf_size = group == 15U && leaf == 15U ? 3U : 2U;
-            leaf_compounds.push_back(compound(
-                std::vector<ShapeDefinition>(leaf_size, box(0.1, 0.1, 0.1))));
-        }
-        root_children.push_back(compound(std::move(leaf_compounds)));
+        groups.push_back(compound(
+            std::vector<ShapeDefinition>(16U, box(0.1, 0.1, 0.1))));
     }
+    const ShapeDefinition exactly_256 = compound(std::move(groups));
+    const auto accepted = create(level_with({
+        dynamic_body(1, exactly_256, {}, "at_budget"),
+    }));
+    NINHO_SIM_REQUIRE(accepted.ok());
+    NINHO_SIM_REQUIRE(accepted.value->physics_metrics().shape_count == 256U);
 
     const auto allocator_before = ninho::physics::detail::box3d_allocator_byte_count();
-    const auto created = create(level_with({
-        dynamic_body(1, compound(std::move(root_children)), {}, "over_budget"),
+    const auto rejected = create(level_with({
+        dynamic_body(1, compound({exactly_256, box(0.1, 0.1, 0.1)}),
+            {}, "over_budget"),
     }));
-    NINHO_SIM_REQUIRE(!created.ok());
-    NINHO_SIM_REQUIRE(created.error.code == ContentErrorCode::ResourceLimit);
-    NINHO_SIM_REQUIRE(created.error.pointer == "/bodies/0/shape");
+    NINHO_SIM_REQUIRE(!rejected.ok());
+    NINHO_SIM_REQUIRE(rejected.error.code == ContentErrorCode::ResourceLimit);
+    NINHO_SIM_REQUIRE(rejected.error.pointer == "/bodies/0/shape");
     NINHO_SIM_REQUIRE(
         ninho::physics::detail::box3d_allocator_byte_count() == allocator_before);
 }
@@ -284,6 +312,40 @@ NINHO_SIM_TEST("compound shape rejects non convex hull before physics creation")
     });
     const auto created = create(level_with({
         dynamic_body(1, non_convex, {}, "non_convex_hull"),
+    }));
+    NINHO_SIM_REQUIRE(!created.ok());
+    NINHO_SIM_REQUIRE(created.error.code == ContentErrorCode::InvalidInvariant);
+    NINHO_SIM_REQUIRE(created.error.pointer == "/bodies/0/shape/vertices_m");
+}
+
+NINHO_SIM_TEST("compound shape rejects a redundant point inside a hull face")
+{
+    const auto face_redundant = hull({
+        {-1.0, -1.0, -1.0}, {1.0, -1.0, -1.0},
+        {1.0, 1.0, -1.0}, {-1.0, 1.0, -1.0},
+        {-1.0, -1.0, 1.0}, {1.0, -1.0, 1.0},
+        {1.0, 1.0, 1.0}, {-1.0, 1.0, 1.0},
+        {0.0, 0.0, 1.0},
+    });
+    const auto created = create(level_with({
+        dynamic_body(1, face_redundant, {}, "face_redundant"),
+    }));
+    NINHO_SIM_REQUIRE(!created.ok());
+    NINHO_SIM_REQUIRE(created.error.code == ContentErrorCode::InvalidInvariant);
+    NINHO_SIM_REQUIRE(created.error.pointer == "/bodies/0/shape/vertices_m");
+}
+
+NINHO_SIM_TEST("compound shape rejects a redundant point inside a hull edge")
+{
+    const auto edge_redundant = hull({
+        {-1.0, -1.0, -1.0}, {1.0, -1.0, -1.0},
+        {1.0, 1.0, -1.0}, {-1.0, 1.0, -1.0},
+        {-1.0, -1.0, 1.0}, {1.0, -1.0, 1.0},
+        {1.0, 1.0, 1.0}, {-1.0, 1.0, 1.0},
+        {0.0, 1.0, 1.0},
+    });
+    const auto created = create(level_with({
+        dynamic_body(1, edge_redundant, {}, "edge_redundant"),
     }));
     NINHO_SIM_REQUIRE(!created.ok());
     NINHO_SIM_REQUIRE(created.error.code == ContentErrorCode::InvalidInvariant);
