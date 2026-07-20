@@ -200,6 +200,38 @@ function Get-NinhoSingleReportToken {
     return $matches[0].Groups[1].Value
 }
 
+function Get-NinhoFoundationEvidenceSha256 {
+    param(
+        [Parameter(Mandatory)][string]$Path,
+        [Parameter(Mandatory)][string]$RelativePath
+    )
+
+    $content = Get-NinhoCanonicalTestedInputContent `
+        -Path $Path `
+        -RelativePath $RelativePath
+    if ($content.mode -cne 'text_utf8_lf') {
+        throw "Foundation evidence is not valid UTF-8 text: $RelativePath"
+    }
+    [byte[]]$canonicalBytes = $content.bytes
+    if ($canonicalBytes.Length -ge 3 -and
+            $canonicalBytes[0] -eq 0xEF -and
+            $canonicalBytes[1] -eq 0xBB -and
+            $canonicalBytes[2] -eq 0xBF) {
+        $canonicalBytes = if ($canonicalBytes.Length -eq 3) {
+            [byte[]]@()
+        } else {
+            [byte[]]$canonicalBytes[3..($canonicalBytes.Length - 1)]
+        }
+    }
+    $algorithm = [Security.Cryptography.SHA256]::Create()
+    try {
+        return -join ($algorithm.ComputeHash($canonicalBytes) |
+            ForEach-Object { $_.ToString('X2') })
+    } finally {
+        $algorithm.Dispose()
+    }
+}
+
 function Assert-NinhoGeneratedFoundationReport {
     param(
         [Parameter(Mandatory)] [string]$Root,
@@ -312,7 +344,9 @@ function Assert-NinhoFoundationEvidence {
         if (-not (Test-Path -LiteralPath $path -PathType Leaf)) {
             throw "Foundation evidence file missing: $relative"
         }
-        $actualHash = (Get-FileHash -Algorithm SHA256 -LiteralPath $path).Hash
+        $actualHash = Get-NinhoFoundationEvidenceSha256 `
+            -Path $path `
+            -RelativePath $relative
         if ($actualHash -cne $expectedHash) {
             throw "Foundation evidence SHA-256 mismatch for ${configuration}: expected $expectedHash, got $actualHash"
         }

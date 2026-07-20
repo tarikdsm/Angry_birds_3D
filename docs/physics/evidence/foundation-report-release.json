@@ -3783,7 +3783,7 @@
     "recommendation":  "prosseguir_com_limites",
     "source_revision":  "2c7e3b5afa296df1d37b376eac6b41ffeffc4fcb",
     "tested_inputs_schema":  "ninho.tested-inputs.v2",
-    "tested_inputs_sha256":  "fcd686f8f03d66de037578075b644f464d1ec347ce8ed1a32039a59b50a21fc6",
+    "tested_inputs_sha256":  "b57609320548051ee32f317a70b42ab306c367bd99f6fadb9211f09ac3da9d61",
     "tested_inputs":  [
                           {
                               "path":  "CMakeLists.txt",
@@ -4256,8 +4256,8 @@
                           {
                               "path":  "tools/FoundationEvidenceGate.psm1",
                               "mode":  "text_utf8_lf",
-                              "size_bytes":  17615,
-                              "sha256":  "cc407a83de549957fc2d5d4ac52dcdb81a4ea1b42ad93f4e9c423db57eecd859"
+                              "size_bytes":  18698,
+                              "sha256":  "195d0cc069d74115ed1c1ab63f1c99909e8a1ba5a4e2a807a66b62a3ca729a60"
                           },
                           {
                               "path":  "tools/GodotSmokeRegistry.psm1",
@@ -4340,8 +4340,8 @@
                           {
                               "path":  "tools/generate_foundation_report.py",
                               "mode":  "text_utf8_lf",
-                              "size_bytes":  21816,
-                              "sha256":  "329a3b11ce264e34d767aa5daed49b7779268172d22c4358d24dd20e217c4c03"
+                              "size_bytes":  22194,
+                              "sha256":  "12f47d5ff5d7f6786f78e1bf4e24b18eec01c2a3a7b74544d6116eb350efc740"
                           },
                           {
                               "path":  "tools/run_spike.ps1",

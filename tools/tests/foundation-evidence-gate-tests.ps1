@@ -6,6 +6,7 @@ param(
 $ErrorActionPreference = 'Stop'
 Import-Module (Join-Path $Root 'tools\FoundationEvidenceGate.psm1') -Force
 Import-Module (Join-Path $Root 'tools\SafePath.psm1') -Force
+Import-Module (Join-Path $Root 'tools\TestedInputIdentity.psm1') -Force
 
 function Assert-Throws {
     param([scriptblock]$Operation, [string]$ExpectedMessage)
@@ -183,7 +184,27 @@ function Write-EvidenceReport {
     }
     $report = [System.IO.File]::ReadAllText($reportPath)
     foreach ($name in 'Debug', 'Release') {
-        $hash = (Get-FileHash -Algorithm SHA256 -LiteralPath $documents[$name].Path).Hash
+        $content = Get-NinhoCanonicalTestedInputContent `
+            -Path $documents[$name].Path `
+            -RelativePath $documents[$name].Relative
+        [byte[]]$canonicalBytes = $content.bytes
+        if ($canonicalBytes.Length -ge 3 -and
+                $canonicalBytes[0] -eq 0xEF -and
+                $canonicalBytes[1] -eq 0xBB -and
+                $canonicalBytes[2] -eq 0xBF) {
+            $canonicalBytes = if ($canonicalBytes.Length -eq 3) {
+                [byte[]]@()
+            } else {
+                [byte[]]$canonicalBytes[3..($canonicalBytes.Length - 1)]
+            }
+        }
+        $algorithm = [Security.Cryptography.SHA256]::Create()
+        try {
+            $hash = -join ($algorithm.ComputeHash($canonicalBytes) |
+                ForEach-Object { $_.ToString('X2') })
+        } finally {
+            $algorithm.Dispose()
+        }
         $report = [regex]::Replace(
             $report,
             "(?m)^Evidence-$name-SHA256:\s*[0-9A-Fa-f]{64}\s*$",
@@ -237,8 +258,44 @@ function Assert-TestedInputMutationInvalidatesEvidence {
 }
 
 $validIdentity = Reset-EvidenceDocuments
+$fixtureEvidenceText = [System.IO.File]::ReadAllText($documents.Debug.Path)
+$lfEvidenceText = $fixtureEvidenceText.Replace("`r`n", "`n").Replace("`r", "`n")
+[System.IO.File]::WriteAllBytes(
+    $documents.Debug.Path,
+    [System.Text.UTF8Encoding]::new($false).GetBytes($lfEvidenceText))
 Write-EvidenceReport
 Assert-NinhoFoundationEvidence -Root $gateRoot -ReportPath $reportPath
+
+$lfEvidenceBytes = [System.IO.File]::ReadAllBytes($documents.Debug.Path)
+$lfEvidenceHash = (Get-FileHash -Algorithm SHA256 `
+    -LiteralPath $documents.Debug.Path).Hash
+$crlfEvidenceText = $lfEvidenceText.Replace("`r`n", "`n").Replace(
+    "`r", "`n").Replace("`n", "`r`n")
+try {
+    [System.IO.File]::WriteAllBytes(
+        $documents.Debug.Path,
+        [System.Text.UTF8Encoding]::new($false).GetBytes($crlfEvidenceText))
+    $crlfEvidenceHash = (Get-FileHash -Algorithm SHA256 `
+        -LiteralPath $documents.Debug.Path).Hash
+    if ($crlfEvidenceHash -ceq $lfEvidenceHash) {
+        throw 'LF and CRLF evidence fixture raw hashes unexpectedly match'
+    }
+    Assert-NinhoFoundationEvidence -Root $gateRoot -ReportPath $reportPath
+
+    $mutatedEvidenceText = ([regex]'("build_type"\s*:\s*)"Debug"').Replace(
+        $crlfEvidenceText, '${1}"Release"', 1)
+    if ($mutatedEvidenceText -ceq $crlfEvidenceText) {
+        throw 'Foundation semantic mutation fixture token is missing'
+    }
+    [System.IO.File]::WriteAllBytes(
+        $documents.Debug.Path,
+        [System.Text.UTF8Encoding]::new($false).GetBytes($mutatedEvidenceText))
+    Assert-Throws {
+        Assert-NinhoFoundationEvidence -Root $gateRoot -ReportPath $reportPath
+    } 'SHA-256 mismatch'
+} finally {
+    [System.IO.File]::WriteAllBytes($documents.Debug.Path, $lfEvidenceBytes)
+}
 
 $fixtureSourceText = [System.IO.File]::ReadAllText($fixtureSource)
 [System.IO.File]::AppendAllText($fixtureSource, "int stale_mutation = 2;`n")

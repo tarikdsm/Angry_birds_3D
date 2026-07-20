@@ -37,6 +37,14 @@ def _decode_json(raw: bytes, path: Path) -> dict[str, Any]:
     return document
 
 
+def _canonical_json_bytes(raw: bytes, path: Path) -> bytes:
+    try:
+        text = raw.decode("utf-8-sig")
+    except UnicodeDecodeError as error:
+        raise ValueError(f"invalid UTF-8 JSON evidence {path.as_posix()}: {error}") from error
+    return text.replace("\r\n", "\n").replace("\r", "\n").encode("utf-8")
+
+
 def _require_report_fields(evidence: Evidence) -> None:
     document = evidence.document
     if document.get("build_type") != evidence.configuration:
@@ -83,7 +91,9 @@ def load_evidence(root: Path) -> tuple[Evidence, Evidence]:
         evidence = Evidence(
             configuration=configuration,
             relative_path=relative,
-            sha256=hashlib.sha256(raw).hexdigest().upper(),
+            sha256=hashlib.sha256(_canonical_json_bytes(raw, relative))
+            .hexdigest()
+            .upper(),
             document=_decode_json(raw, relative),
         )
         _require_report_fields(evidence)

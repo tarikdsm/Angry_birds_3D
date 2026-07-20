@@ -3,12 +3,12 @@
 This normative report is generated only from the two tracked foundation snapshots. Run `python tools/generate_foundation_report.py --check` to detect drift.
 
 Evidence-Debug-Path: docs/physics/evidence/foundation-report-debug.json
-Evidence-Debug-SHA256: 6CA2BDB4E6AC4E2A1D00776F5FB8D36E935B36D3E993A93FCD5D226E25D176C0
+Evidence-Debug-SHA256: 69B11686245E41568399EB9192D0CBEC95D53FD94A76735176C9BC5FC715D769
 Matrix-Debug-Hash: 17104053157009575930
 Matrix-Debug-Topology: 123/123/1;121/221
 Recommendation-Debug: prosseguir_com_limites
 Evidence-Release-Path: docs/physics/evidence/foundation-report-release.json
-Evidence-Release-SHA256: 6A8A35E8CCFB60FE6FE2E47E1A587A82D5FECBECD8AEC177E1B980813F82BAF8
+Evidence-Release-SHA256: A8C5AEE585BBEE531396AA2B699EE5C760247B136CFADF49B0A45AE445F1EF96
 Matrix-Release-Hash: 17104053157009575930
 Matrix-Release-Topology: 123/123/1;121/221
 Recommendation-Release: prosseguir_com_limites
@@ -67,7 +67,7 @@ This inventory covers every global field except the scenario and capability arra
 | `/recommendation` | `"prosseguir_com_limites"` |
 | `/source_revision` | `"2c7e3b5afa296df1d37b376eac6b41ffeffc4fcb"` |
 | `/tested_inputs_schema` | `"ninho.tested-inputs.v2"` |
-| `/tested_inputs_sha256` | `"fcd686f8f03d66de037578075b644f464d1ec347ce8ed1a32039a59b50a21fc6"` |
+| `/tested_inputs_sha256` | `"b57609320548051ee32f317a70b42ab306c367bd99f6fadb9211f09ac3da9d61"` |
 | `/tested_inputs/0/path` | `"CMakeLists.txt"` |
 | `/tested_inputs/0/mode` | `"text_utf8_lf"` |
 | `/tested_inputs/0/size_bytes` | `3834` |
@@ -382,8 +382,8 @@ This inventory covers every global field except the scenario and capability arra
 | `/tested_inputs/77/sha256` | `"da2fab9c92a64d572c04e2311dca0bfa0343e9738dcbdb5ecdb16d884e9dceed"` |
 | `/tested_inputs/78/path` | `"tools/FoundationEvidenceGate.psm1"` |
 | `/tested_inputs/78/mode` | `"text_utf8_lf"` |
-| `/tested_inputs/78/size_bytes` | `17615` |
-| `/tested_inputs/78/sha256` | `"cc407a83de549957fc2d5d4ac52dcdb81a4ea1b42ad93f4e9c423db57eecd859"` |
+| `/tested_inputs/78/size_bytes` | `18698` |
+| `/tested_inputs/78/sha256` | `"195d0cc069d74115ed1c1ab63f1c99909e8a1ba5a4e2a807a66b62a3ca729a60"` |
 | `/tested_inputs/79/path` | `"tools/GodotSmokeRegistry.psm1"` |
 | `/tested_inputs/79/mode` | `"text_utf8_lf"` |
 | `/tested_inputs/79/size_bytes` | `5268` |
@@ -438,8 +438,8 @@ This inventory covers every global field except the scenario and capability arra
 | `/tested_inputs/91/sha256` | `"5faf578e2d23965aa2c5f87d4cb86d74c9605e842ebb38dcacccaefcff185241"` |
 | `/tested_inputs/92/path` | `"tools/generate_foundation_report.py"` |
 | `/tested_inputs/92/mode` | `"text_utf8_lf"` |
-| `/tested_inputs/92/size_bytes` | `21816` |
-| `/tested_inputs/92/sha256` | `"329a3b11ce264e34d767aa5daed49b7779268172d22c4358d24dd20e217c4c03"` |
+| `/tested_inputs/92/size_bytes` | `22194` |
+| `/tested_inputs/92/sha256` | `"12f47d5ff5d7f6786f78e1bf4e24b18eec01c2a3a7b74544d6116eb350efc740"` |
 | `/tested_inputs/93/path` | `"tools/run_spike.ps1"` |
 | `/tested_inputs/93/mode` | `"text_utf8_lf"` |
 | `/tested_inputs/93/size_bytes` | `2709` |
@@ -489,7 +489,7 @@ This inventory covers every global field except the scenario and capability arra
 | `/recommendation` | `"prosseguir_com_limites"` |
 | `/source_revision` | `"2c7e3b5afa296df1d37b376eac6b41ffeffc4fcb"` |
 | `/tested_inputs_schema` | `"ninho.tested-inputs.v2"` |
-| `/tested_inputs_sha256` | `"fcd686f8f03d66de037578075b644f464d1ec347ce8ed1a32039a59b50a21fc6"` |
+| `/tested_inputs_sha256` | `"b57609320548051ee32f317a70b42ab306c367bd99f6fadb9211f09ac3da9d61"` |
 | `/tested_inputs/0/path` | `"CMakeLists.txt"` |
 | `/tested_inputs/0/mode` | `"text_utf8_lf"` |
 | `/tested_inputs/0/size_bytes` | `3834` |
@@ -804,8 +804,8 @@ This inventory covers every global field except the scenario and capability arra
 | `/tested_inputs/77/sha256` | `"da2fab9c92a64d572c04e2311dca0bfa0343e9738dcbdb5ecdb16d884e9dceed"` |
 | `/tested_inputs/78/path` | `"tools/FoundationEvidenceGate.psm1"` |
 | `/tested_inputs/78/mode` | `"text_utf8_lf"` |
-| `/tested_inputs/78/size_bytes` | `17615` |
-| `/tested_inputs/78/sha256` | `"cc407a83de549957fc2d5d4ac52dcdb81a4ea1b42ad93f4e9c423db57eecd859"` |
+| `/tested_inputs/78/size_bytes` | `18698` |
+| `/tested_inputs/78/sha256` | `"195d0cc069d74115ed1c1ab63f1c99909e8a1ba5a4e2a807a66b62a3ca729a60"` |
 | `/tested_inputs/79/path` | `"tools/GodotSmokeRegistry.psm1"` |
 | `/tested_inputs/79/mode` | `"text_utf8_lf"` |
 | `/tested_inputs/79/size_bytes` | `5268` |
@@ -860,8 +860,8 @@ This inventory covers every global field except the scenario and capability arra
 | `/tested_inputs/91/sha256` | `"5faf578e2d23965aa2c5f87d4cb86d74c9605e842ebb38dcacccaefcff185241"` |
 | `/tested_inputs/92/path` | `"tools/generate_foundation_report.py"` |
 | `/tested_inputs/92/mode` | `"text_utf8_lf"` |
-| `/tested_inputs/92/size_bytes` | `21816` |
-| `/tested_inputs/92/sha256` | `"329a3b11ce264e34d767aa5daed49b7779268172d22c4358d24dd20e217c4c03"` |
+| `/tested_inputs/92/size_bytes` | `22194` |
+| `/tested_inputs/92/sha256` | `"12f47d5ff5d7f6786f78e1bf4e24b18eec01c2a3a7b74544d6116eb350efc740"` |
 | `/tested_inputs/93/path` | `"tools/run_spike.ps1"` |
 | `/tested_inputs/93/mode` | `"text_utf8_lf"` |
 | `/tested_inputs/93/size_bytes` | `2709` |
