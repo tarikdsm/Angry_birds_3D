@@ -108,6 +108,12 @@ documento.
 | `score_id` | string | deve existir em `score_ids` |
 | `icon_id`, `animation_id` | string | devem existir em `presentation_ids` |
 
+`mass_kg` e `radius_m` também devem formar uma esfera numericamente segura no
+runtime do Box3D. A densidade derivada após estreitamento para `float`, a massa
+recalculada pela esfera e seu recíproco devem permanecer finitos, positivos e
+não nulos. Essa regra é baseada nas operações do solver, sem um limite decimal
+adicional de massa.
+
 ### WeakpointProfile
 
 `weakpoints` contém de 0 a 32 itens. Cada item é um objeto fechado:

@@ -2,6 +2,8 @@
 #include "ability_system.hpp"
 
 #include <array>
+#include <cmath>
+#include <numbers>
 #include <queue>
 #include <ranges>
 #include <string>
@@ -28,6 +30,65 @@ struct EntitySummary {
     bool has_non_enemy_part{};
 };
 
+}
+
+bool box3d_sphere_mass_is_safe(double mass_kg, double radius_m) noexcept
+{
+    // Keep this chain equivalent to create_projectile() and Box3D's
+    // b3ComputeSphereMass()/b3UpdateBodyMassData(). A positive double is not
+    // sufficient: narrowing, the float volume product, or 1 / mass can still
+    // underflow or overflow at runtime.
+    const double source_volume_m3 = 4.0 / 3.0 * std::numbers::pi
+        * radius_m * radius_m * radius_m;
+    const double source_density_kg_m3 = mass_kg / source_volume_m3;
+    const float runtime_radius_m = static_cast<float>(radius_m);
+    const float runtime_density_kg_m3 = static_cast<float>(source_density_kg_m3);
+    const float runtime_volume_m3 = 4.0F / 3.0F * std::numbers::pi_v<float>
+        * runtime_radius_m * runtime_radius_m * runtime_radius_m;
+    const float runtime_mass_kg = runtime_volume_m3 * runtime_density_kg_m3;
+    const float runtime_inverse_mass_kg = 1.0F / runtime_mass_kg;
+    const auto positive_finite = [](auto value) {
+        return std::isfinite(value) && value > 0;
+    };
+    return positive_finite(mass_kg)
+        && positive_finite(radius_m)
+        && positive_finite(source_volume_m3)
+        && positive_finite(source_density_kg_m3)
+        && positive_finite(runtime_radius_m)
+        && positive_finite(runtime_density_kg_m3)
+        && positive_finite(runtime_volume_m3)
+        && positive_finite(runtime_mass_kg)
+        && positive_finite(runtime_inverse_mass_kg);
+}
+
+std::optional<ContentError> validate_bird_runtime_physics(
+    const BirdArchetype& bird, std::string_view pointer)
+{
+    const std::string mass_pointer = std::string{pointer} + "/mass_kg";
+    if (!std::isfinite(bird.mass_kg)) {
+        return error(ContentErrorCode::InvalidNumber, mass_pointer,
+            "bird mass must be finite");
+    }
+    if (bird.mass_kg <= 0.0 || bird.mass_kg > 100000.0) {
+        return error(ContentErrorCode::OutOfRange, mass_pointer,
+            "bird mass is out of range");
+    }
+
+    const std::string radius_pointer = std::string{pointer} + "/radius_m";
+    if (!std::isfinite(bird.radius_m)) {
+        return error(ContentErrorCode::InvalidNumber, radius_pointer,
+            "bird radius must be finite");
+    }
+    if (bird.radius_m <= 0.0 || bird.radius_m > 100.0) {
+        return error(ContentErrorCode::OutOfRange, radius_pointer,
+            "bird radius is out of range");
+    }
+
+    if (!box3d_sphere_mass_is_safe(bird.mass_kg, bird.radius_m)) {
+        return error(ContentErrorCode::OutOfRange, mass_pointer,
+            "bird mass and radius are unsafe for the Box3D runtime");
+    }
+    return std::nullopt;
 }
 
 std::optional<ContentError> validate_level_semantics(
@@ -258,6 +319,9 @@ std::optional<ContentError> validate_product_v2_session_content(
     for (std::size_t index = 0; index < archetypes.birds.size(); ++index) {
         const BirdArchetype& bird = archetypes.birds[index];
         const std::string pointer = indexed("/birds", index);
+        if (const auto physics_error = validate_bird_runtime_physics(bird, pointer)) {
+            return physics_error;
+        }
         if (!bird_ids.insert(bird.id.value()).second) {
             return duplicate(pointer + "/id", "bird");
         }

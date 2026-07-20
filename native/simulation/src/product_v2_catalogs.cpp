@@ -1,6 +1,7 @@
 #include "ninho/simulation/content.hpp"
 
 #include "ability_system.hpp"
+#include "content_semantic_validation.hpp"
 #include "product_v2_reader.hpp"
 
 #include <limits>
@@ -238,6 +239,9 @@ ContentResult<ArchetypeCatalog> parse_archetype_catalog_v2(std::string_view inpu
                 value.score_id = text(item, "score_id", pointer);
                 value.icon_id = text(item, "icon_id", pointer);
                 value.animation_id = text(item, "animation_id", pointer);
+                if (const auto physics_error =
+                        detail::validate_bird_runtime_physics(value, pointer))
+                    fail(physics_error->code, physics_error->pointer, physics_error->message);
                 if (!ability_ids.contains(value.ability_id.value()))
                     fail(ContentErrorCode::MissingReference, child(pointer, "ability_id"),
                          "ability reference not found");

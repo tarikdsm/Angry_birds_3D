@@ -6,6 +6,8 @@
 #include "ninho/simulation/commands.hpp"
 #include "ninho/simulation/session.hpp"
 
+#include <nlohmann/json.hpp>
+
 #include <algorithm>
 #include <array>
 #include <cmath>
@@ -88,7 +90,7 @@ MaterialCatalog materials()
 }
 
 ArchetypeCatalog archetypes(double fallback = fallback_speed_m_s,
-    double bird_mass_kg = 6.0)
+    double bird_mass_kg = 6.0, double bird_radius_m = 0.25)
 {
     ArchetypeCatalog result;
     result.schema_version = result.source_schema_version = 2U;
@@ -102,7 +104,7 @@ ArchetypeCatalog archetypes(double fallback = fallback_speed_m_s,
         bird.ability_id = AbilityId{1};
         bird.surface_id = SurfaceId{1001};
         bird.mass_kg = bird_mass_kg;
-        bird.radius_m = 0.25;
+        bird.radius_m = bird_radius_m;
         bird.friction = 0.4;
         bird.restitution = 0.1;
         bird.bullet = true;
@@ -285,6 +287,142 @@ NINHO_SIM_TEST("speed boost ability typed create and reconfigure validate payloa
             session->snapshots(), snapshots_before));
         NINHO_SIM_REQUIRE(session->birds_remaining() == birds_before);
     }
+}
+
+NINHO_SIM_TEST("speed boost bird rejects Box3D unsafe mass in JSON and typed boundaries")
+{
+    constexpr double unsafe_mass_kg = 1.0e-39;
+    const auto parsed = parse_archetype_catalog_v2(
+        to_canonical_json(archetypes(fallback_speed_m_s, unsafe_mass_kg)));
+    NINHO_SIM_REQUIRE(!parsed.ok());
+    NINHO_SIM_REQUIRE(parsed.error.code == ContentErrorCode::OutOfRange);
+    NINHO_SIM_REQUIRE(parsed.error.pointer == "/birds/0/mass_kg");
+
+    const auto created = SimulationSession::create(materials(),
+        archetypes(fallback_speed_m_s, unsafe_mass_kg), level());
+    NINHO_SIM_REQUIRE(!created.ok());
+    NINHO_SIM_REQUIRE(created.error.code == ContentErrorCode::OutOfRange);
+    NINHO_SIM_REQUIRE(created.error.pointer == "/birds/0/mass_kg");
+}
+
+NINHO_SIM_TEST("speed boost bird JSON and typed mass validation reject equivalent invalid values")
+{
+    const struct InvalidMass {
+        double value;
+        ContentErrorCode typed_code;
+    } invalids[]{
+        {0.0, ContentErrorCode::OutOfRange},
+        {-1.0, ContentErrorCode::OutOfRange},
+        {std::numeric_limits<double>::quiet_NaN(), ContentErrorCode::InvalidNumber},
+        {std::numeric_limits<double>::infinity(), ContentErrorCode::InvalidNumber},
+    };
+
+    for (const InvalidMass invalid : invalids) {
+        const auto created = SimulationSession::create(materials(),
+            archetypes(fallback_speed_m_s, invalid.value), level());
+        NINHO_SIM_REQUIRE(!created.ok());
+        NINHO_SIM_REQUIRE(created.error.code == invalid.typed_code);
+        NINHO_SIM_REQUIRE(created.error.pointer == "/birds/0/mass_kg");
+
+        auto document = nlohmann::json::parse(to_canonical_json(archetypes()));
+        document["birds"][0]["mass_kg"] = invalid.value;
+        const auto parsed = parse_archetype_catalog_v2(document.dump());
+        NINHO_SIM_REQUIRE(!parsed.ok());
+        NINHO_SIM_REQUIRE(parsed.error.pointer == "/birds/0/mass_kg");
+    }
+}
+
+NINHO_SIM_TEST("speed boost bird rejects unsafe derived runtime sphere density")
+{
+    constexpr double individually_representable_radius_m =
+        static_cast<double>(std::numeric_limits<float>::denorm_min());
+    const std::array invalids{
+        archetypes(fallback_speed_m_s, 1.0,
+            individually_representable_radius_m),
+        archetypes(fallback_speed_m_s,
+            static_cast<double>(std::numeric_limits<float>::denorm_min()), 100.0),
+    };
+
+    for (const auto& invalid : invalids) {
+        const auto parsed = parse_archetype_catalog_v2(to_canonical_json(invalid));
+        NINHO_SIM_REQUIRE(!parsed.ok());
+        NINHO_SIM_REQUIRE(parsed.error.code == ContentErrorCode::OutOfRange);
+        NINHO_SIM_REQUIRE(parsed.error.pointer == "/birds/0/mass_kg");
+
+        const auto created = SimulationSession::create(materials(), invalid, level());
+        NINHO_SIM_REQUIRE(!created.ok());
+        NINHO_SIM_REQUIRE(created.error.code == ContentErrorCode::OutOfRange);
+        NINHO_SIM_REQUIRE(created.error.pointer == "/birds/0/mass_kg");
+    }
+}
+
+NINHO_SIM_TEST("speed boost bird invalid reconfigure preserves live session and queued activation")
+{
+    auto session = create_session();
+    launch(*session);
+    advance_to_offset(*session, 8U);
+    NINHO_SIM_REQUIRE(session->enqueue(ActivateAbilityCommand{}).ok());
+    const auto canonical_before = session->canonical_state_v3();
+    const SessionState state_before = session->state();
+    const auto shot_before = session->shot_state();
+    const std::vector<EntitySnapshot> snapshots_before{
+        session->snapshots().begin(), session->snapshots().end()};
+    const std::vector<DomainEvent> events_before{
+        session->events().begin(), session->events().end()};
+    const auto metrics_before = session->physics_metrics();
+    const std::size_t birds_before = session->birds_remaining();
+
+    const SessionStatus status = session->reconfigure(materials(),
+        archetypes(fallback_speed_m_s, 1.0e-39), level());
+    NINHO_SIM_REQUIRE(!status.ok());
+    NINHO_SIM_REQUIRE(status.error.code == ContentErrorCode::OutOfRange);
+    NINHO_SIM_REQUIRE(status.error.pointer == "/birds/0/mass_kg");
+    NINHO_SIM_REQUIRE(session->canonical_state_v3() == canonical_before);
+    NINHO_SIM_REQUIRE(session->state().tick == state_before.tick);
+    NINHO_SIM_REQUIRE(session->state().phase == state_before.phase);
+    NINHO_SIM_REQUIRE(session->state().outcome == state_before.outcome);
+    NINHO_SIM_REQUIRE(session->state().aim == state_before.aim);
+    NINHO_SIM_REQUIRE(session->state().launcher == state_before.launcher);
+    NINHO_SIM_REQUIRE(session->state().last_impact_m == state_before.last_impact_m);
+    NINHO_SIM_REQUIRE(session->shot_state() == shot_before);
+    NINHO_SIM_REQUIRE(std::ranges::equal(session->snapshots(), snapshots_before));
+    NINHO_SIM_REQUIRE(std::ranges::equal(session->events(), events_before));
+    NINHO_SIM_REQUIRE(session->birds_remaining() == birds_before);
+    const auto metrics_after = session->physics_metrics();
+    NINHO_SIM_REQUIRE(metrics_after.body_count == metrics_before.body_count);
+    NINHO_SIM_REQUIRE(metrics_after.shape_count == metrics_before.shape_count);
+    NINHO_SIM_REQUIRE(metrics_after.joint_count == metrics_before.joint_count);
+    NINHO_SIM_REQUIRE(metrics_after.contact_count == metrics_before.contact_count);
+    NINHO_SIM_REQUIRE(metrics_after.awake_count == metrics_before.awake_count);
+
+    NINHO_SIM_REQUIRE(session->tick().ok());
+    NINHO_SIM_REQUIRE(require_event(
+        session->events(), DomainEventKind::SpeedChanged).kind
+        == DomainEventKind::SpeedChanged);
+}
+
+NINHO_SIM_TEST("speed boost bird smallest proven safe mass launches and accelerates")
+{
+    constexpr double safe_mass_kg = 1.0e-38;
+    const auto parsed = parse_archetype_catalog_v2(
+        to_canonical_json(archetypes(fallback_speed_m_s, safe_mass_kg)));
+    NINHO_SIM_REQUIRE(parsed.ok());
+
+    constexpr double scaled_spring_constant_n_m =
+        520.0 * safe_mass_kg / 6.0;
+    auto session = create_session(
+        scaled_spring_constant_n_m, fallback_speed_m_s, safe_mass_kg);
+    launch(*session);
+    advance_to_offset(*session, 8U);
+    const EntitySnapshot before = projectile_snapshot(*session);
+    NINHO_SIM_REQUIRE(std::isfinite(before.mass_kg));
+    NINHO_SIM_REQUIRE(before.mass_kg > 0.0);
+    NINHO_SIM_REQUIRE(session->enqueue(ActivateAbilityCommand{}).ok());
+    NINHO_SIM_REQUIRE(session->tick().ok());
+    const EntitySnapshot after = projectile_snapshot(*session);
+    NINHO_SIM_REQUIRE(length(after.linear_velocity_m_s)
+        > length(before.linear_velocity_m_s));
+    require_event(session->events(), DomainEventKind::SpeedChanged);
 }
 
 NINHO_SIM_TEST("speed boost ability rejects launch offsets zero through eight and consumes once at nine")
