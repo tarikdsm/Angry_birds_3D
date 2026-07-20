@@ -9,6 +9,11 @@ constexpr float ejection_radius_multiplier = 4.0f;
 constexpr float minimum_ejection_speed = 2.0f;
 constexpr float ejection_duration = 0.5f;
 
+[[nodiscard]] constexpr detail::WorldExitKind radial_ejection_result(bool triggered) noexcept
+{
+    return triggered ? detail::WorldExitKind::RadialEjection : detail::WorldExitKind::None;
+}
+
 [[nodiscard]] constexpr std::uint64_t body_key(BodyHandle body) noexcept
 {
     return (static_cast<std::uint64_t>(body.generation) << 32U) | body.index;
@@ -39,7 +44,8 @@ bool EjectionTracker::update(
 
     float& elapsed = elapsed_[key];
     elapsed += dt;
-    return elapsed >= ejection_duration;
+    return radial_ejection_result(elapsed >= ejection_duration)
+        == detail::WorldExitKind::RadialEjection;
 }
 
 void EjectionTracker::reset(BodyHandle body)

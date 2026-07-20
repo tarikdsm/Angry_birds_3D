@@ -2,6 +2,7 @@
 #include "physics_world_test_facade.hpp"
 
 #include <ninho/physics/physics_world.hpp>
+#include <ninho/physics/world_bounds.hpp>
 
 #include <limits>
 #include <stdexcept>
@@ -299,8 +300,11 @@ NINHO_TEST("contract slow outward tick resets ejection duration window")
     NINHO_REQUIRE(physics.state(handle)->ejected);
 }
 
-NINHO_TEST("contract six radius removal does not fabricate ejection")
+NINHO_TEST("contract spherical six radius world exit does not fabricate ejection")
 {
+    const WorldBounds bounds{SphericalWorldBounds{.center_m = {}, .removal_radius_m = 60.0f}};
+    NINHO_REQUIRE(!bounds.contains({0.0f, 60.0f, 0.0f}));
+
     PhysicsWorld physics(WorldConfig{.planet_radius = 10.0f, .surface_gravity = 0.0f});
     BodyDesc body = BodyDesc::dynamic_sphere(0.5f, {{0, 61, 0}, {}}, 10.0f);
     const BodyHandle handle = physics.create_body(body).value;

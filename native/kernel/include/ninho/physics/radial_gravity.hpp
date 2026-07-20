@@ -36,6 +36,12 @@ private:
     GravityField gravity_;
 };
 
+namespace detail {
+
+enum class WorldExitKind { None, BoundsExit, RadialEjection };
+
+}
+
 class EjectionTracker {
 public:
     bool update(BodyHandle body, float radius, float radial_speed, float dt, float planet_radius);

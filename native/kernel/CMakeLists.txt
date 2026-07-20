@@ -1,5 +1,6 @@
 add_library(ninho_physics_kernel STATIC
   src/gravity_field.cpp
+  src/world_bounds.cpp
   src/physics_world.cpp
   src/radial_gravity.cpp
   src/scenario.cpp
