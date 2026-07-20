@@ -223,7 +223,7 @@ std::optional<ContentError> AbilitySystem::validate_definition(
             return ContentError{ContentErrorCode::InvalidNumber,
                 payload_pointer + "/mass_multiplier", "number must be finite"};
         }
-        if (definition.mass_multiplier < 1.0
+        if (definition.mass_multiplier <= 1.0
             || definition.mass_multiplier > 20.0) {
             return ContentError{ContentErrorCode::OutOfRange,
                 payload_pointer + "/mass_multiplier", "number out of range"};

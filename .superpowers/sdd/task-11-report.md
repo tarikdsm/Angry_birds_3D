@@ -4,7 +4,8 @@
 
 Implementação concluída no branch `codex/game-2-0`, sem push. O commit inicial
 usa `feat(habilidades): adicionar aumento de massa da ave vermelha`; as correções
-do review usam `fix(habilidades): tornar aumento de massa transacional`.
+do review usam `fix(habilidades): tornar aumento de massa transacional` e
+`fix(habilidades): alinhar contrato singular da ave vermelha`.
 
 A habilidade `MassBoost` agora é concreta: ela arma exatamente nove ticks após
 o lançamento, aceita uma única ativação e multiplica massa e inércia da ave por
@@ -33,6 +34,10 @@ GREEN automática.
   porque a Task 10 mantinha todas as habilidades futuras fail-closed.
 - O novo teste de adapter Godot falhou RED até `MassChanged` ser mapeado
   explicitamente para `mass_changed` nos dois nodes.
+- O finding final mostrou que parser JSON, `SimulationSession::create()` e
+  `reconfigure()` aceitavam `mass_multiplier == 1.0`. O CTest exibiu exatamente
+  três falhas em `!parsed.ok()`, `!created.ok()` e `!status.ok()`; o último caso
+  provou que o reconfigure chegava a aceitar e substituir a sessão.
 
 ### GREEN
 
@@ -42,6 +47,8 @@ GREEN automática.
   não depende do valor autorado em `arm_ticks`.
 - Os testes cobrem o boundary físico isolado, o dispatcher, o lifecycle completo
   da sessão, canonical/eventos, restart/reuso e adapters Godot.
+- Uma única regra em `AbilitySystem::validate_definition` atende parser e
+  boundary tipado: duração em `[1,3600]` e multiplicador finito em `(1,20]`.
 
 ## Boundary físico
 
@@ -56,8 +63,9 @@ A operação:
 3. recompõe massa, centro e inércia uma única vez com
    `b3Body_ApplyMassFromShapes`;
 4. restaura velocidade linear, velocidade angular e estado awake;
-5. valida massa e inércia resultantes; em erro, restaura densidades e mass data
-   anteriores.
+5. valida densidades, massa, centro, inércia, velocidades e awake resultantes;
+   em erro, restaura diretamente densidades, mass data, velocidades, awake e
+   escala anteriores, e valida a própria restauração.
 
 A escala é absoluta, não cumulativa. Reservation rollback, remoção e reuso do
 slot limpam shapes, densidades base, mass data e escala. Um seam restrito à
@@ -74,8 +82,8 @@ base e prova que a pré-validação impede mutação parcial.
   uma janela de 75 ticks.
 - Offsets `L+0` a `L+8` geram exatamente nove `CommandRejected` com razão
   `NotArmed`.
-- Em `L+9`, a ativação gera um `AbilityStarted` e um `MassChanged` por corpo
-  afetado, com `weight = 2.25`, em ordem de `EntityId`.
+- Em `L+9`, a ativação gera um `AbilityStarted` e um `MassChanged` para o
+  projétil primário, com `weight = 2.25`.
 - Uma segunda ativação é recusada, sem novo `MassChanged`.
 - No fim da janela é publicado exatamente um `AbilityEnded`; a massa aumentada
   não é revertida. Ela deixa de existir somente com a remoção física da ave.
@@ -100,25 +108,26 @@ massa ou shapes do corpo anterior.
 
 ## Correções após review
 
-O review formal identificou três lacunas, agora fechadas com TDD adicional:
+O review formal identificou dois reforços legítimos e uma expansão indevida:
 
-- O aumento de massa é aplicado atomicamente a todos os projéteis vivos e não
-  finalizados do disparo, em ordem de `EntityId`. Todos os handles são
-  pré-validados antes da primeira escrita; falha no segundo ou último corpo
-  restaura os anteriores e não consome a ativação nem publica
-  `AbilityStarted`/`MassChanged`.
-- O rollback físico salva o `b3MassData` nativo corrente, densidades, velocidades,
-  estado awake e escala. Uma falha pós-escrita restaura esses valores diretamente,
-  valida o rollback integral e invalida explicitamente os metadados se a própria
-  restauração não puder ser comprovada.
-- A pós-condição exige preservação do centro de massa contra o estado anterior e
-  contra a base, com tolerância `1e-5`. Um compound assimétrico e um seam de teste
-  forçam a falha real depois de `b3Body_ApplyMassFromShapes`.
-- A validação semântica tipada de `MassBoost` agora é a mesma usada pelo parser:
-  duração entre 1 e 3600 ticks e multiplicador finito entre 1 e 20. `create` e
-  `reconfigure` rejeitam valores inválidos antes de mutar a sessão.
-- Se o projétil primário já terminou mas irmãos continuam vivos, a prontidão e a
-  ativação consideram o grupo e aplicam o aumento somente aos sobreviventes.
+- O rollback físico singular agora salva o `b3MassData` nativo corrente,
+  densidades, velocidades, estado awake e escala. Uma falha pós-escrita restaura
+  esses valores diretamente, valida o rollback integral e invalida
+  defensivamente os metadados se a própria restauração não puder ser comprovada.
+- A pós-condição singular exige preservação do centro de massa contra o estado
+  anterior e contra a base, com tolerância `1e-5`. Um compound assimétrico e um
+  seam de teste forçam a falha real depois de `b3Body_ApplyMassFromShapes`.
+- O boundary tipado agora rejeita duração fora de `[1,3600]`, multiplicador não
+  finito e valores fora de `(1,20]`, com os mesmos códigos e pointers do parser.
+  Os testes cobrem 0, 0,5, 1, 21, NaN, infinito e duração 0/3601. Em cada
+  reconfigure rejeitado, bytes canônicos, estado, shot, snapshots e fila de aves
+  permanecem idênticos.
+- O commit intermediário `52d2864` ampliou a habilidade para batches e irmãos,
+  adicionando readiness coletivo e rollback parcial no tick. A correção posterior
+  remove integralmente essa expansão: não há API pública batch, ativação de
+  irmãos, múltiplos `MassChanged`, facades de grupo ou limpeza seletiva de
+  eventos/runtime. O contrato original continua singular sobre o projétil
+  primário.
 
 ## Verificação
 
@@ -128,9 +137,12 @@ O review formal identificou três lacunas, agora fechadas com TDD adicional:
 - Regressões `shot_state|product_v2_content|session_restart|` +
   `legacy_orbital_characterization|vertical_slice_determinism|determinism|` +
   `canonical_hash`: 7/7 PASS.
-- Binário completo `ninho_simulation_tests.exe`: 199/199 PASS, exit 0, em 89,3 s.
-- Build Debug com `NINHO_BUILD_GDEXTENSION=ON`: PASS.
-- Binário `ninho_extension_adapter_tests.exe --filter gameplay`: 10/10 PASS.
+- Filtros explícitos de parser MassBoost, boundary tipado e session reconfigure:
+  6/6 PASS; parser, create e reconfigure rejeitam `1.0`, e o último preserva
+  bytes canônicos e todas as views públicas verificadas.
+- Binário completo `ninho_simulation_tests.exe`: PASS, exit 0, em 86,3 s.
+- Build Debug com `NINHO_BUILD_GDEXTENSION=ON`: PASS; binário completo
+  `ninho_extension_adapter_tests.exe`: 31/31 PASS.
 - `git diff --check`: exit 0.
 
 O teste de extension `gameplay frame follows authoritative shot lifecycle and
@@ -152,8 +164,8 @@ provável é uma disputa transitória de acesso aos metadados `.ninja_deps` ou
 Nenhum golden, evidence, threshold, fixture v1 ou conteúdo de foundation foi
 recapturado ou alterado. Não foram implementadas as habilidades das Tasks 12–14,
 nem houve alteração de materiais, scoring ou UI além do nome tipado do novo
-evento. Nenhum stash existente foi aplicado ou removido nesta correção, e nenhum
-push foi executado.
+evento. Os stashes externos `ce0f526` e `70169d1` foram preservados e não foram
+aplicados nem incorporados. Nenhum push foi executado.
 
 ## Concerns
 

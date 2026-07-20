@@ -30,9 +30,6 @@ public:
     static void finish_projectile(SimulationSession&, EntityId);
     static bool append_projectile_body_for_testing(SimulationSession&, EntityId,
         ninho::physics::Vec3 position, ninho::physics::Vec3 linear_velocity);
-    static ninho::physics::PhysicsWorld& physics_world(SimulationSession&);
-    static std::optional<ninho::physics::BodyHandle> projectile_handle(
-        const SimulationSession&, EntityId);
     static std::uint32_t projectile_age(const SimulationSession&, EntityId);
     static bool has_body_record(const SimulationSession&, EntityId);
     static void complete_objective(SimulationSession&);
