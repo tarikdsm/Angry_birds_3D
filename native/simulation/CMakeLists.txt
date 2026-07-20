@@ -1,5 +1,10 @@
 add_library(ninho_simulation_kernel STATIC
   src/content.cpp
+  src/content_semantic_validation.cpp
+  src/product_v2_reader.cpp
+  src/product_v2_catalogs.cpp
+  src/product_v2_campaign.cpp
+  src/product_v2_serialization.cpp
   src/product_v2_content.cpp
   src/canonical_state.cpp
   src/session.cpp

@@ -1,5 +1,7 @@
 #include "ninho/simulation/content.hpp"
 
+#include "content_semantic_validation.hpp"
+
 #include <ninho/physics/physics_limits.hpp>
 
 #include <nlohmann/json.hpp>
@@ -1209,6 +1211,9 @@ ContentResult<ContentBundle> make_content_bundle(const MaterialCatalog& material
                 fail(ContentErrorCode::MissingReference, indexed("/objectives", i) + "/target_entity_id",
                     "objective target must resolve to one enemy entity");
             }
+        }
+        if (const auto semantic_error = detail::validate_level_semantics(archetypes, level)) {
+            fail(semantic_error->code, semantic_error->pointer, semantic_error->message);
         }
         return ContentBundle{materials, archetypes, level};
     });

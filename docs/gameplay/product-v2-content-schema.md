@@ -35,7 +35,7 @@ conteúdo v1.
 Strings têm 1–128 bytes. IDs numéricos pertencem a `[1, 2^32-1]`, salvo campos
 que declaram zero como válido. Entity IDs de conteúdo não podem usar o high bit,
 reservado ao runtime. Todo número real deve ser finito e representável como
-`float` positivo quando maior que zero.
+`float`, sem overflow nem colapso de um valor não zero para zero.
 
 ## MaterialCatalog v2
 
@@ -105,10 +105,37 @@ documento.
 | `score_id` | string | deve existir em `score_ids` |
 | `icon_id`, `animation_id` | string | devem existir em `presentation_ids` |
 
-Weakpoints e enemies mantêm o contrato v1: direção unitária, cone `(0,180]`,
-multipliers `[0,10]`; massa, integrity, energia específica e max damage positivos,
-com `max_damage <= integrity`. Weakpoint IDs são resolvidos no próprio catálogo;
-surface IDs de birds/enemies são resolvidos no bundle.
+### WeakpointProfile
+
+`weakpoints` contém de 0 a 32 itens. Cada item é um objeto fechado:
+
+| Campo | Tipo / unidade | Regra |
+|---|---|---|
+| `id` | ID | positivo e único entre weakpoints |
+| `key` | string | 1–128 bytes |
+| `protected_direction` | vec3 | componentes em `[-1,1]`, norma 1 ± 10⁻⁶ |
+| `protected_cone_deg` | graus | `(0,180]` |
+| `protected_multiplier` | razão | `[0,10]` |
+| `exposed_multiplier` | razão | `[0,10]` |
+
+### EnemyArchetype
+
+`enemies` contém de 0 a 32 itens. Cada item é um objeto fechado:
+
+| Campo | Tipo / unidade | Regra |
+|---|---|---|
+| `id` | ID | positivo e único entre enemies |
+| `key` | string | 1–128 bytes |
+| `weakpoint_id` | ID | deve existir em `weakpoints` |
+| `surface_id` | ID | deve existir em MaterialCatalog quando o bundle é criado |
+| `mass_kg` | kg | `(0,100000]` |
+| `integrity` | pontos | `(0,100000]` |
+| `damage_energy_j_per_kg` | J/kg | `(0,100000]` |
+| `max_damage` | pontos | `(0,integrity]` |
+
+No bundle, cada body marcado como enemy deve ser dynamic, usar somente
+`surface_id`, usar a mesma surface do archetype e pertencer a uma entidade sem
+partes não inimigas nem mistura de archetypes.
 
 ## CampaignManifest v2
 
@@ -190,18 +217,72 @@ Shapes são variantes fechadas:
   não zero;
 - `compound`: `children`, 1–16 shapes, profundidade máxima 4.
 
-Cada body contém exatamente `body_id`, `entity_id`, `part_id`, `body_type`,
-`affected_by_world_gravity`, os IDs anuláveis `material_id`, `surface_id` e
-`enemy_archetype_id`, `density_kg_m3`, `transform`, `shape` e `visual`.
-Exatamente um entre material e surface é não nulo. Density fica em `[0,30000]`
-kg/m³ para static e `(0,30000]` para dynamic. Transform usa posição
-`[-100000,100000]` m e quaternion normalizado. Visual contém `asset_id` e
-`bounds_m` `[0.0001,2000]` m. Body dynamic com
-`affected_by_world_gravity = false` é inválido; static pode optar por false.
+Cada body é um objeto fechado com os campos abaixo. `bodies` contém de 0 a
+500 itens; `body_id` é único e o par `(entity_id, part_id)` também é único.
 
-Joints, assemblies e objectives preservam os formatos v1, agora sujeitos ao
-dispatch v2 e às chaves fechadas. Joint limits são `(0,10^12]` N/N·m;
-assemblies têm listas não vazias e objectives usam apenas `neutralize_entity`.
+| Campo | Tipo / unidade | Regra |
+|---|---|---|
+| `body_id` | ID | positivo e único no nível |
+| `entity_id` | ID | positivo; high bit reservado ao runtime |
+| `part_id` | ID | positivo; único dentro da entidade |
+| `body_type` | enum | `static` ou `dynamic` |
+| `affected_by_world_gravity` | bool | obrigatório; deve ser `true` para dynamic |
+| `material_id` | ID ou `null` | referência resolvida no bundle |
+| `surface_id` | ID ou `null` | referência resolvida no bundle |
+| `enemy_archetype_id` | ID ou `null` | referência resolvida no bundle |
+| `density_kg_m3` | kg/m³ | `[0,30000]` para static; `(0,30000]` para dynamic |
+| `transform` | objeto | exatamente `position_m` e `rotation_xyzw` normalizado |
+| `shape` | objeto | uma das variantes fechadas acima |
+| `visual` | objeto | exatamente `asset_id` e `bounds_m` vec3 em `[0.0001,2000]` |
+
+Exatamente um entre `material_id` e `surface_id` é não nulo. Um enemy body é
+dynamic, não usa material, usa a surface de seu EnemyArchetype e sua entidade
+contém exatamente um archetype inimigo, sem partes não inimigas.
+
+### Ownership, joints e assemblies
+
+| Array | Cardinalidade | Regra dos itens |
+|---|---:|---|
+| `free_body_ids` | 0–500 | IDs positivos, existentes e sem duplicatas |
+| `joints` | 0–250 | IDs únicos; todos pertencem exatamente a uma assembly |
+| `assemblies` | 0–128 | IDs únicos; listas não vazias; até 1.000 memberships totais |
+| `objectives` | 1–64 | IDs únicos |
+
+Todo body aparece exatamente uma vez: em `free_body_ids` ou em `body_ids` de
+uma única assembly. Nenhum body livre pode ser endpoint de joint.
+
+Cada joint é um objeto fechado:
+
+| Campo | Tipo / unidade | Regra |
+|---|---|---|
+| `id` | ID | positivo e único |
+| `assembly_id` | ID | deve existir e coincidir com a dona do joint |
+| `kind` | enum | `pine_fit`, `glass_clamp` ou `mortar` |
+| `body_a_id`, `body_b_id` | ID | existentes, distintos e ambos na mesma assembly do joint |
+| `force_limit_n` | N | `(0,10^12]` |
+| `torque_limit_nm` | N·m | `(0,10^12]` |
+
+Cada assembly é um objeto fechado:
+
+| Campo | Tipo | Regra |
+|---|---|---|
+| `id` | ID | positivo e único |
+| `key` | string | 1–128 bytes |
+| `body_ids` | array de IDs | 1–500, sem duplicatas locais; todos pertencem à assembly |
+| `joint_ids` | array de IDs | 1–250, sem duplicatas locais; todos pertencem à assembly |
+
+O total de memberships de todas as assemblies é no máximo 1.000. O grafo
+formado pelos bodies como vértices e joints como arestas deve ser conexo.
+
+Cada objective é um objeto fechado:
+
+| Campo | Tipo | Regra |
+|---|---|---|
+| `id` | ID | positivo e único |
+| `kind` | enum | somente `neutralize_entity` |
+| `target_entity_id` | ID | entidade puramente inimiga com exatamente um EnemyArchetype |
+
+Uma entidade alvo ausente, não inimiga ou mista é inválida.
 
 ### Bird queue e scoring
 

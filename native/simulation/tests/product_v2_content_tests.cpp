@@ -101,7 +101,7 @@ json archetype_catalog()
                                       {"key", "pig"},
                                       {"weakpoint_id", 1},
                                       {"surface_id", 1002},
-                                      {"mass_kg", 80.0},
+                                      {"mass_kg", 480.0},
                                       {"integrity", 100.0},
                                       {"damage_energy_j_per_kg", 2.5},
                                       {"max_damage", 50.0}}})}};
@@ -187,12 +187,12 @@ json level_manifest(std::string_view gravity_kind = "uniform")
              json::array({{{"body_id", 1},
                            {"entity_id", 100},
                            {"part_id", 1},
-                           {"body_type", "static"},
-                           {"affected_by_world_gravity", false},
-                           {"material_id", 1},
-                           {"surface_id", nullptr},
-                           {"enemy_archetype_id", nullptr},
-                           {"density_kg_m3", 120.0},
+                           {"body_type", "dynamic"},
+                           {"affected_by_world_gravity", true},
+                           {"material_id", nullptr},
+                           {"surface_id", 1002},
+                           {"enemy_archetype_id", 1},
+                           {"density_kg_m3", 480.0},
                            {"transform",
                             {{"position_m", json::array({0.0, 0.0, 0.0})},
                              {"rotation_xyzw", json::array({0.0, 0.0, 0.0, 1.0})}}},
@@ -228,6 +228,42 @@ void require_error(const Result& result, ContentErrorCode code, std::string_view
     NINHO_SIM_REQUIRE(result.error.pointer == pointer);
 }
 
+json static_body(std::uint32_t body_id, std::uint32_t entity_id)
+{
+    auto body = level_manifest()["bodies"][0];
+    body["body_id"] = body_id;
+    body["entity_id"] = entity_id;
+    body["body_type"] = "static";
+    body["affected_by_world_gravity"] = false;
+    body["material_id"] = 1;
+    body["surface_id"] = nullptr;
+    body["enemy_archetype_id"] = nullptr;
+    body["density_kg_m3"] = 120.0;
+    return body;
+}
+
+json level_with_two_assemblies()
+{
+    auto level = level_manifest();
+    level["bodies"].push_back(static_body(2, 200));
+    level["bodies"].push_back(static_body(3, 300));
+    level["bodies"].push_back(static_body(4, 400));
+    level["free_body_ids"] = json::array();
+    level["joints"] = json::array({
+        {{"id", 1}, {"assembly_id", 1}, {"kind", "pine_fit"}, {"body_a_id", 1},
+         {"body_b_id", 2}, {"force_limit_n", 1000.0}, {"torque_limit_nm", 100.0}},
+        {{"id", 2}, {"assembly_id", 2}, {"kind", "pine_fit"}, {"body_a_id", 3},
+         {"body_b_id", 4}, {"force_limit_n", 1000.0}, {"torque_limit_nm", 100.0}},
+    });
+    level["assemblies"] = json::array({
+        {{"id", 1}, {"key", "first"}, {"body_ids", json::array({1, 2})},
+         {"joint_ids", json::array({1})}},
+        {{"id", 2}, {"key", "second"}, {"body_ids", json::array({3, 4})},
+         {"joint_ids", json::array({2})}},
+    });
+    return level;
+}
+
 NINHO_SIM_TEST("product v2 content parses every closed variant")
 {
     const auto materials = parse_material_catalog_v2(material_catalog().dump());
@@ -258,6 +294,10 @@ NINHO_SIM_TEST("product v2 content rejects world and launcher contract violation
     level["world"]["acceleration_m_s2"] = json::array({0, -9.81, 0});
     require_error(parse_level_manifest_v2(level.dump()), ContentErrorCode::UnknownKey,
                   "/world/acceleration_m_s2");
+    level = level_manifest("uniform");
+    level["world"]["center_m"] = json::array({0.0, 0.0, 0.0});
+    require_error(parse_level_manifest_v2(level.dump()), ContentErrorCode::UnknownKey,
+                  "/world/center_m");
     for (const auto key :
          {"spring_constant_n_m", "energy_efficiency", "minimum_extension_m", "maximum_extension_m"})
     {
@@ -266,6 +306,13 @@ NINHO_SIM_TEST("product v2 content rejects world and launcher contract violation
         require_error(parse_level_manifest_v2(level.dump()), ContentErrorCode::MissingField,
                       std::string{"/slingshot/"} + key);
     }
+    level = level_manifest();
+    level["slingshot"]["energy_efficiency"] = 0.0;
+    require_error(parse_level_manifest_v2(level.dump()), ContentErrorCode::OutOfRange,
+                  "/slingshot/energy_efficiency");
+    level = level_manifest();
+    level["slingshot"]["energy_efficiency"] = 1.0;
+    NINHO_SIM_REQUIRE(parse_level_manifest_v2(level.dump()).ok());
     level = level_manifest();
     level["slingshot"]["energy_efficiency"] = 1.01;
     require_error(parse_level_manifest_v2(level.dump()), ContentErrorCode::OutOfRange,
@@ -294,9 +341,13 @@ NINHO_SIM_TEST("product v2 content rejects ability shape scoring and gravity vio
     require_error(parse_level_manifest_v2(level.dump()), ContentErrorCode::InvalidInvariant,
                   "/scoring/star_thresholds/1");
     level = level_manifest();
-    level["bodies"][0]["body_type"] = "dynamic";
+    level["bodies"][0]["affected_by_world_gravity"] = false;
     require_error(parse_level_manifest_v2(level.dump()), ContentErrorCode::InvalidInvariant,
                   "/bodies/0/affected_by_world_gravity");
+    level = level_manifest();
+    level["bodies"][0]["shape"] =
+        {{"type", "capsule"}, {"radius_m", 0.25}, {"half_height_m", 0.5}};
+    NINHO_SIM_REQUIRE(parse_level_manifest_v2(level.dump()).ok());
 }
 
 NINHO_SIM_TEST("product v2 content rejects orphan queue presentation and campaign references")
@@ -315,17 +366,24 @@ NINHO_SIM_TEST("product v2 content rejects orphan queue presentation and campaig
     require_error(make_product_v2_content_bundle(materials.value, archetypes.value, campaign.value,
                                                  orphan_queue.value),
                   ContentErrorCode::MissingReference, "/bird_queue/0");
-    auto archetype_json = archetype_catalog();
-    archetype_json["birds"][0]["icon_id"] = "missing";
-    require_error(parse_archetype_catalog_v2(archetype_json.dump()),
-                  ContentErrorCode::MissingReference, "/birds/0/icon_id");
-    level_json = level_manifest();
-    level_json["camera_profile_id"] = "missing";
-    const auto orphan_level = parse_level_manifest_v2(level_json.dump());
-    NINHO_SIM_REQUIRE(orphan_level.ok());
-    require_error(make_product_v2_content_bundle(materials.value, archetypes.value, campaign.value,
-                                                 orphan_level.value),
-                  ContentErrorCode::MissingReference, "/camera_profile_id");
+    for (const auto field : {"projectile_visual_id", "score_id", "icon_id", "animation_id"})
+    {
+        auto archetype_json = archetype_catalog();
+        archetype_json["birds"][0][field] = "missing";
+        require_error(parse_archetype_catalog_v2(archetype_json.dump()),
+                      ContentErrorCode::MissingReference, std::string{"/birds/0/"} + field);
+    }
+    for (const auto field : {"world_id", "region_id", "camera_profile_id",
+                             "presentation_profile_id"})
+    {
+        level_json = level_manifest();
+        level_json[field] = "missing";
+        const auto orphan_level = parse_level_manifest_v2(level_json.dump());
+        NINHO_SIM_REQUIRE(orphan_level.ok());
+        require_error(make_product_v2_content_bundle(materials.value, archetypes.value,
+                                                     campaign.value, orphan_level.value),
+                      ContentErrorCode::MissingReference, std::string{"/"} + field);
+    }
 }
 
 NINHO_SIM_TEST("product v2 content rejects invalid campaign order defaults unlock and presentation")
@@ -375,6 +433,95 @@ NINHO_SIM_TEST("product v2 content rejects trigger schema and resource violation
     level = level_manifest();
     level["triggers"][0]["pressure_burst"]["radius_m"] = 1e300;
     require_error(parse_level_manifest_v2(level.dump()), ContentErrorCode::OutOfRange,
+                  "/triggers/0/pressure_burst/radius_m");
+}
+
+NINHO_SIM_TEST("product v2 content rejects enemy body and objective semantic contradictions")
+{
+    const auto materials = parse_material_catalog_v2(material_catalog().dump());
+    const auto archetypes = parse_archetype_catalog_v2(archetype_catalog().dump());
+    const auto campaign = parse_campaign_manifest(campaign_manifest().dump());
+    NINHO_SIM_REQUIRE(materials.ok() && archetypes.ok() && campaign.ok());
+    const auto bundle_for = [&](const json& source) {
+        const auto level = parse_level_manifest_v2(source.dump());
+        NINHO_SIM_REQUIRE(level.ok());
+        return make_product_v2_content_bundle(materials.value, archetypes.value, campaign.value,
+                                              level.value);
+    };
+
+    auto level = level_manifest();
+    level["bodies"][0]["body_type"] = "static";
+    level["bodies"][0]["affected_by_world_gravity"] = false;
+    require_error(bundle_for(level), ContentErrorCode::InvalidInvariant, "/bodies/0/body_type");
+
+    level = level_manifest();
+    level["bodies"][0]["material_id"] = 1;
+    level["bodies"][0]["surface_id"] = nullptr;
+    require_error(bundle_for(level), ContentErrorCode::InvalidInvariant, "/bodies/0/material_id");
+
+    level = level_manifest();
+    level["bodies"].push_back(static_body(2, 200));
+    level["free_body_ids"].push_back(2);
+    level["objectives"][0]["target_entity_id"] = 200;
+    require_error(bundle_for(level), ContentErrorCode::MissingReference,
+                  "/objectives/0/target_entity_id");
+}
+
+NINHO_SIM_TEST("product v2 content rejects joint ownership and disconnected assemblies")
+{
+    const auto materials = parse_material_catalog_v2(material_catalog().dump());
+    const auto archetypes = parse_archetype_catalog_v2(archetype_catalog().dump());
+    const auto campaign = parse_campaign_manifest(campaign_manifest().dump());
+    const auto bundle_for = [&](const json& source) {
+        const auto level = parse_level_manifest_v2(source.dump());
+        NINHO_SIM_REQUIRE(level.ok());
+        return make_product_v2_content_bundle(materials.value, archetypes.value, campaign.value,
+                                              level.value);
+    };
+
+    auto level = level_with_two_assemblies();
+    level["joints"][0]["body_b_id"] = 3;
+    require_error(bundle_for(level), ContentErrorCode::InvalidInvariant, "/joints/0/body_b_id");
+
+    level = level_with_two_assemblies();
+    level["joints"].erase(1);
+    level["assemblies"].erase(1);
+    level["free_body_ids"] = json::array({3, 4});
+    level["joints"][0]["body_b_id"] = 3;
+    require_error(bundle_for(level), ContentErrorCode::InvalidInvariant, "/joints/0/body_b_id");
+
+    level = level_with_two_assemblies();
+    level["bodies"].erase(3);
+    level["joints"].erase(1);
+    level["assemblies"].erase(1);
+    level["assemblies"][0]["body_ids"] = json::array({1, 2, 3});
+    require_error(bundle_for(level), ContentErrorCode::InvalidInvariant, "/assemblies/0");
+}
+
+NINHO_SIM_TEST("product v2 content rejects vector float underflow and duplicate JSON keys")
+{
+    auto level = level_manifest();
+    level["slingshot"]["rest_position_m"][0] = 1e-300;
+    require_error(parse_level_manifest_v2(level.dump()), ContentErrorCode::OutOfRange,
+                  "/slingshot/rest_position_m/0");
+
+    level = level_manifest();
+    level["slingshot"]["rest_position_m"][0] = 1e300;
+    require_error(parse_level_manifest_v2(level.dump()), ContentErrorCode::OutOfRange,
+                  "/slingshot/rest_position_m/0");
+
+    auto duplicate_root = material_catalog().dump();
+    const auto root_marker = duplicate_root.find("\"schema_version\":2");
+    NINHO_SIM_REQUIRE(root_marker != std::string::npos);
+    duplicate_root.insert(root_marker, "\"schema_version\":2,");
+    require_error(parse_material_catalog_v2(duplicate_root), ContentErrorCode::DuplicateKey,
+                  "/schema_version");
+
+    auto duplicate_nested = level_manifest().dump();
+    const auto nested_marker = duplicate_nested.find("\"radius_m\":4.0");
+    NINHO_SIM_REQUIRE(nested_marker != std::string::npos);
+    duplicate_nested.insert(nested_marker, "\"radius_m\":4.0,");
+    require_error(parse_level_manifest_v2(duplicate_nested), ContentErrorCode::DuplicateKey,
                   "/triggers/0/pressure_burst/radius_m");
 }
 
