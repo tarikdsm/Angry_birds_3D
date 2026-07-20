@@ -9,7 +9,8 @@ $projectPath = (Resolve-Path -LiteralPath (Join-Path $root 'game\project.godot')
 $godotPath = Join-Path $root '.tools\godot\Godot_v4.5.1-stable_win64.exe'
 $expectedScene = 'res://scenes/vertical_slice.tscn'
 $sceneFailure = 'Legacy capture must pass exactly one executable explicit res:// scene argument'
-$usageFailure = 'Legacy capture $arguments usage must match the exhaustive executable argv contract'
+$argvFailure = 'Legacy capture recorder observed invalid executable argv'
+$recorderFailure = 'Legacy capture recorder did not remain isolated'
 
 Import-Module (Join-Path $root 'tools\VerticalSliceGate.psm1') -Force
 Import-Module (Join-Path $root 'tools\SafePath.psm1') -Force
@@ -29,112 +30,7 @@ function Test-ExactSequence {
     return $true
 }
 
-function Get-NearestScriptBlockAst {
-    param([Parameter(Mandatory)]$Node)
-
-    for ($current = $Node.Parent; $null -ne $current; $current = $current.Parent) {
-        if ($current -is [Management.Automation.Language.ScriptBlockAst]) {
-            return $current
-        }
-    }
-    throw 'Legacy capture AST node is not inside a script block'
-}
-
-function Test-ArgumentsVariableAst {
-    param([Parameter(Mandatory)]$Node)
-
-    if ($Node -isnot [Management.Automation.Language.VariableExpressionAst]) {
-        return $false
-    }
-    return [string]$Node.VariablePath.UserPath -imatch '^(local:)?arguments$'
-}
-
-function Assert-ExactGuard {
-    param(
-        [Parameter(Mandatory)]$Node,
-        [Parameter(Mandatory)]$Block,
-        [Parameter(Mandatory)][string]$Condition,
-        [Parameter(Mandatory)][string]$Label
-    )
-
-    $guards = @()
-    $unexpectedControlFlow = $false
-    for ($current = $Node.Parent; $null -ne $current -and $current -ne $Block;
-            $current = $current.Parent) {
-        if ($current -is [Management.Automation.Language.IfStatementAst]) {
-            $guards += $current
-        } elseif ($current -is [Management.Automation.Language.LoopStatementAst] -or
-                $current -is [Management.Automation.Language.TryStatementAst] -or
-                $current -is [Management.Automation.Language.ScriptBlockAst] -or
-                $current -is [Management.Automation.Language.FunctionDefinitionAst]) {
-            $unexpectedControlFlow = $true
-        }
-    }
-    Assert-True ($current -eq $Block -and -not $unexpectedControlFlow -and
-            $guards.Count -eq 1 -and $guards[0].Clauses.Count -eq 1 -and
-            $null -eq $guards[0].ElseClause -and
-            $guards[0].Clauses[0].Item1.Extent.Text -ceq $Condition) `
-        "Legacy capture $Label guard must be exactly: $Condition"
-    return $guards[0]
-}
-
-function Assert-UnconditionalInBlock {
-    param(
-        [Parameter(Mandatory)]$Node,
-        [Parameter(Mandatory)]$Block,
-        [Parameter(Mandatory)][string]$Label
-    )
-
-    for ($current = $Node.Parent; $null -ne $current -and $current -ne $Block;
-            $current = $current.Parent) {
-        if ($current -is [Management.Automation.Language.IfStatementAst] -or
-                $current -is [Management.Automation.Language.LoopStatementAst] -or
-                $current -is [Management.Automation.Language.TryStatementAst] -or
-                $current -is [Management.Automation.Language.ScriptBlockAst] -or
-                $current -is [Management.Automation.Language.FunctionDefinitionAst]) {
-            throw "Legacy capture $Label must execute unconditionally in the argv block"
-        }
-    }
-    Assert-True ($current -eq $Block) `
-        "Legacy capture $Label is outside the argv block"
-}
-
-function Get-LiteralStringArray {
-    param(
-        [Parameter(Mandatory)]$Call,
-        [Parameter(Mandatory)][string]$Label
-    )
-
-    Assert-True ($Call.Arguments.Count -eq 1) `
-        "Legacy capture $Label AddRange must have one argument"
-    $argument = $Call.Arguments[0]
-    Assert-True ($argument -is [Management.Automation.Language.ConvertExpressionAst] -and
-            $argument.StaticType -eq [string[]] -and
-            $argument.Child -is [Management.Automation.Language.ArrayExpressionAst]) `
-        "Legacy capture $Label must be a literal string[] AddRange"
-    $variables = @($argument.FindAll({
-                param($candidate)
-                $candidate -is [Management.Automation.Language.VariableExpressionAst] -or
-                    $candidate -is [Management.Automation.Language.ExpandableStringExpressionAst]
-            }, $true))
-    Assert-True ($variables.Count -eq 0) `
-        "Legacy capture $Label must not contain dynamic argv values"
-    $arrayLiterals = @($argument.FindAll({
-                param($candidate)
-                $candidate -is [Management.Automation.Language.ArrayLiteralAst]
-            }, $true))
-    Assert-True ($arrayLiterals.Count -eq 1) `
-        "Legacy capture $Label must contain one literal argv array"
-    $values = @()
-    foreach ($element in $arrayLiterals[0].Elements) {
-        Assert-True ($element -is [Management.Automation.Language.StringConstantExpressionAst]) `
-            "Legacy capture $Label contains a non-literal argv value"
-        $values += [string]$element.Value
-    }
-    return [string[]]$values
-}
-
-function Get-CaptureArgumentContract {
+function Get-CaptureFunctionContract {
     param([Parameter(Mandatory)][string]$ScriptPath)
 
     $tokens = $null
@@ -153,342 +49,441 @@ function Get-CaptureArgumentContract {
         'Legacy capture must define exactly one Invoke-CaptureRun function'
     $function = $functions[0]
 
-    $processCommands = @($function.Body.FindAll({
+    $callSites = @($ast.FindAll({
                 param($candidate)
                 $candidate -is [Management.Automation.Language.CommandAst] -and
-                    $candidate.GetCommandName() -ceq 'Invoke-NinhoTimedProcess'
-            }, $true))
-    Assert-True ($processCommands.Count -eq 1) `
-        'Legacy capture must invoke exactly one timed process per capture run'
-    $processCommand = $processCommands[0]
-    $argumentListAst = $null
-    for ($index = 0; $index -lt $processCommand.CommandElements.Count; ++$index) {
-        $element = $processCommand.CommandElements[$index]
-        if ($element -is [Management.Automation.Language.CommandParameterAst] -and
-                $element.ParameterName -ceq 'ArgumentList') {
-            Assert-True ($null -eq $argumentListAst -and
-                    $index + 1 -lt $processCommand.CommandElements.Count) `
-                'Legacy capture process has an invalid -ArgumentList parameter'
-            $argumentListAst = $processCommand.CommandElements[$index + 1]
-        }
-    }
-    Assert-True ($argumentListAst -is [Management.Automation.Language.ArrayExpressionAst]) `
-        'Legacy capture process must pass @($arguments) as -ArgumentList'
-    $argumentStatements = @($argumentListAst.SubExpression.Statements)
-    Assert-True ($argumentStatements.Count -eq 1 -and
-            $argumentStatements[0].PipelineElements.Count -eq 1 -and
-            $argumentStatements[0].PipelineElements[0] -is
-                [Management.Automation.Language.CommandExpressionAst] -and
-            $argumentStatements[0].PipelineElements[0].Expression -is
-                [Management.Automation.Language.VariableExpressionAst] -and
-            $argumentStatements[0].PipelineElements[0].Expression.VariablePath.UserPath -ceq
-                'arguments') `
-        'Legacy capture process must pass only @($arguments) as -ArgumentList'
-    $argumentVariables = @($argumentListAst.FindAll({
-                param($candidate)
-                $candidate -is [Management.Automation.Language.VariableExpressionAst]
-            }, $true))
-    Assert-True ($argumentVariables.Count -eq 1 -and
-            $argumentVariables[0].VariablePath.UserPath -ceq 'arguments') `
-        'Legacy capture process must consume the validated $arguments list'
-
-    $argumentBlock = Get-NearestScriptBlockAst -Node $processCommand
-    $initializers = @($argumentBlock.FindAll({
-                param($candidate)
-                $candidate -is [Management.Automation.Language.AssignmentStatementAst] -and
-                    (Test-ArgumentsVariableAst -Node $candidate.Left)
-            }, $true))
-    Assert-True ($initializers.Count -eq 1 -and
-            $initializers[0].Left.VariablePath.UserPath -ceq 'arguments' -and
-            $initializers[0].Operator -eq 'Equals' -and
-            $initializers[0].Right.Extent.Text -ceq
-                '[Collections.Generic.List[string]]::new()') `
-        'Legacy capture must initialize one concrete string argv list'
-
-    $argumentCalls = @($argumentBlock.FindAll({
-                param($candidate)
-                $candidate -is [Management.Automation.Language.InvokeMemberExpressionAst] -and
-                    (Test-ArgumentsVariableAst -Node $candidate.Expression)
+                    $candidate.GetCommandName() -ceq 'Invoke-CaptureRun'
             }, $true) | Sort-Object { $_.Extent.StartOffset })
-
-    # Preserve the focused scene diagnostic before enforcing the complete argv-use set.
-    $literalAddCalls = @($argumentCalls | Where-Object {
-            $_.Member.Value -ceq 'Add' -and $_.Arguments.Count -eq 1 -and
-                $_.Arguments[0] -is
-                    [Management.Automation.Language.StringConstantExpressionAst]
-        })
-    $sceneCalls = @($literalAddCalls | Where-Object {
-            [string]$_.Arguments[0].Value -match '^res://.+\.tscn$'
-        })
-    if ($sceneCalls.Count -ne 1) { throw $sceneFailure }
-    $sceneCall = $sceneCalls[0]
-    Assert-True ($sceneCall.Arguments[0].StringConstantType -eq
-            [Management.Automation.Language.StringConstantType]::SingleQuoted) `
-        'Legacy capture executable scene must be a single-quoted literal'
-    $scene = [string]$sceneCall.Arguments[0].Value
-    Assert-True ($scene -ceq $expectedScene) `
-        "Legacy capture executable scene changed: $scene"
-
-    $allArgumentReferences = @($ast.FindAll({
-                param($candidate)
-                Test-ArgumentsVariableAst -Node $candidate
-            }, $true) | Sort-Object { $_.Extent.StartOffset })
-    $blockArgumentReferences = @($argumentBlock.FindAll({
-                param($candidate)
-                Test-ArgumentsVariableAst -Node $candidate
-            }, $true) | Sort-Object { $_.Extent.StartOffset })
-    if ($argumentCalls.Count -ne 9 -or
-            $allArgumentReferences.Count -ne 11 -or
-            $blockArgumentReferences.Count -ne 11) {
-        throw $usageFailure
+    Assert-True ($callSites.Count -eq 2) `
+        'Legacy capture must have exactly two canonical Invoke-CaptureRun call sites'
+    foreach ($callSite in $callSites) {
+        Assert-True ($callSite.Extent.StartOffset -lt $function.Extent.StartOffset -or
+                $callSite.Extent.EndOffset -gt $function.Extent.EndOffset) `
+            'Legacy capture call sites must invoke the real top-level function'
     }
-    for ($index = 0; $index -lt $allArgumentReferences.Count; ++$index) {
-        if ($allArgumentReferences[$index].Extent.StartOffset -ne
-                $blockArgumentReferences[$index].Extent.StartOffset) {
-            throw $usageFailure
-        }
+    $expectedCallSites = @(
+        'Invoke-CaptureRun -Name "capture-$slug" -Renderer $renderer -Scale 100 -Movie $rawMovie',
+        'Invoke-CaptureRun -Name "performance-$slug-$scale" -Renderer $renderer -Scale $scale -Metrics $metrics')
+    for ($index = 0; $index -lt $callSites.Count; ++$index) {
+        Assert-True ($callSites[$index].Extent.Text -ceq $expectedCallSites[$index]) `
+            'Legacy capture canonical Invoke-CaptureRun call sites changed'
     }
 
-    $rendererCall = $argumentCalls[0]
-    $pathCall = $argumentCalls[1]
-    $movieCall = $argumentCalls[2]
-    $orderedSceneCall = $argumentCalls[3]
-    $delimiterCall = $argumentCalls[4]
-    $captureFlagCall = $argumentCalls[5]
-    $scaleCall = $argumentCalls[6]
-    $normalTerminalCall = $argumentCalls[7]
-    $metricsCall = $argumentCalls[8]
-
-    $expectedMembers = @(
-        'AddRange', 'AddRange', 'AddRange', 'Add', 'Add', 'Add', 'Add', 'Add', 'Add')
-    for ($index = 0; $index -lt $argumentCalls.Count; ++$index) {
-        if ($argumentCalls[$index].Expression.VariablePath.UserPath -cne 'arguments' -or
-                $argumentCalls[$index].NullConditional -or
-                $argumentCalls[$index].Member -isnot
-                    [Management.Automation.Language.StringConstantExpressionAst] -or
-                $argumentCalls[$index].Member.Value -cne $expectedMembers[$index]) {
-            throw $usageFailure
-        }
-    }
-    if ($orderedSceneCall.Extent.StartOffset -ne $sceneCall.Extent.StartOffset) {
-        throw $usageFailure
-    }
-
-    $rendererArguments = @(
-        Get-LiteralStringArray -Call $rendererCall -Label 'OpenGL renderer')
-    Assert-True (Test-ExactSequence -Actual $rendererArguments -Expected @(
-                '--rendering-method', 'gl_compatibility')) `
-        'Legacy capture OpenGL renderer argv changed'
-    $rendererGuard = Assert-ExactGuard -Node $rendererCall -Block $argumentBlock `
-        -Condition "`$Renderer -ceq 'OpenGL'" -Label 'renderer argv'
-
-    $pathArguments = @(Get-LiteralStringArray -Call $pathCall -Label 'project path')
-    Assert-True (Test-ExactSequence -Actual $pathArguments -Expected @(
-                '--path', 'game', '--resolution', '1920x1080')) `
-        'Legacy capture project path argv changed'
-
-    Assert-True ($movieCall.Arguments.Count -eq 1 -and
-            $movieCall.Arguments[0].Extent.Text -ceq
-                "[string[]]@('--write-movie',`$movieRelative,'--fixed-fps','60')") `
-        'Legacy capture movie argv shape changed'
-    $movieCallVariables = @($movieCall.Arguments[0].FindAll({
-                param($candidate)
-                $candidate -is [Management.Automation.Language.VariableExpressionAst]
-            }, $true))
-    Assert-True ($movieCallVariables.Count -eq 1 -and
-            $movieCallVariables[0].VariablePath.UserPath -ceq 'movieRelative') `
-        'Legacy capture movie argv must derive only from $movieRelative'
-    $movieGuard = Assert-ExactGuard -Node $movieCall -Block $argumentBlock `
-        -Condition '$Movie' -Label 'movie argv'
-
-    foreach ($literalContract in @(
-            @($sceneCall, $expectedScene, 'explicit scene'),
-            @($delimiterCall, '--', 'user-argument delimiter'),
-            @($captureFlagCall, '--vertical-slice-capture', 'capture flag'),
-            @($normalTerminalCall, '--capture-normal-terminal', 'normal-terminal flag')
-        )) {
-        $call = $literalContract[0]
-        Assert-True ($call.Arguments.Count -eq 1 -and
-                $call.Arguments[0] -is
-                    [Management.Automation.Language.StringConstantExpressionAst] -and
-                $call.Arguments[0].StringConstantType -eq
-                    [Management.Automation.Language.StringConstantType]::SingleQuoted -and
-                [string]$call.Arguments[0].Value -ceq $literalContract[1]) `
-            "Legacy capture $($literalContract[2]) argv shape changed"
-    }
-
-    Assert-True ($scaleCall.Arguments.Count -eq 1 -and
-            $scaleCall.Arguments[0] -is
-                [Management.Automation.Language.ExpandableStringExpressionAst] -and
-            $scaleCall.Arguments[0].Value -ceq '--ui-scale=$Scale') `
-        'Legacy capture UI scale argv shape changed'
-    $scaleVariables = @($scaleCall.Arguments[0].FindAll({
-                param($candidate)
-                $candidate -is [Management.Automation.Language.VariableExpressionAst]
-            }, $true))
-    Assert-True ($scaleVariables.Count -eq 1 -and
-            $scaleVariables[0].VariablePath.UserPath -ceq 'Scale') `
-        'Legacy capture UI scale argument must derive only from $Scale'
-
-    $normalTerminalGuard = Assert-ExactGuard -Node $normalTerminalCall `
-        -Block $argumentBlock -Condition '$Movie' -Label 'normal-terminal argv'
-
-    Assert-True ($metricsCall.Arguments.Count -eq 1 -and
-            $metricsCall.Arguments[0] -is
-                [Management.Automation.Language.ExpandableStringExpressionAst] -and
-            $metricsCall.Arguments[0].Value -ceq
-                '--vertical-slice-metrics=res://$metricsRelative') `
-        'Legacy capture metrics argv shape changed'
-    $metricsCallVariables = @($metricsCall.Arguments[0].FindAll({
-                param($candidate)
-                $candidate -is [Management.Automation.Language.VariableExpressionAst]
-            }, $true))
-    Assert-True ($metricsCallVariables.Count -eq 1 -and
-            $metricsCallVariables[0].VariablePath.UserPath -ceq 'metricsRelative') `
-        'Legacy capture metrics argv must derive only from $metricsRelative'
-    $metricsGuard = Assert-ExactGuard -Node $metricsCall -Block $argumentBlock `
-        -Condition '$Metrics' -Label 'metrics argv'
-
-    $movieAssignments = @($argumentBlock.FindAll({
-                param($candidate)
-                $candidate -is [Management.Automation.Language.AssignmentStatementAst] -and
-                    $candidate.Left -is
-                        [Management.Automation.Language.VariableExpressionAst] -and
-                    $candidate.Left.VariablePath.UserPath -ceq 'movieRelative'
-            }, $true))
-    $movieReferences = @($ast.FindAll({
-                param($candidate)
-                $candidate -is [Management.Automation.Language.VariableExpressionAst] -and
-                    $candidate.VariablePath.UserPath -ceq 'movieRelative'
-            }, $true))
-    Assert-True ($movieAssignments.Count -eq 1 -and
-            $movieAssignments[0].Operator -eq 'Equals' -and
-            $movieAssignments[0].Right.Extent.Text -ceq
-                "(Get-RelativePath (Join-Path `$root 'game') `$Movie).Replace('\','/')" -and
-            $movieReferences.Count -eq 2) `
-        'Legacy capture $movieRelative derivation changed'
-    $movieAssignmentGuard = Assert-ExactGuard -Node $movieAssignments[0] `
-        -Block $argumentBlock -Condition '$Movie' -Label '$movieRelative derivation'
-    Assert-True ($movieAssignmentGuard.Extent.StartOffset -eq
-            $movieGuard.Extent.StartOffset) `
-        'Legacy capture movie argv and derivation must share one guard'
-
-    $metricsAssignments = @($argumentBlock.FindAll({
-                param($candidate)
-                $candidate -is [Management.Automation.Language.AssignmentStatementAst] -and
-                    $candidate.Left -is
-                        [Management.Automation.Language.VariableExpressionAst] -and
-                    $candidate.Left.VariablePath.UserPath -ceq 'metricsRelative'
-            }, $true))
-    $metricsReferences = @($ast.FindAll({
-                param($candidate)
-                $candidate -is [Management.Automation.Language.VariableExpressionAst] -and
-                    $candidate.VariablePath.UserPath -ceq 'metricsRelative'
-            }, $true))
-    Assert-True ($metricsAssignments.Count -eq 1 -and
-            $metricsAssignments[0].Operator -eq 'Equals' -and
-            $metricsAssignments[0].Right.Extent.Text -ceq
-                "(Get-RelativePath (Join-Path `$root 'game') `$Metrics).Replace('\','/')" -and
-            $metricsReferences.Count -eq 2) `
-        'Legacy capture $metricsRelative derivation changed'
-    $metricsAssignmentGuard = Assert-ExactGuard -Node $metricsAssignments[0] `
-        -Block $argumentBlock -Condition '$Metrics' -Label '$metricsRelative derivation'
-    Assert-True ($metricsAssignmentGuard.Extent.StartOffset -eq
-            $metricsGuard.Extent.StartOffset) `
-        'Legacy capture metrics argv and derivation must share one guard'
-
-    Assert-True ($rendererGuard.Extent.StartOffset -ne
-            $movieGuard.Extent.StartOffset -and
-            $normalTerminalGuard.Extent.StartOffset -ne
-                $movieGuard.Extent.StartOffset) `
-        'Legacy capture renderer, movie, and normal-terminal guards must be distinct'
-
-    foreach ($required in @(
-            @($initializers[0], 'argv initialization'),
-            @($pathCall, 'project path'),
-            @($sceneCall, 'explicit scene'),
-            @($delimiterCall, 'user-argument delimiter'),
-            @($captureFlagCall, 'capture flag'),
-            @($scaleCall, 'UI scale'),
-            @($processCommand, 'timed process invocation')
-        )) {
-        Assert-UnconditionalInBlock -Node $required[0] `
-            -Block $argumentBlock -Label $required[1]
-    }
-
-    $orderedNodes = @(
-        $initializers[0], $rendererCall, $pathCall, $movieAssignments[0], $movieCall,
-        $sceneCall, $delimiterCall, $captureFlagCall, $scaleCall,
-        $normalTerminalCall, $metricsAssignments[0], $metricsCall, $processCommand)
-    for ($index = 1; $index -lt $orderedNodes.Count; ++$index) {
-        Assert-True ($orderedNodes[$index - 1].Extent.StartOffset -lt
-                $orderedNodes[$index].Extent.StartOffset) `
-            'Legacy capture executable argv statements changed relative order'
-    }
-
-    $classifiedArgumentReferences = @(
-        $initializers[0].Left
-        $rendererCall.Expression
-        $pathCall.Expression
-        $movieCall.Expression
-        $sceneCall.Expression
-        $delimiterCall.Expression
-        $captureFlagCall.Expression
-        $scaleCall.Expression
-        $normalTerminalCall.Expression
-        $metricsCall.Expression
-        $argumentVariables[0]
-    ) | Sort-Object { $_.Extent.StartOffset }
-    for ($index = 0; $index -lt $allArgumentReferences.Count; ++$index) {
-        if ($classifiedArgumentReferences[$index].Extent.StartOffset -ne
-                $allArgumentReferences[$index].Extent.StartOffset) {
-            throw $usageFailure
-        }
-    }
-
-    # Runtime proof is derived only after every executable $arguments use is classified.
-    $scaleArgument = $scaleCall.Arguments[0].Value.Replace('$Scale', '100')
-    $derivedArguments = @(
-        $rendererArguments
-        $pathArguments
-        $scene
-        [string]$delimiterCall.Arguments[0].Value
-        [string]$captureFlagCall.Arguments[0].Value
-        [string]$scaleArgument
-    )
     return [pscustomobject]@{
         Ast = $ast
-        Scene = $scene
-        SceneCall = $sceneCall
-        ArgumentList = [string[]]$derivedArguments
+        Function = $function
+        FunctionText = $function.Extent.Text
+        ScriptText = [IO.File]::ReadAllText($ScriptPath)
+        CallSites = $callSites
     }
 }
 
-function Replace-AstExtent {
+function Replace-UniqueFunctionText {
     param(
-        [Parameter(Mandatory)][string]$Text,
-        [Parameter(Mandatory)]$Node,
+        [Parameter(Mandatory)]$FunctionContract,
+        [Parameter(Mandatory)][string]$Search,
         [AllowEmptyString()][string]$Replacement
     )
 
-    return $Text.Substring(0, $Node.Extent.StartOffset) + $Replacement +
-        $Text.Substring($Node.Extent.EndOffset)
+    $matches = @([regex]::Matches(
+            $FunctionContract.FunctionText, [regex]::Escape($Search)))
+    Assert-True ($matches.Count -eq 1) `
+        "Legacy capture fixture source must occur once in the real function: $Search"
+    $match = $matches[0]
+    $mutatedFunction = $FunctionContract.FunctionText.Substring(0, $match.Index) +
+        $Replacement +
+        $FunctionContract.FunctionText.Substring($match.Index + $match.Length)
+    return $FunctionContract.ScriptText.Substring(
+        0, $FunctionContract.Function.Extent.StartOffset) + $mutatedFunction +
+        $FunctionContract.ScriptText.Substring(
+            $FunctionContract.Function.Extent.EndOffset)
 }
 
-function Assert-SceneContractFailure {
+function New-CaptureFixture {
+    param(
+        [Parameter(Mandatory)]$FunctionContract,
+        [Parameter(Mandatory)][string]$Directory,
+        [Parameter(Mandatory)][string]$Name,
+        [Parameter(Mandatory)][string]$Search,
+        [AllowEmptyString()][string]$Replacement
+    )
+
+    $path = Join-Path $Directory $Name
+    $text = Replace-UniqueFunctionText -FunctionContract $FunctionContract `
+        -Search $Search -Replacement $Replacement
+    [IO.File]::WriteAllText($path, $text, [Text.UTF8Encoding]::new($false))
+    return $path
+}
+
+function Get-RecorderRelativePath {
+    param(
+        [Parameter(Mandatory)][string]$Base,
+        [Parameter(Mandatory)][string]$Target
+    )
+
+    $basePath = [IO.Path]::GetFullPath($Base).TrimEnd('\', '/') +
+        [IO.Path]::DirectorySeparatorChar
+    $targetPath = [IO.Path]::GetFullPath($Target)
+    return [Uri]::UnescapeDataString(
+        ([Uri]$basePath).MakeRelativeUri([Uri]$targetPath).ToString())
+}
+
+function New-RecorderCases {
+    param([Parameter(Mandatory)][string]$RecorderOutput)
+
+    $cases = [Collections.Generic.List[object]]::new()
+    foreach ($renderer in 'OpenGL', 'Vulkan') {
+        foreach ($movieEnabled in $false, $true) {
+            foreach ($metricsEnabled in $false, $true) {
+                foreach ($scale in 100, 150) {
+                    $slug = $renderer.ToLowerInvariant()
+                    $caseId = "$slug-s$scale-m$([int]$movieEnabled)-x$([int]$metricsEnabled)"
+                    $movie = if ($movieEnabled) {
+                        Join-Path $RecorderOutput "$caseId.avi"
+                    } else { '' }
+                    $metrics = if ($metricsEnabled) {
+                        Join-Path $RecorderOutput "$caseId.json"
+                    } else { '' }
+                    $cases.Add([pscustomobject]@{
+                            Id = $caseId
+                            Name = "recorder-$caseId"
+                            Renderer = $renderer
+                            Scale = $scale
+                            Movie = $movie
+                            Metrics = $metrics
+                            MovieEnabled = $movieEnabled
+                            MetricsEnabled = $metricsEnabled
+                        })
+                }
+            }
+        }
+    }
+    return @($cases)
+}
+
+function Invoke-CaptureRecorder {
+    param(
+        [Parameter(Mandatory)][string]$FunctionText,
+        [Parameter(Mandatory)][object[]]$Cases,
+        [Parameter(Mandatory)][string]$RecorderRoot,
+        [Parameter(Mandatory)][string]$RecorderOutput
+    )
+
+    $harness = @'
+param($FunctionText, $Cases, $RecorderRoot, $RecorderOutput)
+$ErrorActionPreference = 'Stop'
+$root = $RecorderRoot
+$OutputDirectory = $RecorderOutput
+$godot = Join-Path $RecorderOutput '__recorder_no_launch__.exe'
+$script:records = [Collections.Generic.List[object]]::new()
+$script:retryCalls = [Collections.Generic.List[object]]::new()
+$script:markers = [Collections.Generic.List[object]]::new()
+$script:artifacts = [Collections.Generic.List[object]]::new()
+$script:currentCaseId = ''
+$script:currentAttempt = 0
+$script:currentMaximum = 0
+$script:interceptedLaunchCount = 0
+$script:externalLaunchCount = 0
+
+function Get-RelativePath([string]$Base, [string]$Target) {
+    $basePath = [IO.Path]::GetFullPath($Base).TrimEnd('\', '/') +
+        [IO.Path]::DirectorySeparatorChar
+    $targetPath = [IO.Path]::GetFullPath($Target)
+    return [Uri]::UnescapeDataString(
+        ([Uri]$basePath).MakeRelativeUri([Uri]$targetPath).ToString())
+}
+
+function Invoke-NinhoLimitedRetry {
+    param(
+        [string]$Name,
+        [int]$MaximumAttempts,
+        [scriptblock]$Operation
+    )
+    $script:currentMaximum = $MaximumAttempts
+    $script:retryCalls.Add([pscustomobject]@{
+            CaseId = $script:currentCaseId
+            Name = $Name
+            MaximumAttempts = $MaximumAttempts
+        }) | Out-Null
+    $result = $null
+    foreach ($attempt in 1..$MaximumAttempts) {
+        $script:currentAttempt = $attempt
+        $result = & $Operation $attempt
+    }
+    return $result
+}
+
+function Invoke-NinhoTimedProcess {
+    param(
+        [string]$FilePath,
+        [string[]]$ArgumentList,
+        [int]$TimeoutMs,
+        [string]$StdoutPath,
+        [string]$StderrPath,
+        [string]$WorkingDirectory,
+        [string]$FatalMarker
+    )
+    ++$script:interceptedLaunchCount
+    $script:records.Add([pscustomobject]@{
+            CaseId = $script:currentCaseId
+            Attempt = $script:currentAttempt
+            MaximumAttempts = $script:currentMaximum
+            FilePath = $FilePath
+            ArgumentList = [string[]]@($ArgumentList)
+            TimeoutMs = $TimeoutMs
+            StdoutPath = $StdoutPath
+            StderrPath = $StderrPath
+            WorkingDirectory = $WorkingDirectory
+            FatalMarker = $FatalMarker
+        }) | Out-Null
+    return [pscustomobject]@{
+        ExitCode = 0
+        Stdout = $StdoutPath
+        Stderr = $StderrPath
+    }
+}
+
+function Assert-CleanLog {
+    param([string]$Stdout, [string]$Stderr, [string]$Marker = '')
+    $script:markers.Add([pscustomobject]@{
+            CaseId = $script:currentCaseId
+            Stdout = $Stdout
+            Stderr = $Stderr
+            Marker = $Marker
+        }) | Out-Null
+    return ''
+}
+
+function Add-Artifact {
+    param([string]$Path)
+    $script:artifacts.Add([pscustomobject]@{
+            CaseId = $script:currentCaseId
+            Path = $Path
+        }) | Out-Null
+}
+
+function Start-Process {
+    param([Parameter(ValueFromRemainingArguments = $true)]$Ignored)
+    ++$script:externalLaunchCount
+    throw 'Recorder blocked a real Start-Process call'
+}
+
+Invoke-Expression -Command $FunctionText
+foreach ($case in @($Cases)) {
+    $script:currentCaseId = $case.Id
+    $null = Invoke-CaptureRun -Name $case.Name -Renderer $case.Renderer `
+        -Scale $case.Scale -Movie $case.Movie -Metrics $case.Metrics
+}
+
+[pscustomobject]@{
+    Records = @($script:records)
+    RetryCalls = @($script:retryCalls)
+    Markers = @($script:markers)
+    Artifacts = @($script:artifacts)
+    InterceptedLaunchCount = $script:interceptedLaunchCount
+    ExternalLaunchCount = $script:externalLaunchCount
+    GodotSentinel = $godot
+}
+'@
+
+    $powerShell = [PowerShell]::Create()
+    try {
+        $null = $powerShell.AddScript($harness).
+            AddParameter('FunctionText', $FunctionText).
+            AddParameter('Cases', [object[]]$Cases).
+            AddParameter('RecorderRoot', $RecorderRoot).
+            AddParameter('RecorderOutput', $RecorderOutput)
+        $output = @($powerShell.Invoke())
+        $errors = @($powerShell.Streams.Error)
+        Assert-True (-not $powerShell.HadErrors -and $errors.Count -eq 0) `
+            "$recorderFailure`: $(@($errors | ForEach-Object { $_.ToString() }) -join '; ')"
+        Assert-True ($output.Count -eq 1) `
+            "$recorderFailure`: expected one recorder result, found $($output.Count)"
+        return $output[0]
+    } finally {
+        $powerShell.Dispose()
+    }
+}
+
+function Get-ExpectedCaptureArguments {
+    param(
+        [Parameter(Mandatory)]$Case,
+        [Parameter(Mandatory)][string]$RecorderRoot
+    )
+
+    $expected = [Collections.Generic.List[string]]::new()
+    if ($Case.Renderer -ceq 'OpenGL') {
+        $expected.AddRange([string[]]@('--rendering-method', 'gl_compatibility'))
+    }
+    $expected.AddRange([string[]]@('--path', 'game', '--resolution', '1920x1080'))
+    if ($Case.MovieEnabled) {
+        $movieRelative = (Get-RecorderRelativePath `
+                -Base (Join-Path $RecorderRoot 'game') -Target $Case.Movie).
+            Replace('\', '/')
+        $expected.AddRange([string[]]@(
+                '--write-movie', $movieRelative, '--fixed-fps', '60'))
+    }
+    $expected.Add($expectedScene)
+    $expected.Add('--')
+    $expected.Add('--vertical-slice-capture')
+    $expected.Add("--ui-scale=$($Case.Scale)")
+    if ($Case.MovieEnabled) {
+        $expected.Add('--capture-normal-terminal')
+    }
+    if ($Case.MetricsEnabled) {
+        $metricsRelative = (Get-RecorderRelativePath `
+                -Base (Join-Path $RecorderRoot 'game') -Target $Case.Metrics).
+            Replace('\', '/')
+        $expected.Add("--vertical-slice-metrics=res://$metricsRelative")
+    }
+    return [string[]]@($expected)
+}
+
+function Assert-RecordedCaptureContract {
+    param(
+        [Parameter(Mandatory)]$Recorder,
+        [Parameter(Mandatory)][object[]]$Cases,
+        [Parameter(Mandatory)][string]$RecorderRoot,
+        [Parameter(Mandatory)][string]$RecorderOutput
+    )
+
+    $records = @($Recorder.Records)
+    $retryCalls = @($Recorder.RetryCalls)
+    $markers = @($Recorder.Markers)
+    $artifacts = @($Recorder.Artifacts)
+    $expectedSentinel = Join-Path $RecorderOutput '__recorder_no_launch__.exe'
+    Assert-True ($Recorder.GodotSentinel -ceq $expectedSentinel -and
+            -not (Test-Path -LiteralPath $expectedSentinel) -and
+            -not (Test-Path -LiteralPath $RecorderOutput)) `
+        "$recorderFailure`: recorder created or resolved a real external target"
+    $expectedRecordCount = @($Cases | ForEach-Object {
+            if ($_.Renderer -ceq 'Vulkan') { 2 } else { 1 }
+        } | Measure-Object -Sum).Sum
+    Assert-True ($Recorder.ExternalLaunchCount -eq 0 -and
+            $Recorder.InterceptedLaunchCount -eq $records.Count -and
+            $records.Count -eq $expectedRecordCount) $recorderFailure
+    Assert-True ($retryCalls.Count -eq $Cases.Count -and
+            $markers.Count -eq $Cases.Count -and
+            $artifacts.Count -eq 2 * $Cases.Count) `
+        'Legacy capture recorder did not observe the complete real function lifecycle'
+
+    foreach ($case in $Cases) {
+        $maximumAttempts = if ($case.Renderer -ceq 'Vulkan') { 2 } else { 1 }
+        $caseRetry = @($retryCalls | Where-Object { $_.CaseId -ceq $case.Id })
+        Assert-True ($caseRetry.Count -eq 1 -and
+                $caseRetry[0].Name -ceq $case.Name -and
+                $caseRetry[0].MaximumAttempts -eq $maximumAttempts) `
+            'Legacy capture retry branch changed under the recorder'
+
+        $caseRecords = @($records | Where-Object { $_.CaseId -ceq $case.Id } |
+            Sort-Object Attempt)
+        Assert-True ($caseRecords.Count -eq $maximumAttempts) `
+            'Legacy capture recorder observed an invalid attempt count'
+        $expectedArguments = @(Get-ExpectedCaptureArguments `
+                -Case $case -RecorderRoot $RecorderRoot)
+        foreach ($record in $caseRecords) {
+            $actualArguments = @($record.ArgumentList)
+            $sceneArguments = @($actualArguments | Where-Object {
+                    $_ -match '^res://.+\.tscn$'
+                })
+            if ($sceneArguments.Count -ne 1 -or
+                    $sceneArguments[0] -cne $expectedScene) {
+                throw $sceneFailure
+            }
+            if (-not (Test-ExactSequence -Actual $actualArguments `
+                        -Expected $expectedArguments)) {
+                throw $argvFailure
+            }
+            $expectedStdout = Join-Path $RecorderOutput `
+                "$($case.Name)-attempt$($record.Attempt).stdout.log"
+            $expectedStderr = Join-Path $RecorderOutput `
+                "$($case.Name)-attempt$($record.Attempt).stderr.log"
+            Assert-True ($record.MaximumAttempts -eq $maximumAttempts -and
+                    $record.FilePath -ceq $Recorder.GodotSentinel -and
+                    $record.TimeoutMs -eq $(if ($case.MovieEnabled) { 600000 } else { 120000 }) -and
+                    $record.StdoutPath -ceq $expectedStdout -and
+                    $record.StderrPath -ceq $expectedStderr -and
+                    $record.WorkingDirectory -ceq $RecorderRoot -and
+                    $record.FatalMarker -ceq
+                        "NINHO_CAPTURE_FATAL name=$($case.Name) reason=timeout") `
+                'Legacy capture timed-process contract changed under the recorder'
+        }
+
+        $caseMarkers = @($markers | Where-Object { $_.CaseId -ceq $case.Id })
+        $expectedMarker = if ($case.MovieEnabled) {
+            'VERTICAL_SLICE_SOURCE_CAPTURE_COMPLETE'
+        } else { 'VERTICAL_SLICE_CAPTURE_COMPLETE frame=300' }
+        Assert-True ($caseMarkers.Count -eq 1 -and
+                $caseMarkers[0].Marker -ceq $expectedMarker) `
+            'Legacy capture completion-marker branch changed under the recorder'
+
+        $caseArtifacts = @($artifacts | Where-Object { $_.CaseId -ceq $case.Id })
+        $lastAttempt = $maximumAttempts
+        Assert-True ($caseArtifacts.Count -eq 2 -and
+                $caseArtifacts[0].Path -ceq (Join-Path $RecorderOutput `
+                    "$($case.Name)-attempt$lastAttempt.stdout.log") -and
+                $caseArtifacts[1].Path -ceq (Join-Path $RecorderOutput `
+                    "$($case.Name)-attempt$lastAttempt.stderr.log")) `
+            'Legacy capture artifact lifecycle changed under the recorder'
+    }
+}
+
+function Get-ValidatedCaptureContract {
     param(
         [Parameter(Mandatory)][string]$ScriptPath,
+        [Parameter(Mandatory)][string]$RecorderOutput
+    )
+
+    $functionContract = Get-CaptureFunctionContract -ScriptPath $ScriptPath
+    $cases = @(New-RecorderCases -RecorderOutput $RecorderOutput)
+    $recorder = Invoke-CaptureRecorder `
+        -FunctionText $functionContract.FunctionText `
+        -Cases $cases `
+        -RecorderRoot $root `
+        -RecorderOutput $RecorderOutput
+    Assert-RecordedCaptureContract -Recorder $recorder -Cases $cases `
+        -RecorderRoot $root -RecorderOutput $RecorderOutput
+
+    $proofCase = @($cases | Where-Object {
+            $_.Renderer -ceq 'OpenGL' -and $_.Scale -eq 100 -and
+                -not $_.MovieEnabled -and -not $_.MetricsEnabled
+        })
+    Assert-True ($proofCase.Count -eq 1) `
+        'Legacy capture recorder lacks the canonical Godot proof case'
+    $proofRecord = @($recorder.Records | Where-Object {
+            $_.CaseId -ceq $proofCase[0].Id -and $_.Attempt -eq 1
+        })
+    Assert-True ($proofRecord.Count -eq 1) `
+        'Legacy capture recorder lacks one effective argv for the Godot proof'
+
+    return [pscustomobject]@{
+        FunctionContract = $functionContract
+        Scene = $expectedScene
+        ArgumentList = [string[]]@($proofRecord[0].ArgumentList)
+        MatrixCount = $cases.Count
+        RecordCount = @($recorder.Records).Count
+        ExternalLaunchCount = $recorder.ExternalLaunchCount
+        OutputWriteCount = 0
+    }
+}
+
+function Assert-CaptureContractFailure {
+    param(
+        [Parameter(Mandatory)][string]$ScriptPath,
+        [Parameter(Mandatory)][string]$RecorderOutput,
+        [Parameter(Mandatory)][string]$ExpectedFailure,
         [Parameter(Mandatory)][string]$Label
     )
 
     $failure = ''
     try {
-        $null = Get-CaptureArgumentContract -ScriptPath $ScriptPath
+        $null = Get-ValidatedCaptureContract `
+            -ScriptPath $ScriptPath -RecorderOutput $RecorderOutput
     } catch {
         $failure = $_.Exception.Message
     }
-    Assert-True ($failure -ceq $sceneFailure) `
-        "$Label did not cause the exact scene-contract RED: $failure"
+    Assert-True ($failure -ceq $ExpectedFailure) `
+        "$Label did not cause the exact recorder RED: $failure"
 }
 
 Assert-True ((Split-Path -Parent $captureScriptPath) -ceq (Join-Path $root 'tools')) `
@@ -498,10 +493,8 @@ Assert-True ($projectPath -ceq (Join-Path $root 'game\project.godot')) `
 Assert-True (Test-Path -LiteralPath $godotPath -PathType Leaf) `
     "Pinned Godot executable missing: $godotPath"
 
-$contract = Get-CaptureArgumentContract -ScriptPath $captureScriptPath
-$captureText = [IO.File]::ReadAllText($captureScriptPath)
-$sceneCallText = $contract.SceneCall.Extent.Text
-
+$functionContract = Get-CaptureFunctionContract -ScriptPath $captureScriptPath
+$sceneStatement = "`$arguments.Add('$expectedScene')"
 $temporaryParent = [IO.Path]::GetFullPath([IO.Path]::GetTempPath())
 $temporaryRoot = Join-Path $temporaryParent `
     ('ninho-legacy-scene-contract-' + [Guid]::NewGuid().ToString('N'))
@@ -509,74 +502,84 @@ Assert-NinhoNoReparseAncestors -Path $temporaryRoot -AllowedRoot $temporaryParen
     Out-Null
 New-Item -ItemType Directory -Path $temporaryRoot | Out-Null
 try {
-    $removedPath = Join-Path $temporaryRoot 'capture-without-scene.ps1'
-    $removedText = Replace-AstExtent -Text $captureText `
-        -Node $contract.SceneCall -Replacement ''
-    [IO.File]::WriteAllText($removedPath, $removedText, [Text.UTF8Encoding]::new($false))
-    Assert-SceneContractFailure -ScriptPath $removedPath -Label 'Removing only the scene AST node'
+    $recorderOutput = Join-Path $temporaryRoot 'recorder-output'
+    $contract = Get-ValidatedCaptureContract `
+        -ScriptPath $captureScriptPath -RecorderOutput $recorderOutput
 
-    $commentedPath = Join-Path $temporaryRoot 'capture-commented-scene.ps1'
-    $commentedText = Replace-AstExtent -Text $captureText -Node $contract.SceneCall `
-        -Replacement ("# " + $sceneCallText)
-    [IO.File]::WriteAllText(
-        $commentedPath, $commentedText, [Text.UTF8Encoding]::new($false))
-    Assert-SceneContractFailure -ScriptPath $commentedPath `
-        -Label 'Replacing the scene AST node with a comment'
-
-    $stringPath = Join-Path $temporaryRoot 'capture-string-scene.ps1'
-    $looseString = "'" + $sceneCallText.Replace("'", "''") + "'"
-    $stringText = Replace-AstExtent -Text $captureText `
-        -Node $contract.SceneCall -Replacement $looseString
-    [IO.File]::WriteAllText($stringPath, $stringText, [Text.UTF8Encoding]::new($false))
-    Assert-SceneContractFailure -ScriptPath $stringPath `
-        -Label 'Replacing the scene AST node with a loose string'
-
-    $duplicatePath = Join-Path $temporaryRoot 'capture-duplicate-scene.ps1'
-    $duplicateText = Replace-AstExtent -Text $captureText -Node $contract.SceneCall `
-        -Replacement ($sceneCallText + "`r`n        " + $sceneCallText)
-    [IO.File]::WriteAllText(
-        $duplicatePath, $duplicateText, [Text.UTF8Encoding]::new($false))
-    Assert-SceneContractFailure -ScriptPath $duplicatePath `
-        -Label 'Duplicating the executable scene AST node'
-
-    $removePath = Join-Path $temporaryRoot 'capture-remove-scene.ps1'
-    $removeText = Replace-AstExtent -Text $captureText -Node $contract.SceneCall `
-        -Replacement ($sceneCallText + "`r`n        " +
-            "`$arguments.Remove('$expectedScene')")
-    [IO.File]::WriteAllText(
-        $removePath, $removeText, [Text.UTF8Encoding]::new($false))
-    $indexedPath = Join-Path $temporaryRoot 'capture-indexed-assignment.ps1'
-    $indexedText = Replace-AstExtent -Text $captureText -Node $contract.SceneCall `
-        -Replacement ($sceneCallText + "`r`n        " +
-            "`$arguments[0] = 'tampered'")
-    [IO.File]::WriteAllText(
-        $indexedPath, $indexedText, [Text.UTF8Encoding]::new($false))
-    $outsidePath = Join-Path $temporaryRoot 'capture-outside-arguments-use.ps1'
-    $outsideText = $captureText + "`r`n`$null = `$arguments`r`n"
-    [IO.File]::WriteAllText(
-        $outsidePath, $outsideText, [Text.UTF8Encoding]::new($false))
-    $usageFailures = @()
-    foreach ($fixture in @(
-            @($removePath, 'Remove(scene)'),
-            @($indexedPath, 'indexed assignment'),
-            @($outsidePath, 'unclassified use outside argv block')
-        )) {
-        $failure = ''
-        try {
-            $null = Get-CaptureArgumentContract -ScriptPath $fixture[0]
-        } catch {
-            $failure = $_.Exception.Message
+    $fixtureDefinitions = @(
+        [pscustomobject]@{
+            Name = 'capture-without-scene.ps1'
+            Label = 'Removing the executable scene statement'
+            Replacement = ''
+            Failure = $sceneFailure
+        },
+        [pscustomobject]@{
+            Name = 'capture-commented-scene.ps1'
+            Label = 'Replacing the scene statement with a comment'
+            Replacement = "# $sceneStatement"
+            Failure = $sceneFailure
+        },
+        [pscustomobject]@{
+            Name = 'capture-string-scene.ps1'
+            Label = 'Replacing the scene statement with a loose string'
+            Replacement = "'" + $sceneStatement.Replace("'", "''") + "'"
+            Failure = $sceneFailure
+        },
+        [pscustomobject]@{
+            Name = 'capture-duplicate-scene.ps1'
+            Label = 'Duplicating the executable scene statement'
+            Replacement = $sceneStatement + "`r`n        " + $sceneStatement
+            Failure = $sceneFailure
+        },
+        [pscustomobject]@{
+            Name = 'capture-remove-scene.ps1'
+            Label = 'Removing the scene through the effective list'
+            Replacement = $sceneStatement + "`r`n        " +
+                "`$arguments.Remove('$expectedScene')"
+            Failure = $sceneFailure
+        },
+        [pscustomobject]@{
+            Name = 'capture-indexed-assignment.ps1'
+            Label = 'Mutating the effective list through an index'
+            Replacement = $sceneStatement + "`r`n        " +
+                "`$arguments[0] = 'tampered'"
+            Failure = $argvFailure
+        },
+        [pscustomobject]@{
+            Name = 'capture-provider-arguments.ps1'
+            Label = 'Clearing the effective list through variable provider syntax'
+            Replacement = $sceneStatement + "`r`n        " +
+                '${variable:arguments}.Clear()'
+            Failure = $sceneFailure
+        },
+        [pscustomobject]@{
+            Name = 'capture-private-arguments.ps1'
+            Label = 'Clearing the effective list through private scope syntax'
+            Replacement = $sceneStatement + "`r`n        " +
+                '${private:arguments}.Clear()'
+            Failure = $sceneFailure
+        },
+        [pscustomobject]@{
+            Name = 'capture-get-variable-arguments.ps1'
+            Label = 'Clearing the effective list through Get-Variable'
+            Replacement = $sceneStatement + "`r`n        " +
+                '(Get-Variable arguments -ValueOnly).Clear()'
+            Failure = $sceneFailure
         }
-        $usageFailures += [pscustomobject]@{ Label = $fixture[1]; Failure = $failure }
+    )
+    foreach ($fixture in $fixtureDefinitions) {
+        $fixturePath = New-CaptureFixture `
+            -FunctionContract $functionContract `
+            -Directory $temporaryRoot `
+            -Name $fixture.Name `
+            -Search $sceneStatement `
+            -Replacement $fixture.Replacement
+        Assert-CaptureContractFailure `
+            -ScriptPath $fixturePath `
+            -RecorderOutput $recorderOutput `
+            -ExpectedFailure $fixture.Failure `
+            -Label $fixture.Label
     }
-    $unexpectedUsageFailures = @($usageFailures | Where-Object {
-            $_.Failure -cne $usageFailure
-        })
-    Assert-True ($unexpectedUsageFailures.Count -eq 0) `
-        ('Legacy capture contract accepted or misclassified extra $arguments usage: ' +
-            (($usageFailures | ForEach-Object {
-                        "$($_.Label)=[$($_.Failure)]"
-                    }) -join ', '))
 
     $gameSource = Join-Path $root 'game'
     $reparseSources = @(Get-ChildItem -LiteralPath $gameSource -Recurse -Force |
@@ -634,8 +637,11 @@ try {
         'vertical slice explicit scene contract: PASS ' +
         "capture=$($contract.Scene) original_main=$originalMainScene " +
         "mutated_main=$mutatedMainScene " +
-        "ast_red=removed,comment,string,duplicate,remove,indexed,outside " +
-        'arguments_contract=initializer+9_calls+handoff ' +
+        'dynamic_red=removed,comment,string,duplicate,remove,indexed,provider,private,get-variable ' +
+        "recorder_matrix=$($contract.MatrixCount) " +
+        "recorded_attempts=$($contract.RecordCount) " +
+        "recorder_external_launches=$($contract.ExternalLaunchCount) " +
+        "recorder_output_writes=$($contract.OutputWriteCount) " +
         "runtime_marker=$completionMarker argv=$($contract.ArgumentList -join '|')")
 } finally {
     $resolvedTemporaryRoot = [IO.Path]::GetFullPath($temporaryRoot)
