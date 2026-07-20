@@ -1,7 +1,9 @@
 #include "ninho/simulation/content.hpp"
 
+#include "ability_system.hpp"
 #include "product_v2_reader.hpp"
 
+#include <limits>
 #include <unordered_set>
 #include <utility>
 
@@ -65,8 +67,11 @@ AbilityArchetype parse_ability(const json& item, const std::string& pointer)
         result.kind_v2 = AbilityKind::MassBoost;
         keys(payload, payload_pointer, {"duration_ticks", "mass_multiplier"});
         const AbilityArchetype::MassBoostPayload value{
-            uint(payload, "duration_ticks", payload_pointer, 1U, 3600U),
-            number(payload, "mass_multiplier", payload_pointer, 1.0, 20.0, false)};
+            uint(payload, "duration_ticks", payload_pointer, 0U,
+                std::numeric_limits<std::uint32_t>::max()),
+            number(payload, "mass_multiplier", payload_pointer,
+                -std::numeric_limits<double>::max(),
+                std::numeric_limits<double>::max())};
         result.arm_ticks = 9U;
         result.duration_ticks = value.duration_ticks;
         result.payload = value;
@@ -101,6 +106,11 @@ AbilityArchetype parse_ability(const json& item, const std::string& pointer)
     else
     {
         fail(ContentErrorCode::InvalidEnum, child(pointer, "kind"), "invalid ability kind");
+    }
+    if (const auto definition_error = detail::AbilitySystem::validate_definition(
+            result, pointer)) {
+        fail(definition_error->code, definition_error->pointer,
+            definition_error->message);
     }
     return result;
 }

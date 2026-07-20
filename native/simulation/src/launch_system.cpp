@@ -785,12 +785,17 @@ SessionStatus SimulationSession::Impl::process_commands()
             const AbilityArchetype* ability = shot
                 ? ability_archetype(shot->ability_id)
                 : nullptr;
+            const bool has_unfinished_projectile = shot
+                && std::ranges::any_of(
+                    shot->projectiles(), [](const ProjectileState& current) {
+                        return !current.finished;
+                    });
             if (session_state.phase == SessionPhase::FlightAbility && shot
                 && projectile && ability
                 && session_state.tick.value()
                     >= shot->launch_tick.value()
                         + detail::AbilitySystem::activation_arm_ticks(*ability)
-                && !shot->activation_consumed && !projectile->finished) {
+                && !shot->activation_consumed && has_unfinished_projectile) {
                 const SessionStatus activation_status = detail::AbilitySystem::activate(
                     *ability, *shot, session_state.tick);
                 if (!activation_status.ok()) {

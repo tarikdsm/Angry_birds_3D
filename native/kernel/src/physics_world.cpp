@@ -356,6 +356,7 @@ struct PhysicsWorld::Impl {
         std::vector<OwnedShape> shapes;
         b3MassData base_mass_data{};
         float mass_scale{1.0f};
+        bool mass_scale_valid{true};
         BodyType type{BodyType::Static};
         WorldExitPolicy world_exit_policy{WorldExitPolicy::KeepOutsideBounds};
         bool ejected{};
@@ -571,6 +572,7 @@ struct PhysicsWorld::Impl {
         slot.shapes.clear();
         slot.base_mass_data = {};
         slot.mass_scale = 1.0f;
+        slot.mass_scale_valid = true;
         slot.ejected = false;
         slot.exited_world = false;
         const BodyHandle handle{index, slot.generation};
@@ -628,6 +630,7 @@ struct PhysicsWorld::Impl {
         slot.shapes.clear();
         slot.base_mass_data = {};
         slot.mass_scale = 1.0f;
+        slot.mass_scale_valid = true;
         slot.type = BodyType::Static;
         slot.world_exit_policy = WorldExitPolicy::KeepOutsideBounds;
         slot.ejected = false;
@@ -737,6 +740,7 @@ struct PhysicsWorld::Impl {
         slot->shapes.clear();
         slot->base_mass_data = {};
         slot->mass_scale = 1.0f;
+        slot->mass_scale_valid = true;
         slot->state = SlotState::Free;
         slot->type = BodyType::Static;
         slot->world_exit_policy = WorldExitPolicy::KeepOutsideBounds;
@@ -917,6 +921,7 @@ struct PhysicsWorld::Impl {
         slot->native = native;
         slot->base_mass_data = b3Body_GetMassData(native);
         slot->mass_scale = 1.0f;
+        slot->mass_scale_valid = true;
         slot->type = desc.type;
         slot->world_exit_policy = desc.world_exit_policy;
         if (slot->state == SlotState::PendingCreate) {
@@ -1503,6 +1508,7 @@ struct PhysicsWorld::Impl {
     bool step_called{};
 #if defined(NINHO_ENABLE_TEST_FACADES)
     std::optional<std::size_t> fail_initial_commit_after_for_testing;
+    std::optional<std::size_t> fail_mass_scale_postcondition_after_for_testing;
 #endif
     double step_ms{};
 };
@@ -1621,9 +1627,9 @@ Status PhysicsWorld::apply_impulse(BodyHandle body, Vec3 impulse, Vec3 point, bo
     return {};
 }
 
-Status PhysicsWorld::set_body_mass_scale(BodyHandle body, float scale)
+Status PhysicsWorld::validate_body_mass_scale(BodyHandle body, float scale) const
 {
-    Impl::Slot* slot = impl_->matching_slot(body);
+    const Impl::Slot* slot = impl_->matching_slot(body);
     if (slot == nullptr || slot->state != Impl::SlotState::Live
         || B3_IS_NULL(slot->native) || !b3Body_IsValid(slot->native)) {
         return invalid_handle_status();
@@ -1634,35 +1640,41 @@ Status PhysicsWorld::set_body_mass_scale(BodyHandle body, float scale)
     if (!positive_finite(scale)) {
         return invalid_argument_status("mass scale must be finite and positive");
     }
-    if (slot->mass_scale == scale) {
-        return {};
+    if (!slot->mass_scale_valid) {
+        return {StatusCode::Box3DFault,
+            "body mass scale metadata is unavailable after a failed rollback"};
     }
-    if (slot->shapes.empty() || !positive_finite(slot->base_mass_data.mass)) {
+    const b3MassData& base = slot->base_mass_data;
+    if (slot->shapes.empty() || !positive_finite(base.mass)
+        || !std::isfinite(base.center.x) || !std::isfinite(base.center.y)
+        || !std::isfinite(base.center.z)) {
         return {StatusCode::Box3DFault, "dynamic body has no valid base mass data"};
     }
-
-    const auto scaled_value = [scale](float base, bool positive) -> std::optional<float> {
-        const double scaled = static_cast<double>(base) * static_cast<double>(scale);
+    const auto scaled_value = [scale](float value, bool positive)
+        -> std::optional<float> {
+        const double scaled =
+            static_cast<double>(value) * static_cast<double>(scale);
         if (!std::isfinite(scaled)
             || std::abs(scaled) > std::numeric_limits<float>::max()) {
             return std::nullopt;
         }
         const float narrowed = static_cast<float>(scaled);
-        if (!std::isfinite(narrowed) || (positive && narrowed <= 0.0f)) {
+        if (!std::isfinite(narrowed) || (positive && narrowed <= 0.0F)) {
             return std::nullopt;
         }
         return narrowed;
     };
-    const auto mass = scaled_value(slot->base_mass_data.mass, true);
-    const b3Matrix3 base_inertia = slot->base_mass_data.inertia;
-    const std::array base_inertia_values{
-        base_inertia.cx.x, base_inertia.cx.y, base_inertia.cx.z,
-        base_inertia.cy.x, base_inertia.cy.y, base_inertia.cy.z,
-        base_inertia.cz.x, base_inertia.cz.y, base_inertia.cz.z,
+    const std::array base_inertia{
+        base.inertia.cx.x, base.inertia.cx.y, base.inertia.cx.z,
+        base.inertia.cy.x, base.inertia.cy.y, base.inertia.cy.z,
+        base.inertia.cz.x, base.inertia.cz.y, base.inertia.cz.z,
     };
-    if (!mass || !std::ranges::all_of(base_inertia_values,
-            [&](float value) { return scaled_value(value, false).has_value(); })) {
-        return invalid_argument_status("mass scale exceeds the supported float range");
+    if (!scaled_value(base.mass, true)
+        || !std::ranges::all_of(base_inertia, [&](float value) {
+            return scaled_value(value, false).has_value();
+        })) {
+        return invalid_argument_status(
+            "mass scale exceeds the supported float range");
     }
     for (const Impl::Slot::OwnedShape& shape : slot->shapes) {
         if (B3_IS_NULL(shape.native) || !b3Shape_IsValid(shape.native)
@@ -1672,52 +1684,182 @@ Status PhysicsWorld::set_body_mass_scale(BodyHandle body, float scale)
                 "mass scale cannot be applied to every owned shape");
         }
     }
+    return {};
+}
 
-    const b3Vec3 linear_velocity = b3Body_GetLinearVelocity(slot->native);
-    const b3Vec3 angular_velocity = b3Body_GetAngularVelocity(slot->native);
-    const bool awake = b3Body_IsAwake(slot->native);
+Status PhysicsWorld::set_body_mass_scale(BodyHandle body, float scale)
+{
+    const Status validation = validate_body_mass_scale(body, scale);
+    if (!validation.ok()) {
+        return validation;
+    }
+    Impl::Slot* slot = impl_->matching_slot(body);
+    if (slot->mass_scale == scale) {
+        return {};
+    }
+    const b3MassData previous_mass_data = b3Body_GetMassData(slot->native);
+    const b3Vec3 previous_linear_velocity = b3Body_GetLinearVelocity(slot->native);
+    const b3Vec3 previous_angular_velocity = b3Body_GetAngularVelocity(slot->native);
+    const bool previous_awake = b3Body_IsAwake(slot->native);
     const float previous_scale = slot->mass_scale;
-    const auto apply_scale = [&](float selected_scale) {
-        for (const Impl::Slot::OwnedShape& shape : slot->shapes) {
-            const float density = static_cast<float>(
-                static_cast<double>(shape.base_density)
-                * static_cast<double>(selected_scale));
-            b3Shape_SetDensity(shape.native, density, false);
+    std::vector<float> previous_densities;
+    std::vector<float> target_densities;
+    previous_densities.reserve(slot->shapes.size());
+    target_densities.reserve(slot->shapes.size());
+    for (const Impl::Slot::OwnedShape& shape : slot->shapes) {
+        previous_densities.push_back(b3Shape_GetDensity(shape.native));
+        target_densities.push_back(static_cast<float>(
+            static_cast<double>(shape.base_density) * static_cast<double>(scale)));
+    }
+    for (std::size_t index = 0; index < slot->shapes.size(); ++index) {
+        b3Shape_SetDensity(slot->shapes[index].native, target_densities[index], false);
+    }
+    b3Body_ApplyMassFromShapes(slot->native);
+    b3Body_SetLinearVelocity(slot->native, previous_linear_velocity);
+    b3Body_SetAngularVelocity(slot->native, previous_angular_velocity);
+    b3Body_SetAwake(slot->native, previous_awake);
+#if defined(NINHO_ENABLE_TEST_FACADES)
+    if (impl_->fail_mass_scale_postcondition_after_for_testing) {
+        if (*impl_->fail_mass_scale_postcondition_after_for_testing == 0U) {
+            impl_->fail_mass_scale_postcondition_after_for_testing.reset();
+            b3MassData corrupted = b3Body_GetMassData(slot->native);
+            corrupted.center.x += 0.25F;
+            b3Body_SetMassData(slot->native, corrupted);
+        } else {
+            --*impl_->fail_mass_scale_postcondition_after_for_testing;
         }
-        b3Body_ApplyMassFromShapes(slot->native);
-        b3Body_SetLinearVelocity(slot->native, linear_velocity);
-        b3Body_SetAngularVelocity(slot->native, angular_velocity);
-        b3Body_SetAwake(slot->native, awake);
+    }
+#endif
+    const auto close_value = [](float actual, float expected, double tolerance) {
+        return std::isfinite(actual)
+            && std::abs(static_cast<double>(actual) - static_cast<double>(expected))
+                <= tolerance;
     };
-    apply_scale(scale);
-
+    const auto close_vector = [&](b3Vec3 actual, b3Vec3 expected, double tolerance) {
+        return close_value(actual.x, expected.x, tolerance)
+            && close_value(actual.y, expected.y, tolerance)
+            && close_value(actual.z, expected.z, tolerance);
+    };
+    const auto inertia_values = [](const b3Matrix3& inertia) {
+        return std::array{
+            inertia.cx.x, inertia.cx.y, inertia.cx.z,
+            inertia.cy.x, inertia.cy.y, inertia.cy.z,
+            inertia.cz.x, inertia.cz.y, inertia.cz.z,
+        };
+    };
     const b3MassData updated = b3Body_GetMassData(slot->native);
+    const auto updated_inertia = inertia_values(updated.inertia);
+    const auto base_inertia = inertia_values(slot->base_mass_data.inertia);
     const auto close_scaled = [scale](float actual, float base) {
         const double expected = static_cast<double>(base) * static_cast<double>(scale);
         const double tolerance = std::max(1.0e-5, std::abs(expected) * 5.0e-5);
         return std::isfinite(actual)
             && std::abs(static_cast<double>(actual) - expected) <= tolerance;
     };
-    const std::array updated_inertia_values{
-        updated.inertia.cx.x, updated.inertia.cx.y, updated.inertia.cx.z,
-        updated.inertia.cy.x, updated.inertia.cy.y, updated.inertia.cy.z,
-        updated.inertia.cz.x, updated.inertia.cz.y, updated.inertia.cz.z,
-    };
+    bool densities_match = true;
+    for (std::size_t index = 0; index < slot->shapes.size(); ++index) {
+        densities_match = densities_match
+            && b3Shape_GetDensity(slot->shapes[index].native) == target_densities[index];
+    }
     const bool valid_result = positive_finite(updated.mass)
         && close_scaled(updated.mass, slot->base_mass_data.mass)
-        && std::ranges::equal(updated_inertia_values, base_inertia_values,
-            close_scaled)
-        && std::isfinite(updated.center.x) && std::isfinite(updated.center.y)
-        && std::isfinite(updated.center.z);
+        && std::ranges::equal(updated_inertia, base_inertia, close_scaled)
+        && close_vector(updated.center, previous_mass_data.center, 1.0e-5)
+        && close_vector(updated.center, slot->base_mass_data.center, 1.0e-5)
+        && close_vector(b3Body_GetLinearVelocity(slot->native),
+            previous_linear_velocity, 1.0e-5)
+        && close_vector(b3Body_GetAngularVelocity(slot->native),
+            previous_angular_velocity, 1.0e-5)
+        && b3Body_IsAwake(slot->native) == previous_awake && densities_match;
     if (!valid_result) {
-        apply_scale(previous_scale);
+        for (std::size_t index = 0; index < slot->shapes.size(); ++index) {
+            b3Shape_SetDensity(slot->shapes[index].native,
+                previous_densities[index], false);
+        }
+        b3Body_SetMassData(slot->native, previous_mass_data);
+        b3Body_SetLinearVelocity(slot->native, previous_linear_velocity);
+        b3Body_SetAngularVelocity(slot->native, previous_angular_velocity);
+        b3Body_SetAwake(slot->native, previous_awake);
+        const b3MassData rolled_back = b3Body_GetMassData(slot->native);
+        const auto rolled_back_inertia = inertia_values(rolled_back.inertia);
+        const auto previous_inertia = inertia_values(previous_mass_data.inertia);
+        bool rollback_densities_match = true;
+        for (std::size_t index = 0; index < slot->shapes.size(); ++index) {
+            rollback_densities_match = rollback_densities_match
+                && b3Shape_GetDensity(slot->shapes[index].native)
+                    == previous_densities[index];
+        }
+        const bool rollback_valid =
+            close_value(rolled_back.mass, previous_mass_data.mass, 1.0e-6)
+            && std::ranges::equal(rolled_back_inertia, previous_inertia,
+                [&](float actual, float expected) {
+                    return close_value(actual, expected, 1.0e-6);
+                })
+            && close_vector(rolled_back.center, previous_mass_data.center, 1.0e-6)
+            && close_vector(b3Body_GetLinearVelocity(slot->native),
+                previous_linear_velocity, 1.0e-6)
+            && close_vector(b3Body_GetAngularVelocity(slot->native),
+                previous_angular_velocity, 1.0e-6)
+            && b3Body_IsAwake(slot->native) == previous_awake
+            && rollback_densities_match && slot->mass_scale == previous_scale;
+        if (!rollback_valid) {
+            slot->mass_scale_valid = false;
+            impl_->rebuild_snapshots();
+            return {StatusCode::Box3DFault,
+                "FATAL: Box3D body mass rollback validation failed"};
+        }
         impl_->rebuild_snapshots();
         return {StatusCode::Box3DFault,
             "Box3D produced invalid mass properties while scaling body mass"};
     }
-
     slot->mass_scale = scale;
+    slot->mass_scale_valid = true;
     impl_->rebuild_snapshots();
+    return {};
+}
+
+Status PhysicsWorld::set_body_mass_scales(
+    std::span<const BodyHandle> bodies, float scale)
+{
+    if (bodies.empty()) {
+        return invalid_argument_status("mass scale batch requires at least one body");
+    }
+    std::vector<float> previous_scales;
+    previous_scales.reserve(bodies.size());
+    for (std::size_t index = 0; index < bodies.size(); ++index) {
+        const std::span<const BodyHandle> previous_bodies = bodies.first(index);
+        if (std::ranges::find(previous_bodies, bodies[index])
+            != previous_bodies.end()) {
+            return invalid_argument_status(
+                "mass scale batch contains a duplicate body handle");
+        }
+        const Status validation = validate_body_mass_scale(bodies[index], scale);
+        if (!validation.ok()) {
+            return validation;
+        }
+        previous_scales.push_back(impl_->matching_slot(bodies[index])->mass_scale);
+    }
+    for (std::size_t index = 0; index < bodies.size(); ++index) {
+        const Status status = set_body_mass_scale(bodies[index], scale);
+        if (status.ok()) {
+            continue;
+        }
+        bool rollback_valid = true;
+        for (std::size_t rollback = index; rollback > 0U; --rollback) {
+            const std::size_t previous = rollback - 1U;
+            const Status rollback_status = set_body_mass_scale(
+                bodies[previous], previous_scales[previous]);
+            const Impl::Slot* slot = impl_->matching_slot(bodies[previous]);
+            rollback_valid = rollback_valid && rollback_status.ok()
+                && slot != nullptr && slot->mass_scale_valid
+                && slot->mass_scale == previous_scales[previous];
+        }
+        if (!rollback_valid) {
+            return {StatusCode::Box3DFault,
+                "FATAL: mass scale batch rollback validation failed"};
+        }
+        return status;
+    }
     return {};
 }
 
@@ -2070,6 +2212,7 @@ float detail::PhysicsWorldTestFacade::mass_scale(
 {
     const PhysicsWorld::Impl::Slot* slot = world.impl_->matching_slot(handle);
     return slot != nullptr && slot->state == PhysicsWorld::Impl::SlotState::Live
+            && slot->mass_scale_valid
         ? slot->mass_scale : 0.0f;
 }
 
@@ -2081,6 +2224,13 @@ void detail::PhysicsWorldTestFacade::set_base_density(
         && shape_index < slot->shapes.size()) {
         slot->shapes[shape_index].base_density = density;
     }
+}
+
+void detail::PhysicsWorldTestFacade::fail_mass_scale_postcondition_after(
+    PhysicsWorld& world, std::size_t successful_updates)
+{
+    world.impl_->fail_mass_scale_postcondition_after_for_testing =
+        successful_updates;
 }
 
 void detail::PhysicsWorldTestFacade::fail_initial_commit_after(

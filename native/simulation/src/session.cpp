@@ -45,6 +45,13 @@ SessionStatus SimulationSession::tick()
         return *impl_->latched_fault;
     }
     try {
+        const bool had_shot_before_commands = impl_->shot.has_value();
+        const bool activation_consumed_before_commands =
+            had_shot_before_commands && impl_->shot->activation_consumed;
+        const std::optional<AbilityRuntime> runtime_before_commands =
+            had_shot_before_commands
+            ? std::optional<AbilityRuntime>{impl_->shot->runtime}
+            : std::nullopt;
         impl_->domain_events.clear();
         impl_->session_state.tick = TickIndex{impl_->session_state.tick.value() + 1U};
         impl_->apply_pending_fractures_before_step();
@@ -58,6 +65,17 @@ SessionStatus SimulationSession::tick()
         impl_->update_fsm_before_step();
         const SessionStatus ability_status = impl_->apply_ability_before_step();
         if (!ability_status.ok()) {
+            if (had_shot_before_commands && impl_->shot
+                && runtime_before_commands
+                && !activation_consumed_before_commands
+                && impl_->shot->activation_consumed) {
+                impl_->shot->activation_consumed = false;
+                impl_->shot->runtime = *runtime_before_commands;
+                std::erase_if(impl_->domain_events, [](const DomainEvent& event) {
+                    return event.kind == DomainEventKind::AbilityStarted
+                        || event.kind == DomainEventKind::MassChanged;
+                });
+            }
             impl_->session_state.phase = SessionPhase::Faulted;
             impl_->session_state.outcome = Outcome::None;
             impl_->latched_fault = ability_status;
@@ -184,8 +202,10 @@ AbilityReadiness SimulationSession::ability_readiness() const noexcept
     if (ability_runtime_active(impl_->shot->runtime)) {
         return AbilityReadiness::Active;
     }
+    const bool all_projectiles_finished = std::ranges::all_of(
+        impl_->shot->projectiles(), &ProjectileState::finished);
     if (impl_->shot->activation_consumed
-        || impl_->shot->primary_projectile()->finished
+        || all_projectiles_finished
         || impl_->session_state.phase != SessionPhase::FlightAbility) {
         return AbilityReadiness::Spent;
     }
@@ -328,6 +348,27 @@ bool detail::SessionTestFacade::append_projectile_body_for_testing(
     static_cast<void>(session.impl_->physics.destroy_body(record->physics_handle));
     session.impl_->body_records.erase(record);
     return false;
+}
+
+ninho::physics::PhysicsWorld& detail::SessionTestFacade::physics_world(
+    SimulationSession& session)
+{
+    return session.impl_->physics;
+}
+
+std::optional<ninho::physics::BodyHandle>
+detail::SessionTestFacade::projectile_handle(
+    const SimulationSession& session, EntityId entity)
+{
+    if (!session.impl_->shot) {
+        return std::nullopt;
+    }
+    const auto found = std::ranges::find(
+        session.impl_->shot->projectiles(), entity,
+        &ProjectileState::entity_id);
+    return found == session.impl_->shot->projectiles().end()
+        ? std::nullopt
+        : std::optional{found->physics_handle};
 }
 
 std::uint32_t detail::SessionTestFacade::projectile_age(

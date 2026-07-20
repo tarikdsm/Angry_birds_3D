@@ -50,6 +50,46 @@ AbilityArchetype mass_boost_ability()
     return result;
 }
 
+struct InvalidMassBoostDefinition {
+    std::uint32_t duration_ticks;
+    double mass_multiplier;
+    ContentErrorCode expected_code;
+    std::string_view expected_field;
+};
+
+ArchetypeCatalog archetypes();
+
+std::vector<InvalidMassBoostDefinition> invalid_mass_boost_definitions()
+{
+    return {
+        {ability_duration_ticks, 0.0, ContentErrorCode::OutOfRange,
+            "mass_multiplier"},
+        {ability_duration_ticks, 0.5, ContentErrorCode::OutOfRange,
+            "mass_multiplier"},
+        {ability_duration_ticks, 1.0, ContentErrorCode::OutOfRange,
+            "mass_multiplier"},
+        {ability_duration_ticks, 21.0, ContentErrorCode::OutOfRange,
+            "mass_multiplier"},
+        {ability_duration_ticks, std::numeric_limits<double>::quiet_NaN(),
+            ContentErrorCode::InvalidNumber, "mass_multiplier"},
+        {ability_duration_ticks, std::numeric_limits<double>::infinity(),
+            ContentErrorCode::InvalidNumber, "mass_multiplier"},
+        {0U, mass_multiplier, ContentErrorCode::OutOfRange,
+            "duration_ticks"},
+        {3601U, mass_multiplier, ContentErrorCode::OutOfRange,
+            "duration_ticks"},
+    };
+}
+
+ArchetypeCatalog archetypes_with_mass_boost(
+    const InvalidMassBoostDefinition& definition)
+{
+    ArchetypeCatalog result = archetypes();
+    result.abilities.front().payload = MassBoostAbilityDefinition{
+        definition.duration_ticks, definition.mass_multiplier};
+    return result;
+}
+
 MaterialCatalog materials()
 {
     MaterialCatalog result;
@@ -155,6 +195,111 @@ void advance_to_activation(SimulationSession& session)
     NINHO_SIM_REQUIRE(session.tick().ok());
 }
 
+void advance_until_mass_boost_is_armed(SimulationSession& session)
+{
+    const TickIndex launched =
+        ninho::simulation::detail::SessionTestFacade::projectile_launch_tick(session);
+    while (session.state().tick < TickIndex{launched.value() + 8U}) {
+        NINHO_SIM_REQUIRE(session.tick().ok());
+    }
+}
+
+constexpr std::array group_entity_ids{
+    EntityId{0x80000000U},
+    EntityId{0x80000001U},
+    EntityId{0x80000002U},
+};
+
+std::unique_ptr<SimulationSession> create_three_projectile_session()
+{
+    auto session = create_session();
+    launch(*session);
+    NINHO_SIM_REQUIRE(
+        ninho::simulation::detail::SessionTestFacade::append_projectile_body_for_testing(
+            *session, group_entity_ids[1], {0.0F, 22.0F, 1.0F},
+            {5.0F, 0.0F, 0.0F}));
+    NINHO_SIM_REQUIRE(
+        ninho::simulation::detail::SessionTestFacade::append_projectile_body_for_testing(
+            *session, group_entity_ids[2], {0.0F, 22.0F, -1.0F},
+            {5.0F, 0.0F, 0.0F}));
+    advance_until_mass_boost_is_armed(*session);
+    return session;
+}
+
+struct NativeMassCheckpoint {
+    BodyHandle handle{};
+    BodyState state{};
+    std::array<float, 9> inertia{};
+    Vec3 center{};
+    std::vector<std::uint64_t> shape_keys;
+    std::vector<float> densities;
+    float scale{};
+};
+
+NativeMassCheckpoint native_mass_checkpoint(
+    const PhysicsWorld& physics, BodyHandle handle)
+{
+    const auto state = physics.state(handle);
+    NINHO_SIM_REQUIRE(state.has_value());
+    return {
+        .handle = handle,
+        .state = *state,
+        .inertia = ninho::physics::detail::PhysicsWorldTestFacade::local_inertia(
+            physics, handle),
+        .center = ninho::physics::detail::PhysicsWorldTestFacade::local_center(
+            physics, handle),
+        .shape_keys =
+            ninho::physics::detail::PhysicsWorldTestFacade::shape_keys(
+                physics, handle),
+        .densities =
+            ninho::physics::detail::PhysicsWorldTestFacade::shape_densities(
+                physics, handle),
+        .scale = ninho::physics::detail::PhysicsWorldTestFacade::mass_scale(
+            physics, handle),
+    };
+}
+
+void require_native_mass_checkpoint(const PhysicsWorld& physics,
+    const NativeMassCheckpoint& checkpoint, bool metadata_valid)
+{
+    const auto state = physics.state(checkpoint.handle);
+    NINHO_SIM_REQUIRE(state.has_value());
+    NINHO_SIM_REQUIRE(state->handle == checkpoint.state.handle);
+    NINHO_SIM_REQUIRE(state->transform == checkpoint.state.transform);
+    NINHO_SIM_REQUIRE(
+        state->linear_velocity == checkpoint.state.linear_velocity);
+    NINHO_SIM_REQUIRE(
+        state->angular_velocity == checkpoint.state.angular_velocity);
+    NINHO_SIM_REQUIRE(state->mass == checkpoint.state.mass);
+    NINHO_SIM_REQUIRE(state->awake == checkpoint.state.awake);
+    NINHO_SIM_REQUIRE(state->ejected == checkpoint.state.ejected);
+    NINHO_SIM_REQUIRE(state->exited_world == checkpoint.state.exited_world);
+    NINHO_SIM_REQUIRE(
+        ninho::physics::detail::PhysicsWorldTestFacade::local_inertia(
+            physics, checkpoint.handle) == checkpoint.inertia);
+    NINHO_SIM_REQUIRE(
+        ninho::physics::detail::PhysicsWorldTestFacade::local_center(
+            physics, checkpoint.handle) == checkpoint.center);
+    NINHO_SIM_REQUIRE(
+        ninho::physics::detail::PhysicsWorldTestFacade::shape_keys(
+            physics, checkpoint.handle) == checkpoint.shape_keys);
+    NINHO_SIM_REQUIRE(
+        ninho::physics::detail::PhysicsWorldTestFacade::shape_densities(
+            physics, checkpoint.handle) == checkpoint.densities);
+    NINHO_SIM_REQUIRE(
+        ninho::physics::detail::PhysicsWorldTestFacade::mass_scale_metadata_valid(
+            physics, checkpoint.handle) == metadata_valid);
+    if (metadata_valid) {
+        NINHO_SIM_REQUIRE(
+            ninho::physics::detail::PhysicsWorldTestFacade::mass_scale(
+                physics, checkpoint.handle) == checkpoint.scale);
+    } else {
+        NINHO_SIM_REQUIRE(
+            ninho::physics::detail::PhysicsWorldTestFacade::mass_scale(
+                physics, checkpoint.handle) == 0.0F);
+    }
+}
+
 EntitySnapshot projectile_snapshot(const SimulationSession& session)
 {
     const auto found = std::ranges::find_if(session.snapshots(), [](const auto& value) {
@@ -194,6 +339,69 @@ NINHO_SIM_TEST("mass boost ability parser derives nine arm ticks without changin
         ability_duration_ticks, mass_multiplier};
     NINHO_SIM_REQUIRE(std::get<MassBoostAbilityDefinition>(ability.payload)
         == expected);
+}
+
+NINHO_SIM_TEST("mass boost ability parser rejects a no op multiplier")
+{
+    ArchetypeCatalog no_op = archetypes();
+    std::get<MassBoostAbilityDefinition>(
+        no_op.abilities.front().payload).mass_multiplier = 1.0;
+
+    const auto parsed = parse_archetype_catalog_v2(to_canonical_json(no_op));
+
+    NINHO_SIM_REQUIRE(!parsed.ok());
+    NINHO_SIM_REQUIRE(parsed.error.code == ContentErrorCode::OutOfRange);
+    NINHO_SIM_REQUIRE(parsed.error.pointer
+        == "/abilities/0/payload/mass_multiplier");
+}
+
+NINHO_SIM_TEST("mass boost ability typed create rejects invalid payload semantics")
+{
+    NINHO_SIM_REQUIRE(
+        SimulationSession::create(materials(), archetypes(), level()).ok());
+
+    for (const InvalidMassBoostDefinition& definition
+        : invalid_mass_boost_definitions()) {
+        const auto created = SimulationSession::create(
+            materials(), archetypes_with_mass_boost(definition), level());
+        NINHO_SIM_REQUIRE(!created.ok());
+        NINHO_SIM_REQUIRE(created.error.code == definition.expected_code);
+        NINHO_SIM_REQUIRE(created.error.pointer
+            == "/abilities/0/payload/" + std::string{definition.expected_field});
+    }
+}
+
+NINHO_SIM_TEST("mass boost ability typed reconfigure rejects invalid payload atomically")
+{
+    auto session = create_session();
+    launch(*session);
+    const auto canonical_before = session->canonical_state_v3();
+    const SessionState state_before = session->state();
+    const auto shot_before = session->shot_state();
+    const std::vector<EntitySnapshot> snapshots_before{
+        session->snapshots().begin(), session->snapshots().end()};
+    const std::size_t birds_before = session->birds_remaining();
+
+    for (const InvalidMassBoostDefinition& definition
+        : invalid_mass_boost_definitions()) {
+        const SessionStatus status = session->reconfigure(
+            materials(), archetypes_with_mass_boost(definition), level());
+        NINHO_SIM_REQUIRE(!status.ok());
+        NINHO_SIM_REQUIRE(status.error.code == definition.expected_code);
+        NINHO_SIM_REQUIRE(status.error.pointer
+            == "/abilities/0/payload/" + std::string{definition.expected_field});
+        NINHO_SIM_REQUIRE(session->canonical_state_v3() == canonical_before);
+        NINHO_SIM_REQUIRE(session->state().tick == state_before.tick);
+        NINHO_SIM_REQUIRE(session->state().phase == state_before.phase);
+        NINHO_SIM_REQUIRE(session->state().outcome == state_before.outcome);
+        NINHO_SIM_REQUIRE(session->state().aim == state_before.aim);
+        NINHO_SIM_REQUIRE(session->state().launcher == state_before.launcher);
+        NINHO_SIM_REQUIRE(session->state().last_impact_m == state_before.last_impact_m);
+        NINHO_SIM_REQUIRE(session->shot_state() == shot_before);
+        NINHO_SIM_REQUIRE(std::ranges::equal(
+            session->snapshots(), snapshots_before));
+        NINHO_SIM_REQUIRE(session->birds_remaining() == birds_before);
+    }
 }
 
 NINHO_SIM_TEST("mass boost ability physics scales mass and inertia without replacing shapes")
@@ -380,6 +588,99 @@ NINHO_SIM_TEST("mass boost ability physics prevalidates every compound child bef
         1.0, 0.0);
 }
 
+NINHO_SIM_TEST("mass boost ability physics batch prevalidates every body before writing")
+{
+    WorldConfig config;
+    config.gravity = UniformGravityConfig{{}};
+    config.bounds = NoWorldBounds{};
+    PhysicsWorld world{config};
+    const auto first = world.create_body(
+        BodyDesc::dynamic_sphere(0.25F, {}, 11.0F));
+    const auto fixed = world.create_body(BodyDesc::static_sphere(0.25F, {}));
+    const auto last = world.create_body(
+        BodyDesc::dynamic_sphere(0.25F, {}, 17.0F));
+    NINHO_SIM_REQUIRE(first && fixed && last);
+    NINHO_SIM_REQUIRE(world.commit_pending_initial_state().ok());
+    const auto first_before = world.state(first.value);
+    const auto last_before = world.state(last.value);
+    const auto first_density_before =
+        ninho::physics::detail::PhysicsWorldTestFacade::shape_densities(
+            world, first.value);
+    const std::array handles{first.value, fixed.value, last.value};
+
+    const Status status = world.set_body_mass_scales(handles, 2.25F);
+
+    NINHO_SIM_REQUIRE(status.code == StatusCode::InvalidArgument);
+    require_near(world.state(first.value)->mass, first_before->mass, 1.0e-6);
+    require_near(world.state(last.value)->mass, last_before->mass, 1.0e-6);
+    NINHO_SIM_REQUIRE(
+        ninho::physics::detail::PhysicsWorldTestFacade::shape_densities(
+            world, first.value) == first_density_before);
+    require_near(
+        ninho::physics::detail::PhysicsWorldTestFacade::mass_scale(
+            world, first.value),
+        1.0, 0.0);
+}
+
+NINHO_SIM_TEST("mass boost ability physics restores native state after post write failure")
+{
+    WorldConfig config;
+    config.gravity = UniformGravityConfig{{}};
+    config.bounds = NoWorldBounds{};
+    PhysicsWorld world{config};
+    BodyDesc body = BodyDesc::dynamic_sphere(
+        0.2F, {{1.0F, 2.0F, 3.0F}, {}}, 13.0F);
+    body.linear_velocity = {3.0F, -4.0F, 5.0F};
+    body.angular_velocity = {-0.5F, 0.75F, -1.0F};
+    body.shapes.push_back({
+        .geometry = CompoundShape{{
+            BoxShape{{0.15F, 0.25F, 0.35F}, {{0.7F, 0.1F, 0.0F}, {}}},
+            CapsuleShape{0.12F, 0.3F, {{-0.2F, 0.45F, 0.1F}, {}}},
+        }},
+        .density = 29.0F,
+    });
+    const auto created = world.create_body(body);
+    NINHO_SIM_REQUIRE(created);
+    NINHO_SIM_REQUIRE(world.commit_pending_initial_state().ok());
+    const BodyHandle handle = created.value;
+    NINHO_SIM_REQUIRE(world.set_body_mass_scale(handle, 1.5F).ok());
+    const auto before = world.state(handle);
+    const auto densities_before =
+        ninho::physics::detail::PhysicsWorldTestFacade::shape_densities(
+            world, handle);
+    const auto inertia_before =
+        ninho::physics::detail::PhysicsWorldTestFacade::local_inertia(
+            world, handle);
+    const Vec3 center_before =
+        ninho::physics::detail::PhysicsWorldTestFacade::local_center(world, handle);
+    NINHO_SIM_REQUIRE(before.has_value());
+    NINHO_SIM_REQUIRE(length(center_before) > 0.01F);
+    ninho::physics::detail::PhysicsWorldTestFacade::
+        fail_mass_scale_postcondition_after(world, 0U);
+
+    const Status status = world.set_body_mass_scale(handle, 2.25F);
+
+    NINHO_SIM_REQUIRE(status.code == StatusCode::Box3DFault);
+    const auto after = world.state(handle);
+    NINHO_SIM_REQUIRE(after.has_value());
+    require_near(after->mass, before->mass, 1.0e-6);
+    require_vector_near(after->linear_velocity, before->linear_velocity, 1.0e-6);
+    require_vector_near(after->angular_velocity, before->angular_velocity, 1.0e-6);
+    NINHO_SIM_REQUIRE(after->awake == before->awake);
+    NINHO_SIM_REQUIRE(
+        ninho::physics::detail::PhysicsWorldTestFacade::shape_densities(
+            world, handle) == densities_before);
+    NINHO_SIM_REQUIRE(
+        ninho::physics::detail::PhysicsWorldTestFacade::local_inertia(
+            world, handle) == inertia_before);
+    require_vector_near(
+        ninho::physics::detail::PhysicsWorldTestFacade::local_center(world, handle),
+        center_before, 1.0e-6);
+    require_near(
+        ninho::physics::detail::PhysicsWorldTestFacade::mass_scale(world, handle),
+        1.5, 0.0);
+}
+
 NINHO_SIM_TEST("mass boost ability physics preserves sleep and resets reused body slots")
 {
     WorldConfig config;
@@ -539,6 +840,148 @@ NINHO_SIM_TEST("mass boost ability rejects ticks zero through eight and activate
         == CommandRejectionReason::NotArmed);
     NINHO_SIM_REQUIRE(
         ninho::simulation::detail::SessionTestFacade::ability_active(*active));
+}
+
+NINHO_SIM_TEST("mass boost ability atomically boosts every relevant projectile in entity order")
+{
+    auto session = create_three_projectile_session();
+    NINHO_SIM_REQUIRE(session->enqueue(ActivateAbilityCommand{}).ok());
+    NINHO_SIM_REQUIRE(session->tick().ok());
+    std::vector<EntityId> affected;
+    for (const DomainEvent& event : session->events()) {
+        if (event.kind == DomainEventKind::MassChanged) {
+            affected.push_back(event.affected_entity_id);
+        }
+    }
+    NINHO_SIM_REQUIRE(affected == std::vector<EntityId>(
+        group_entity_ids.begin(), group_entity_ids.end()));
+    NINHO_SIM_REQUIRE(std::ranges::count(
+        session->events(), DomainEventKind::AbilityStarted,
+        &DomainEvent::kind) == 1);
+    const auto& physics =
+        ninho::simulation::detail::SessionTestFacade::physics_world(*session);
+    for (const EntityId entity : group_entity_ids) {
+        const auto handle =
+            ninho::simulation::detail::SessionTestFacade::projectile_handle(
+                *session, entity);
+        NINHO_SIM_REQUIRE(handle.has_value());
+        require_near(physics.state(*handle)->mass,
+            6.0 * mass_multiplier, 1.0e-4);
+    }
+}
+
+NINHO_SIM_TEST("mass boost ability activates surviving siblings after primary finishes")
+{
+    auto session = create_three_projectile_session();
+    ninho::simulation::detail::SessionTestFacade::finish_projectile(
+        *session, group_entity_ids.front());
+    NINHO_SIM_REQUIRE(session->ability_readiness() == AbilityReadiness::Arming);
+
+    NINHO_SIM_REQUIRE(session->enqueue(ActivateAbilityCommand{}).ok());
+    NINHO_SIM_REQUIRE(session->tick().ok());
+
+    std::vector<EntityId> affected;
+    for (const DomainEvent& event : session->events()) {
+        if (event.kind == DomainEventKind::MassChanged) {
+            affected.push_back(event.affected_entity_id);
+        }
+    }
+    NINHO_SIM_REQUIRE((affected == std::vector{
+        group_entity_ids[1], group_entity_ids[2]}));
+    const auto& physics =
+        ninho::simulation::detail::SessionTestFacade::physics_world(*session);
+    for (const EntityId entity : std::span{group_entity_ids}.subspan(1U)) {
+        const auto handle =
+            ninho::simulation::detail::SessionTestFacade::projectile_handle(
+                *session, entity);
+        NINHO_SIM_REQUIRE(handle.has_value());
+        require_near(physics.state(*handle)->mass,
+            6.0 * mass_multiplier, 1.0e-4);
+    }
+}
+
+NINHO_SIM_TEST("mass boost ability rolls back group failure without consuming activation")
+{
+    for (const std::size_t failure_after : {1U, 2U}) {
+        auto session = create_three_projectile_session();
+        auto& physics =
+            ninho::simulation::detail::SessionTestFacade::physics_world(*session);
+        std::vector<NativeMassCheckpoint> checkpoints;
+        checkpoints.reserve(group_entity_ids.size());
+        for (const EntityId entity : group_entity_ids) {
+            const auto handle =
+                ninho::simulation::detail::SessionTestFacade::projectile_handle(
+                    *session, entity);
+            NINHO_SIM_REQUIRE(handle.has_value());
+            checkpoints.push_back(native_mass_checkpoint(physics, *handle));
+        }
+        ninho::physics::detail::PhysicsWorldTestFacade::
+            fail_mass_scale_postcondition_after(physics, failure_after);
+        NINHO_SIM_REQUIRE(session->enqueue(ActivateAbilityCommand{}).ok());
+        const SessionStatus status = session->tick();
+
+        NINHO_SIM_REQUIRE(!status.ok());
+        NINHO_SIM_REQUIRE(session->state().phase == SessionPhase::Faulted);
+        NINHO_SIM_REQUIRE(
+            !ninho::simulation::detail::SessionTestFacade::ability_requested(
+                *session));
+        NINHO_SIM_REQUIRE(
+            !ninho::simulation::detail::SessionTestFacade::ability_active(
+                *session));
+        NINHO_SIM_REQUIRE(std::ranges::none_of(
+            session->events(), [](const DomainEvent& event) {
+                return event.kind == DomainEventKind::AbilityStarted
+                    || event.kind == DomainEventKind::MassChanged;
+            }));
+        for (const NativeMassCheckpoint& checkpoint : checkpoints) {
+            require_native_mass_checkpoint(physics, checkpoint, true);
+        }
+    }
+}
+
+NINHO_SIM_TEST("mass boost ability quarantines group after batch rollback validation failure")
+{
+    auto session = create_three_projectile_session();
+    auto& physics =
+        ninho::simulation::detail::SessionTestFacade::physics_world(*session);
+    std::vector<NativeMassCheckpoint> checkpoints;
+    checkpoints.reserve(group_entity_ids.size());
+    for (const EntityId entity : group_entity_ids) {
+        const auto handle =
+            ninho::simulation::detail::SessionTestFacade::projectile_handle(
+                *session, entity);
+        NINHO_SIM_REQUIRE(handle.has_value());
+        checkpoints.push_back(native_mass_checkpoint(physics, *handle));
+    }
+    ninho::physics::detail::PhysicsWorldTestFacade::
+        fail_mass_scale_postcondition_after(physics, 1U);
+    ninho::physics::detail::PhysicsWorldTestFacade::
+        fail_mass_scale_batch_rollback_validation(physics, 1U);
+
+    NINHO_SIM_REQUIRE(session->enqueue(ActivateAbilityCommand{}).ok());
+    const SessionStatus status = session->tick();
+
+    NINHO_SIM_REQUIRE(!status.ok());
+    NINHO_SIM_REQUIRE(status.error.message.starts_with("FATAL:"));
+    NINHO_SIM_REQUIRE(session->state().phase == SessionPhase::Faulted);
+    NINHO_SIM_REQUIRE(
+        !ninho::simulation::detail::SessionTestFacade::ability_requested(
+            *session));
+    NINHO_SIM_REQUIRE(
+        !ninho::simulation::detail::SessionTestFacade::ability_active(*session));
+    NINHO_SIM_REQUIRE(std::ranges::none_of(
+        session->events(), [](const DomainEvent& event) {
+            return event.kind == DomainEventKind::AbilityStarted
+                || event.kind == DomainEventKind::MassChanged;
+        }));
+    for (const NativeMassCheckpoint& checkpoint : checkpoints) {
+        require_native_mass_checkpoint(physics, checkpoint, false);
+        const Status rejected =
+            physics.set_body_mass_scale(checkpoint.handle, 1.5F);
+        NINHO_SIM_REQUIRE(rejected.code == StatusCode::Box3DFault);
+        NINHO_SIM_REQUIRE(rejected.message.starts_with("FATAL:"));
+        require_native_mass_checkpoint(physics, checkpoint, false);
+    }
 }
 
 NINHO_SIM_TEST("mass boost ability remains until removal and emits lifecycle events once")

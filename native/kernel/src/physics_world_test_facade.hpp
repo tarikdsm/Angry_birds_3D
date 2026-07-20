@@ -35,6 +35,8 @@ public:
     [[nodiscard]] static float mass_scale(const PhysicsWorld&, BodyHandle);
     static void set_base_density(
         PhysicsWorld&, BodyHandle, std::size_t shape_index, float density);
+    static void fail_mass_scale_postcondition_after(
+        PhysicsWorld&, std::size_t successful_updates);
     static void fail_initial_commit_after(PhysicsWorld&, std::size_t applied_command_count);
 };
 

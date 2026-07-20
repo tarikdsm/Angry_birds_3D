@@ -2,6 +2,7 @@
 #include "session_internal.hpp"
 
 #include <algorithm>
+#include <cmath>
 #include <cstdint>
 #include <string>
 #include <type_traits>
@@ -208,6 +209,25 @@ std::optional<ContentError> AbilitySystem::validate_definition(
     if (!payload_matches(ability.kind_v2, ability.payload)) {
         return ContentError{ContentErrorCode::InvalidInvariant,
             std::string{pointer} + "/payload", "ability payload does not match its kind"};
+    }
+    if (ability.kind_v2 == AbilityKind::MassBoost) {
+        const auto& definition =
+            std::get<MassBoostAbilityDefinition>(ability.payload);
+        const std::string payload_pointer = std::string{pointer} + "/payload";
+        if (definition.duration_ticks < 1U
+            || definition.duration_ticks > 3600U) {
+            return ContentError{ContentErrorCode::OutOfRange,
+                payload_pointer + "/duration_ticks", "integer out of range"};
+        }
+        if (!std::isfinite(definition.mass_multiplier)) {
+            return ContentError{ContentErrorCode::InvalidNumber,
+                payload_pointer + "/mass_multiplier", "number must be finite"};
+        }
+        if (definition.mass_multiplier < 1.0
+            || definition.mass_multiplier > 20.0) {
+            return ContentError{ContentErrorCode::OutOfRange,
+                payload_pointer + "/mass_multiplier", "number out of range"};
+        }
     }
     return std::nullopt;
 }
