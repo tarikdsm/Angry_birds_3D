@@ -27,6 +27,17 @@ static_assert(Vec3{2, 4, 6} / 2.0f == Vec3{1, 2, 3});
 static_assert(dot(Vec3{1, 2, 3}, Vec3{4, 5, 6}) == 32.0f);
 static_assert(cross(Vec3{1, 0, 0}, Vec3{0, 1, 0}) == Vec3{0, 0, 1});
 
+NINHO_TEST("radial gravity adapts an explicit legacy configuration")
+{
+    const LegacyRadialGravityConfig legacy{
+        .center = {1.0f, -2.0f, 3.0f},
+        .radius = 10.0f,
+        .surface_acceleration = 9.0f,
+    };
+    const RadialGravity gravity{legacy};
+    NINHO_REQUIRE((gravity.acceleration({11.0f, -2.0f, 3.0f}) == Vec3{-9.0f, 0.0f, 0.0f}));
+}
+
 NINHO_TEST("radial gravity points toward center on every axis")
 {
     const auto near_failure = [](double actual, double expected, double epsilon) {

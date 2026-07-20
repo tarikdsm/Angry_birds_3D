@@ -61,9 +61,9 @@ NINHO_TEST("gravity field modes preserve their typed configuration")
         == radial_config.reference_acceleration_m_s2);
 }
 
-NINHO_TEST("radial gravity keeps its legacy configuration member names")
+NINHO_TEST("radial gravity adapts its legacy configuration type")
 {
-    const RadialGravityConfig config{
+    const LegacyRadialGravityConfig config{
         .center = {1.0f, -2.0f, 3.0f},
         .radius = 10.0f,
         .surface_acceleration = 9.0f,

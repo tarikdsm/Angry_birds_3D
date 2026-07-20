@@ -8,10 +8,25 @@
 
 namespace ninho::physics {
 
+struct LegacyRadialGravityConfig {
+    Vec3 center{};
+    float radius{10.0f};
+    float surface_acceleration{9.0f};
+};
+
 class RadialGravity {
 public:
     explicit RadialGravity(RadialGravityConfig config)
         : gravity_(GravityFieldConfig{config})
+    {
+    }
+
+    explicit RadialGravity(LegacyRadialGravityConfig config)
+        : RadialGravity(RadialGravityConfig{
+            .center_m = config.center,
+            .reference_radius_m = config.radius,
+            .reference_acceleration_m_s2 = config.surface_acceleration,
+        })
     {
     }
 

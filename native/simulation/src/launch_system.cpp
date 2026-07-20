@@ -195,8 +195,11 @@ TrajectoryPreview SimulationSession::preview(const AimState& source) const
                 "current physics timestep is not representable");
             return result;
         }
-        ninho::physics::RadialGravity gravity({{}, world_config.planet_radius,
-            world_config.surface_gravity});
+        ninho::physics::RadialGravity gravity(ninho::physics::RadialGravityConfig{
+            .center_m = {},
+            .reference_radius_m = world_config.planet_radius,
+            .reference_acceleration_m_s2 = world_config.surface_gravity,
+        });
         auto position = result.quantized_aim.origin_m;
         auto velocity = result.quantized_aim.tangent_direction
             * static_cast<float>(result.quantized_aim.speed_m_s);

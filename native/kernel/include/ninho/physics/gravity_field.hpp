@@ -11,18 +11,9 @@ struct UniformGravityConfig {
 };
 
 struct RadialGravityConfig {
-    union {
-        Vec3 center_m{};
-        Vec3 center;
-    };
-    union {
-        float reference_radius_m{10.0f};
-        float radius;
-    };
-    union {
-        float reference_acceleration_m_s2{9.0f};
-        float surface_acceleration;
-    };
+    Vec3 center_m{};
+    float reference_radius_m{10.0f};
+    float reference_acceleration_m_s2{9.0f};
 };
 
 using GravityFieldConfig = std::variant<UniformGravityConfig, RadialGravityConfig>;

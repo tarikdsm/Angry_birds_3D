@@ -217,8 +217,9 @@ NINHO_SIM_TEST("legacy orbital characterization freezes radial world ejection an
     NINHO_SIM_REQUIRE(config.surface_gravity == 9.0F);
     NINHO_SIM_REQUIRE(config.max_bodies == 500U);
 
-    const ninho::physics::RadialGravity gravity{{{}, config.planet_radius,
-        config.surface_gravity}};
+    const ninho::physics::RadialGravity gravity{
+        ninho::physics::LegacyRadialGravityConfig{{}, config.planet_radius,
+            config.surface_gravity}};
     NINHO_SIM_REQUIRE(std::abs(gravity.acceleration({10.0F, 0.0F, 0.0F}).x + 9.0F)
         < 1.0e-6F);
     NINHO_SIM_REQUIRE(std::abs(gravity.acceleration({20.0F, 0.0F, 0.0F}).x + 2.25F)
