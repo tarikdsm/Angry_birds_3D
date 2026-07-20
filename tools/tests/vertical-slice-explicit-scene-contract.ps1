@@ -12,6 +12,9 @@ $sceneFailure = 'Legacy capture must pass exactly one executable explicit res://
 $argvFailure = 'Legacy capture recorder observed invalid executable argv'
 $recorderFailure = 'Legacy capture recorder did not remain isolated'
 $reachabilityFailure = 'Legacy capture top-level must reach Invoke-CaptureRun and the timed process interceptor'
+$captureReachabilityFailure = 'Legacy capture top-level must reach the capture call site'
+$performanceReachabilityFailure = 'Legacy capture top-level must reach the performance call site'
+$externalReachabilityFailure = 'Legacy capture top-level reachability probe attempted an external launch'
 $reachabilitySentinel = 'NINHO_TOP_LEVEL_REACHABILITY_INTERCEPT:'
 
 Import-Module (Join-Path $root 'tools\VerticalSliceGate.psm1') -Force
@@ -117,23 +120,24 @@ function New-CaptureFixture {
     return $path
 }
 
-function Disable-CaptureCallSites {
-    param([Parameter(Mandatory)]$FunctionContract)
+function Disable-OneCaptureCallSite {
+    param(
+        [Parameter(Mandatory)]$FunctionContract,
+        [Parameter(Mandatory)][ValidateSet(0, 1)][int]$Index
+    )
 
-    $text = $FunctionContract.ScriptText
-    foreach ($callSite in @($FunctionContract.CallSites |
-            Sort-Object { $_.Extent.StartOffset } -Descending)) {
-        $replacement = "if (`$false) { $($callSite.Extent.Text) }"
-        $text = $text.Substring(0, $callSite.Extent.StartOffset) +
-            $replacement + $text.Substring($callSite.Extent.EndOffset)
-    }
-    return $text
+    $callSite = $FunctionContract.CallSites[$Index]
+    $replacement = "if (`$false) { $($callSite.Extent.Text) }"
+    return $FunctionContract.ScriptText.Substring(0, $callSite.Extent.StartOffset) +
+        $replacement +
+        $FunctionContract.ScriptText.Substring($callSite.Extent.EndOffset)
 }
 
 function Add-TopLevelReachabilityInterceptor {
     param(
         [Parameter(Mandatory)]$FunctionContract,
-        [Parameter(Mandatory)][string]$ScriptText
+        [Parameter(Mandatory)][string]$ScriptText,
+        [Parameter(Mandatory)][string]$TargetName
     )
 
     $functionStart = $FunctionContract.Function.Extent.StartOffset
@@ -142,7 +146,52 @@ function Add-TopLevelReachabilityInterceptor {
                 $functionStart, $functionEnd - $functionStart) -ceq
             $FunctionContract.FunctionText) `
         'Reachability instrumentation must preserve the exact real function Extent'
+    # Only external boundaries and their minimum file/log dependencies are mocked.
+    # Renderer loops, call sites, Invoke-CaptureRun, retry, frame mapping, and argv stay real.
     $interceptor = @'
+
+$global:NinhoReachabilityState = [ordered]@{
+    target_name = '__TARGET_NAME__'
+    timed_process_interceptions = 0
+    timed_process_names = [Collections.Generic.List[string]]::new()
+    direct_tool_interceptions = 0
+    ffprobe_interceptions = 0
+    ffmpeg_interceptions = 0
+    start_process_attempts = 0
+    file_writes = 0
+    clean_log_calls = 0
+    artifact_calls = 0
+    ability_calls = 0
+}
+
+function Write-NinhoReachabilityFile {
+    param([string]$Path, [string]$Text = '')
+    $outputRoot = [IO.Path]::GetFullPath($OutputDirectory).TrimEnd('\', '/')
+    $fullPath = [IO.Path]::GetFullPath($Path)
+    if (-not $fullPath.StartsWith(
+            $outputRoot + [IO.Path]::DirectorySeparatorChar,
+            [StringComparison]::OrdinalIgnoreCase)) {
+        throw "Reachability mock write escaped output root: $fullPath"
+    }
+    [IO.File]::WriteAllText(
+        $fullPath, $Text, [Text.UTF8Encoding]::new($false))
+    ++$global:NinhoReachabilityState.file_writes
+}
+
+function Invoke-NinhoReachabilityFfprobe {
+    param([Parameter(ValueFromRemainingArguments = $true)]$Ignored)
+    ++$global:NinhoReachabilityState.direct_tool_interceptions
+    ++$global:NinhoReachabilityState.ffprobe_interceptions
+    $global:LASTEXITCODE = 0
+    return '{"streams":[{"width":1920,"height":1080,"nb_frames":300}]}'
+}
+
+function Invoke-NinhoReachabilityFfmpeg {
+    param([Parameter(ValueFromRemainingArguments = $true)]$Ignored)
+    ++$global:NinhoReachabilityState.direct_tool_interceptions
+    ++$global:NinhoReachabilityState.ffmpeg_interceptions
+    $global:LASTEXITCODE = 0
+}
 
 function Invoke-NinhoTimedProcess {
     param(
@@ -154,8 +203,42 @@ function Invoke-NinhoTimedProcess {
         [string]$WorkingDirectory,
         [string]$FatalMarker
     )
+    $operationName = [regex]::Match(
+        $FatalMarker, 'name=([^ ]+)').Groups[1].Value
+    ++$global:NinhoReachabilityState.timed_process_interceptions
+    $global:NinhoReachabilityState.timed_process_names.Add(
+        $operationName) | Out-Null
+    if ($operationName -cne $global:NinhoReachabilityState.target_name) {
+        if ($operationName -ceq 'capture-vulkan') {
+            $captureLine = 'NINHO_CAPTURE_EVENT frame=10 tick=10 kind=damage_applied ' +
+                'profile=vulnerable affected=200 damage=1 camera=(0,0,0) exposure=1'
+            Write-NinhoReachabilityFile -Path $StdoutPath -Text $captureLine
+            Write-NinhoReachabilityFile -Path $StderrPath
+            $movieIndex = [Array]::IndexOf(
+                [string[]]$ArgumentList, '--write-movie')
+            if ($movieIndex -lt 0 -or $movieIndex + 1 -ge $ArgumentList.Count) {
+                throw 'Reachability capture mock lacks movie argv'
+            }
+            $moviePath = [IO.Path]::GetFullPath((Join-Path (
+                        Join-Path $root 'game') $ArgumentList[$movieIndex + 1]))
+            Write-NinhoReachabilityFile -Path $moviePath -Text 'mock movie'
+        } elseif ($operationName -ceq 'downsample-vulkan') {
+            Write-NinhoReachabilityFile -Path $StdoutPath
+            Write-NinhoReachabilityFile -Path $StderrPath
+            Write-NinhoReachabilityFile `
+                -Path ([string]$ArgumentList[$ArgumentList.Count - 1]) `
+                -Text 'mock downsampled movie'
+        } else {
+            throw "Unexpected timed process before reachability target: $operationName"
+        }
+        return [pscustomobject]@{
+            ExitCode = 0
+            Stdout = $StdoutPath
+            Stderr = $StderrPath
+        }
+    }
     $payload = [ordered]@{
-        name = $Name
+        name = $operationName
         call_stack = @(Get-PSCallStack | ForEach-Object { $_.FunctionName })
         file_path = $FilePath
         argument_list = [string[]]@($ArgumentList)
@@ -165,11 +248,39 @@ function Invoke-NinhoTimedProcess {
         working_directory = $WorkingDirectory
         fatal_marker = $FatalMarker
         script_root = $PSScriptRoot
+        state = $global:NinhoReachabilityState
     }
     throw ('__REACHABILITY_SENTINEL__' +
         ($payload | ConvertTo-Json -Depth 5 -Compress))
 }
+
+function Assert-CleanLog {
+    param([string]$Stdout, [string]$Stderr, [string]$Marker = '')
+    ++$global:NinhoReachabilityState.clean_log_calls
+    return ''
+}
+
+function Add-Artifact {
+    param([string]$Path)
+    ++$global:NinhoReachabilityState.artifact_calls
+}
+
+function Get-NinhoVirelaAbilityProof {
+    param([string]$Text)
+    ++$global:NinhoReachabilityState.ability_calls
+    return [pscustomobject]@{ frame = 20 }
+}
+
+function Start-Process {
+    param([Parameter(ValueFromRemainingArguments = $true)]$Ignored)
+    ++$global:NinhoReachabilityState.start_process_attempts
+    throw 'Reachability probe blocked Start-Process'
+}
+
+$ffprobe = 'Invoke-NinhoReachabilityFfprobe'
+$ffmpeg = 'Invoke-NinhoReachabilityFfmpeg'
 '@.Replace('__REACHABILITY_SENTINEL__', $reachabilitySentinel)
+    $interceptor = $interceptor.Replace('__TARGET_NAME__', $TargetName)
     return $ScriptText.Substring(0, $functionEnd) + $interceptor +
         $ScriptText.Substring($functionEnd)
 }
@@ -185,6 +296,9 @@ function Invoke-TopLevelReachabilityProbe {
 param($ProbeScriptPath, $OutputDirectory, $GoldenDirectory)
 $ErrorActionPreference = 'Stop'
 $breakpointsBefore = @(Get-PSBreakpoint).Count
+$childProcessesBefore = @(Get-CimInstance Win32_Process |
+    Where-Object { $_.ParentProcessId -eq $PID } |
+    ForEach-Object { [int]$_.ProcessId })
 $completed = $false
 $failure = ''
 try {
@@ -194,11 +308,22 @@ try {
 } catch {
     $failure = $_.Exception.Message
 }
+$childProcessesAfter = @(Get-CimInstance Win32_Process |
+    Where-Object { $_.ParentProcessId -eq $PID } |
+    ForEach-Object { [int]$_.ProcessId })
+$externalLaunches = @($childProcessesAfter | Where-Object {
+        $childProcessesBefore -notcontains $_
+    })
+$state = Get-Variable -Name NinhoReachabilityState -Scope Global `
+    -ValueOnly -ErrorAction SilentlyContinue
 [pscustomobject]@{
     Completed = $completed
     Failure = $failure
     BreakpointsBefore = $breakpointsBefore
     BreakpointsAfter = @(Get-PSBreakpoint).Count
+    State = $state
+    ExternalLaunches = $externalLaunches.Count
+    ExternalProcessIds = [int[]]@($externalLaunches)
 }
 '@
     $powerShell = [PowerShell]::Create()
@@ -226,59 +351,115 @@ function Get-TopLevelReachabilityContract {
         [Parameter(Mandatory)][string]$ScriptText,
         [Parameter(Mandatory)][string]$ProbeScriptPath,
         [Parameter(Mandatory)][string]$OutputDirectory,
-        [Parameter(Mandatory)][string]$GoldenDirectory
+        [Parameter(Mandatory)][string]$GoldenDirectory,
+        [Parameter(Mandatory)]
+        [ValidateSet('capture-vulkan', 'performance-vulkan-100')]
+        [string]$TargetName
     )
 
     $instrumentedText = Add-TopLevelReachabilityInterceptor `
-        -FunctionContract $FunctionContract -ScriptText $ScriptText
+        -FunctionContract $FunctionContract -ScriptText $ScriptText `
+        -TargetName $TargetName
     [IO.File]::WriteAllText(
         $ProbeScriptPath, $instrumentedText, [Text.UTF8Encoding]::new($false))
     $probe = Invoke-TopLevelReachabilityProbe `
         -ProbeScriptPath $ProbeScriptPath `
         -OutputDirectory $OutputDirectory `
         -GoldenDirectory $GoldenDirectory
+    if ($null -eq $probe.State -or $probe.ExternalLaunches -ne 0 -or
+            $probe.State.start_process_attempts -ne 0 -or
+            $probe.BreakpointsBefore -ne 0 -or $probe.BreakpointsAfter -ne 0) {
+        throw $externalReachabilityFailure
+    }
+
+    $targetFailure = if ($TargetName -ceq 'capture-vulkan') {
+        $captureReachabilityFailure
+    } else { $performanceReachabilityFailure }
     if ($probe.Completed -or
             -not $probe.Failure.StartsWith(
-                $reachabilitySentinel, [StringComparison]::Ordinal) -or
-            $probe.BreakpointsBefore -ne 0 -or $probe.BreakpointsAfter -ne 0) {
-        throw $reachabilityFailure
+                $reachabilitySentinel, [StringComparison]::Ordinal)) {
+        throw $targetFailure
     }
 
     $payloadText = $probe.Failure.Substring($reachabilitySentinel.Length)
     try {
         $payload = $payloadText | ConvertFrom-Json
     } catch {
-        throw $reachabilityFailure
+        throw $targetFailure
     }
     $callStack = @($payload.call_stack | ForEach-Object { [string]$_ })
     if ($callStack -cnotcontains 'Invoke-CaptureRun' -or
             $callStack -cnotcontains 'Invoke-NinhoLimitedRetry') {
-        throw $reachabilityFailure
+        throw $targetFailure
     }
 
-    $expectedMovie = Join-Path $OutputDirectory 'vertical-slice-vulkan-source.avi'
-    $expectedCase = [pscustomobject]@{
-        Renderer = 'Vulkan'
-        Scale = 100
-        Movie = $expectedMovie
-        Metrics = ''
-        MovieEnabled = $true
-        MetricsEnabled = $false
+    if ($TargetName -ceq 'capture-vulkan') {
+        $expectedCase = [pscustomobject]@{
+            Renderer = 'Vulkan'
+            Scale = 100
+            Movie = Join-Path $OutputDirectory 'vertical-slice-vulkan-source.avi'
+            Metrics = ''
+            MovieEnabled = $true
+            MetricsEnabled = $false
+        }
+        $expectedTimeout = 600000
+        $expectedNames = @('capture-vulkan')
+        $expectedDirectTools = 0
+        $expectedFfprobes = 0
+        $expectedFileWrites = 0
+        $expectedCleanLogs = 0
+        $expectedArtifacts = 0
+        $expectedAbilities = 0
+    } else {
+        $expectedCase = [pscustomobject]@{
+            Renderer = 'Vulkan'
+            Scale = 100
+            Movie = ''
+            Metrics = Join-Path $OutputDirectory 'metrics-vulkan-100.json'
+            MovieEnabled = $false
+            MetricsEnabled = $true
+        }
+        $expectedTimeout = 120000
+        $expectedNames = @(
+            'capture-vulkan', 'downsample-vulkan', 'performance-vulkan-100')
+        $expectedDirectTools = 2
+        $expectedFfprobes = 2
+        $expectedFileWrites = 6
+        $expectedCleanLogs = 2
+        $expectedArtifacts = 6
+        $expectedAbilities = 1
     }
     $expectedArguments = @(Get-ExpectedCaptureArguments `
             -Case $expectedCase -RecorderRoot $root)
-    if ($payload.name -cne 'capture-vulkan' -or
+    $stateNames = @($probe.State.timed_process_names |
+        ForEach-Object { [string]$_ })
+    if ($payload.name -cne $TargetName -or
             $payload.file_path -cne $godotPath -or
             -not (Test-ExactSequence -Actual @($payload.argument_list) `
                 -Expected $expectedArguments) -or
-            $payload.timeout_ms -ne 600000 -or
+            $payload.timeout_ms -ne $expectedTimeout -or
             $payload.working_directory -cne $root -or
             $payload.fatal_marker -cne
-                'NINHO_CAPTURE_FATAL name=capture-vulkan reason=timeout' -or
-            $payload.script_root -cne (Join-Path $root 'tools')) {
-        throw $reachabilityFailure
+                "NINHO_CAPTURE_FATAL name=$TargetName reason=timeout" -or
+            $payload.script_root -cne (Join-Path $root 'tools') -or
+            -not (Test-ExactSequence -Actual $stateNames -Expected $expectedNames) -or
+            $probe.State.timed_process_interceptions -ne $expectedNames.Count -or
+            $probe.State.direct_tool_interceptions -ne $expectedDirectTools -or
+            $probe.State.ffprobe_interceptions -ne $expectedFfprobes -or
+            $probe.State.ffmpeg_interceptions -ne 0 -or
+            $probe.State.file_writes -ne $expectedFileWrites -or
+            $probe.State.clean_log_calls -ne $expectedCleanLogs -or
+            $probe.State.artifact_calls -ne $expectedArtifacts -or
+            $probe.State.ability_calls -ne $expectedAbilities) {
+        throw $targetFailure
     }
-    return $payload
+    return [pscustomobject]@{
+        TargetName = $TargetName
+        Payload = $payload
+        State = $probe.State
+        ExternalLaunches = $probe.ExternalLaunches
+        Breakpoints = $probe.BreakpointsBefore + $probe.BreakpointsAfter
+    }
 }
 
 function Get-RecorderRelativePath {
@@ -682,14 +863,24 @@ try {
     $recorderOutput = Join-Path $temporaryRoot 'recorder-output'
     $contract = Get-ValidatedCaptureContract `
         -ScriptPath $captureScriptPath -RecorderOutput $recorderOutput
-    $canonicalReachabilityOutput = Join-Path $reachabilityRoot 'canonical\output'
-    $canonicalReachabilityGolden = Join-Path $reachabilityRoot 'canonical\golden'
-    $topLevelReachability = Get-TopLevelReachabilityContract `
+    $captureReachabilityOutput = Join-Path $reachabilityRoot 'capture\output'
+    $captureReachabilityGolden = Join-Path $reachabilityRoot 'capture\golden'
+    $captureReachability = Get-TopLevelReachabilityContract `
         -FunctionContract $functionContract `
         -ScriptText $functionContract.ScriptText `
         -ProbeScriptPath $probeScriptPath `
-        -OutputDirectory $canonicalReachabilityOutput `
-        -GoldenDirectory $canonicalReachabilityGolden
+        -OutputDirectory $captureReachabilityOutput `
+        -GoldenDirectory $captureReachabilityGolden `
+        -TargetName 'capture-vulkan'
+    $performanceReachabilityOutput = Join-Path $reachabilityRoot 'performance\output'
+    $performanceReachabilityGolden = Join-Path $reachabilityRoot 'performance\golden'
+    $performanceReachability = Get-TopLevelReachabilityContract `
+        -FunctionContract $functionContract `
+        -ScriptText $functionContract.ScriptText `
+        -ProbeScriptPath $probeScriptPath `
+        -OutputDirectory $performanceReachabilityOutput `
+        -GoldenDirectory $performanceReachabilityGolden `
+        -TargetName 'performance-vulkan-100'
 
     $fixtureDefinitions = @(
         [pscustomobject]@{
@@ -766,27 +957,56 @@ try {
             -Label $fixture.Label
     }
 
-    $unreachableText = Disable-CaptureCallSites `
-        -FunctionContract $functionContract
-    $unreachableReachabilityOutput = Join-Path $reachabilityRoot 'unreachable\output'
-    $unreachableReachabilityGolden = Join-Path $reachabilityRoot 'unreachable\golden'
-    $reachabilityRed = ''
-    try {
-        $null = Get-TopLevelReachabilityContract `
-            -FunctionContract $functionContract `
-            -ScriptText $unreachableText `
-            -ProbeScriptPath $probeScriptPath `
-            -OutputDirectory $unreachableReachabilityOutput `
-            -GoldenDirectory $unreachableReachabilityGolden
-    } catch {
-        $reachabilityRed = $_.Exception.Message
+    $singleCallSiteReds = @()
+    foreach ($negative in @(
+            [pscustomobject]@{
+                Index = 1
+                Slug = 'performance-disabled'
+                Failure = $performanceReachabilityFailure
+            },
+            [pscustomobject]@{
+                Index = 0
+                Slug = 'capture-disabled'
+                Failure = $captureReachabilityFailure
+            }
+        )) {
+        $negativeText = Disable-OneCaptureCallSite `
+            -FunctionContract $functionContract -Index $negative.Index
+        $negativeOutput = Join-Path $reachabilityRoot "$($negative.Slug)\output"
+        $negativeGolden = Join-Path $reachabilityRoot "$($negative.Slug)\golden"
+        $failure = ''
+        try {
+            $null = Get-TopLevelReachabilityContract `
+                -FunctionContract $functionContract `
+                -ScriptText $negativeText `
+                -ProbeScriptPath $probeScriptPath `
+                -OutputDirectory $negativeOutput `
+                -GoldenDirectory $negativeGolden `
+                -TargetName $(if ($negative.Index -eq 0) {
+                        'capture-vulkan'
+                    } else { 'performance-vulkan-100' })
+        } catch {
+            $failure = $_.Exception.Message
+        }
+        $singleCallSiteReds += [pscustomobject]@{
+            Slug = $negative.Slug
+            Expected = $negative.Failure
+            Actual = $failure
+        }
     }
-    Assert-True ($reachabilityRed -ceq $reachabilityFailure) `
-        "False-guarded call sites did not cause the exact reachability RED: $reachabilityRed"
+    $invalidSingleCallSiteReds = @($singleCallSiteReds | Where-Object {
+            $_.Actual -cne $_.Expected
+        })
+    Assert-True ($invalidSingleCallSiteReds.Count -eq 0) `
+        ('Single false-guarded call sites did not cause exact reachability REDs: ' +
+            (($singleCallSiteReds | ForEach-Object {
+                        "$($_.Slug)=[$($_.Actual)]"
+                    }) -join ', '))
+
     $reachabilityFiles = @(Get-ChildItem -LiteralPath $reachabilityRoot `
         -Recurse -File -ErrorAction SilentlyContinue)
-    Assert-True ($reachabilityFiles.Count -eq 0) `
-        'Top-level reachability proof performed an external file operation'
+    Assert-True ($reachabilityFiles.Count -eq 12) `
+        'Top-level reachability probes produced unexpected intermediate files'
 
     $gameSource = Join-Path $root 'game'
     $reparseSources = @(Get-ChildItem -LiteralPath $gameSource -Recurse -Force |
@@ -839,6 +1059,19 @@ try {
         $runtimeLog, [regex]::Escape($completionMarker)).Count
     Assert-True ($completionCount -eq 1) `
         "Explicit-scene Godot proof must emit one completion marker, found $completionCount"
+    $topLevelTimedInterceptions =
+        $captureReachability.State.timed_process_interceptions +
+        $performanceReachability.State.timed_process_interceptions
+    $topLevelDirectInterceptions =
+        $captureReachability.State.direct_tool_interceptions +
+        $performanceReachability.State.direct_tool_interceptions
+    $topLevelStartProcessAttempts =
+        $captureReachability.State.start_process_attempts +
+        $performanceReachability.State.start_process_attempts
+    $topLevelExternalLaunches = $captureReachability.ExternalLaunches +
+        $performanceReachability.ExternalLaunches
+    $topLevelBreakpoints = $captureReachability.Breakpoints +
+        $performanceReachability.Breakpoints
 
     Write-Output (
         'vertical slice explicit scene contract: PASS ' +
@@ -849,10 +1082,13 @@ try {
         "recorded_attempts=$($contract.RecordCount) " +
         "recorder_external_launches=$($contract.ExternalLaunchCount) " +
         "recorder_output_writes=$($contract.OutputWriteCount) " +
-        'top_level_red=false-guarded-call-sites ' +
-        'top_level_reachability=Invoke-CaptureRun>Invoke-NinhoTimedProcess ' +
-        "top_level_case=$($topLevelReachability.name) " +
-        'top_level_external_launches=0 top_level_breakpoints=0 ' +
+        'top_level_red=capture-disabled,performance-disabled ' +
+        'top_level_reachability=capture-vulkan,performance-vulkan-100 ' +
+        "top_level_timed_interceptions=$topLevelTimedInterceptions " +
+        "top_level_direct_tool_interceptions=$topLevelDirectInterceptions " +
+        "top_level_start_process_attempts=$topLevelStartProcessAttempts " +
+        "top_level_external_launches=$topLevelExternalLaunches " +
+        "top_level_breakpoints=$topLevelBreakpoints " +
         "runtime_marker=$completionMarker argv=$($contract.ArgumentList -join '|')")
 } finally {
     $resolvedProbeScript = [IO.Path]::GetFullPath($probeScriptPath)
