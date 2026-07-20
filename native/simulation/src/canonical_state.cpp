@@ -550,6 +550,11 @@ std::vector<std::uint8_t> SimulationSession::Impl::canonical_state_uncached_for_
 
 void SimulationSession::Impl::refresh_canonical_state()
 {
+    if (bundle.level.source_schema_version != 1U) {
+        canonical_bytes.clear();
+        canonical_hash = 0U;
+        return;
+    }
 #if defined(NINHO_ENABLE_TEST_FACADES)
     if (canonical_refresh_failure_for_testing) {
         std::string message = std::move(*canonical_refresh_failure_for_testing);

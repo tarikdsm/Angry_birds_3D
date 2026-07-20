@@ -43,6 +43,9 @@ void array(const json&, const std::string& pointer, std::size_t maximum,
     bool non_empty = false);
 void keys(const json&, const std::string& pointer,
     std::initializer_list<std::string_view> allowed);
+void keys(const json&, const std::string& pointer,
+    std::initializer_list<std::string_view> required,
+    std::initializer_list<std::string_view> optional);
 [[nodiscard]] const json& member(const json&, std::string_view key,
     const std::string& pointer);
 [[nodiscard]] std::string text(const json&, std::string_view key,

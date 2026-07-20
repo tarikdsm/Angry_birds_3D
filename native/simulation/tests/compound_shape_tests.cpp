@@ -108,6 +108,11 @@ LevelManifest level_with(std::vector<BodyDefinition> bodies)
 
 ContentResult<std::unique_ptr<SimulationSession>> create(LevelManifest level)
 {
+    if (level.free_body_ids.empty() && level.assemblies.empty()) {
+        for (const BodyDefinition& definition : level.bodies) {
+            level.free_body_ids.push_back(definition.body_id);
+        }
+    }
     return SimulationSession::create(materials(), archetypes(), level);
 }
 
@@ -129,7 +134,14 @@ NINHO_SIM_TEST("compound shape capsule hull and compound preserve shape mass and
         {-0.5, 0.5, -0.5},
         {-0.5, -0.5, 0.5},
     });
-    const auto pig = compound({box(0.5, 0.5, 0.25), box(0.5, 0.5, 0.25)});
+    constexpr double pig_half_depth = 65.0 / 240.0;
+    auto pig_left = box(0.25, 0.125, pig_half_depth);
+    pig_left.local_position_m = {-0.4, 0.0, 0.0};
+    auto pig_right = box(0.25, 0.125, pig_half_depth);
+    pig_right.local_position_m = {0.6, 0.2, 0.0};
+    pig_right.local_rotation_xyzw = {
+        0.0, 0.0, 0.7071067811865476, 0.7071067811865476};
+    const auto pig = compound({pig_left, pig_right});
     auto created = create(level_with({
         dynamic_body(1, capsule(0.25, 0.5), {-4.0, 4.0, 0.0}, "capsule"),
         dynamic_body(2, tetrahedron, {0.0, 4.0, 0.0}, "hull"),
@@ -164,14 +176,21 @@ NINHO_SIM_TEST("compound shape capsule hull and compound preserve shape mass and
     const auto& pig_snapshot = snapshot(*created.value, EntityId{3});
     NINHO_SIM_REQUIRE(pig_snapshot.shape == pig);
     NINHO_SIM_REQUIRE(pig_snapshot.visual_id == "pig_compound");
-    NINHO_SIM_REQUIRE(std::abs(pig_snapshot.mass_kg - 480.0) <= 0.48);
+    NINHO_SIM_REQUIRE(std::abs(pig_snapshot.mass_kg - 65.0) <= 0.065);
     const auto pig_bounds = detail::SessionTestFacade::body_bounds(
         *created.value, EntityId{3}, PartId{1});
     NINHO_SIM_REQUIRE(pig_bounds.has_value());
-    NINHO_SIM_REQUIRE(std::abs(pig_bounds->lower.x - 3.48f) <= 1.0e-4f);
-    NINHO_SIM_REQUIRE(std::abs(pig_bounds->upper.x - 4.52f) <= 1.0e-4f);
+    NINHO_SIM_REQUIRE(std::abs(pig_bounds->lower.x - 3.33f) <= 1.0e-4f);
+    NINHO_SIM_REQUIRE(std::abs(pig_bounds->lower.y - 3.855f) <= 1.0e-4f);
+    NINHO_SIM_REQUIRE(std::abs(pig_bounds->upper.x - 4.745f) <= 1.0e-4f);
+    NINHO_SIM_REQUIRE(std::abs(pig_bounds->upper.y - 4.47f) <= 1.0e-4f);
+    const float bounds_center_x = (pig_bounds->lower.x + pig_bounds->upper.x) * 0.5f;
+    const float bounds_center_y = (pig_bounds->lower.y + pig_bounds->upper.y) * 0.5f;
+    NINHO_SIM_REQUIRE(std::abs(bounds_center_x - 4.0375f) <= 1.0e-4f);
+    NINHO_SIM_REQUIRE(std::abs(bounds_center_y - 4.1625f) <= 1.0e-4f);
 
-    const auto initial_hash = created.value->canonical_hash_v2();
+    NINHO_SIM_REQUIRE(created.value->canonical_state_v2().empty());
+    NINHO_SIM_REQUIRE(created.value->canonical_hash_v2() == 0U);
     const auto initial_snapshots = std::vector<EntitySnapshot>{
         created.value->snapshots().begin(), created.value->snapshots().end()};
     const auto initial_metrics = created.value->physics_metrics();
@@ -179,7 +198,8 @@ NINHO_SIM_TEST("compound shape capsule hull and compound preserve shape mass and
         ninho::physics::detail::box3d_allocator_byte_count();
     for (int restart = 0; restart < 20; ++restart) {
         NINHO_SIM_REQUIRE(created.value->restart().ok());
-        NINHO_SIM_REQUIRE(created.value->canonical_hash_v2() == initial_hash);
+        NINHO_SIM_REQUIRE(created.value->canonical_state_v2().empty());
+        NINHO_SIM_REQUIRE(created.value->canonical_hash_v2() == 0U);
         NINHO_SIM_REQUIRE(std::ranges::equal(
             created.value->snapshots(), initial_snapshots));
         NINHO_SIM_REQUIRE(created.value->physics_metrics().body_count
@@ -190,6 +210,51 @@ NINHO_SIM_TEST("compound shape capsule hull and compound preserve shape mass and
             ninho::physics::detail::box3d_allocator_byte_count()
             == initial_allocator_bytes);
     }
+}
+
+NINHO_SIM_TEST("compound shape accepts a valid convex hull at the 64 vertex limit")
+{
+    std::vector<std::array<double, 3>> vertices;
+    vertices.reserve(64U);
+    constexpr double pi = 3.14159265358979323846;
+    for (double z : {-0.5, 0.5}) {
+        for (std::size_t index = 0; index < 32U; ++index) {
+            const double angle = 2.0 * pi * static_cast<double>(index) / 32.0;
+            vertices.push_back({std::cos(angle), std::sin(angle), z});
+        }
+    }
+    const auto created = create(level_with({
+        dynamic_body(1, hull(std::move(vertices)), {}, "hull_64"),
+    }));
+    NINHO_SIM_REQUIRE(created.ok());
+    NINHO_SIM_REQUIRE(created.value->physics_metrics().body_count == 1);
+    NINHO_SIM_REQUIRE(created.value->physics_metrics().shape_count == 1);
+}
+
+NINHO_SIM_TEST("compound shape rejects expanded primitive budget before physics creation")
+{
+    std::vector<ShapeDefinition> root_children;
+    root_children.reserve(16U);
+    for (std::size_t group = 0; group < 16U; ++group) {
+        std::vector<ShapeDefinition> leaf_compounds;
+        leaf_compounds.reserve(16U);
+        for (std::size_t leaf = 0; leaf < 16U; ++leaf) {
+            const std::size_t leaf_size = group == 15U && leaf == 15U ? 3U : 2U;
+            leaf_compounds.push_back(compound(
+                std::vector<ShapeDefinition>(leaf_size, box(0.1, 0.1, 0.1))));
+        }
+        root_children.push_back(compound(std::move(leaf_compounds)));
+    }
+
+    const auto allocator_before = ninho::physics::detail::box3d_allocator_byte_count();
+    const auto created = create(level_with({
+        dynamic_body(1, compound(std::move(root_children)), {}, "over_budget"),
+    }));
+    NINHO_SIM_REQUIRE(!created.ok());
+    NINHO_SIM_REQUIRE(created.error.code == ContentErrorCode::ResourceLimit);
+    NINHO_SIM_REQUIRE(created.error.pointer == "/bodies/0/shape");
+    NINHO_SIM_REQUIRE(
+        ninho::physics::detail::box3d_allocator_byte_count() == allocator_before);
 }
 
 NINHO_SIM_TEST("compound shape rejects hull capacity before physics creation")
@@ -223,6 +288,22 @@ NINHO_SIM_TEST("compound shape rejects non convex hull before physics creation")
     NINHO_SIM_REQUIRE(!created.ok());
     NINHO_SIM_REQUIRE(created.error.code == ContentErrorCode::InvalidInvariant);
     NINHO_SIM_REQUIRE(created.error.pointer == "/bodies/0/shape/vertices_m");
+}
+
+NINHO_SIM_TEST("compound shape rejects invalid typed local transform before physics creation")
+{
+    auto invalid_transform = box(0.5, 0.5, 0.5);
+    invalid_transform.local_rotation_xyzw = {0.0, 0.0, 0.0, 0.0};
+    const auto allocator_before = ninho::physics::detail::box3d_allocator_byte_count();
+    const auto created = create(level_with({
+        dynamic_body(1, invalid_transform, {}, "invalid_transform"),
+    }));
+    NINHO_SIM_REQUIRE(!created.ok());
+    NINHO_SIM_REQUIRE(created.error.code == ContentErrorCode::InvalidInvariant);
+    NINHO_SIM_REQUIRE(
+        created.error.pointer == "/bodies/0/shape/local_transform/rotation_xyzw");
+    NINHO_SIM_REQUIRE(
+        ninho::physics::detail::box3d_allocator_byte_count() == allocator_before);
 }
 
 NINHO_SIM_TEST("compound shape capacity failure is atomic during reconfigure")

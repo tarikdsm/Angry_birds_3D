@@ -11,27 +11,37 @@ namespace
 using namespace detail::v2content;
 json shape_json(const ShapeDefinition& shape)
 {
+    json result;
     switch (shape.type)
     {
     case ShapeType::Box:
-        return {{"type", "box"}, {"half_extents_m", shape.half_extents_m}};
+        result = {{"type", "box"}, {"half_extents_m", shape.half_extents_m}};
+        break;
     case ShapeType::Sphere:
-        return {{"type", "sphere"}, {"radius_m", shape.radius_m}};
+        result = {{"type", "sphere"}, {"radius_m", shape.radius_m}};
+        break;
     case ShapeType::Capsule:
-        return {{"type", "capsule"},
-                {"radius_m", shape.radius_m},
-                {"half_height_m", shape.half_height_m}};
+        result = {{"type", "capsule"},
+                  {"radius_m", shape.radius_m},
+                  {"half_height_m", shape.half_height_m}};
+        break;
     case ShapeType::ConvexHull:
-        return {{"type", "convex_hull"}, {"vertices_m", shape.vertices_m}};
+        result = {{"type", "convex_hull"}, {"vertices_m", shape.vertices_m}};
+        break;
     case ShapeType::Compound:
     {
         json children = json::array();
         for (const auto& value : shape.children)
             children.push_back(shape_json(value));
-        return {{"type", "compound"}, {"children", std::move(children)}};
+        result = {{"type", "compound"}, {"children", std::move(children)}};
+        break;
     }
     }
-    return nullptr;
+    result["local_transform"] = {
+        {"position_m", shape.local_position_m},
+        {"rotation_xyzw", shape.local_rotation_xyzw},
+    };
+    return result;
 }
 
 const char* response_name(MaterialResponse response)

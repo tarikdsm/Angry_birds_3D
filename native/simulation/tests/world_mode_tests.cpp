@@ -98,7 +98,23 @@ LevelManifest radial_level()
 
 ContentResult<std::unique_ptr<SimulationSession>> create(LevelManifest level)
 {
+    if (level.free_body_ids.empty() && level.assemblies.empty()) {
+        for (const BodyDefinition& definition : level.bodies) {
+            level.free_body_ids.push_back(definition.body_id);
+        }
+    }
     return SimulationSession::create(v2_materials(), v2_archetypes(), level);
+}
+
+ContentResult<std::unique_ptr<SimulationSession>> create(
+    ArchetypeCatalog archetypes, LevelManifest level)
+{
+    if (level.free_body_ids.empty() && level.assemblies.empty()) {
+        for (const BodyDefinition& definition : level.bodies) {
+            level.free_body_ids.push_back(definition.body_id);
+        }
+    }
+    return SimulationSession::create(v2_materials(), archetypes, level);
 }
 
 const EntitySnapshot& snapshot(const SimulationSession& session, EntityId entity)
@@ -189,7 +205,53 @@ NINHO_SIM_TEST("world mode v2 body order is canonical and independent of declara
     auto second = create(reversed);
     NINHO_SIM_REQUIRE(first.ok() && second.ok());
     NINHO_SIM_REQUIRE(std::ranges::equal(first.value->snapshots(), second.value->snapshots()));
-    NINHO_SIM_REQUIRE(first.value->canonical_hash_v2() == second.value->canonical_hash_v2());
+    NINHO_SIM_REQUIRE(first.value->canonical_state_v2().empty());
+    NINHO_SIM_REQUIRE(first.value->canonical_hash_v2() == 0U);
+}
+
+NINHO_SIM_TEST("world mode v2 never publishes legacy canonical state v2")
+{
+    auto level = uniform_level();
+    level.bodies.push_back(body(1, 1, BodyType::Dynamic,
+        sphere(0.5), {0.0, 3.0, 0.0}, "pig", true));
+    auto created = create(level);
+    NINHO_SIM_REQUIRE(created.ok());
+    NINHO_SIM_REQUIRE(created.value->canonical_state_v2().empty());
+    NINHO_SIM_REQUIRE(created.value->canonical_hash_v2() == 0U);
+    NINHO_SIM_REQUIRE(created.value->tick().ok());
+    NINHO_SIM_REQUIRE(created.value->canonical_state_v2().empty());
+    NINHO_SIM_REQUIRE(created.value->canonical_hash_v2() == 0U);
+    NINHO_SIM_REQUIRE(created.value->restart().ok());
+    NINHO_SIM_REQUIRE(created.value->canonical_state_v2().empty());
+    NINHO_SIM_REQUIRE(created.value->canonical_hash_v2() == 0U);
+}
+
+NINHO_SIM_TEST("world mode v2 rejects orphan queue enemy weakpoint and enemy body references")
+{
+    auto orphan_queue = uniform_level();
+    orphan_queue.bird_queue.push_back(BirdArchetypeId{999});
+    auto rejected = create(orphan_queue);
+    NINHO_SIM_REQUIRE(!rejected.ok());
+    NINHO_SIM_REQUIRE(rejected.error.code == ContentErrorCode::MissingReference);
+    NINHO_SIM_REQUIRE(rejected.error.pointer == "/bird_queue/0");
+
+    auto orphan_weakpoint_archetypes = v2_archetypes();
+    orphan_weakpoint_archetypes.enemies.push_back({EnemyArchetypeId{1}, "pig",
+        WeakpointId{999}, SurfaceId{1002}, 65.0, 100.0, 2.5, 50.0});
+    rejected = create(orphan_weakpoint_archetypes, uniform_level());
+    NINHO_SIM_REQUIRE(!rejected.ok());
+    NINHO_SIM_REQUIRE(rejected.error.code == ContentErrorCode::MissingReference);
+    NINHO_SIM_REQUIRE(rejected.error.pointer == "/enemies/0/weakpoint_id");
+
+    auto orphan_enemy_body = uniform_level();
+    auto pig = body(1, 1, BodyType::Dynamic,
+        sphere(0.5), {0.0, 3.0, 0.0}, "pig", true);
+    pig.enemy_archetype_id = EnemyArchetypeId{999};
+    orphan_enemy_body.bodies.push_back(std::move(pig));
+    rejected = create(orphan_enemy_body);
+    NINHO_SIM_REQUIRE(!rejected.ok());
+    NINHO_SIM_REQUIRE(rejected.error.code == ContentErrorCode::MissingReference);
+    NINHO_SIM_REQUIRE(rejected.error.pointer == "/bodies/0/enemy_archetype_id");
 }
 
 NINHO_SIM_TEST("world mode rejects v2 dynamic body with gravity disabled at build boundary")
@@ -226,7 +288,8 @@ NINHO_SIM_TEST("world mode failed reconfigure is atomic and twenty restarts do n
         sphere(0.5), {0.0, 3.0, 0.0}, "pig", true));
     auto created = create(level);
     NINHO_SIM_REQUIRE(created.ok());
-    const auto initial_hash = created.value->canonical_hash_v2();
+    NINHO_SIM_REQUIRE(created.value->canonical_state_v2().empty());
+    NINHO_SIM_REQUIRE(created.value->canonical_hash_v2() == 0U);
     const auto initial_snapshots = std::vector<EntitySnapshot>{
         created.value->snapshots().begin(), created.value->snapshots().end()};
     const auto initial_metrics = created.value->physics_metrics();
@@ -236,13 +299,15 @@ NINHO_SIM_TEST("world mode failed reconfigure is atomic and twenty restarts do n
     const auto failed = created.value->reconfigure(
         v2_materials(), v2_archetypes(), invalid);
     NINHO_SIM_REQUIRE(!failed.ok());
-    NINHO_SIM_REQUIRE(created.value->canonical_hash_v2() == initial_hash);
+    NINHO_SIM_REQUIRE(created.value->canonical_state_v2().empty());
+    NINHO_SIM_REQUIRE(created.value->canonical_hash_v2() == 0U);
     NINHO_SIM_REQUIRE(std::ranges::equal(created.value->snapshots(), initial_snapshots));
 
     for (int iteration = 0; iteration < 20; ++iteration) {
         NINHO_SIM_REQUIRE(created.value->tick().ok());
         NINHO_SIM_REQUIRE(created.value->restart().ok());
-        NINHO_SIM_REQUIRE(created.value->canonical_hash_v2() == initial_hash);
+        NINHO_SIM_REQUIRE(created.value->canonical_state_v2().empty());
+        NINHO_SIM_REQUIRE(created.value->canonical_hash_v2() == 0U);
         NINHO_SIM_REQUIRE(std::ranges::equal(created.value->snapshots(), initial_snapshots));
         NINHO_SIM_REQUIRE(created.value->physics_metrics().body_count
             == initial_metrics.body_count);

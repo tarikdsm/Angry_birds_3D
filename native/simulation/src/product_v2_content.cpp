@@ -45,26 +45,26 @@ ShapeDefinition parse_shape(const json& item, const std::string& pointer, std::s
     ShapeDefinition result;
     if (type == "box")
     {
-        keys(item, pointer, {"type", "half_extents_m"});
+        keys(item, pointer, {"type", "half_extents_m"}, {"local_transform"});
         result.type = ShapeType::Box;
         result.half_extents_m = vector<3>(item, "half_extents_m", pointer, 0.0001, 1000.0);
     }
     else if (type == "sphere")
     {
-        keys(item, pointer, {"type", "radius_m"});
+        keys(item, pointer, {"type", "radius_m"}, {"local_transform"});
         result.type = ShapeType::Sphere;
         result.radius_m = number(item, "radius_m", pointer, 0.0, 1000.0, false);
     }
     else if (type == "capsule")
     {
-        keys(item, pointer, {"type", "radius_m", "half_height_m"});
+        keys(item, pointer, {"type", "radius_m", "half_height_m"}, {"local_transform"});
         result.type = ShapeType::Capsule;
         result.radius_m = number(item, "radius_m", pointer, 0.0, 1000.0, false);
         result.half_height_m = number(item, "half_height_m", pointer, 0.0, 1000.0, false);
     }
     else if (type == "convex_hull")
     {
-        keys(item, pointer, {"type", "vertices_m"});
+        keys(item, pointer, {"type", "vertices_m"}, {"local_transform"});
         result.type = ShapeType::ConvexHull;
         const auto vertices_pointer = child(pointer, "vertices_m");
         const auto& vertices = member(item, "vertices_m", pointer);
@@ -107,7 +107,7 @@ ShapeDefinition parse_shape(const json& item, const std::string& pointer, std::s
     }
     else if (type == "compound")
     {
-        keys(item, pointer, {"type", "children"});
+        keys(item, pointer, {"type", "children"}, {"local_transform"});
         result.type = ShapeType::Compound;
         const auto children_pointer = child(pointer, "children");
         const auto& children = member(item, "children", pointer);
@@ -120,6 +120,22 @@ ShapeDefinition parse_shape(const json& item, const std::string& pointer, std::s
     else
     {
         fail(ContentErrorCode::InvalidEnum, child(pointer, "type"), "invalid shape type");
+    }
+    if (item.contains("local_transform"))
+    {
+        const auto local_pointer = child(pointer, "local_transform");
+        const auto& local = member(item, "local_transform", pointer);
+        keys(local, local_pointer, {"position_m", "rotation_xyzw"});
+        result.local_position_m =
+            vector<3>(local, "position_m", local_pointer, -1000.0, 1000.0);
+        result.local_rotation_xyzw =
+            vector<4>(local, "rotation_xyzw", local_pointer, -1.0, 1.0);
+        const auto& q = result.local_rotation_xyzw;
+        const double length =
+            std::sqrt(q[0] * q[0] + q[1] * q[1] + q[2] * q[2] + q[3] * q[3]);
+        if (std::abs(length - 1.0) > 1e-6)
+            fail(ContentErrorCode::InvalidInvariant,
+                 child(local_pointer, "rotation_xyzw"), "rotation must be normalized");
     }
     return result;
 }

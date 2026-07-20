@@ -162,42 +162,9 @@ make_product_v2_content_bundle(const MaterialCatalog& materials, const Archetype
                 campaign.source_schema_version != 2U || level.source_schema_version != 2U)
                 fail(ContentErrorCode::InvalidInvariant, "/schema_version",
                      "product v2 bundle requires only schema version 2");
-            std::unordered_set<std::uint32_t> material_ids, surface_ids, bird_ids, enemy_ids;
-            for (const auto& value : materials.materials)
-                material_ids.insert(value.id.value());
-            for (const auto& value : materials.surfaces)
-                surface_ids.insert(value.id.value());
-            for (const auto& value : archetypes.birds)
-                bird_ids.insert(value.id.value());
-            for (const auto& value : archetypes.enemies)
-                enemy_ids.insert(value.id.value());
-            for (std::size_t i = 0; i < archetypes.birds.size(); ++i)
-                if (!surface_ids.contains(archetypes.birds[i].surface_id.value()))
-                    fail(ContentErrorCode::MissingReference, indexed("/birds", i) + "/surface_id",
-                         "surface reference not found");
-            for (std::size_t i = 0; i < archetypes.enemies.size(); ++i)
-                if (!surface_ids.contains(archetypes.enemies[i].surface_id.value()))
-                    fail(ContentErrorCode::MissingReference, indexed("/enemies", i) + "/surface_id",
-                         "surface reference not found");
-            for (std::size_t i = 0; i < level.bird_queue.size(); ++i)
-                if (!bird_ids.contains(level.bird_queue[i].value()))
-                    fail(ContentErrorCode::MissingReference, indexed("/bird_queue", i),
-                         "bird reference not found");
-            for (std::size_t i = 0; i < level.bodies.size(); ++i)
-            {
-                const auto& body = level.bodies[i];
-                if (body.material_id && !material_ids.contains(body.material_id->value()))
-                    fail(ContentErrorCode::MissingReference, indexed("/bodies", i) + "/material_id",
-                         "material reference not found");
-                if (body.surface_id && !surface_ids.contains(body.surface_id->value()))
-                    fail(ContentErrorCode::MissingReference, indexed("/bodies", i) + "/surface_id",
-                         "surface reference not found");
-                if (body.enemy_archetype_id &&
-                    !enemy_ids.contains(body.enemy_archetype_id->value()))
-                    fail(ContentErrorCode::MissingReference,
-                         indexed("/bodies", i) + "/enemy_archetype_id",
-                         "enemy reference not found");
-            }
+            if (const auto semantic_error =
+                    detail::validate_product_v2_session_content(materials, archetypes, level))
+                fail(semantic_error->code, semantic_error->pointer, semantic_error->message);
             const CampaignWorldDefinition* world = nullptr;
             for (const auto& value : campaign.worlds)
                 if (value.id == level.world_id)
@@ -225,8 +192,6 @@ make_product_v2_content_bundle(const MaterialCatalog& materials, const Archetype
             if (registered->presentation_profile_id != level.presentation_profile_id)
                 fail(ContentErrorCode::MissingReference, "/presentation_profile_id",
                      "presentation profile reference not found");
-            if (const auto semantic_error = detail::validate_level_semantics(archetypes, level))
-                fail(semantic_error->code, semantic_error->pointer, semantic_error->message);
             return ProductV2ContentBundle{materials, archetypes, campaign, level};
         });
 }

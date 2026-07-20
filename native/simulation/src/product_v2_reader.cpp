@@ -137,6 +137,25 @@ void keys(const json& value, const std::string& pointer,
     }
 }
 
+void keys(const json& value, const std::string& pointer,
+    std::initializer_list<std::string_view> required,
+    std::initializer_list<std::string_view> optional)
+{
+    object(value, pointer);
+    std::set<std::string, std::less<>> allowed;
+    for (const auto key : required) allowed.emplace(key);
+    for (const auto key : optional) allowed.emplace(key);
+    for (auto it = value.begin(); it != value.end(); ++it) {
+        if (!allowed.contains(it.key())) {
+            fail(ContentErrorCode::UnknownKey, child(pointer, it.key()), "unknown key");
+        }
+    }
+    for (const auto key : required) {
+        if (!value.contains(key)) fail(ContentErrorCode::MissingField, child(pointer, key),
+            "missing required field");
+    }
+}
+
 const json& member(const json& value, std::string_view key, const std::string& pointer)
 {
     if (!value.contains(key)) fail(ContentErrorCode::MissingField, child(pointer, key),

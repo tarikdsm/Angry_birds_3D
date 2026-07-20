@@ -611,4 +611,32 @@ NINHO_SIM_TEST("product v2 content enforces closed hull compound queue and trigg
                   "/triggers");
 }
 
+NINHO_SIM_TEST("product v2 content preserves optional compound child local transforms")
+{
+    auto level = level_manifest();
+    level["bodies"][0]["shape"] = {
+        {"type", "compound"},
+        {"children", json::array({
+            {{"type", "box"},
+             {"half_extents_m", json::array({0.25, 0.125, 0.25})},
+             {"local_transform",
+              {{"position_m", json::array({-0.4, 0.0, 0.0})},
+               {"rotation_xyzw", json::array({0.0, 0.0, 0.0, 1.0})}}}},
+            {{"type", "box"},
+             {"half_extents_m", json::array({0.25, 0.125, 0.25})},
+             {"local_transform",
+              {{"position_m", json::array({0.6, 0.2, 0.0})},
+               {"rotation_xyzw", json::array({0.0, 0.0, 0.7071067811865476,
+                                                0.7071067811865476})}}}},
+        })},
+    };
+    const auto parsed = parse_level_manifest_v2(level.dump());
+    NINHO_SIM_REQUIRE(parsed.ok());
+    const auto canonical = to_canonical_json(parsed.value);
+    const auto reparsed = parse_level_manifest_v2(canonical);
+    NINHO_SIM_REQUIRE(reparsed.ok());
+    NINHO_SIM_REQUIRE(reparsed.value.bodies.front().shape
+        == parsed.value.bodies.front().shape);
+}
+
 } // namespace

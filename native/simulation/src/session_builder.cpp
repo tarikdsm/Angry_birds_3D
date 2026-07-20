@@ -1,4 +1,5 @@
 #include "session_internal.hpp"
+#include "content_semantic_validation.hpp"
 #include "material_mapping.hpp"
 
 #include <algorithm>
@@ -135,80 +136,172 @@ namespace {
         + a[2] * (b[0] * c[1] - b[1] * c[0]);
 }
 
-[[nodiscard]] bool contained_by_tetrahedron(const std::array<double, 3>& point,
-    const std::array<double, 3>& a, const std::array<double, 3>& b,
-    const std::array<double, 3>& c, const std::array<double, 3>& d) noexcept
+[[nodiscard]] std::array<double, 3> cross(
+    const std::array<double, 3>& lhs, const std::array<double, 3>& rhs) noexcept
 {
-    const auto ba = subtract(b, a);
-    const auto ca = subtract(c, a);
-    const auto da = subtract(d, a);
-    const auto pa = subtract(point, a);
-    const double denominator = determinant(ba, ca, da);
-    constexpr double epsilon = 1.0e-10;
-    if (std::abs(denominator) <= epsilon) {
-        return false;
-    }
-    const double u = determinant(pa, ca, da) / denominator;
-    const double v = determinant(ba, pa, da) / denominator;
-    const double w = determinant(ba, ca, pa) / denominator;
-    const double t = 1.0 - u - v - w;
-    return u >= -epsilon && v >= -epsilon && w >= -epsilon && t >= -epsilon
-        && u <= 1.0 + epsilon && v <= 1.0 + epsilon
-        && w <= 1.0 + epsilon && t <= 1.0 + epsilon;
+    return {
+        lhs[1] * rhs[2] - lhs[2] * rhs[1],
+        lhs[2] * rhs[0] - lhs[0] * rhs[2],
+        lhs[0] * rhs[1] - lhs[1] * rhs[0],
+    };
 }
 
-[[nodiscard]] bool has_redundant_hull_vertex(
+[[nodiscard]] double dot(
+    const std::array<double, 3>& lhs, const std::array<double, 3>& rhs) noexcept
+{
+    return lhs[0] * rhs[0] + lhs[1] * rhs[1] + lhs[2] * rhs[2];
+}
+
+// Every true 3D hull vertex belongs to at least one supporting plane. This
+// bounded O(n^4) check rejects volume-interior points without invoking Box3D;
+// n is independently capped at 64 by the schema.
+[[nodiscard]] bool every_hull_vertex_has_supporting_plane(
     const std::vector<std::array<double, 3>>& vertices) noexcept
 {
-    if (vertices.size() <= 4U) {
-        return false;
-    }
+    constexpr double epsilon = 1.0e-9;
     for (std::size_t candidate = 0; candidate < vertices.size(); ++candidate) {
-        for (std::size_t a = 0; a < vertices.size(); ++a) {
-            if (a == candidate) continue;
-            for (std::size_t b = a + 1U; b < vertices.size(); ++b) {
-                if (b == candidate) continue;
-                for (std::size_t c = b + 1U; c < vertices.size(); ++c) {
-                    if (c == candidate) continue;
-                    for (std::size_t d = c + 1U; d < vertices.size(); ++d) {
-                        if (d == candidate) continue;
-                        if (contained_by_tetrahedron(vertices[candidate],
-                                vertices[a], vertices[b], vertices[c], vertices[d])) {
-                            return true;
-                        }
-                    }
+        bool supported = false;
+        for (std::size_t first = 0; first < vertices.size() && !supported; ++first) {
+            if (first == candidate) continue;
+            for (std::size_t second = first + 1U;
+                 second < vertices.size() && !supported; ++second) {
+                if (second == candidate) continue;
+                const auto normal = cross(
+                    subtract(vertices[first], vertices[candidate]),
+                    subtract(vertices[second], vertices[candidate]));
+                if (dot(normal, normal) <= epsilon * epsilon) continue;
+                bool positive = false;
+                bool negative = false;
+                for (const auto& vertex : vertices) {
+                    const double side = dot(normal, subtract(vertex, vertices[candidate]));
+                    positive = positive || side > epsilon;
+                    negative = negative || side < -epsilon;
+                    if (positive && negative) break;
+                }
+                if (!(positive && negative)) {
+                    supported = true;
                 }
             }
         }
+        if (!supported) {
+            return false;
+        }
     }
-    return false;
+    return true;
+}
+
+[[nodiscard]] ninho::physics::Transform shape_local_transform(
+    const ShapeDefinition& shape)
+{
+    return {vector_from(shape.local_position_m),
+        quaternion_from(shape.local_rotation_xyzw)};
+}
+
+[[nodiscard]] ninho::physics::Transform compose(
+    const ninho::physics::Transform& parent,
+    const ninho::physics::Transform& local) noexcept
+{
+    return {
+        parent.position + rotate(parent.rotation, local.position),
+        multiply(parent.rotation, local.rotation),
+    };
+}
+
+void append_primitives(const ShapeDefinition& shape,
+    std::vector<ninho::physics::PrimitiveShape>& output,
+    const ninho::physics::Transform& parent)
+{
+    const ninho::physics::Transform local = compose(parent, shape_local_transform(shape));
+    switch (shape.type) {
+    case ShapeType::Box:
+        output.push_back(ninho::physics::BoxShape{vector_from(shape.half_extents_m), local});
+        break;
+    case ShapeType::Sphere:
+        output.push_back(ninho::physics::SphereShape{
+            static_cast<float>(shape.radius_m), local});
+        break;
+    case ShapeType::Capsule:
+        output.push_back(ninho::physics::CapsuleShape{
+            static_cast<float>(shape.half_height_m),
+            static_cast<float>(shape.radius_m), local});
+        break;
+    case ShapeType::ConvexHull: {
+        std::vector<ninho::physics::Vec3> vertices;
+        vertices.reserve(shape.vertices_m.size());
+        std::ranges::transform(shape.vertices_m, std::back_inserter(vertices), vector_from);
+        output.push_back(ninho::physics::HullShape{std::move(vertices), local});
+        break;
+    }
+    case ShapeType::Compound:
+        for (const ShapeDefinition& child : shape.children) {
+            append_primitives(child, output, local);
+        }
+        break;
+    }
+}
+
+void append_primitives(const ShapeDefinition& shape,
+    std::vector<ninho::physics::PrimitiveShape>& output)
+{
+    append_primitives(shape, output, {});
 }
 
 [[nodiscard]] std::optional<ContentError> validate_shape(
-    const ShapeDefinition& shape, const std::string& pointer, std::size_t depth = 0U)
+    const ShapeDefinition& shape, const std::string& pointer,
+    std::size_t& expanded_primitives, const std::string& budget_pointer,
+    std::size_t depth = 0U)
 {
+    constexpr std::size_t maximum_expanded_primitives = 512U;
+    const auto consume_primitive = [&]() -> std::optional<ContentError> {
+        ++expanded_primitives;
+        if (expanded_primitives > maximum_expanded_primitives) {
+            return ContentError{ContentErrorCode::ResourceLimit, budget_pointer,
+                "expanded shape primitive budget exceeded"};
+        }
+        return std::nullopt;
+    };
     const auto positive = [](double value) {
         return std::isfinite(value) && value > 0.0;
     };
+    if (!finite_vector(shape.local_position_m)) {
+        return ContentError{ContentErrorCode::InvalidInvariant,
+            pointer + "/local_transform/position_m",
+            "shape local position must be finite"};
+    }
+    if (!std::ranges::all_of(shape.local_rotation_xyzw,
+            [](double value) { return std::isfinite(value); })) {
+        return ContentError{ContentErrorCode::InvalidInvariant,
+            pointer + "/local_transform/rotation_xyzw",
+            "shape local rotation must be finite and normalized"};
+    }
+    const auto& rotation = shape.local_rotation_xyzw;
+    const double rotation_length = std::sqrt(rotation[0] * rotation[0]
+        + rotation[1] * rotation[1] + rotation[2] * rotation[2]
+        + rotation[3] * rotation[3]);
+    if (std::abs(rotation_length - 1.0) > 1.0e-6) {
+        return ContentError{ContentErrorCode::InvalidInvariant,
+            pointer + "/local_transform/rotation_xyzw",
+            "shape local rotation must be finite and normalized"};
+    }
     switch (shape.type) {
     case ShapeType::Box:
         if (!std::ranges::all_of(shape.half_extents_m, positive)) {
             return ContentError{ContentErrorCode::InvalidInvariant,
                 pointer + "/half_extents_m", "box half extents must be positive and finite"};
         }
-        return std::nullopt;
+        return consume_primitive();
     case ShapeType::Sphere:
         if (!positive(shape.radius_m)) {
             return ContentError{ContentErrorCode::InvalidInvariant,
                 pointer + "/radius_m", "sphere radius must be positive and finite"};
         }
-        return std::nullopt;
+        return consume_primitive();
     case ShapeType::Capsule:
         if (!positive(shape.radius_m) || !positive(shape.half_height_m)) {
             return ContentError{ContentErrorCode::InvalidInvariant, pointer,
                 "capsule dimensions must be positive and finite"};
         }
-        return std::nullopt;
+        return consume_primitive();
     case ShapeType::ConvexHull: {
         const std::string vertices_pointer = pointer + "/vertices_m";
         if (shape.vertices_m.size() > 64U) {
@@ -236,16 +329,16 @@ namespace {
                     has_volume = std::abs(determinant(
                         subtract(shape.vertices_m[b], shape.vertices_m[0]),
                         subtract(shape.vertices_m[c], shape.vertices_m[0]),
-                        subtract(shape.vertices_m[d], shape.vertices_m[0]))) > 1.0e-10;
+                        subtract(shape.vertices_m[d], shape.vertices_m[0]))) > 1.0e-9;
                     if (has_volume) break;
                 }
             }
         }
-        if (!has_volume || has_redundant_hull_vertex(shape.vertices_m)) {
+        if (!has_volume || !every_hull_vertex_has_supporting_plane(shape.vertices_m)) {
             return ContentError{ContentErrorCode::InvalidInvariant, vertices_pointer,
                 "vertices must be the vertices of a convex volume"};
         }
-        return std::nullopt;
+        return consume_primitive();
     }
     case ShapeType::Compound:
         if (depth >= 4U) {
@@ -262,7 +355,8 @@ namespace {
         }
         for (std::size_t index = 0; index < shape.children.size(); ++index) {
             if (const auto error = validate_shape(shape.children[index],
-                    pointer + "/children/" + std::to_string(index), depth + 1U)) {
+                    pointer + "/children/" + std::to_string(index), expanded_primitives,
+                    budget_pointer, depth + 1U)) {
                 return error;
             }
         }
@@ -272,36 +366,6 @@ namespace {
         "shape type is invalid"};
 }
 
-void append_primitives(const ShapeDefinition& shape,
-    std::vector<ninho::physics::PrimitiveShape>& output)
-{
-    switch (shape.type) {
-    case ShapeType::Box:
-        output.push_back(ninho::physics::BoxShape{vector_from(shape.half_extents_m), {}});
-        break;
-    case ShapeType::Sphere:
-        output.push_back(ninho::physics::SphereShape{
-            static_cast<float>(shape.radius_m), {}});
-        break;
-    case ShapeType::Capsule:
-        output.push_back(ninho::physics::CapsuleShape{
-            static_cast<float>(shape.half_height_m),
-            static_cast<float>(shape.radius_m), {}});
-        break;
-    case ShapeType::ConvexHull: {
-        std::vector<ninho::physics::Vec3> vertices;
-        vertices.reserve(shape.vertices_m.size());
-        std::ranges::transform(shape.vertices_m, std::back_inserter(vertices), vector_from);
-        output.push_back(ninho::physics::HullShape{std::move(vertices), {}});
-        break;
-    }
-    case ShapeType::Compound:
-        for (const ShapeDefinition& child : shape.children) {
-            append_primitives(child, output);
-        }
-        break;
-    }
-}
 
 [[nodiscard]] ninho::physics::ShapeDesc make_shape(
     const BodyDefinition& body, const MaterialCatalog& materials)
@@ -675,6 +739,11 @@ ContentResult<std::unique_ptr<SimulationSession>> SimulationSession::create(
             return {{}, {ContentErrorCode::ResourceLimit, "/bodies",
                 "physics body capacity has been exceeded"}};
         }
+        if (const auto semantic_error = detail::validate_product_v2_session_content(
+                materials, archetypes, level)) {
+            return {{}, *semantic_error};
+        }
+        std::size_t expanded_primitives{};
         for (std::size_t index = 0; index < level.bodies.size(); ++index) {
             const BodyDefinition& body = level.bodies[index];
             const std::string pointer = "/bodies/" + std::to_string(index);
@@ -683,7 +752,8 @@ ContentResult<std::unique_ptr<SimulationSession>> SimulationSession::create(
                     pointer + "/affected_by_world_gravity",
                     "dynamic bodies must use world gravity"}};
             }
-            if (const auto error = validate_shape(body.shape, pointer + "/shape")) {
+            if (const auto error = validate_shape(body.shape, pointer + "/shape",
+                    expanded_primitives, pointer + "/shape")) {
                 return {{}, *error};
             }
             if (!std::isfinite(body.density_kg_m3) || body.density_kg_m3 < 0.0

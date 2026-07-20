@@ -28,6 +28,7 @@ conteúdo v1.
 | Vértices por convex hull | 64 |
 | Children por compound | 16 |
 | Profundidade de compound | 4 |
+| Primitivas expandidas por sessão | 512 |
 | Bird queue | 32 |
 | Triggers / objectives | 64 / 64 |
 | Worlds / levels por world | 16 / 64 |
@@ -211,6 +212,11 @@ rejeitados.
 ### Shapes e bodies
 
 Shapes são variantes fechadas:
+
+Toda shape aceita `local_transform` opcional, com `position_m` e
+`rotation_xyzw` normalizado. A omissão equivale à identidade. Em compounds, o
+transform do filho é composto deterministicamente com o de seus ancestrais; o
+JSON canônico publica a identidade explicitamente.
 
 - `box`: `half_extents_m`, vec3 `[0.0001,1000]` m;
 - `sphere`: `radius_m` `(0,1000]` m;

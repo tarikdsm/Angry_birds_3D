@@ -166,6 +166,8 @@ public:
     [[nodiscard]] std::vector<ObjectiveTargetStatus> objective_target_statuses() const;
     [[nodiscard]] AbilityReadiness ability_readiness() const noexcept;
     [[nodiscard]] ninho::physics::WorldMetrics physics_metrics() const noexcept;
+    // Legacy-only contract. Schema v2 sessions return an empty span/hash 0 until
+    // canonical_state_v3 is introduced by its dedicated task.
     [[nodiscard]] const std::vector<std::uint8_t>& canonical_state_v2() const noexcept;
     [[nodiscard]] std::uint64_t canonical_hash_v2() const noexcept;
 

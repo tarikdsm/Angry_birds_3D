@@ -259,6 +259,8 @@ struct ShapeDefinition {
     double half_height_m{};
     std::vector<std::array<double, 3>> vertices_m;
     std::vector<ShapeDefinition> children;
+    std::array<double, 3> local_position_m{};
+    std::array<double, 4> local_rotation_xyzw{0.0, 0.0, 0.0, 1.0};
 
     bool operator==(const ShapeDefinition&) const = default;
 };
