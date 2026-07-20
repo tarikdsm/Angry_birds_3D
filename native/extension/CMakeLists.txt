@@ -1,8 +1,10 @@
 add_library(ninho_physics_extension SHARED
   src/adapter_helpers.cpp
   src/box3d_world_node.cpp
+  src/gameplay_session_node.cpp
   src/orbital_session_node.cpp
   src/register_types.cpp
+  src/session_adapter_services.cpp
 )
 target_include_directories(ninho_physics_extension PRIVATE include)
 target_link_libraries(ninho_physics_extension PRIVATE ninho::physics ninho::simulation godot::cpp)
@@ -47,11 +49,13 @@ if(BUILD_TESTING)
   add_executable(ninho_extension_adapter_tests
     "${PROJECT_SOURCE_DIR}/native/tests/test_main.cpp"
     src/adapter_helpers.cpp
+    src/gameplay_session_node.cpp
     src/orbital_session_node.cpp
+    src/session_adapter_services.cpp
     tests/adapter_helpers_tests.cpp
+    tests/gameplay_session_adapter_tests.cpp
     tests/orbital_session_adapter_tests.cpp
     tests/registration_contract_tests.cpp
-    tests/session_frame_batch_tests.cpp
     tests/legacy_orbital_frame_contract_tests.cpp
   )
   target_include_directories(ninho_extension_adapter_tests PRIVATE
@@ -63,6 +67,7 @@ if(BUILD_TESTING)
     ninho::physics
     ninho::simulation
     godot::cpp
+    nlohmann_json::nlohmann_json
   )
   target_compile_definitions(ninho_extension_adapter_tests PRIVATE
     NINHO_SOURCE_DIR="${PROJECT_SOURCE_DIR}"
@@ -76,9 +81,39 @@ if(BUILD_TESTING)
   endif()
   add_test(NAME gdextension_adapter_helpers COMMAND ninho_extension_adapter_tests)
   add_test(
+    NAME gameplay_session_adapter
+    COMMAND ninho_extension_adapter_tests --filter gameplay
+  )
+  add_test(
     NAME legacy_orbital_frame_contract
     COMMAND ninho_extension_adapter_tests --filter "legacy orbital frame contract"
   )
+
+  add_executable(ninho_session_frame_batch_tests
+    "${PROJECT_SOURCE_DIR}/native/tests/test_main.cpp"
+    src/session_adapter_services.cpp
+    tests/session_frame_batch_tests.cpp
+  )
+  target_include_directories(ninho_session_frame_batch_tests PRIVATE
+    include
+    "${PROJECT_SOURCE_DIR}/native/tests"
+    "${PROJECT_SOURCE_DIR}/native/simulation/src"
+  )
+  target_link_libraries(ninho_session_frame_batch_tests PRIVATE
+    ninho::physics
+    ninho::simulation
+  )
+  target_compile_definitions(ninho_session_frame_batch_tests PRIVATE
+    NINHO_SOURCE_DIR="${PROJECT_SOURCE_DIR}"
+    NINHO_ENABLE_TEST_FACADES=1
+  )
+  target_compile_features(ninho_session_frame_batch_tests PRIVATE cxx_std_20)
+  if(MSVC)
+    target_compile_options(ninho_session_frame_batch_tests PRIVATE
+      "$<$<COMPILE_LANGUAGE:CXX>:/W4;/permissive-;/fp:precise;/utf-8;/EHsc>"
+    )
+  endif()
+  add_test(NAME gameplay_session_frame_batch COMMAND ninho_session_frame_batch_tests)
 
   add_test(
     NAME gdextension_project_import
@@ -93,9 +128,20 @@ if(BUILD_TESTING)
       --path "${PROJECT_SOURCE_DIR}/game"
       --script res://tests/orbital_session_node_smoke.gd
   )
+  add_test(
+    NAME gdextension_gameplay_session
+    COMMAND "${NINHO_GODOT_EXECUTABLE}"
+      --headless
+      --fixed-fps 60
+      --path "${PROJECT_SOURCE_DIR}/game"
+      --script res://tests/gameplay_session_node_smoke.gd
+  )
   set_tests_properties(gdextension_project_import PROPERTIES
     FIXTURES_SETUP ninho_gdextension_import)
   set_tests_properties(gdextension_vertical_slice PROPERTIES
     FIXTURES_REQUIRED ninho_gdextension_import
     PASS_REGULAR_EXPRESSION "ORBITAL_SESSION_NODE_SMOKE_OK")
+  set_tests_properties(gdextension_gameplay_session PROPERTIES
+    FIXTURES_REQUIRED ninho_gdextension_import
+    PASS_REGULAR_EXPRESSION "GAMEPLAY_SESSION_NODE_SMOKE_OK")
 endif()

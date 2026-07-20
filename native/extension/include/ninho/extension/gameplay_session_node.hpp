@@ -7,27 +7,22 @@
 #include <godot_cpp/variant/string.hpp>
 #include <godot_cpp/variant/vector3.hpp>
 
-#include <cstdint>
 #include <memory>
-#include <string>
 #include <string_view>
 
 namespace ninho::extension::detail {
 
-class OrbitalSessionAdapter {
+class GameplaySessionAdapter {
 public:
     [[nodiscard]] bool configure(
         std::string_view materials_json,
         std::string_view archetypes_json,
         std::string_view level_json) noexcept;
-    [[nodiscard]] bool queue_begin_aim() noexcept;
-    [[nodiscard]] bool queue_aim(
-        physics::Vec3 origin,
-        physics::Vec3 tangent_direction,
-        double speed) noexcept;
-    [[nodiscard]] bool queue_launch() noexcept;
+    [[nodiscard]] bool queue_begin_grab(physics::Vec3 camera_right) noexcept;
+    [[nodiscard]] bool queue_pull(double horizontal_m, double vertical_m) noexcept;
+    [[nodiscard]] bool queue_release() noexcept;
     [[nodiscard]] bool queue_activate_ability() noexcept;
-    [[nodiscard]] bool queue_cancel_aim() noexcept;
+    [[nodiscard]] bool queue_cancel_grab() noexcept;
     [[nodiscard]] bool restart() noexcept;
     [[nodiscard]] bool advance(double delta) noexcept;
     [[nodiscard]] SessionFrameData consume_frame() noexcept;
@@ -50,6 +45,9 @@ private:
     simulation::ContentBundle content_;
     SessionFixedStepAccumulator accumulator_;
     SessionFrameBatch batch_;
+    std::optional<LockedPlaneFrameData> locked_plane_;
+    std::optional<simulation::BirdArchetypeId> active_bird_;
+    std::optional<simulation::BirdArchetypeId> pending_release_bird_;
     std::uint64_t fault_generation_{};
 };
 
@@ -57,25 +55,22 @@ private:
 
 namespace ninho::extension {
 
-class OrbitalSessionNode : public godot::Node {
-    GDCLASS(OrbitalSessionNode, godot::Node)
+class GameplaySessionNode : public godot::Node {
+    GDCLASS(GameplaySessionNode, godot::Node)
 
 public:
-    OrbitalSessionNode();
-    ~OrbitalSessionNode() override = default;
+    GameplaySessionNode();
+    ~GameplaySessionNode() override = default;
 
     bool configure_session(
         godot::String materials_json,
         godot::String archetypes_json,
         godot::String level_json) noexcept;
-    bool queue_begin_aim() noexcept;
-    bool queue_aim(
-        godot::Vector3 origin,
-        godot::Vector3 tangent_direction,
-        double speed) noexcept;
-    bool queue_launch() noexcept;
+    bool queue_begin_grab(godot::Vector3 camera_right) noexcept;
+    bool queue_pull(double horizontal_m, double vertical_m) noexcept;
+    bool queue_release() noexcept;
     bool queue_activate_ability() noexcept;
-    bool queue_cancel_aim() noexcept;
+    bool queue_cancel_grab() noexcept;
     bool restart_level() noexcept;
     godot::Dictionary consume_frame() noexcept;
     void _physics_process(double delta) noexcept override;
@@ -87,7 +82,7 @@ private:
     void emit_pending_fault() noexcept;
     void emit_exception_fault(std::string_view operation, const char* message) noexcept;
 
-    detail::OrbitalSessionAdapter adapter_;
+    detail::GameplaySessionAdapter adapter_;
     std::uint64_t reported_fault_generation_{};
 };
 

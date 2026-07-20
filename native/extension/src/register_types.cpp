@@ -1,4 +1,5 @@
 #include <ninho/extension/box3d_world_node.hpp>
+#include <ninho/extension/gameplay_session_node.hpp>
 #include <ninho/extension/orbital_session_node.hpp>
 #include <ninho/extension/register_types.hpp>
 
@@ -31,6 +32,7 @@ void initialize_ninho_module(godot::ModuleInitializationLevel level) noexcept
             return;
         }
         GDREGISTER_CLASS(Box3DWorldNode);
+        GDREGISTER_CLASS(GameplaySessionNode);
         GDREGISTER_CLASS(OrbitalSessionNode);
     } catch (const std::exception& error) {
         log_registration_failure("initializer", error.what());

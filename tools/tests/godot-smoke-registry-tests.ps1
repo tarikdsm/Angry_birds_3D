@@ -29,6 +29,7 @@ $registry = @(Get-NinhoGodotSmokeRegistry)
 $expectedNames = @(
     'import-completeness',
     'orbital-session-smoke',
+    'gameplay-session-smoke',
     'vertical-slice-smoke',
     'feedback-smoke',
     'feedback-config-validation',
@@ -42,13 +43,15 @@ for ($index = 0; $index -lt $expectedNames.Count; ++$index) {
 }
 Assert-True ($registry[0].RequiredCompletionMarker -ceq 'NINHO_IMPORT_COMPLETENESS_OK') `
     'Import completeness must preserve its completion marker'
-Assert-True ($registry[2].FixedFps -eq 60 -and $registry[3].FixedFps -eq 60) `
+Assert-True ($registry[2].FixedFps -eq 60 -and $registry[3].FixedFps -eq 60 -and `
+        $registry[4].FixedFps -eq 60) `
     'Gameplay smokes must preserve fixed 60 fps execution'
-Assert-True ($registry[4].RequiredLogText -ceq 'feedback config validation: PASS') `
+Assert-True ($registry[5].RequiredLogText -ceq 'feedback config validation: PASS') `
     'Feedback validation must preserve its required log text'
 $expectedMarkers = @{
     'import-completeness' = 'NINHO_IMPORT_COMPLETENESS_OK'
     'orbital-session-smoke' = 'ORBITAL_SESSION_NODE_SMOKE_OK'
+    'gameplay-session-smoke' = 'GAMEPLAY_SESSION_NODE_SMOKE_OK'
     'vertical-slice-smoke' = 'VERTICAL_SLICE_SMOKE_OK'
     'feedback-smoke' = 'FEEDBACK_SMOKE_OK'
     'forbid-godot-physics' = 'FORBID_GODOT_PHYSICS_OK'

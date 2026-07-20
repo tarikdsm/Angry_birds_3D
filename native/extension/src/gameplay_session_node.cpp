@@ -1,41 +1,109 @@
-#include <ninho/extension/orbital_session_node.hpp>
+#include <ninho/extension/gameplay_session_node.hpp>
 
 #include <ninho/extension/adapter_helpers.hpp>
+#include <ninho/physics/gravity_field.hpp>
 
 #include <godot_cpp/core/class_db.hpp>
 #include <godot_cpp/core/property_info.hpp>
-#include <godot_cpp/variant/string_name.hpp>
+#include <godot_cpp/variant/array.hpp>
 #include <godot_cpp/variant/typed_array.hpp>
 #include <godot_cpp/variant/variant.hpp>
 
 #include <algorithm>
 #include <cmath>
 #include <exception>
-#include <limits>
-#include <string>
-#include <utility>
 #include <type_traits>
+#include <utility>
+#include <vector>
 
 namespace ninho::extension::detail {
-
 namespace {
 
-[[nodiscard]] AimEnvelope aim_envelope_from(
-    const simulation::LevelManifest& level) noexcept
+[[nodiscard]] physics::Vec3 vector_from(
+    const std::array<double, 3>& value) noexcept
 {
     return {
-        .shell_radius_m = level.planet.radius_m + level.launch_ring.shell_offset_m,
-        .theta_min_deg = level.launch_ring.theta_min_deg,
-        .theta_max_deg = level.launch_ring.theta_max_deg,
-        .speed_min_m_s = level.launch_ring.phase_speed_min_m_s,
-        .speed_max_m_s = level.launch_ring.phase_speed_max_m_s,
-        .default_speed_m_s = level.launch_ring.default_speed_m_s,
+        static_cast<float>(value[0]),
+        static_cast<float>(value[1]),
+        static_cast<float>(value[2]),
     };
 }
 
+[[nodiscard]] LockedPlaneFrameData locked_plane_from(
+    const simulation::LauncherState& launcher) noexcept
+{
+    return {
+        .camera_right = launcher.camera_right,
+        .up = launcher.up,
+        .horizontal = launcher.horizontal,
+        .plane_normal = launcher.plane_normal,
+    };
 }
 
-void OrbitalSessionAdapter::latch_content_error(
+[[nodiscard]] std::pair<std::string, physics::Vec3> gravity_frame_from(
+    const simulation::LevelManifest& level)
+{
+    const physics::Vec3 sample_position = vector_from(level.slingshot.rest_position_m);
+    if (const auto* uniform =
+            std::get_if<simulation::UniformWorldDefinition>(&level.world)) {
+        const physics::Vec3 acceleration = vector_from(uniform->acceleration_m_s2);
+        const physics::GravityField field{
+            physics::UniformGravityConfig{acceleration}};
+        return {"uniform", field.acceleration_at(sample_position)};
+    }
+    const auto& radial = std::get<simulation::RadialWorldDefinition>(level.world);
+    const physics::GravityField field{physics::RadialGravityConfig{
+        .center_m = vector_from(radial.center_m),
+        .reference_radius_m = static_cast<float>(radial.reference_radius_m),
+        .reference_acceleration_m_s2 =
+            static_cast<float>(radial.reference_acceleration_m_s2),
+    }};
+    return {"radial", field.acceleration_at(sample_position)};
+}
+
+[[nodiscard]] GameplayFrameFields gameplay_fields_from(
+    const simulation::SimulationSession& session,
+    const simulation::ContentBundle& content,
+    std::optional<LockedPlaneFrameData> locked_plane,
+    std::optional<simulation::BirdArchetypeId> active_bird)
+{
+    GameplayFrameFields fields;
+    const std::uint32_t remaining = session.birds_remaining();
+    const std::size_t queue_size = content.level.bird_queue.size();
+    const std::size_t first_remaining = remaining <= queue_size
+        ? queue_size - static_cast<std::size_t>(remaining)
+        : queue_size;
+    fields.bird_queue.assign(
+        content.level.bird_queue.begin() + static_cast<std::ptrdiff_t>(first_remaining),
+        content.level.bird_queue.end());
+    if (!fields.bird_queue.empty()) {
+        fields.current_bird = fields.bird_queue.front();
+    }
+    fields.locked_plane = locked_plane;
+
+    for (const simulation::EntitySnapshot& snapshot : session.snapshots()) {
+        if (snapshot.is_projectile) {
+            fields.projectiles.push_back(snapshot);
+        }
+    }
+    if (active_bird && !fields.projectiles.empty()) {
+        ShotFrameData shot{.bird_archetype_id = *active_bird};
+        shot.projectile_ids.reserve(fields.projectiles.size());
+        for (const simulation::EntitySnapshot& projectile : fields.projectiles) {
+            shot.projectile_ids.push_back(projectile.entity_id);
+        }
+        fields.shot = std::move(shot);
+    }
+
+    auto [gravity_kind, local_gravity] = gravity_frame_from(content.level);
+    fields.gravity_kind = std::move(gravity_kind);
+    fields.local_gravity_m_s2 = local_gravity;
+    return fields;
+}
+
+}
+
+void GameplaySessionAdapter::latch_content_error(
     const simulation::ContentError& error) noexcept
 {
     if (batch_.fault()) {
@@ -46,7 +114,7 @@ void OrbitalSessionAdapter::latch_content_error(
     ++fault_generation_;
 }
 
-void OrbitalSessionAdapter::latch_exception(
+void GameplaySessionAdapter::latch_exception(
     std::string_view operation, const char* message) noexcept
 {
     if (batch_.fault()) {
@@ -57,7 +125,7 @@ void OrbitalSessionAdapter::latch_exception(
     ++fault_generation_;
 }
 
-void OrbitalSessionAdapter::fail(
+void GameplaySessionAdapter::fail(
     std::string_view code, std::string_view message) noexcept
 {
     if (batch_.fault()) {
@@ -70,7 +138,7 @@ void OrbitalSessionAdapter::fail(
 static_assert(std::is_nothrow_move_assignable_v<SessionFrameBatch>);
 static_assert(std::is_nothrow_move_assignable_v<simulation::ContentBundle>);
 
-bool OrbitalSessionAdapter::configure(
+bool GameplaySessionAdapter::configure(
     std::string_view materials_json,
     std::string_view archetypes_json,
     std::string_view level_json) noexcept
@@ -120,11 +188,15 @@ bool OrbitalSessionAdapter::configure(
             candidate.value->physics_metrics(),
             objective_targets,
             candidate.value->ability_readiness());
-        candidate_batch.set_aim_envelope(aim_envelope_from(candidate_content.level));
+        candidate_batch.set_gameplay_fields(gameplay_fields_from(
+            *candidate.value, candidate_content, std::nullopt, std::nullopt));
 
         session_ = std::move(candidate.value);
         content_ = std::move(candidate_content);
         batch_ = std::move(candidate_batch);
+        locked_plane_.reset();
+        active_bird_.reset();
+        pending_release_bird_.reset();
         accumulator_.reset();
         return true;
     } catch (const std::exception& error) {
@@ -137,7 +209,7 @@ bool OrbitalSessionAdapter::configure(
     return false;
 }
 
-bool OrbitalSessionAdapter::accept_status(
+bool GameplaySessionAdapter::accept_status(
     const simulation::SessionStatus& status) noexcept
 {
     if (status.ok()) {
@@ -147,7 +219,7 @@ bool OrbitalSessionAdapter::accept_status(
     return false;
 }
 
-bool OrbitalSessionAdapter::enqueue(simulation::PlayerCommand command) noexcept
+bool GameplaySessionAdapter::enqueue(simulation::PlayerCommand command) noexcept
 {
     if (batch_.fault()) {
         return false;
@@ -166,62 +238,45 @@ bool OrbitalSessionAdapter::enqueue(simulation::PlayerCommand command) noexcept
     return false;
 }
 
-bool OrbitalSessionAdapter::queue_begin_aim() noexcept
+bool GameplaySessionAdapter::queue_begin_grab(physics::Vec3 camera_right) noexcept
 {
-    return enqueue(simulation::BeginAimCommand{});
-}
-
-bool OrbitalSessionAdapter::queue_aim(
-    physics::Vec3 origin,
-    physics::Vec3 tangent_direction,
-    double speed) noexcept
-{
-    if (batch_.fault()) {
+    if (!physics::is_finite(camera_right)) {
         return false;
     }
-    if (!session_) {
-        fail("session_not_configured", "configure_session must succeed first");
-        return false;
-    }
-    if (!physics::is_finite(origin) || !physics::is_finite(tangent_direction)
-        || !std::isfinite(speed)) {
-        return false;
-    }
-    try {
-        simulation::AimState aim{origin, tangent_direction, speed};
-        simulation::TrajectoryPreview preview = session_->preview(aim);
-        if (!accept_status(preview.status)) {
-            return false;
-        }
-        if (!accept_status(session_->enqueue(simulation::SetAimCommand{aim}))) {
-            return false;
-        }
-        batch_.set_preview(std::move(preview));
-        return true;
-    } catch (const std::exception& error) {
-        latch_exception("queue_aim", error.what());
-    } catch (...) {
-        latch_exception("queue_aim", "unknown exception");
-    }
-    return false;
+    return enqueue(simulation::BeginGrabCommand{camera_right});
 }
 
-bool OrbitalSessionAdapter::queue_launch() noexcept
+bool GameplaySessionAdapter::queue_pull(
+    double horizontal_m, double vertical_m) noexcept
 {
-    return enqueue(simulation::LaunchCommand{});
+    if (!std::isfinite(horizontal_m) || !std::isfinite(vertical_m)) {
+        return false;
+    }
+    return enqueue(simulation::SetPullCommand{horizontal_m, vertical_m});
 }
 
-bool OrbitalSessionAdapter::queue_activate_ability() noexcept
+bool GameplaySessionAdapter::queue_release() noexcept
+{
+    const std::optional<simulation::BirdArchetypeId> released_bird =
+        batch_.peek().current_bird;
+    if (!enqueue(simulation::ReleaseBirdCommand{})) {
+        return false;
+    }
+    pending_release_bird_ = released_bird;
+    return true;
+}
+
+bool GameplaySessionAdapter::queue_activate_ability() noexcept
 {
     return enqueue(simulation::ActivateAbilityCommand{});
 }
 
-bool OrbitalSessionAdapter::queue_cancel_aim() noexcept
+bool GameplaySessionAdapter::queue_cancel_grab() noexcept
 {
-    return enqueue(simulation::CancelAimCommand{});
+    return enqueue(simulation::CancelGrabCommand{});
 }
 
-bool OrbitalSessionAdapter::restart() noexcept
+bool GameplaySessionAdapter::restart() noexcept
 {
     if (!session_) {
         fail("session_not_configured", "configure_session must succeed before restart");
@@ -246,10 +301,14 @@ bool OrbitalSessionAdapter::restart() noexcept
             candidate.value->physics_metrics(),
             objective_targets,
             candidate.value->ability_readiness());
-        candidate_batch.set_aim_envelope(aim_envelope_from(content_.level));
+        candidate_batch.set_gameplay_fields(gameplay_fields_from(
+            *candidate.value, content_, std::nullopt, std::nullopt));
 
         session_ = std::move(candidate.value);
         batch_ = std::move(candidate_batch);
+        locked_plane_.reset();
+        active_bird_.reset();
+        pending_release_bird_.reset();
         accumulator_.reset();
         return true;
     } catch (const std::exception& error) {
@@ -262,7 +321,7 @@ bool OrbitalSessionAdapter::restart() noexcept
     return false;
 }
 
-void OrbitalSessionAdapter::capture_latest()
+void GameplaySessionAdapter::capture_latest()
 {
     const std::vector<simulation::ObjectiveTargetStatus> objective_targets =
         session_->objective_target_statuses();
@@ -274,9 +333,42 @@ void OrbitalSessionAdapter::capture_latest()
         session_->physics_metrics(),
         objective_targets,
         session_->ability_readiness());
+
+    if (session_->state().launcher) {
+        locked_plane_ = locked_plane_from(*session_->state().launcher);
+    }
+    for (const simulation::DomainEvent& event : session_->events()) {
+        if (event.kind == simulation::DomainEventKind::BirdLaunched) {
+            active_bird_ = event.bird_archetype_id;
+        }
+    }
+    const bool has_projectile = std::ranges::any_of(
+        session_->snapshots(), &simulation::EntitySnapshot::is_projectile);
+    if (has_projectile && !active_bird_ && pending_release_bird_) {
+        active_bird_ = pending_release_bird_;
+    }
+    if (has_projectile) {
+        pending_release_bird_.reset();
+    }
+    if (!has_projectile && session_->state().phase != simulation::SessionPhase::Grabbed) {
+        active_bird_.reset();
+        locked_plane_.reset();
+        pending_release_bird_.reset();
+    }
+    batch_.set_gameplay_fields(gameplay_fields_from(
+        *session_, content_, locked_plane_, active_bird_));
+
+    if (session_->state().phase == simulation::SessionPhase::Grabbed) {
+        simulation::TrajectoryPreview preview = session_->preview();
+        if (preview.status.ok()) {
+            batch_.set_preview(std::move(preview));
+        } else {
+            batch_.clear_preview();
+        }
+    }
 }
 
-bool OrbitalSessionAdapter::advance(double delta) noexcept
+bool GameplaySessionAdapter::advance(double delta) noexcept
 {
     if (batch_.fault()) {
         return false;
@@ -313,7 +405,7 @@ bool OrbitalSessionAdapter::advance(double delta) noexcept
     return false;
 }
 
-SessionFrameData OrbitalSessionAdapter::consume_frame() noexcept
+SessionFrameData GameplaySessionAdapter::consume_frame() noexcept
 {
     try {
         return batch_.consume();
@@ -325,27 +417,27 @@ SessionFrameData OrbitalSessionAdapter::consume_frame() noexcept
     return {};
 }
 
-const SessionFrameData& OrbitalSessionAdapter::peek_frame() const noexcept
+const SessionFrameData& GameplaySessionAdapter::peek_frame() const noexcept
 {
     return batch_.peek();
 }
 
-void OrbitalSessionAdapter::acknowledge_frame() noexcept
+void GameplaySessionAdapter::acknowledge_frame() noexcept
 {
     batch_.acknowledge();
 }
 
-bool OrbitalSessionAdapter::configured() const noexcept
+bool GameplaySessionAdapter::configured() const noexcept
 {
     return session_ != nullptr;
 }
 
-const std::optional<FaultInfo>& OrbitalSessionAdapter::fault() const noexcept
+const std::optional<FaultInfo>& GameplaySessionAdapter::fault() const noexcept
 {
     return batch_.fault();
 }
 
-std::uint64_t OrbitalSessionAdapter::fault_generation() const noexcept
+std::uint64_t GameplaySessionAdapter::fault_generation() const noexcept
 {
     return fault_generation_;
 }
@@ -353,6 +445,7 @@ std::uint64_t OrbitalSessionAdapter::fault_generation() const noexcept
 }
 
 namespace ninho::extension {
+
 namespace {
 
 [[nodiscard]] godot::String godot_string(std::string_view text)
@@ -370,6 +463,7 @@ namespace {
     case simulation::SessionPhase::Evaluation: return "evaluation";
     case simulation::SessionPhase::Result: return "result";
     case simulation::SessionPhase::Faulted: return "faulted";
+    case simulation::SessionPhase::Grabbed: return "grabbed";
     }
     return "unknown";
 }
@@ -442,30 +536,34 @@ namespace {
     return "unknown";
 }
 
+[[nodiscard]] const char* shape_type_name(simulation::ShapeType type) noexcept
+{
+    switch (type) {
+    case simulation::ShapeType::Box: return "box";
+    case simulation::ShapeType::Sphere: return "sphere";
+    case simulation::ShapeType::Capsule: return "capsule";
+    case simulation::ShapeType::ConvexHull: return "convex_hull";
+    case simulation::ShapeType::Compound: return "compound";
+    }
+    return "unknown";
+}
+
 [[nodiscard]] const char* body_type_name(simulation::BodyType type) noexcept
 {
     return type == simulation::BodyType::Static ? "static" : "dynamic";
-}
-
-[[nodiscard]] godot::Dictionary aim_dictionary(const simulation::AimState& aim)
-{
-    godot::Dictionary result;
-    result["origin"] = detail::to_godot(aim.origin_m);
-    result["tangent_direction"] = detail::to_godot(aim.tangent_direction);
-    result["speed"] = aim.speed_m_s;
-    return result;
 }
 
 [[nodiscard]] godot::Dictionary snapshot_dictionary(
     const simulation::EntitySnapshot& snapshot)
 {
     godot::Dictionary shape;
-    shape["type"] = snapshot.shape.type == simulation::ShapeType::Box ? "box" : "sphere";
+    shape["type"] = shape_type_name(snapshot.shape.type);
     shape["half_extents"] = godot::Vector3{
         static_cast<godot::real_t>(snapshot.shape.half_extents_m[0]),
         static_cast<godot::real_t>(snapshot.shape.half_extents_m[1]),
         static_cast<godot::real_t>(snapshot.shape.half_extents_m[2])};
     shape["radius"] = snapshot.shape.radius_m;
+    shape["half_height"] = snapshot.shape.half_height_m;
 
     godot::Dictionary result;
     result["entity_id"] = static_cast<std::int64_t>(snapshot.entity_id.value());
@@ -489,23 +587,28 @@ namespace {
     result["mass_kg"] = snapshot.mass_kg;
     result["awake"] = snapshot.awake;
     result["ejected"] = snapshot.ejected;
+    result["exited_world"] = snapshot.exited_world;
     result["is_projectile"] = snapshot.is_projectile;
     return result;
 }
 
-[[nodiscard]] godot::Dictionary event_dictionary(const simulation::DomainEvent& event)
+[[nodiscard]] godot::Dictionary event_dictionary(
+    const simulation::DomainEvent& event)
 {
     godot::Dictionary result;
     result["id"] = static_cast<std::int64_t>(event.id.value());
     result["tick"] = static_cast<std::int64_t>(event.tick.value());
     result["kind"] = event_kind_name(event.kind);
     result["entity_id"] = static_cast<std::int64_t>(event.entity_id.value());
-    result["bird_archetype_id"] = static_cast<std::int64_t>(event.bird_archetype_id.value());
+    result["bird_archetype_id"] =
+        static_cast<std::int64_t>(event.bird_archetype_id.value());
     result["rejection_reason"] = static_cast<std::int64_t>(event.rejection_reason);
     result["rejection_reason_name"] = rejection_reason_name(event.rejection_reason);
     result["ability_id"] = static_cast<std::int64_t>(event.ability_id.value());
-    result["affected_entity_id"] = static_cast<std::int64_t>(event.affected_entity_id.value());
-    result["affected_part_id"] = static_cast<std::int64_t>(event.affected_part_id.value());
+    result["affected_entity_id"] =
+        static_cast<std::int64_t>(event.affected_entity_id.value());
+    result["affected_part_id"] =
+        static_cast<std::int64_t>(event.affected_part_id.value());
     result["weight"] = event.weight;
     result["force"] = detail::to_godot(event.force_n);
     result["impulse"] = detail::to_godot(event.impulse_n_s);
@@ -516,12 +619,47 @@ namespace {
     result["damage"] = event.damage;
     result["damage_classification"] =
         damage_classification_name(event.damage_classification);
-    result["neutralization_cause"] = static_cast<std::int64_t>(event.neutralization_cause);
+    result["neutralization_cause"] =
+        static_cast<std::int64_t>(event.neutralization_cause);
     result["cause_event_id"] = static_cast<std::int64_t>(event.cause_event_id.value());
     result["joint_id"] = static_cast<std::int64_t>(event.joint_id.value());
     result["material_id"] = static_cast<std::int64_t>(event.material_id.value());
     result["joint_load_ratio"] = event.joint_load_ratio;
     result["fracture_ratio"] = event.fracture_ratio;
+    return result;
+}
+
+[[nodiscard]] godot::Variant launcher_variant(
+    const std::optional<simulation::LauncherState>& launcher)
+{
+    if (!launcher) {
+        return {};
+    }
+    godot::Dictionary result;
+    result["rest_position"] = detail::to_godot(launcher->rest_position_m);
+    result["pull_horizontal_m"] = launcher->pull_horizontal_m;
+    result["pull_vertical_m"] = launcher->pull_vertical_m;
+    result["extension_m"] = launcher->extension_m;
+    result["spring_energy_j"] = launcher->spring_energy_j;
+    result["launch_energy_j"] = launcher->launch_energy_j;
+    result["launch_direction"] = detail::to_godot(launcher->launch_direction);
+    result["predicted_speed_m_s"] = launcher->predicted_speed_m_s;
+    result["deadzone_m"] = launcher->deadzone_m;
+    result["maximum_extension_m"] = launcher->maximum_extension_m;
+    return result;
+}
+
+[[nodiscard]] godot::Variant locked_plane_variant(
+    const std::optional<detail::LockedPlaneFrameData>& plane)
+{
+    if (!plane) {
+        return {};
+    }
+    godot::Dictionary result;
+    result["camera_right"] = detail::to_godot(plane->camera_right);
+    result["up"] = detail::to_godot(plane->up);
+    result["horizontal"] = detail::to_godot(plane->horizontal);
+    result["plane_normal"] = detail::to_godot(plane->plane_normal);
     return result;
 }
 
@@ -532,7 +670,6 @@ namespace {
         return {};
     }
     godot::Dictionary result;
-    result["aim"] = aim_dictionary(preview->quantized_aim);
     godot::TypedArray<godot::Vector3> samples;
     for (const physics::Vec3 sample : preview->samples) {
         samples.push_back(detail::to_godot(sample));
@@ -540,8 +677,10 @@ namespace {
     result["samples"] = samples;
     if (preview->first_hit) {
         godot::Dictionary hit;
-        hit["entity_id"] = static_cast<std::int64_t>(preview->first_hit->entity_id.value());
-        hit["part_id"] = static_cast<std::int64_t>(preview->first_hit->part_id.value());
+        hit["entity_id"] =
+            static_cast<std::int64_t>(preview->first_hit->entity_id.value());
+        hit["part_id"] =
+            static_cast<std::int64_t>(preview->first_hit->part_id.value());
         hit["point"] = detail::to_godot(preview->first_hit->point_m);
         hit["normal"] = detail::to_godot(preview->first_hit->normal);
         result["first_hit"] = hit;
@@ -552,8 +691,68 @@ namespace {
     return result;
 }
 
-[[nodiscard]] godot::Dictionary frame_dictionary(const detail::SessionFrameData& frame)
+[[nodiscard]] godot::Variant shot_variant(
+    const std::optional<detail::ShotFrameData>& shot)
 {
+    if (!shot) {
+        return {};
+    }
+    godot::Dictionary result;
+    result["bird_archetype_id"] =
+        static_cast<std::int64_t>(shot->bird_archetype_id.value());
+    godot::Array projectile_ids;
+    for (const simulation::EntityId id : shot->projectile_ids) {
+        projectile_ids.push_back(static_cast<std::int64_t>(id.value()));
+    }
+    result["projectile_ids"] = projectile_ids;
+    return result;
+}
+
+[[nodiscard]] godot::Dictionary objectives_dictionary(
+    const detail::SessionFrameData& frame)
+{
+    godot::TypedArray<godot::Dictionary> targets;
+    for (const auto& target : frame.objective_targets) {
+        godot::Dictionary item;
+        item["entity_id"] = static_cast<std::int64_t>(target.entity_id.value());
+        item["current_integrity"] = target.current_integrity;
+        item["maximum_integrity"] = target.maximum_integrity;
+        item["neutralized"] = target.neutralized;
+        targets.push_back(item);
+    }
+    godot::Dictionary result;
+    result["complete"] = frame.objectives_complete;
+    result["targets"] = targets;
+    return result;
+}
+
+[[nodiscard]] godot::Dictionary metrics_dictionary(
+    const physics::WorldMetrics& metrics)
+{
+    godot::Dictionary result;
+    result["body_count"] = metrics.body_count;
+    result["shape_count"] = metrics.shape_count;
+    result["joint_count"] = metrics.joint_count;
+    result["contact_count"] = metrics.contact_count;
+    result["awake_count"] = metrics.awake_count;
+    result["step_ms"] = metrics.step_ms;
+    return result;
+}
+
+[[nodiscard]] godot::Dictionary gameplay_frame_dictionary(const detail::SessionFrameData& frame)
+{
+    godot::Array bird_queue;
+    for (const simulation::BirdArchetypeId id : frame.bird_queue) {
+        bird_queue.push_back(static_cast<std::int64_t>(id.value()));
+    }
+    godot::Variant current_bird;
+    if (frame.current_bird) {
+        current_bird = static_cast<std::int64_t>(frame.current_bird->value());
+    }
+    godot::TypedArray<godot::Dictionary> projectiles;
+    for (const auto& projectile : frame.projectiles) {
+        projectiles.push_back(snapshot_dictionary(projectile));
+    }
     godot::TypedArray<godot::Dictionary> snapshots;
     for (const auto& snapshot : frame.snapshots) {
         snapshots.push_back(snapshot_dictionary(snapshot));
@@ -562,79 +761,65 @@ namespace {
     for (const auto& event : frame.events) {
         events.push_back(event_dictionary(event));
     }
-    godot::TypedArray<godot::Dictionary> objective_targets;
-    for (const auto& target : frame.objective_targets) {
-        godot::Dictionary item;
-        item["entity_id"] = static_cast<std::int64_t>(target.entity_id.value());
-        item["current_integrity"] = target.current_integrity;
-        item["maximum_integrity"] = target.maximum_integrity;
-        item["neutralized"] = target.neutralized;
-        objective_targets.push_back(item);
-    }
-    godot::Dictionary metrics;
-    metrics["body_count"] = frame.metrics.body_count;
-    metrics["shape_count"] = frame.metrics.shape_count;
-    metrics["joint_count"] = frame.metrics.joint_count;
-    metrics["contact_count"] = frame.metrics.contact_count;
-    metrics["awake_count"] = frame.metrics.awake_count;
-    metrics["step_ms"] = frame.metrics.step_ms;
-
-    godot::Dictionary aim_envelope;
-    aim_envelope["shell_radius_m"] = frame.aim_envelope.shell_radius_m;
-    aim_envelope["theta_min_deg"] = frame.aim_envelope.theta_min_deg;
-    aim_envelope["theta_max_deg"] = frame.aim_envelope.theta_max_deg;
-    aim_envelope["speed_min_m_s"] = frame.aim_envelope.speed_min_m_s;
-    aim_envelope["speed_max_m_s"] = frame.aim_envelope.speed_max_m_s;
-    aim_envelope["default_speed_m_s"] = frame.aim_envelope.default_speed_m_s;
 
     godot::Dictionary result;
+    result["frame_schema_version"] = 2;
     result["tick"] = static_cast<std::int64_t>(frame.state.tick.value());
     result["ticks_executed"] = frame.ticks_executed;
     result["phase"] = phase_name(frame.state.phase);
     result["outcome"] = outcome_name(frame.state.outcome);
-    result["birds_remaining"] = static_cast<std::int64_t>(frame.birds_remaining);
+    result["launcher"] = launcher_variant(frame.state.launcher);
+    result["locked_plane"] = locked_plane_variant(frame.locked_plane);
+    result["bird_queue"] = bird_queue;
+    result["current_bird"] = current_bird;
+    result["shot"] = shot_variant(frame.shot);
+    result["projectiles"] = projectiles;
     result["snapshots"] = snapshots;
     result["events"] = events;
-    result["objectives_complete"] = frame.objectives_complete;
-    result["objective_targets"] = objective_targets;
+    result["objectives"] = objectives_dictionary(frame);
     result["ability_readiness"] = ability_readiness_name(frame.ability_readiness);
     result["ability_armed"] =
         frame.ability_readiness == simulation::AbilityReadiness::Armed;
     result["trajectory_preview"] = preview_variant(frame.preview);
-    result["aim_envelope"] = aim_envelope;
-    result["metrics"] = metrics;
+    result["score"] = static_cast<std::int64_t>(frame.score);
+    result["stars"] = static_cast<std::int64_t>(frame.stars);
+    result["gravity_kind"] = godot_string(frame.gravity_kind);
+    result["local_gravity"] = detail::to_godot(frame.local_gravity_m_s2);
+    result["metrics"] = metrics_dictionary(frame.metrics);
     result["discarded_time_seconds"] = frame.discarded_time_seconds;
     return result;
 }
 
 }
 
-OrbitalSessionNode::OrbitalSessionNode()
+GameplaySessionNode::GameplaySessionNode()
 {
     set_process_priority(-100);
 }
 
-void OrbitalSessionNode::_bind_methods()
+void GameplaySessionNode::_bind_methods()
 {
     godot::ClassDB::bind_method(
         godot::D_METHOD("configure_session", "materials_json", "archetypes_json", "level_json"),
-        &OrbitalSessionNode::configure_session);
+        &GameplaySessionNode::configure_session);
     godot::ClassDB::bind_method(
-        godot::D_METHOD("queue_begin_aim"), &OrbitalSessionNode::queue_begin_aim);
+        godot::D_METHOD("queue_begin_grab", "camera_right"),
+        &GameplaySessionNode::queue_begin_grab);
     godot::ClassDB::bind_method(
-        godot::D_METHOD("queue_aim", "origin", "tangent_direction", "speed"),
-        &OrbitalSessionNode::queue_aim);
+        godot::D_METHOD("queue_pull", "horizontal_m", "vertical_m"),
+        &GameplaySessionNode::queue_pull);
     godot::ClassDB::bind_method(
-        godot::D_METHOD("queue_launch"), &OrbitalSessionNode::queue_launch);
+        godot::D_METHOD("queue_release"), &GameplaySessionNode::queue_release);
     godot::ClassDB::bind_method(
         godot::D_METHOD("queue_activate_ability"),
-        &OrbitalSessionNode::queue_activate_ability);
+        &GameplaySessionNode::queue_activate_ability);
     godot::ClassDB::bind_method(
-        godot::D_METHOD("queue_cancel_aim"), &OrbitalSessionNode::queue_cancel_aim);
+        godot::D_METHOD("queue_cancel_grab"),
+        &GameplaySessionNode::queue_cancel_grab);
     godot::ClassDB::bind_method(
-        godot::D_METHOD("restart_level"), &OrbitalSessionNode::restart_level);
+        godot::D_METHOD("restart_level"), &GameplaySessionNode::restart_level);
     godot::ClassDB::bind_method(
-        godot::D_METHOD("consume_frame"), &OrbitalSessionNode::consume_frame);
+        godot::D_METHOD("consume_frame"), &GameplaySessionNode::consume_frame);
 
     ADD_SIGNAL(godot::MethodInfo(
         "gameplay_fault",
@@ -642,7 +827,7 @@ void OrbitalSessionNode::_bind_methods()
         godot::PropertyInfo(godot::Variant::STRING, "message")));
 }
 
-void OrbitalSessionNode::emit_pending_fault() noexcept
+void GameplaySessionNode::emit_pending_fault() noexcept
 {
     if (adapter_.fault_generation() == reported_fault_generation_) {
         return;
@@ -655,11 +840,11 @@ void OrbitalSessionNode::emit_pending_fault() noexcept
             reported_fault_generation_ = adapter_.fault_generation();
         }
     } catch (...) {
-        // Diagnostics must not become exceptions crossing the GDExtension ABI.
+        // Diagnostics must never become exceptions crossing the GDExtension ABI.
     }
 }
 
-void OrbitalSessionNode::emit_exception_fault(
+void GameplaySessionNode::emit_exception_fault(
     std::string_view operation, const char* message) noexcept
 {
     (void)operation;
@@ -667,7 +852,7 @@ void OrbitalSessionNode::emit_exception_fault(
     emit_pending_fault();
 }
 
-bool OrbitalSessionNode::configure_session(
+bool GameplaySessionNode::configure_session(
     godot::String materials_json,
     godot::String archetypes_json,
     godot::String level_json) noexcept
@@ -690,61 +875,57 @@ bool OrbitalSessionNode::configure_session(
     return false;
 }
 
-bool OrbitalSessionNode::queue_begin_aim() noexcept
+bool GameplaySessionNode::queue_begin_grab(godot::Vector3 camera_right) noexcept
 {
-    const bool result = adapter_.queue_begin_aim();
-    emit_pending_fault();
-    return result;
-}
-
-bool OrbitalSessionNode::queue_aim(
-    godot::Vector3 origin,
-    godot::Vector3 tangent_direction,
-    double speed) noexcept
-{
-    const auto kernel_origin = detail::to_kernel_checked(origin);
-    const auto kernel_direction = detail::to_kernel_checked(tangent_direction);
-    if (!kernel_origin || !kernel_direction || !std::isfinite(speed)) {
+    const auto kernel_camera_right = detail::to_kernel_checked(camera_right);
+    if (!kernel_camera_right) {
         return false;
     }
-    const bool result = adapter_.queue_aim(*kernel_origin, *kernel_direction, speed);
+    const bool result = adapter_.queue_begin_grab(*kernel_camera_right);
     emit_pending_fault();
     return result;
 }
 
-bool OrbitalSessionNode::queue_launch() noexcept
+bool GameplaySessionNode::queue_pull(double horizontal_m, double vertical_m) noexcept
 {
-    const bool result = adapter_.queue_launch();
+    const bool result = adapter_.queue_pull(horizontal_m, vertical_m);
     emit_pending_fault();
     return result;
 }
 
-bool OrbitalSessionNode::queue_activate_ability() noexcept
+bool GameplaySessionNode::queue_release() noexcept
+{
+    const bool result = adapter_.queue_release();
+    emit_pending_fault();
+    return result;
+}
+
+bool GameplaySessionNode::queue_activate_ability() noexcept
 {
     const bool result = adapter_.queue_activate_ability();
     emit_pending_fault();
     return result;
 }
 
-bool OrbitalSessionNode::queue_cancel_aim() noexcept
+bool GameplaySessionNode::queue_cancel_grab() noexcept
 {
-    const bool result = adapter_.queue_cancel_aim();
+    const bool result = adapter_.queue_cancel_grab();
     emit_pending_fault();
     return result;
 }
 
-bool OrbitalSessionNode::restart_level() noexcept
+bool GameplaySessionNode::restart_level() noexcept
 {
     const bool result = adapter_.restart();
     emit_pending_fault();
     return result;
 }
 
-godot::Dictionary OrbitalSessionNode::consume_frame() noexcept
+godot::Dictionary GameplaySessionNode::consume_frame() noexcept
 {
     try {
         const detail::SessionFrameData& frame = adapter_.peek_frame();
-        godot::Dictionary result = frame_dictionary(frame);
+        godot::Dictionary result = gameplay_frame_dictionary(frame);
         adapter_.acknowledge_frame();
         emit_pending_fault();
         return result;
@@ -756,7 +937,7 @@ godot::Dictionary OrbitalSessionNode::consume_frame() noexcept
     return {};
 }
 
-void OrbitalSessionNode::_physics_process(double delta) noexcept
+void GameplaySessionNode::_physics_process(double delta) noexcept
 {
     (void)adapter_.advance(delta);
     emit_pending_fault();

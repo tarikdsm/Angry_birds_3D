@@ -22,6 +22,14 @@ function Get-NinhoGodotSmokeRegistry {
             RequiredLogText = ''
         },
         [pscustomobject]@{
+            Name = 'gameplay-session-smoke'
+            RelativePath = 'game/tests/gameplay_session_node_smoke.gd'
+            ResourcePath = 'res://tests/gameplay_session_node_smoke.gd'
+            FixedFps = 60
+            RequiredCompletionMarker = 'GAMEPLAY_SESSION_NODE_SMOKE_OK'
+            RequiredLogText = ''
+        },
+        [pscustomobject]@{
             Name = 'vertical-slice-smoke'
             RelativePath = 'game/tests/vertical_slice_smoke.gd'
             ResourcePath = 'res://tests/vertical_slice_smoke.gd'

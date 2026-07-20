@@ -220,4 +220,19 @@ NINHO_TEST("orbital adapter acknowledges a frame only after the consumer commits
     NINHO_REQUIRE(!adapter.peek_frame().snapshots.empty());
 }
 
+NINHO_TEST("orbital adapter remains a ring aim path without slingshot or hooke translation")
+{
+    const std::string source = read_source_file(
+        "native/extension/src/orbital_session_node.cpp");
+    NINHO_REQUIRE(source.find("simulation::BeginAimCommand") != std::string::npos);
+    NINHO_REQUIRE(source.find("simulation::SetAimCommand") != std::string::npos);
+    NINHO_REQUIRE(source.find("simulation::LaunchCommand") != std::string::npos);
+    NINHO_REQUIRE(source.find("simulation::BeginGrabCommand") == std::string::npos);
+    NINHO_REQUIRE(source.find("simulation::SetPullCommand") == std::string::npos);
+    NINHO_REQUIRE(source.find("simulation::ReleaseBirdCommand") == std::string::npos);
+    NINHO_REQUIRE(source.find("SlingshotDefinition") == std::string::npos);
+    NINHO_REQUIRE(source.find("camera_right") == std::string::npos);
+    NINHO_REQUIRE(source.find("spring_energy_j") == std::string::npos);
+}
+
 }

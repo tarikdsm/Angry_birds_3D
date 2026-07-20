@@ -1,6 +1,6 @@
 #include "test_framework.hpp"
 
-#include <ninho/extension/orbital_session_node.hpp>
+#include <ninho/extension/session_adapter_services.hpp>
 
 #include "session_test_facade.hpp"
 
@@ -141,6 +141,9 @@ NINHO_TEST("session frame batch clears trajectory preview after cancel launch an
     batch.capture_latest({}, SessionState{.phase = SessionPhase::Aim}, 3, false, {});
     batch.set_preview(preview);
     NINHO_REQUIRE(batch.peek().preview.has_value());
+    batch.clear_preview();
+    NINHO_REQUIRE(!batch.peek().preview.has_value());
+    batch.set_preview(preview);
 
     batch.capture_latest(
         {}, SessionState{.phase = SessionPhase::Inspection}, 3, false, {});
