@@ -92,6 +92,16 @@ static_assert(!noexcept(std::declval<const SimulationSession&>().preview(
 static_assert(!noexcept(std::declval<const SimulationSession&>().quantize_aim(
     std::declval<const AimState&>())));
 
+static_assert(PlayerCommand{BeginAimCommand{}}.index() == 0U);
+static_assert(PlayerCommand{SetAimCommand{}}.index() == 1U);
+static_assert(PlayerCommand{LaunchCommand{}}.index() == 2U);
+static_assert(PlayerCommand{ActivateAbilityCommand{}}.index() == 3U);
+static_assert(PlayerCommand{CancelAimCommand{}}.index() == 4U);
+static_assert(PlayerCommand{BeginGrabCommand{}}.index() == 5U);
+static_assert(PlayerCommand{SetPullCommand{}}.index() == 6U);
+static_assert(PlayerCommand{ReleaseBirdCommand{}}.index() == 7U);
+static_assert(PlayerCommand{CancelGrabCommand{}}.index() == 8U);
+
 NINHO_SIM_TEST("launch fsm queue is bounded sequenced deferred and last aim wins")
 {
     auto session = create_session();

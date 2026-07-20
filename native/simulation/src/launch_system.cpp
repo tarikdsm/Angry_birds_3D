@@ -2,6 +2,7 @@
 #include "material_mapping.hpp"
 
 #include <ninho/physics/radial_gravity.hpp>
+#include <ninho/physics/world_bounds.hpp>
 
 #include <algorithm>
 #include <cmath>
@@ -140,6 +141,22 @@ SessionStatus SimulationSession::enqueue(PlayerCommand command)
                 "aim command numeric envelope must be finite and bounded")};
         }
     }
+    if (const auto* begin = std::get_if<BeginGrabCommand>(&command)) {
+        if (!ninho::physics::is_finite(begin->camera_right)) {
+            return {error(ContentErrorCode::InvalidNumber, "/commands/camera_right",
+                "camera right must be finite")};
+        }
+    }
+    if (const auto* update = std::get_if<SetPullCommand>(&command)) {
+        const auto within_envelope = [](double value) {
+            return std::isfinite(value) && std::abs(value) <= 1000000.0;
+        };
+        if (!within_envelope(update->horizontal_m)
+            || !within_envelope(update->vertical_m)) {
+            return {error(ContentErrorCode::InvalidNumber, "/commands/pull",
+                "pull command numeric envelope must be finite and bounded")};
+        }
+    }
     impl_->command_queue.push_back({impl_->next_command_sequence++, std::move(command)});
     try {
         impl_->refresh_canonical_state();
@@ -265,8 +282,120 @@ TrajectoryPreview SimulationSession::preview(const AimState& source) const
     return result;
 }
 
+TrajectoryPreview SimulationSession::preview() const
+{
+    TrajectoryPreview result;
+    if (impl_->bundle.level.source_schema_version != 2U
+        || impl_->session_state.phase != SessionPhase::Grabbed
+        || !impl_->launcher_system) {
+        result.status.error = error(ContentErrorCode::InvalidInvariant, "/preview",
+            "launcher preview requires a grabbed schema v2 session");
+        return result;
+    }
+    const auto solved = impl_->launcher_system->solution();
+    if (!solved.ok() || !solved.value.launchable) {
+        result.status.error = solved.ok()
+            ? error(ContentErrorCode::InvalidInvariant, "/preview",
+                "launcher preview requires a pull outside the deadzone")
+            : solved.error;
+        return result;
+    }
+    const BirdArchetype* preview_bird = impl_->next_bird_archetype();
+    if (preview_bird == nullptr) {
+        result.status.error = error(ContentErrorCode::InvalidInvariant, "/bird_queue",
+            "launcher preview requires an available bird");
+        return result;
+    }
+    result.quantized_aim = {
+        solved.value.origin_m, solved.value.direction, solved.value.speed_m_s};
+
+    try {
+        constexpr double preview_seconds = 3.0;
+        const auto& world_config = impl_->physics.config();
+        const float dt = world_config.time_step;
+        if (!std::isfinite(dt) || dt <= 0.0F) {
+            result.status.error = error(ContentErrorCode::InternalError, "/preview",
+                "current physics timestep is not representable");
+            return result;
+        }
+        const auto maximum_ticks = static_cast<std::uint32_t>(
+            std::floor(preview_seconds / static_cast<double>(dt) + 1.0e-6));
+        const ninho::physics::WorldBounds bounds{world_config.bounds};
+        auto position = solved.value.origin_m;
+        auto velocity = solved.value.direction * static_cast<float>(solved.value.speed_m_s);
+        result.samples.reserve(static_cast<std::size_t>(maximum_ticks) + 1U);
+        result.samples.push_back(position);
+        std::uint64_t hash = 14695981039346656037ULL;
+        for (std::uint32_t tick = 0; tick < maximum_ticks; ++tick) {
+            velocity = velocity + impl_->physics.gravity_at(position) * dt;
+            const auto translation = velocity * dt;
+            if (!ninho::physics::is_finite(translation)
+                || ninho::physics::length(translation) <= 0.0F) {
+                result.status.error = error(ContentErrorCode::InternalError, "/preview",
+                    "trajectory segment is not representable");
+                return result;
+            }
+            const auto hit = impl_->physics.cast_sphere(position,
+                static_cast<float>(preview_bird->radius_m), translation);
+            if (hit) {
+                const auto identity = impl_->domain_identity(hit->body);
+                if (!identity) {
+                    result.status.error = error(ContentErrorCode::InternalError, "/preview",
+                        "trajectory hit has no domain identity");
+                    return result;
+                }
+                result.first_hit = TrajectoryHit{identity->entity_id,
+                    identity->part_id, hit->point, hit->normal};
+                position = position + translation * hit->fraction;
+                result.samples.push_back(position);
+                break;
+            }
+            position = position + translation;
+            result.samples.push_back(position);
+            if (!bounds.contains(position)) {
+                break;
+            }
+        }
+        for (const auto sample : result.samples) {
+            hash = fnv_mix(hash, std::llround(static_cast<double>(sample.x) * 100000.0));
+            hash = fnv_mix(hash, std::llround(static_cast<double>(sample.y) * 100000.0));
+            hash = fnv_mix(hash, std::llround(static_cast<double>(sample.z) * 100000.0));
+        }
+        if (result.first_hit) {
+            hash = fnv_mix(hash, result.first_hit->entity_id.value());
+            hash = fnv_mix(hash, result.first_hit->part_id.value());
+            hash = fnv_mix(hash,
+                std::llround(static_cast<double>(result.first_hit->point_m.x) * 100000.0));
+            hash = fnv_mix(hash,
+                std::llround(static_cast<double>(result.first_hit->point_m.y) * 100000.0));
+            hash = fnv_mix(hash,
+                std::llround(static_cast<double>(result.first_hit->point_m.z) * 100000.0));
+        }
+        result.canonical_hash = hash;
+    } catch (const std::exception& exception) {
+        result.status.error = error(
+            ContentErrorCode::InternalError, "/preview", exception.what());
+    } catch (...) {
+        result.status.error = error(ContentErrorCode::InternalError, "/preview",
+            "unexpected trajectory preview failure");
+    }
+    return result;
+}
+
 const BirdArchetype* SimulationSession::Impl::next_bird_archetype() const noexcept
 {
+    if (bundle.level.source_schema_version == 2U) {
+        if (remaining_birds == 0U
+            || remaining_birds > bundle.level.bird_queue.size()) {
+            return nullptr;
+        }
+        const std::size_t queue_index = bundle.level.bird_queue.size()
+            - static_cast<std::size_t>(remaining_birds);
+        const BirdArchetypeId next_id = bundle.level.bird_queue[queue_index];
+        const auto found = std::ranges::find(
+            bundle.archetypes.birds, next_id, &BirdArchetype::id);
+        return found == bundle.archetypes.birds.end() ? nullptr : &*found;
+    }
     for (const BirdRosterEntry& entry : roster_remaining) {
         if (entry.count == 0U) {
             continue;
@@ -313,10 +442,10 @@ void SimulationSession::Impl::publish_event(
         kind, entity, archetype, rejection});
 }
 
-SessionStatus SimulationSession::Impl::create_projectile()
+SessionStatus SimulationSession::Impl::create_projectile(const AimState& launch_state)
 {
     const BirdArchetype* bird = next_bird_archetype();
-    if (bird == nullptr || !session_state.aim) {
+    if (bird == nullptr) {
         return {error(ContentErrorCode::InvalidInvariant, "/launch",
             "launch requires a valid aim and an available bird")};
     }
@@ -334,18 +463,25 @@ SessionStatus SimulationSession::Impl::create_projectile()
         return {error(ContentErrorCode::MissingReference, "/launch/surface_id",
             "bird surface is unavailable")};
     }
+    const bool legacy = bundle.level.source_schema_version == 1U;
+    const double sphere_volume_m3 = 4.0 / 3.0 * std::numbers::pi
+        * bird->radius_m * bird->radius_m * bird->radius_m;
+    const double density_kg_m3 = legacy
+        ? bird->density_kg_m3 : bird->mass_kg / sphere_volume_m3;
     ninho::physics::BodyDesc description = ninho::physics::BodyDesc::dynamic_sphere(
-        static_cast<float>(bird->radius_m), {session_state.aim->origin_m, {}},
-        static_cast<float>(bird->density_kg_m3));
-    description.linear_velocity = session_state.aim->tangent_direction
-        * static_cast<float>(session_state.aim->speed_m_s);
+        static_cast<float>(bird->radius_m), {launch_state.origin_m, {}},
+        static_cast<float>(density_kg_m3));
+    description.linear_velocity = launch_state.tangent_direction
+        * static_cast<float>(launch_state.speed_m_s);
     description.bullet = bird->bullet;
     // The simulation FSM owns projectile lifetime. In particular, an active
     // ability still needs its source body after crossing the world's 6R cleanup
     // boundary so it can deterministically publish its final pulse and end.
     description.world_exit_policy =
         ninho::physics::WorldExitPolicy::KeepOutsideBounds;
-    description.name = "CHR_LaunchBird";
+    const std::string visual_id = legacy
+        ? "CHR_LaunchBird" : bird->projectile_visual_id;
+    description.name = visual_id;
     description.shapes.front().friction = static_cast<float>(bird->friction);
     description.shapes.front().restitution = static_cast<float>(bird->restitution);
     description.shapes.front().material_id = detail::physics_surface_tag(bird->surface_id);
@@ -361,7 +497,7 @@ SessionStatus SimulationSession::Impl::create_projectile()
         .body_type = BodyType::Dynamic,
         .surface_id = bird->surface_id,
         .shape = {.type = ShapeType::Sphere, .radius_m = bird->radius_m},
-        .visual_id = "CHR_LaunchBird",
+        .visual_id = visual_id,
         .physics_handle = created.value,
         .is_projectile = true,
         .affected_by_world_gravity = true});
@@ -371,10 +507,12 @@ SessionStatus SimulationSession::Impl::create_projectile()
         .physics_handle = created.value,
         .bullet = bird->bullet,
         .launch_tick = session_state.tick};
-    for (BirdRosterEntry& entry : roster_remaining) {
-        if (entry.bird_archetype_id == bird->id && entry.count > 0U) {
-            --entry.count;
-            break;
+    if (legacy) {
+        for (BirdRosterEntry& entry : roster_remaining) {
+            if (entry.bird_archetype_id == bird->id && entry.count > 0U) {
+                --entry.count;
+                break;
+            }
         }
     }
     --remaining_birds;
@@ -388,6 +526,29 @@ SessionStatus SimulationSession::Impl::create_projectile()
 SessionStatus SimulationSession::Impl::process_commands()
 {
     while (!command_queue.empty()) {
+        if (std::holds_alternative<SetPullCommand>(command_queue.front().command)) {
+            SetPullCommand latest = std::get<SetPullCommand>(command_queue.front().command);
+            while (!command_queue.empty()
+                && std::holds_alternative<SetPullCommand>(command_queue.front().command)) {
+                latest = std::get<SetPullCommand>(command_queue.front().command);
+                last_processed_command_sequence = command_queue.front().sequence;
+                command_queue.pop_front();
+            }
+            if (session_state.phase != SessionPhase::Grabbed || !launcher_system) {
+                publish_event(DomainEventKind::CommandRejected, {}, {},
+                    CommandRejectionReason::InvalidPhase);
+                continue;
+            }
+            const auto value = launcher_system->set_pull(
+                latest.horizontal_m, latest.vertical_m);
+            if (!value.ok()) {
+                publish_event(DomainEventKind::CommandRejected, {}, {},
+                    CommandRejectionReason::InvalidAim);
+                continue;
+            }
+            session_state.launcher = value.value;
+            continue;
+        }
         if (std::holds_alternative<SetAimCommand>(command_queue.front().command)) {
             SetAimCommand latest = std::get<SetAimCommand>(command_queue.front().command);
             while (!command_queue.empty()
@@ -414,7 +575,8 @@ SessionStatus SimulationSession::Impl::process_commands()
         command_queue.pop_front();
         last_processed_command_sequence = queued.sequence;
         if (std::holds_alternative<BeginAimCommand>(queued.command)) {
-            if (session_state.phase == SessionPhase::Inspection) {
+            if (bundle.level.source_schema_version == 1U
+                && session_state.phase == SessionPhase::Inspection) {
                 session_state.phase = SessionPhase::Aim;
                 const double shell = bundle.level.planet.radius_m
                     + bundle.level.launch_ring.shell_offset_m;
@@ -434,7 +596,7 @@ SessionStatus SimulationSession::Impl::process_commands()
             }
         } else if (std::holds_alternative<LaunchCommand>(queued.command)) {
             if (session_state.phase == SessionPhase::Aim) {
-                const auto status = create_projectile();
+                const auto status = create_projectile(*session_state.aim);
                 if (!status.ok()) {
                     return status;
                 }
@@ -442,6 +604,61 @@ SessionStatus SimulationSession::Impl::process_commands()
                 publish_event(DomainEventKind::CommandRejected, {}, {},
                     CommandRejectionReason::InvalidPhase);
             }
+        } else if (const auto* begin = std::get_if<BeginGrabCommand>(&queued.command)) {
+            const BirdArchetype* bird = next_bird_archetype();
+            if (bundle.level.source_schema_version != 2U
+                || session_state.phase != SessionPhase::Inspection
+                || !launcher_system || bird == nullptr) {
+                publish_event(DomainEventKind::CommandRejected, {}, {},
+                    bird == nullptr ? CommandRejectionReason::NoBirdAvailable
+                                    : CommandRejectionReason::InvalidPhase);
+                continue;
+            }
+            const auto value = launcher_system->begin_grab(begin->camera_right,
+                {.mass_kg = bird->mass_kg, .speed_cap_m_s = bird->launch_speed_cap_m_s});
+            if (!value.ok()) {
+                publish_event(DomainEventKind::CommandRejected, {}, {},
+                    CommandRejectionReason::InvalidAim);
+                continue;
+            }
+            session_state.phase = SessionPhase::Grabbed;
+            session_state.aim.reset();
+            session_state.launcher = value.value;
+        } else if (std::holds_alternative<CancelGrabCommand>(queued.command)) {
+            if (session_state.phase == SessionPhase::Grabbed && launcher_system) {
+                launcher_system->cancel_grab();
+                session_state.phase = SessionPhase::Inspection;
+                session_state.launcher.reset();
+            } else {
+                publish_event(DomainEventKind::CommandRejected, {}, {},
+                    CommandRejectionReason::InvalidPhase);
+            }
+        } else if (std::holds_alternative<ReleaseBirdCommand>(queued.command)) {
+            if (session_state.phase != SessionPhase::Grabbed || !launcher_system) {
+                publish_event(DomainEventKind::CommandRejected, {}, {},
+                    CommandRejectionReason::InvalidPhase);
+                continue;
+            }
+            const auto solved = launcher_system->solution();
+            if (!solved.ok()) {
+                publish_event(DomainEventKind::CommandRejected, {}, {},
+                    CommandRejectionReason::InvalidAim);
+                continue;
+            }
+            if (!solved.value.launchable) {
+                launcher_system->cancel_grab();
+                session_state.phase = SessionPhase::Inspection;
+                session_state.launcher.reset();
+                continue;
+            }
+            const AimState launch_state{solved.value.origin_m,
+                solved.value.direction, solved.value.speed_m_s};
+            const auto status = create_projectile(launch_state);
+            if (!status.ok()) {
+                return status;
+            }
+            launcher_system->complete_release();
+            session_state.launcher = launcher_system->state();
         } else if (std::holds_alternative<ActivateAbilityCommand>(queued.command)) {
             const AbilityArchetype* ability = projectile
                 ? ability_archetype(projectile->ability_id)

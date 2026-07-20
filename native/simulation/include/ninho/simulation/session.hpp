@@ -31,6 +31,7 @@ enum class SessionPhase : std::uint8_t {
     Evaluation,
     Result,
     Faulted,
+    Grabbed,
 };
 
 enum class Outcome : std::uint8_t {
@@ -39,11 +40,31 @@ enum class Outcome : std::uint8_t {
     Defeat,
 };
 
+struct LauncherState {
+    ninho::physics::Vec3 rest_position_m{};
+    ninho::physics::Vec3 camera_right{};
+    ninho::physics::Vec3 up{};
+    ninho::physics::Vec3 horizontal{};
+    ninho::physics::Vec3 plane_normal{};
+    double pull_horizontal_m{};
+    double pull_vertical_m{};
+    double extension_m{};
+    double spring_energy_j{};
+    double launch_energy_j{};
+    ninho::physics::Vec3 launch_direction{};
+    double predicted_speed_m_s{};
+    double deadzone_m{};
+    double maximum_extension_m{};
+
+    bool operator==(const LauncherState&) const = default;
+};
+
 struct SessionState {
     TickIndex tick{};
     SessionPhase phase{SessionPhase::Inspection};
     Outcome outcome{Outcome::None};
     std::optional<AimState> aim;
+    std::optional<LauncherState> launcher;
     std::optional<ninho::physics::Vec3> last_impact_m;
 };
 
@@ -152,6 +173,7 @@ public:
     [[nodiscard]] SessionStatus tick();
     [[nodiscard]] ContentResult<AimState> quantize_aim(const AimState&) const;
     [[nodiscard]] TrajectoryPreview preview(const AimState&) const;
+    [[nodiscard]] TrajectoryPreview preview() const;
 
     // Non-owning views of buffers published by this session. Any non-const
     // operation on the session, as well as moving or destroying it, may

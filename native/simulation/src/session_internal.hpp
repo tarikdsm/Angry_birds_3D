@@ -2,6 +2,7 @@
 
 #include "ninho/simulation/session.hpp"
 #include "damage_system.hpp"
+#include "launcher_system.hpp"
 
 #include <ninho/physics/physics_world.hpp>
 
@@ -83,7 +84,7 @@ struct SimulationSession::Impl {
 
     [[nodiscard]] SessionStatus build() noexcept;
     [[nodiscard]] SessionStatus process_commands();
-    [[nodiscard]] SessionStatus create_projectile();
+    [[nodiscard]] SessionStatus create_projectile(const AimState& launch_state);
     void update_fsm_before_step();
     void update_fsm_after_step();
     [[nodiscard]] SessionStatus apply_gravity_field_before_step();
@@ -117,6 +118,7 @@ struct SimulationSession::Impl {
     ContentBundle bundle;
     ninho::physics::PhysicsWorld physics;
     detail::DamageSystem damage_system;
+    std::optional<detail::LauncherSystem> launcher_system;
     SessionState session_state;
     std::optional<SessionStatus> latched_fault;
     std::optional<SessionStatus> emergency_fault{

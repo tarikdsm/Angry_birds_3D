@@ -9,6 +9,7 @@ add_library(ninho_simulation_kernel STATIC
   src/canonical_state.cpp
   src/session.cpp
   src/session_builder.cpp
+  src/launcher_system.cpp
   src/launch_system.cpp
   src/gravity_field_ability_system.cpp
   src/damage_system.cpp
@@ -43,6 +44,7 @@ if(BUILD_TESTING)
     tests/product_v2_content_tests.cpp
     tests/world_mode_tests.cpp
     tests/compound_shape_tests.cpp
+    tests/launcher_system_tests.cpp
     tests/session_tests.cpp
     tests/launch_fsm_tests.cpp
     tests/gravity_field_ability_tests.cpp
@@ -77,6 +79,10 @@ if(BUILD_TESTING)
     )
   endif()
 
+  add_test(
+    NAME launcher_system
+    COMMAND ninho_simulation_tests --filter "launcher system"
+  )
   add_test(
     NAME launch_fsm
     COMMAND ninho_simulation_tests --filter "launch fsm"

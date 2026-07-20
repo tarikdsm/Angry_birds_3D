@@ -35,7 +35,27 @@ struct CancelAimCommand {
     bool operator==(const CancelAimCommand&) const = default;
 };
 
+struct BeginGrabCommand {
+    ninho::physics::Vec3 camera_right{};
+    bool operator==(const BeginGrabCommand&) const = default;
+};
+
+struct SetPullCommand {
+    double horizontal_m{};
+    double vertical_m{};
+    bool operator==(const SetPullCommand&) const = default;
+};
+
+struct ReleaseBirdCommand {
+    bool operator==(const ReleaseBirdCommand&) const = default;
+};
+
+struct CancelGrabCommand {
+    bool operator==(const CancelGrabCommand&) const = default;
+};
+
 using PlayerCommand = std::variant<
-    BeginAimCommand, SetAimCommand, LaunchCommand, ActivateAbilityCommand, CancelAimCommand>;
+    BeginAimCommand, SetAimCommand, LaunchCommand, ActivateAbilityCommand, CancelAimCommand,
+    BeginGrabCommand, SetPullCommand, ReleaseBirdCommand, CancelGrabCommand>;
 
 }

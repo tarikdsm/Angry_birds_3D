@@ -526,6 +526,7 @@ SessionStatus SimulationSession::Impl::build() noexcept
             }
         } else {
             remaining_birds = static_cast<std::uint32_t>(bundle.level.bird_queue.size());
+            launcher_system.emplace(bundle.level.world, bundle.level.slingshot);
         }
 
         std::unordered_map<std::uint32_t, ninho::physics::BodyHandle> handles_by_body_id;
