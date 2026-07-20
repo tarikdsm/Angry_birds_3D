@@ -59,7 +59,8 @@ NINHO_SIM_TEST("damage anchor contact normal is fixed from a to b")
 {
     static_assert(contact_normal_convention == ContactNormalConvention::AToB);
 
-    PhysicsWorld world({.surface_gravity = 0.0f});
+    PhysicsWorld world(ninho::physics::make_legacy_radial_world_config(
+        {.surface_gravity = 0.0f}));
     auto a = BodyDesc::dynamic_sphere(0.5f, {{-2.0f, 5.0f, 0.0f}, {}}, 100.0f);
     auto b = BodyDesc::dynamic_sphere(0.5f, {{2.0f, 5.0f, 0.0f}, {}}, 400.0f);
     a.linear_velocity = {10.0f, 0.0f, 0.0f};

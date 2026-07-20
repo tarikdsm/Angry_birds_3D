@@ -36,7 +36,7 @@ namespace {
 
 NINHO_TEST("capability compound body has expected mass and can be queried")
 {
-    PhysicsWorld world(WorldConfig{.surface_gravity = 0});
+    PhysicsWorld world(make_legacy_radial_world_config({.surface_gravity = 0}));
     BodyDesc body{.type = BodyType::Dynamic, .transform = {{0, 5, 0}, {}}};
     body.shapes = {
         ShapeDesc{.geometry = BoxShape{{0.5f, 0.5f, 0.5f}, {{-0.75f, 0, 0}, {}}},
@@ -58,7 +58,7 @@ NINHO_TEST("capability compound body has expected mass and can be queried")
 
 NINHO_TEST("capability sphere cast returns first hit")
 {
-    PhysicsWorld world(WorldConfig{.surface_gravity = 0});
+    PhysicsWorld world(make_legacy_radial_world_config({.surface_gravity = 0}));
     BodyDesc high_desc = BodyDesc::static_box({1, 1, 1}, {{0, 8, 0}, {}});
     high_desc.shapes.front().material_id = 81;
     const auto high = world.create_body(high_desc).value;
@@ -76,7 +76,7 @@ NINHO_TEST("capability sphere cast returns first hit")
 
 NINHO_TEST("capability shape cast resolves quantized ties by public handle")
 {
-    PhysicsWorld world(WorldConfig{.surface_gravity = 0});
+    PhysicsWorld world(make_legacy_radial_world_config({.surface_gravity = 0}));
     constexpr Vec3 cast_origin{0, 12, 0};
     constexpr Vec3 cast_translation{0, -12, 0};
     constexpr float query_radius = 0.25f;
@@ -120,7 +120,7 @@ NINHO_TEST("capability shape cast resolves quantized ties by public handle")
 
 NINHO_TEST("capability distance joint exposes finite force and destroys safely")
 {
-    PhysicsWorld world(WorldConfig{.surface_gravity = 0});
+    PhysicsWorld world(make_legacy_radial_world_config({.surface_gravity = 0}));
     auto a = world.create_body(
         BodyDesc::dynamic_box({0.5f, 0.5f, 0.5f}, {{-1, 5, 0}, {}}, 500)).value;
     auto b = world.create_body(
@@ -140,7 +140,7 @@ NINHO_TEST("capability distance joint exposes finite force and destroys safely")
 
 NINHO_TEST("capability weld joint keeps loaded bodies together")
 {
-    PhysicsWorld world(WorldConfig{.surface_gravity = 0});
+    PhysicsWorld world(make_legacy_radial_world_config({.surface_gravity = 0}));
     auto a = world.create_body(
         BodyDesc::dynamic_box({0.5f, 0.5f, 0.5f}, {{0, 5, 0}, {}}, 500)).value;
     auto b = world.create_body(
@@ -161,7 +161,7 @@ NINHO_TEST("capability weld joint keeps loaded bodies together")
 
 NINHO_TEST("capability nontrivial weld frames map to world and resist applied torque")
 {
-    PhysicsWorld world(WorldConfig{.substeps = 6, .surface_gravity = 0});
+    PhysicsWorld world(make_legacy_radial_world_config({.substeps = 6, .surface_gravity = 0}));
     constexpr float half_sqrt_two = 0.70710678118f;
     const Quat positive_quarter_turn{0, 0, half_sqrt_two, half_sqrt_two};
     const Quat negative_quarter_turn{0, 0, -half_sqrt_two, half_sqrt_two};
@@ -170,7 +170,6 @@ NINHO_TEST("capability nontrivial weld frames map to world and resist applied to
         {0.5f, 0.5f, 0.5f}, {{-1, 5, 0}, positive_quarter_turn})).value;
     BodyDesc b_desc = BodyDesc::dynamic_box(
         {0.5f, 0.5f, 0.5f}, {{1, 5, 0}, negative_quarter_turn}, 500);
-    b_desc.radial_gravity = false;
     b_desc.enable_sleep = false;
     const BodyHandle b = world.create_body(b_desc).value;
     world.step();
@@ -204,7 +203,7 @@ NINHO_TEST("capability nontrivial weld frames map to world and resist applied to
 
 NINHO_TEST("capability hit events are copied before mutation")
 {
-    PhysicsWorld world(WorldConfig{.surface_gravity = 0});
+    PhysicsWorld world(make_legacy_radial_world_config({.surface_gravity = 0}));
     BodyDesc wall_desc = BodyDesc::static_box({2, 0.5f, 2}, {{0, 5, 0}, {}});
     wall_desc.shapes.front().material_id = 101;
     auto wall = world.create_body(wall_desc).value;
@@ -235,7 +234,7 @@ NINHO_TEST("capability hit events are copied before mutation")
 
 NINHO_TEST("capability asymmetric contact reports numeric mass energy and canonical materials")
 {
-    PhysicsWorld world(WorldConfig{.surface_gravity = 0});
+    PhysicsWorld world(make_legacy_radial_world_config({.surface_gravity = 0}));
     BodyDesc light_desc = BodyDesc::dynamic_sphere(0.5f, {{-2, 5, 0}, {}}, 100);
     light_desc.linear_velocity = {10, 0, 0};
     light_desc.bullet = true;
@@ -282,7 +281,7 @@ NINHO_TEST("capability invalid hull is rejected before Box3D")
 
 NINHO_TEST("capability three meter shape cast hits transformed hull")
 {
-    PhysicsWorld world(WorldConfig{.surface_gravity = 0});
+    PhysicsWorld world(make_legacy_radial_world_config({.surface_gravity = 0}));
     BodyDesc target{.type = BodyType::Static, .transform = {{0, 0, 0}, {}}};
     target.shapes = {ShapeDesc{
         .geometry = HullShape{{{-0.5f, -0.5f, -0.5f},
@@ -310,7 +309,7 @@ NINHO_TEST("capability three meter shape cast hits transformed hull")
 
 NINHO_TEST("capability eight hull compound reports mass bounds and contact")
 {
-    PhysicsWorld world(WorldConfig{.surface_gravity = 0});
+    PhysicsWorld world(make_legacy_radial_world_config({.surface_gravity = 0}));
     BodyDesc compound{.type = BodyType::Dynamic, .transform = {{0, 3, 0}, {}}};
     for (int i = 0; i < 8; ++i) {
         compound.shapes.push_back(ShapeDesc{
@@ -336,7 +335,7 @@ NINHO_TEST("capability eight hull compound reports mass bounds and contact")
 
 NINHO_TEST("capability hit events deduplicate substeps and joint load crosses threshold")
 {
-    PhysicsWorld world(WorldConfig{.substeps = 6, .surface_gravity = 0});
+    PhysicsWorld world(make_legacy_radial_world_config({.substeps = 6, .surface_gravity = 0}));
     auto a = world.create_body(
         BodyDesc::static_box({0.5f, 0.5f, 0.5f}, {{0, 0, 0}, {}})).value;
     auto b = world.create_body(
@@ -378,7 +377,7 @@ NINHO_TEST("capability hit events deduplicate substeps and joint load crosses th
 
 NINHO_TEST("capability CompoundShape expands children and query ordering is stable")
 {
-    PhysicsWorld world(WorldConfig{.surface_gravity = 0});
+    PhysicsWorld world(make_legacy_radial_world_config({.surface_gravity = 0}));
     BodyDesc compound{.type = BodyType::Dynamic, .transform = {{0, 4, 0}, {}}};
     compound.shapes.push_back(ShapeDesc{
         .geometry = CompoundShape{{
@@ -407,7 +406,7 @@ NINHO_TEST("capability CompoundShape expands children and query ordering is stab
 
 NINHO_TEST("capability invalid joint and query inputs are rejected")
 {
-    PhysicsWorld world(WorldConfig{.surface_gravity = 0});
+    PhysicsWorld world(make_legacy_radial_world_config({.surface_gravity = 0}));
     auto a = world.create_body(BodyDesc::dynamic_sphere(0.5f, {}, 10)).value;
     auto b = world.create_body(BodyDesc::dynamic_sphere(0.5f, {{2, 0, 0}, {}}, 10)).value;
     world.step();
@@ -432,7 +431,7 @@ NINHO_TEST("capability invalid joint and query inputs are rejected")
 
 NINHO_TEST("capability body destruction invalidates attached joint handle")
 {
-    PhysicsWorld world(WorldConfig{.surface_gravity = 0});
+    PhysicsWorld world(make_legacy_radial_world_config({.surface_gravity = 0}));
     const auto a = world.create_body(BodyDesc::dynamic_sphere(0.5f, {}, 10)).value;
     const auto b = world.create_body(BodyDesc::dynamic_sphere(0.5f, {{2, 0, 0}, {}}, 10)).value;
     world.step();
@@ -449,17 +448,15 @@ NINHO_TEST("capability body destruction invalidates attached joint handle")
 
 NINHO_TEST("capability auto removal invalidates attached joint before deferred body destruction")
 {
-    PhysicsWorld world(WorldConfig{.planet_radius = 10, .surface_gravity = 0});
+    PhysicsWorld world(make_legacy_radial_world_config({.planet_radius = 10, .surface_gravity = 0}));
     BodyDesc doomed_desc =
         BodyDesc::dynamic_box({0.5f, 0.5f, 0.5f}, {{0, 61, 0}, {}}, 10);
-    doomed_desc.radial_gravity = false;
     doomed_desc.enable_sleep = false;
     const BodyHandle doomed = world.create_body(doomed_desc).value;
 
     BodyDesc survivor_desc =
         BodyDesc::dynamic_box({0.5f, 0.5f, 0.5f}, {{0, 62, 0}, {}}, 10);
-    survivor_desc.radial_gravity = false;
-    survivor_desc.remove_beyond_six_r = false;
+    survivor_desc.world_exit_policy = WorldExitPolicy::KeepOutsideBounds;
     survivor_desc.enable_sleep = false;
     const BodyHandle survivor = world.create_body(survivor_desc).value;
     const JointHandle joint = world.create_joint(
@@ -482,7 +479,7 @@ NINHO_TEST("capability auto removal invalidates attached joint before deferred b
 NINHO_TEST("capability queued stale joint commands become safe no ops after body destruction")
 {
     {
-        PhysicsWorld world(WorldConfig{.surface_gravity = 0});
+        PhysicsWorld world(make_legacy_radial_world_config({.surface_gravity = 0}));
         const auto a_result =
             world.create_body(BodyDesc::dynamic_sphere(0.5f, {}, 10));
         const auto b_result = world.create_body(
@@ -513,7 +510,7 @@ NINHO_TEST("capability queued stale joint commands become safe no ops after body
     }
 
     {
-        PhysicsWorld world(WorldConfig{.surface_gravity = 0});
+        PhysicsWorld world(make_legacy_radial_world_config({.surface_gravity = 0}));
         const auto a_result =
             world.create_body(BodyDesc::dynamic_sphere(0.5f, {}, 10));
         const auto b_result = world.create_body(
@@ -553,7 +550,7 @@ NINHO_TEST("capability queued stale joint commands become safe no ops after body
 
 NINHO_TEST("capability joint capacity is explicit and generation safe")
 {
-    PhysicsWorld world(WorldConfig{.surface_gravity = 0});
+    PhysicsWorld world(make_legacy_radial_world_config({.surface_gravity = 0}));
     const auto a = world.create_body(BodyDesc::static_sphere(0.5f, {})).value;
     const auto b = world.create_body(BodyDesc::dynamic_sphere(0.5f, {{2, 0, 0}, {}}, 10)).value;
     world.step();
@@ -580,7 +577,7 @@ NINHO_TEST("capability joint capacity is explicit and generation safe")
 
 NINHO_TEST("capability bounds metrics and stale handles remain public only")
 {
-    PhysicsWorld world(WorldConfig{.surface_gravity = 0});
+    PhysicsWorld world(make_legacy_radial_world_config({.surface_gravity = 0}));
     const BodyHandle body =
         world.create_body(BodyDesc::dynamic_box({1, 2, 3}, {{0, 5, 0}, {}}, 10)).value;
     NINHO_REQUIRE(world.metrics().body_count == 0);
@@ -604,7 +601,7 @@ NINHO_TEST("capability bounds metrics and stale handles remain public only")
 
 NINHO_TEST("capability metrics exclude contacts attached to pending body destruction")
 {
-    PhysicsWorld world(WorldConfig{.surface_gravity = 0});
+    PhysicsWorld world(make_legacy_radial_world_config({.surface_gravity = 0}));
     world.create_body(BodyDesc::static_box({2, 0.5f, 2}, {{0, 0, 0}, {}}));
     const BodyHandle body =
         world.create_body(BodyDesc::dynamic_box({0.5f, 0.5f, 0.5f}, {{0, 1, 0}, {}}, 10)).value;
@@ -616,7 +613,7 @@ NINHO_TEST("capability metrics exclude contacts attached to pending body destruc
 
 NINHO_TEST("capability metrics reuse contact scratch after warmup")
 {
-    PhysicsWorld world(WorldConfig{.surface_gravity = 0});
+    PhysicsWorld world(make_legacy_radial_world_config({.surface_gravity = 0}));
     world.create_body(BodyDesc::static_box({2, 0.5f, 2}, {{0, 0, 0}, {}}));
     world.create_body(
         BodyDesc::dynamic_box({0.5f, 0.5f, 0.5f}, {{0, 1, 0}, {}}, 10));

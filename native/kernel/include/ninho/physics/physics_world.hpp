@@ -91,10 +91,6 @@ struct BodyDesc {
     bool enable_sleep{true};
     bool affected_by_world_gravity{true};
     WorldExitPolicy world_exit_policy{WorldExitPolicy::RemoveOutsideBounds};
-    // Compatibility fields for authored v1 call sites. New content uses the
-    // typed fields above.
-    bool radial_gravity{true};
-    bool remove_beyond_six_r{true};
     std::string name;
 
     static BodyDesc static_sphere(float radius, Transform transform);
@@ -106,8 +102,6 @@ struct BodyDesc {
 struct WorldConfig {
     float time_step{1.0f / 60.0f};
     int substeps{4};
-    float planet_radius{10.0f};
-    float surface_gravity{9.0f};
     std::size_t max_bodies{500};
     GravityFieldConfig gravity{RadialGravityConfig{
         .center_m = {},
@@ -119,6 +113,17 @@ struct WorldConfig {
         .removal_radius_m = 60.0f,
     }};
 };
+
+struct LegacyRadialWorldConfig {
+    float time_step{1.0f / 60.0f};
+    int substeps{4};
+    float planet_radius{10.0f};
+    float surface_gravity{9.0f};
+    std::size_t max_bodies{500};
+};
+
+[[nodiscard]] WorldConfig make_legacy_radial_world_config(
+    LegacyRadialWorldConfig legacy = {}) noexcept;
 
 struct BodyState {
     BodyHandle handle{};

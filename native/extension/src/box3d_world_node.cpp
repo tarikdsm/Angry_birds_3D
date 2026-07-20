@@ -117,8 +117,13 @@ bool Box3DWorldNode::require_world(std::string_view operation) noexcept
 bool Box3DWorldNode::recreate_world(const physics::WorldConfig& config)
 {
     auto replacement = std::make_unique<physics::PhysicsWorld>(config);
+    const auto* radial = std::get_if<physics::RadialGravityConfig>(&config.gravity);
+    if (radial == nullptr) {
+        emit_fault("invalid_argument", "planet world requires radial gravity");
+        return false;
+    }
     const physics::Result<physics::BodyHandle> planet =
-        replacement->create_body(detail::make_planet_desc(config.planet_radius));
+        replacement->create_body(detail::make_planet_desc(radial->reference_radius_m));
     if (!planet) {
         emit_status_fault("create_planet", planet.status);
         return false;

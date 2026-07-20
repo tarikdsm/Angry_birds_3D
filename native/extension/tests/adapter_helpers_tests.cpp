@@ -106,10 +106,13 @@ NINHO_TEST("fixed scheduler rejects invalid delta and reset clears backlog")
 NINHO_TEST("adapter builds planet configuration and static sphere")
 {
     const ninho::physics::WorldConfig config = make_world_config(25.0F, 12.0F);
-    NINHO_REQUIRE_NEAR(config.planet_radius, 25.0, 1e-6);
-    NINHO_REQUIRE_NEAR(config.surface_gravity, 12.0, 1e-6);
+    const auto& radial = std::get<ninho::physics::RadialGravityConfig>(config.gravity);
+    const auto& bounds = std::get<ninho::physics::SphericalWorldBounds>(config.bounds);
+    NINHO_REQUIRE_NEAR(radial.reference_radius_m, 25.0, 1e-6);
+    NINHO_REQUIRE_NEAR(radial.reference_acceleration_m_s2, 12.0, 1e-6);
+    NINHO_REQUIRE_NEAR(bounds.removal_radius_m, 150.0, 1e-6);
 
-    const ninho::physics::BodyDesc planet = make_planet_desc(config.planet_radius);
+    const ninho::physics::BodyDesc planet = make_planet_desc(radial.reference_radius_m);
     NINHO_REQUIRE(planet.type == ninho::physics::BodyType::Static);
     const auto& sphere = std::get<ninho::physics::SphereShape>(planet.shapes.front().geometry);
     NINHO_REQUIRE_NEAR(sphere.radius, 25.0, 1e-6);

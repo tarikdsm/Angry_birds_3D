@@ -181,10 +181,10 @@ namespace ninho::extension::detail {
 [[nodiscard]] inline physics::WorldConfig make_world_config(
     float radius, float surface_gravity) noexcept
 {
-    physics::WorldConfig config;
-    config.planet_radius = radius;
-    config.surface_gravity = surface_gravity;
-    return config;
+    return physics::make_legacy_radial_world_config({
+        .planet_radius = radius,
+        .surface_gravity = surface_gravity,
+    });
 }
 
 [[nodiscard]] inline physics::BodyDesc make_planet_desc(float radius)

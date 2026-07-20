@@ -219,53 +219,23 @@ namespace {
     if (config.substeps <= 0) {
         throw std::invalid_argument("substeps must be positive");
     }
-    if (!positive_finite(config.planet_radius)) {
-        throw std::invalid_argument("planet_radius must be finite and positive");
-    }
-    if (!nonnegative_finite(config.surface_gravity)) {
-        throw std::invalid_argument("surface_gravity must be finite and non-negative");
-    }
-    if (config.surface_gravity > maximum_radial_acceleration) {
-        throw std::invalid_argument("surface_gravity exceeds the radial acceleration ceiling");
-    }
-    const double gravity_scale = static_cast<double>(config.surface_gravity)
-        * static_cast<double>(config.planet_radius) * static_cast<double>(config.planet_radius);
-    const double ejection_radius = 6.0 * static_cast<double>(config.planet_radius);
-    if (gravity_scale > std::numeric_limits<float>::max()
-        || ejection_radius > std::numeric_limits<float>::max()) {
-        throw std::invalid_argument("radial gravity configuration exceeds finite float range");
-    }
     constexpr std::size_t maximum_public_slots =
         static_cast<std::size_t>(std::numeric_limits<std::uint32_t>::max()) - 1U;
     if (config.max_bodies == 0 || config.max_bodies > maximum_public_slots) {
         throw std::invalid_argument("max_bodies is outside the supported handle range");
     }
-
-    const auto* configured_radial = std::get_if<RadialGravityConfig>(&config.gravity);
-    const bool typed_gravity_is_legacy_default = configured_radial != nullptr
-        && configured_radial->center_m == Vec3{}
-        && configured_radial->reference_radius_m == 10.0f
-        && configured_radial->reference_acceleration_m_s2 == 9.0f;
-    if (typed_gravity_is_legacy_default) {
-        config.gravity = RadialGravityConfig{
-            .center_m = {},
-            .reference_radius_m = config.planet_radius,
-            .reference_acceleration_m_s2 = config.surface_gravity,
-        };
-    }
-    const auto* configured_sphere = std::get_if<SphericalWorldBounds>(&config.bounds);
-    const bool typed_bounds_are_legacy_default = configured_sphere != nullptr
-        && configured_sphere->center_m == Vec3{}
-        && configured_sphere->removal_radius_m == 60.0f;
-    if (typed_bounds_are_legacy_default) {
-        config.bounds = SphericalWorldBounds{
-            .center_m = {},
-            .removal_radius_m = 6.0f * config.planet_radius,
-        };
-    }
     static_cast<void>(GravityField{config.gravity});
     static_cast<void>(WorldBounds{config.bounds});
     return config;
+}
+
+[[nodiscard]] RadialGravityConfig radial_ejection_config(
+    const GravityFieldConfig& config) noexcept
+{
+    if (const auto* radial = std::get_if<RadialGravityConfig>(&config)) {
+        return *radial;
+    }
+    return {};
 }
 
 [[nodiscard]] Status validate_body(const BodyDesc& body)
@@ -310,6 +280,24 @@ namespace {
 
 }
 
+WorldConfig make_legacy_radial_world_config(LegacyRadialWorldConfig legacy) noexcept
+{
+    return WorldConfig{
+        .time_step = legacy.time_step,
+        .substeps = legacy.substeps,
+        .max_bodies = legacy.max_bodies,
+        .gravity = RadialGravityConfig{
+            .center_m = {},
+            .reference_radius_m = legacy.planet_radius,
+            .reference_acceleration_m_s2 = legacy.surface_gravity,
+        },
+        .bounds = SphericalWorldBounds{
+            .center_m = {},
+            .removal_radius_m = 6.0f * legacy.planet_radius,
+        },
+    };
+}
+
 BodyDesc BodyDesc::static_sphere(float radius, Transform transform)
 {
     BodyDesc body;
@@ -317,8 +305,6 @@ BodyDesc BodyDesc::static_sphere(float radius, Transform transform)
     body.transform = transform;
     body.affected_by_world_gravity = false;
     body.world_exit_policy = WorldExitPolicy::KeepOutsideBounds;
-    body.radial_gravity = false;
-    body.remove_beyond_six_r = false;
     body.shapes.push_back(make_shape(SphereShape{radius, {}}, 1.0f));
     return body;
 }
@@ -330,8 +316,6 @@ BodyDesc BodyDesc::static_box(Vec3 half_extents, Transform transform)
     body.transform = transform;
     body.affected_by_world_gravity = false;
     body.world_exit_policy = WorldExitPolicy::KeepOutsideBounds;
-    body.radial_gravity = false;
-    body.remove_beyond_six_r = false;
     body.shapes.push_back(make_shape(BoxShape{half_extents, {}}, 1.0f));
     return body;
 }
@@ -364,7 +348,6 @@ struct PhysicsWorld::Impl {
         SlotState state{SlotState::Free};
         b3BodyId native{};
         BodyType type{BodyType::Static};
-        bool affected_by_world_gravity{};
         WorldExitPolicy world_exit_policy{WorldExitPolicy::KeepOutsideBounds};
         bool ejected{};
         bool exited_world{};
@@ -449,7 +432,8 @@ struct PhysicsWorld::Impl {
               config.bounds,
               std::holds_alternative<RadialGravityConfig>(config.gravity)
                   ? detail::RadialEjectionPolicy::Enabled
-                  : detail::RadialEjectionPolicy::Disabled)
+                  : detail::RadialEjectionPolicy::Disabled,
+              radial_ejection_config(config.gravity))
     {
         constexpr std::size_t initial_reserve_limit = 1024;
         const std::size_t initial_body_capacity =
@@ -630,7 +614,6 @@ struct PhysicsWorld::Impl {
         slot.state = SlotState::Free;
         slot.native = {};
         slot.type = BodyType::Static;
-        slot.affected_by_world_gravity = false;
         slot.world_exit_policy = WorldExitPolicy::KeepOutsideBounds;
         slot.ejected = false;
         slot.exited_world = false;
@@ -738,7 +721,6 @@ struct PhysicsWorld::Impl {
         slot->native = {};
         slot->state = SlotState::Free;
         slot->type = BodyType::Static;
-        slot->affected_by_world_gravity = false;
         slot->world_exit_policy = WorldExitPolicy::KeepOutsideBounds;
         slot->ejected = false;
         slot->exited_world = false;
@@ -907,10 +889,7 @@ struct PhysicsWorld::Impl {
 
         slot->native = native;
         slot->type = desc.type;
-        slot->affected_by_world_gravity = desc.affected_by_world_gravity;
-        slot->world_exit_policy = desc.remove_beyond_six_r
-            ? desc.world_exit_policy
-            : WorldExitPolicy::KeepOutsideBounds;
+        slot->world_exit_policy = desc.world_exit_policy;
         if (slot->state == SlotState::PendingCreate) {
             slot->state = SlotState::Live;
         }
@@ -1451,16 +1430,15 @@ struct PhysicsWorld::Impl {
                 continue;
             }
 
-            const detail::WorldExitKind exit = world_exit_tracker.update(
+            const detail::WorldExitEvents exit = world_exit_tracker.update(
                 snapshot.handle,
                 snapshot.transform.position,
                 snapshot.linear_velocity,
-                config.time_step,
-                config.planet_radius);
-            if (exit == detail::WorldExitKind::RadialEjection) {
+                config.time_step);
+            if (exit.radial_ejection) {
                 slot->ejected = true;
             }
-            if (exit == detail::WorldExitKind::BoundsExit) {
+            if (exit.bounds_exit) {
                 slot->exited_world = true;
             }
             snapshot.ejected = slot->ejected;
@@ -1671,7 +1649,7 @@ void PhysicsWorld::step()
     for (std::uint32_t index = 1; index < impl_->slots.size(); ++index) {
         Impl::Slot& slot = impl_->slots[index];
         if (slot.state != Impl::SlotState::Live || slot.type != BodyType::Dynamic
-            || !slot.affected_by_world_gravity || B3_IS_NULL(slot.native) || !b3Body_IsValid(slot.native)
+            || B3_IS_NULL(slot.native) || !b3Body_IsValid(slot.native)
             || !b3Body_IsAwake(slot.native)) {
             continue;
         }
@@ -1851,6 +1829,31 @@ int detail::PhysicsWorldTestFacade::worker_count(const PhysicsWorld& world)
 Vec3 detail::PhysicsWorldTestFacade::box3d_gravity(const PhysicsWorld& world)
 {
     return detail::from_box3d_vector(b3World_GetGravity(world.impl_->world));
+}
+
+int detail::PhysicsWorldTestFacade::gravity_strategy(const PhysicsWorld& world)
+{
+    return world.impl_->gravity.evaluator_ == &GravityField::evaluate_uniform ? 0 : 1;
+}
+
+int detail::PhysicsWorldTestFacade::bounds_strategy(const PhysicsWorld& world)
+{
+    if (world.impl_->world_exit_tracker.bounds_.evaluator_
+        == &WorldBounds::contains_everywhere) {
+        return 0;
+    }
+    return world.impl_->world_exit_tracker.bounds_.evaluator_
+            == &WorldBounds::contains_aabb
+        ? 1
+        : 2;
+}
+
+int detail::PhysicsWorldTestFacade::ejection_strategy(const PhysicsWorld& world)
+{
+    return world.impl_->world_exit_tracker.ejection_evaluator_
+            == &detail::WorldExitTracker::disabled_ejection
+        ? 0
+        : 1;
 }
 
 void detail::PhysicsWorldTestFacade::fail_initial_commit_after(

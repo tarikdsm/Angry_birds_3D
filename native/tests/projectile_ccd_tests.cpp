@@ -22,18 +22,17 @@ struct ThinTargetOutcome {
     constexpr float target_half_thickness = 0.025f;
     constexpr float projectile_radius = 0.05f;
     constexpr float projectile_speed = 90.0f;
-    PhysicsWorld world(WorldConfig{
+    PhysicsWorld world(make_legacy_radial_world_config({
         .substeps = 4,
         .surface_gravity = 0.0f,
         .max_bodies = 2,
-    });
+    }));
 
     BodyDesc target = BodyDesc::dynamic_box(
         {target_half_thickness, 2.0f, 2.0f},
         {{target_center_x, 5.0f, 0.0f}, {}},
         100'000.0f);
-    target.radial_gravity = false;
-    target.remove_beyond_six_r = false;
+    target.world_exit_policy = WorldExitPolicy::KeepOutsideBounds;
     const auto target_result = world.create_body(target);
 
     BodyDesc projectile = BodyDesc::dynamic_sphere(
@@ -41,8 +40,7 @@ struct ThinTargetOutcome {
     projectile.linear_velocity = {projectile_speed, 0.0f, 0.0f};
     projectile.bullet = bullet;
     projectile.enable_sleep = false;
-    projectile.radial_gravity = false;
-    projectile.remove_beyond_six_r = false;
+    projectile.world_exit_policy = WorldExitPolicy::KeepOutsideBounds;
     const auto projectile_result = world.create_body(projectile);
 
     NINHO_REQUIRE(target_result && projectile_result);

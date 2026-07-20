@@ -107,11 +107,9 @@ void require_weld_does_not_snap(
     const auto& body_a = find_snapshot(session, joint.a);
     const auto& body_b = find_snapshot(session, joint.b);
     using namespace ninho::physics;
-    PhysicsWorld isolated({.surface_gravity = 0.0f});
+    PhysicsWorld isolated(make_legacy_radial_world_config({.surface_gravity = 0.0f}));
     auto description_a = BodyDesc::dynamic_sphere(0.05f, body_a.transform, 10.0f);
     auto description_b = BodyDesc::dynamic_sphere(0.05f, body_b.transform, 10.0f);
-    description_a.radial_gravity = false;
-    description_b.radial_gravity = false;
     const auto handle_a = isolated.create_body(description_a);
     const auto handle_b = isolated.create_body(description_b);
     NINHO_SIM_REQUIRE(handle_a && handle_b);
@@ -188,7 +186,7 @@ private:
 NINHO_SIM_TEST("session bootstrap commits only initial creations without stepping")
 {
     using namespace ninho::physics;
-    PhysicsWorld world({.surface_gravity = 0.0f});
+    PhysicsWorld world(make_legacy_radial_world_config({.surface_gravity = 0.0f}));
     const auto body = world.create_body(
         BodyDesc::dynamic_box({0.5f, 0.5f, 0.5f}, {{0.0f, 5.0f, 0.0f}, {}}, 10.0f));
     NINHO_SIM_REQUIRE(body);
@@ -208,7 +206,7 @@ NINHO_SIM_TEST("session bootstrap commits only initial creations without steppin
 NINHO_SIM_TEST("session bootstrap initial commit rejects non-create commands atomically")
 {
     using namespace ninho::physics;
-    PhysicsWorld world({.surface_gravity = 0.0f});
+    PhysicsWorld world(make_legacy_radial_world_config({.surface_gravity = 0.0f}));
     const auto body = world.create_body(
         BodyDesc::dynamic_box({0.5f, 0.5f, 0.5f}, {{0.0f, 5.0f, 0.0f}, {}}, 10.0f));
     NINHO_SIM_REQUIRE(body);
@@ -227,7 +225,7 @@ NINHO_SIM_TEST("session bootstrap initial commit rejects non-create commands ato
 NINHO_SIM_TEST("session bootstrap initial commit is unavailable after any step")
 {
     using namespace ninho::physics;
-    PhysicsWorld world({.surface_gravity = 0.0f});
+    PhysicsWorld world(make_legacy_radial_world_config({.surface_gravity = 0.0f}));
     world.step();
     const Status status = world.commit_pending_initial_state();
     NINHO_SIM_REQUIRE(!status.ok());
@@ -237,7 +235,7 @@ NINHO_SIM_TEST("session bootstrap initial commit is unavailable after any step")
 NINHO_SIM_TEST("session bootstrap latches a partial initial commit failure permanently")
 {
     using namespace ninho::physics;
-    PhysicsWorld world({.surface_gravity = 0.0f});
+    PhysicsWorld world(make_legacy_radial_world_config({.surface_gravity = 0.0f}));
     NINHO_SIM_REQUIRE(world.create_body(
         BodyDesc::dynamic_sphere(0.2f, {{0.0f, 5.0f, 0.0f}, {}}, 10.0f)));
     NINHO_SIM_REQUIRE(world.create_body(

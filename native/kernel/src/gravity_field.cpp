@@ -136,20 +136,35 @@ Overloaded(Visitors...) -> Overloaded<Visitors...>;
 GravityField::GravityField(GravityFieldConfig config)
     : config_(validated_config(std::move(config)))
 {
+    std::visit(
+        [this](const auto& selected) {
+            using Config = std::decay_t<decltype(selected)>;
+            if constexpr (std::is_same_v<Config, UniformGravityConfig>) {
+                uniform_acceleration_ = selected.acceleration_m_s2;
+                evaluator_ = evaluate_uniform;
+            } else {
+                radial_config_ = selected;
+                evaluator_ = evaluate_radial;
+            }
+        },
+        config_);
 }
 
 Vec3 GravityField::acceleration_at(Vec3 position_m) const noexcept
 {
-    return std::visit(
-        Overloaded{
-            [](const UniformGravityConfig& uniform) {
-                return uniform.acceleration_m_s2;
-            },
-            [position_m](const RadialGravityConfig& radial) {
-                return radial_acceleration(radial, position_m);
-            },
-        },
-        config_);
+    return evaluator_(*this, position_m);
+}
+
+Vec3 GravityField::evaluate_uniform(
+    const GravityField& field, Vec3) noexcept
+{
+    return field.uniform_acceleration_;
+}
+
+Vec3 GravityField::evaluate_radial(
+    const GravityField& field, Vec3 position_m) noexcept
+{
+    return radial_acceleration(field.radial_config_, position_m);
 }
 
 const GravityFieldConfig& GravityField::config() const noexcept

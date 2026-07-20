@@ -40,6 +40,22 @@ WorldBounds::WorldBounds(WorldBoundsConfig config)
     if (!is_valid) {
         throw std::invalid_argument("world bounds must be finite and ordered");
     }
+    std::visit(
+        [this](const auto& selected) {
+            using Bounds = std::decay_t<decltype(selected)>;
+            if constexpr (std::is_same_v<Bounds, NoWorldBounds>) {
+                evaluator_ = contains_everywhere;
+            } else if constexpr (std::is_same_v<Bounds, AabbWorldBounds>) {
+                minimum_m_ = selected.minimum_m;
+                maximum_m_ = selected.maximum_m;
+                evaluator_ = contains_aabb;
+            } else {
+                center_m_ = selected.center_m;
+                removal_radius_m_ = selected.removal_radius_m;
+                evaluator_ = contains_sphere;
+            }
+        },
+        config_);
 }
 
 bool WorldBounds::contains(Vec3 position_m) const noexcept
@@ -48,26 +64,33 @@ bool WorldBounds::contains(Vec3 position_m) const noexcept
         return false;
     }
 
-    return std::visit(
-        [position_m](const auto& bounds) {
-            using Bounds = std::decay_t<decltype(bounds)>;
-            if constexpr (std::is_same_v<Bounds, NoWorldBounds>) {
-                return true;
-            } else if constexpr (std::is_same_v<Bounds, AabbWorldBounds>) {
-                return position_m.x >= bounds.minimum_m.x && position_m.x <= bounds.maximum_m.x
-                    && position_m.y >= bounds.minimum_m.y && position_m.y <= bounds.maximum_m.y
-                    && position_m.z >= bounds.minimum_m.z && position_m.z <= bounds.maximum_m.z;
-            } else {
-                const Vec3 offset = position_m - bounds.center_m;
-                const double distance_squared = static_cast<double>(offset.x) * offset.x
-                    + static_cast<double>(offset.y) * offset.y
-                    + static_cast<double>(offset.z) * offset.z;
-                const double removal_radius_squared =
-                    static_cast<double>(bounds.removal_radius_m) * bounds.removal_radius_m;
-                return std::isfinite(distance_squared) && distance_squared < removal_radius_squared;
-            }
-        },
-        config_);
+    return evaluator_(*this, position_m);
+}
+
+bool WorldBounds::contains_everywhere(
+    const WorldBounds&, Vec3) noexcept
+{
+    return true;
+}
+
+bool WorldBounds::contains_aabb(
+    const WorldBounds& bounds, Vec3 position_m) noexcept
+{
+    return position_m.x >= bounds.minimum_m_.x && position_m.x <= bounds.maximum_m_.x
+        && position_m.y >= bounds.minimum_m_.y && position_m.y <= bounds.maximum_m_.y
+        && position_m.z >= bounds.minimum_m_.z && position_m.z <= bounds.maximum_m_.z;
+}
+
+bool WorldBounds::contains_sphere(
+    const WorldBounds& bounds, Vec3 position_m) noexcept
+{
+    const Vec3 offset = position_m - bounds.center_m_;
+    const double distance_squared = static_cast<double>(offset.x) * offset.x
+        + static_cast<double>(offset.y) * offset.y
+        + static_cast<double>(offset.z) * offset.z;
+    const double removal_radius_squared =
+        static_cast<double>(bounds.removal_radius_m_) * bounds.removal_radius_m_;
+    return std::isfinite(distance_squared) && distance_squared < removal_radius_squared;
 }
 
 }

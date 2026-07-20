@@ -369,12 +369,12 @@ void finish_timings(ScenarioResult& result, std::vector<double> timings)
 
     constexpr float planet_radius = 10.0f;
     constexpr float ball_radius = 0.4f;
-    PhysicsWorld world(WorldConfig{
+    PhysicsWorld world(make_legacy_radial_world_config({
         .substeps = substeps,
         .planet_radius = planet_radius,
         .surface_gravity = 9.0f,
         .max_bodies = 2,
-    });
+    }));
     const auto planet =
         world.create_body(BodyDesc::static_sphere(planet_radius, {}));
     const auto ball = world.create_body(
@@ -569,12 +569,12 @@ void merge_capability_metrics(CapabilityRow& row, const ProjectileOutcome& outco
     constexpr float planet_radius = 10.0f;
     constexpr float platform_half_height = 0.25f;
     constexpr int block_count = 120;
-    PhysicsWorld world(WorldConfig{
+    PhysicsWorld world(make_legacy_radial_world_config({
         .substeps = substeps,
         .planet_radius = planet_radius,
         .surface_gravity = 9.0f,
         .max_bodies = block_count + 3,
-    });
+    }));
     const auto planet = world.create_body(BodyDesc::static_sphere(planet_radius, {}));
     const auto platform = world.create_body(BodyDesc::static_box(
         {4.0f, platform_half_height, 2.0f},
@@ -910,12 +910,12 @@ struct OrientedBox {
     constexpr float planet_radius = 10.0f;
     constexpr float platform_top = 10.5f;
     constexpr float cube_side = 0.5f;
-    PhysicsWorld world(WorldConfig{
+    PhysicsWorld world(make_legacy_radial_world_config({
         .substeps = substeps,
         .planet_radius = planet_radius,
         .surface_gravity = 9.0f,
         .max_bodies = 81,
-    });
+    }));
     const auto platform = world.create_body(
         BodyDesc::static_box({4, 0.25f, 4}, {{0, 10.25f, 0}, {}}));
     if (!platform) {
@@ -1254,12 +1254,12 @@ struct StressCycleResult {
     constexpr int shape_count = 800;
     constexpr int joint_count = 250;
     StressCycleResult cycle;
-    PhysicsWorld world(WorldConfig{
+    PhysicsWorld world(make_legacy_radial_world_config({
         .substeps = substeps,
         .planet_radius = 10,
         .surface_gravity = 0,
         .max_bodies = body_count,
-    });
+    }));
     cycle.executed_substeps = world.config().substeps;
 
     std::vector<BodyHandle> bodies;
@@ -1273,8 +1273,7 @@ struct StressCycleResult {
             .type = BodyType::Dynamic,
             .transform = {
                 {base_x + static_cast<float>(index % 2), base_y, base_z}, {}},
-            .radial_gravity = false,
-            .remove_beyond_six_r = false,
+            .world_exit_policy = WorldExitPolicy::KeepOutsideBounds,
         };
         const int shapes_on_body = index < 300 ? 2 : 1;
         for (int shape = 0; shape < shapes_on_body; ++shape) {
@@ -1856,7 +1855,8 @@ struct CrtStressProbeResult {
 [[nodiscard]] CapabilityRow prove_shape_query()
 {
     CapabilityRow row{.capability = "shape_cast_overlap"};
-    PhysicsWorld world(WorldConfig{.surface_gravity = 0, .max_bodies = 1});
+    PhysicsWorld world(make_legacy_radial_world_config(
+        {.surface_gravity = 0, .max_bodies = 1}));
     BodyDesc target{.type = BodyType::Static};
     target.shapes = {ShapeDesc{
         .geometry = HullShape{{{-0.5f, -0.5f, -0.5f},
@@ -1917,7 +1917,8 @@ struct CrtStressProbeResult {
 [[nodiscard]] CapabilityRow prove_contact_events()
 {
     CapabilityRow row{.capability = "contact_hit_events"};
-    PhysicsWorld world(WorldConfig{.substeps = 6, .surface_gravity = 0, .max_bodies = 2});
+    PhysicsWorld world(make_legacy_radial_world_config(
+        {.substeps = 6, .surface_gravity = 0, .max_bodies = 2}));
     BodyDesc light_desc = BodyDesc::dynamic_sphere(0.5f, {{-2, 5, 0}, {}}, 100);
     light_desc.linear_velocity = {10, 0, 0};
     light_desc.bullet = true;
@@ -2024,7 +2025,8 @@ struct CrtStressProbeResult {
 [[nodiscard]] CapabilityRow prove_joint_reaction()
 {
     CapabilityRow row{.capability = "joint_force_torque"};
-    PhysicsWorld world(WorldConfig{.surface_gravity = 0, .max_bodies = 2});
+    PhysicsWorld world(make_legacy_radial_world_config(
+        {.surface_gravity = 0, .max_bodies = 2}));
     const auto anchor = world.create_body(
         BodyDesc::static_box({0.5f, 0.5f, 0.5f}, {{0, 0, 0}, {}}));
     const auto loaded = world.create_body(
@@ -2132,8 +2134,7 @@ struct CrtStressProbeResult {
     BodyDesc body{
         .type = BodyType::Dynamic,
         .transform = {{0, 3, 0}, {}},
-        .radial_gravity = false,
-        .remove_beyond_six_r = false,
+        .world_exit_policy = WorldExitPolicy::KeepOutsideBounds,
     };
     if (compound) {
         body.shapes.push_back(ShapeDesc{
@@ -2185,7 +2186,8 @@ struct CrtStressProbeResult {
         constexpr double expected_mass = 42.666666666666664;
         constexpr double tolerance = 1.0e-4;
         constexpr Aabb expected_bounds{{-1.62f, 2.78f, -0.22f}, {1.62f, 3.22f, 0.22f}};
-        PhysicsWorld world(WorldConfig{.surface_gravity = 0, .max_bodies = 2});
+        PhysicsWorld world(make_legacy_radial_world_config(
+            {.surface_gravity = 0, .max_bodies = 2}));
         const auto body = world.create_body(eight_hull_body(compound));
         const auto platform = world.create_body(
             BodyDesc::static_box({4, 0.25f, 4}, {{0, 0, 0}, {}}));
@@ -2291,10 +2293,10 @@ struct CrtStressProbeResult {
     const std::int64_t allocator_baseline = detail::box3d_allocator_byte_count();
     CapabilityRow row = [&] {
     CapabilityRow row{.capability = "batch_lifecycle"};
-    PhysicsWorld world(WorldConfig{.surface_gravity = 0, .max_bodies = 1});
+    PhysicsWorld world(make_legacy_radial_world_config(
+        {.surface_gravity = 0, .max_bodies = 1}));
     BodyDesc body = BodyDesc::dynamic_sphere(0.25f, {}, 10);
-    body.radial_gravity = false;
-    body.remove_beyond_six_r = false;
+    body.world_exit_policy = WorldExitPolicy::KeepOutsideBounds;
 
     BodyHandle previous{};
     for (int warmup = 0; warmup < 64; ++warmup) {
@@ -2452,11 +2454,11 @@ struct CrtStressProbeResult {
     std::uint64_t seed, CapabilityRow* metrics = nullptr)
 {
     XorShift64 random(seed);
-    PhysicsWorld world(WorldConfig{.surface_gravity = 0, .max_bodies = 1});
+    PhysicsWorld world(make_legacy_radial_world_config(
+        {.surface_gravity = 0, .max_bodies = 1}));
     BodyDesc body = BodyDesc::dynamic_sphere(
         0.5f, {{random.centered(0.1f), 2, 0}, {}}, 100);
-    body.radial_gravity = false;
-    body.remove_beyond_six_r = false;
+    body.world_exit_policy = WorldExitPolicy::KeepOutsideBounds;
     body.linear_velocity = {1, 0, 0};
     world.create_body(body);
     for (int tick = 0; tick < 60; ++tick) {

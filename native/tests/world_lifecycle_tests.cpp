@@ -11,6 +11,23 @@
 
 using namespace ninho::physics;
 
+template<class T>
+concept HasLegacyPlanetRadius = requires(T value) { value.planet_radius; };
+
+template<class T>
+concept HasLegacySurfaceGravity = requires(T value) { value.surface_gravity; };
+
+template<class T>
+concept HasLegacyRadialGravity = requires(T value) { value.radial_gravity; };
+
+template<class T>
+concept HasLegacySixRadiusRemoval = requires(T value) { value.remove_beyond_six_r; };
+
+static_assert(!HasLegacyPlanetRadius<WorldConfig>);
+static_assert(!HasLegacySurfaceGravity<WorldConfig>);
+static_assert(!HasLegacyRadialGravity<BodyDesc>);
+static_assert(!HasLegacySixRadiusRemoval<BodyDesc>);
+
 static_assert(!std::is_copy_constructible_v<PhysicsWorld>);
 static_assert(!std::is_copy_assignable_v<PhysicsWorld>);
 static_assert(std::is_nothrow_move_constructible_v<PhysicsWorld>);
@@ -38,6 +55,37 @@ NINHO_TEST("world applies one uniform gravity sample to every runtime dynamic bo
     const auto state = world.state(body);
     NINHO_REQUIRE(state.has_value());
     NINHO_REQUIRE_NEAR(state->linear_velocity.y, -9.0f / 60.0f, 1.0e-5f);
+}
+
+NINHO_TEST("world publishes one exact typed config and preselects evaluator strategies")
+{
+    const RadialGravityConfig radial{
+        .center_m = {},
+        .reference_radius_m = 10.0f,
+        .reference_acceleration_m_s2 = 9.0f,
+    };
+    const SphericalWorldBounds sphere{
+        .center_m = {},
+        .removal_radius_m = 60.0f,
+    };
+    PhysicsWorld orbital(WorldConfig{.gravity = radial, .bounds = sphere});
+    NINHO_REQUIRE(std::get<RadialGravityConfig>(orbital.config().gravity).center_m == radial.center_m);
+    NINHO_REQUIRE(std::get<RadialGravityConfig>(orbital.config().gravity).reference_radius_m
+        == radial.reference_radius_m);
+    NINHO_REQUIRE(std::get<SphericalWorldBounds>(orbital.config().bounds).removal_radius_m
+        == sphere.removal_radius_m);
+
+    PhysicsWorld terrestrial(WorldConfig{
+        .gravity = UniformGravityConfig{.acceleration_m_s2 = {0.0f, -9.81f, 0.0f}},
+        .bounds = AabbWorldBounds{.minimum_m = {-1.0f, -1.0f, -1.0f},
+            .maximum_m = {1.0f, 1.0f, 1.0f}},
+    });
+    NINHO_REQUIRE(detail::PhysicsWorldTestFacade::gravity_strategy(orbital)
+        != detail::PhysicsWorldTestFacade::gravity_strategy(terrestrial));
+    NINHO_REQUIRE(detail::PhysicsWorldTestFacade::bounds_strategy(orbital)
+        != detail::PhysicsWorldTestFacade::bounds_strategy(terrestrial));
+    NINHO_REQUIRE(detail::PhysicsWorldTestFacade::ejection_strategy(orbital)
+        != detail::PhysicsWorldTestFacade::ejection_strategy(terrestrial));
 }
 
 NINHO_TEST("world rejects authored dynamic gravity opt out")
@@ -86,6 +134,61 @@ NINHO_TEST("world AABB exit removal follows body policy")
     NINHO_REQUIRE(world.state(retained_handle).has_value());
 }
 
+NINHO_TEST("world publishes radial ejection and spherical exit on the same tick")
+{
+    const auto config = make_legacy_radial_world_config({.surface_gravity = 0.0f});
+    const auto run = [&](WorldExitPolicy policy) {
+        PhysicsWorld world(config);
+        BodyDesc body = BodyDesc::dynamic_sphere(
+            0.1f, {{40.0f, 0.0f, 0.0f}, {}}, 1.0f);
+        body.linear_velocity = {40.0f, 0.0f, 0.0f};
+        body.world_exit_policy = policy;
+        const BodyHandle handle = world.create_body(body).value;
+        for (int tick = 0; tick < 29; ++tick) {
+            world.step();
+            NINHO_REQUIRE(!world.state(handle)->ejected);
+            NINHO_REQUIRE(!world.state(handle)->exited_world);
+        }
+        world.step();
+        const auto crossing = world.state(handle);
+        NINHO_REQUIRE(crossing.has_value());
+        NINHO_REQUIRE(crossing->ejected);
+        NINHO_REQUIRE(crossing->exited_world);
+        world.step();
+        return world.state(handle).has_value();
+    };
+
+    NINHO_REQUIRE(run(WorldExitPolicy::KeepOutsideBounds));
+    NINHO_REQUIRE(!run(WorldExitPolicy::RemoveOutsideBounds));
+}
+
+NINHO_TEST("uniform world preserves deterministic sleep and explicit wake")
+{
+    const WorldConfig config{
+        .gravity = UniformGravityConfig{},
+        .bounds = NoWorldBounds{},
+    };
+    const auto run = [&] {
+        PhysicsWorld world(config);
+        const BodyHandle body = world.create_body(
+            BodyDesc::dynamic_sphere(0.5f, {}, 1.0f)).value;
+        for (int tick = 0; tick < 120; ++tick) {
+            world.step();
+        }
+        NINHO_REQUIRE(!world.state(body)->awake);
+        NINHO_REQUIRE(world.apply_impulse(body, {1.0f, 0.0f, 0.0f}, {}, true).ok());
+        world.step();
+        NINHO_REQUIRE(world.state(body)->awake);
+        return *world.state(body);
+    };
+
+    const BodyState first = run();
+    const BodyState second = run();
+    NINHO_REQUIRE(first.handle == second.handle);
+    NINHO_REQUIRE(first.transform == second.transform);
+    NINHO_REQUIRE(first.linear_velocity == second.linear_velocity);
+}
+
 NINHO_TEST("world rejects destroyed handle after slot reuse")
 {
     PhysicsWorld world(WorldConfig{});
@@ -102,7 +205,8 @@ NINHO_TEST("world rejects destroyed handle after slot reuse")
 
 NINHO_TEST("world dynamic sphere falls toward center and settles on planet")
 {
-    WorldConfig config{.substeps = 4, .planet_radius = 10, .surface_gravity = 9};
+    WorldConfig config = make_legacy_radial_world_config(
+        {.substeps = 4, .planet_radius = 10, .surface_gravity = 9});
     PhysicsWorld world(config);
     world.create_body(BodyDesc::static_sphere(10.0f, {{0, 0, 0}, {}}));
     const auto ball =
@@ -146,10 +250,10 @@ NINHO_TEST("contract configuration validation rejects unsafe values")
     config.substeps = 0;
     NINHO_REQUIRE(rejected(config));
     config = {};
-    config.planet_radius = 0.0f;
+    config.gravity = RadialGravityConfig{.reference_radius_m = 0.0f};
     NINHO_REQUIRE(rejected(config));
     config = {};
-    config.surface_gravity = -1.0f;
+    config.gravity = RadialGravityConfig{.reference_acceleration_m_s2 = -1.0f};
     NINHO_REQUIRE(rejected(config));
     config = {};
     config.max_bodies = 0;
@@ -158,7 +262,9 @@ NINHO_TEST("contract configuration validation rejects unsafe values")
     config.time_step = std::numeric_limits<float>::quiet_NaN();
     NINHO_REQUIRE(rejected(config));
     config = {};
-    config.planet_radius = std::numeric_limits<float>::max();
+    config.gravity = RadialGravityConfig{
+        .reference_radius_m = std::numeric_limits<float>::max(),
+    };
     NINHO_REQUIRE(rejected(config));
 }
 
@@ -166,7 +272,8 @@ NINHO_TEST("contract configuration rejects surface gravity above the acceleratio
 {
     const auto rejected = [](float surface_gravity) {
         try {
-            PhysicsWorld physics(WorldConfig{.surface_gravity = surface_gravity});
+            PhysicsWorld physics(make_legacy_radial_world_config(
+                {.surface_gravity = surface_gravity}));
         } catch (const std::invalid_argument&) {
             return true;
         }
@@ -215,8 +322,7 @@ NINHO_TEST("contract pimpl move retains ownership and live handles")
 {
     PhysicsWorld source(WorldConfig{});
     BodyDesc body = BodyDesc::dynamic_sphere(0.5f, {}, 10.0f);
-    body.radial_gravity = false;
-    body.remove_beyond_six_r = false;
+    body.world_exit_policy = WorldExitPolicy::KeepOutsideBounds;
     const BodyHandle handle = source.create_body(body).value;
 
     PhysicsWorld destination(std::move(source));
@@ -228,7 +334,6 @@ NINHO_TEST("contract load validation rejects non finite force and impulse")
 {
     PhysicsWorld physics(WorldConfig{});
     BodyDesc body = BodyDesc::dynamic_sphere(0.5f, {}, 10.0f);
-    body.radial_gravity = false;
     const BodyHandle handle = physics.create_body(body).value;
     const float infinity = std::numeric_limits<float>::infinity();
     NINHO_REQUIRE(
@@ -256,8 +361,7 @@ NINHO_TEST("contract queue commands preserve order and cancel pre tick creation"
 {
     PhysicsWorld physics(WorldConfig{});
     BodyDesc body = BodyDesc::dynamic_sphere(0.5f, {}, 10.0f);
-    body.radial_gravity = false;
-    body.remove_beyond_six_r = false;
+    body.world_exit_policy = WorldExitPolicy::KeepOutsideBounds;
 
     const BodyHandle accelerated = physics.create_body(body).value;
     NINHO_REQUIRE(physics.apply_impulse(accelerated, {10, 0, 0}, {}).ok());
@@ -277,8 +381,7 @@ NINHO_TEST("contract capacity counts reserved handles and permits reuse after de
 {
     PhysicsWorld physics(WorldConfig{.max_bodies = 1});
     BodyDesc body = BodyDesc::dynamic_sphere(0.5f, {}, 10.0f);
-    body.radial_gravity = false;
-    body.remove_beyond_six_r = false;
+    body.world_exit_policy = WorldExitPolicy::KeepOutsideBounds;
 
     const auto rejected = physics.create_body(BodyDesc::dynamic_sphere(0.0f, {}, 10.0f));
     NINHO_REQUIRE(rejected.status.code == StatusCode::InvalidArgument);
@@ -299,8 +402,7 @@ NINHO_TEST("contract capsule primitive with local transform contributes dynamic 
     PhysicsWorld physics(WorldConfig{});
     BodyDesc capsule;
     capsule.type = BodyType::Dynamic;
-    capsule.radial_gravity = false;
-    capsule.remove_beyond_six_r = false;
+    capsule.world_exit_policy = WorldExitPolicy::KeepOutsideBounds;
     capsule.shapes.push_back(ShapeDesc{
         .geometry = CapsuleShape{.half_height = 1.0f,
                                  .radius = 0.25f,
@@ -315,10 +417,11 @@ NINHO_TEST("contract capsule primitive with local transform contributes dynamic 
 
 NINHO_TEST("contract outward motion beyond four radii becomes sticky ejection after half second")
 {
-    PhysicsWorld physics(WorldConfig{.planet_radius = 10.0f, .surface_gravity = 0.0f});
+    PhysicsWorld physics(make_legacy_radial_world_config(
+        {.planet_radius = 10.0f, .surface_gravity = 0.0f}));
     BodyDesc body = BodyDesc::dynamic_sphere(0.5f, {{0, 41, 0}, {}}, 10.0f);
     body.linear_velocity = {0, 3, 0};
-    body.remove_beyond_six_r = false;
+    body.world_exit_policy = WorldExitPolicy::KeepOutsideBounds;
     const BodyHandle handle = physics.create_body(body).value;
 
     for (int tick = 0; tick < 29; ++tick) {
@@ -332,10 +435,11 @@ NINHO_TEST("contract outward motion beyond four radii becomes sticky ejection af
 
 NINHO_TEST("contract slow outward tick resets ejection duration window")
 {
-    PhysicsWorld physics(WorldConfig{.planet_radius = 10.0f, .surface_gravity = 0.0f});
+    PhysicsWorld physics(make_legacy_radial_world_config(
+        {.planet_radius = 10.0f, .surface_gravity = 0.0f}));
     BodyDesc body = BodyDesc::dynamic_sphere(0.5f, {{0, 41, 0}, {}}, 10.0f);
     body.linear_velocity = {0, 3, 0};
-    body.remove_beyond_six_r = false;
+    body.world_exit_policy = WorldExitPolicy::KeepOutsideBounds;
     const BodyHandle handle = physics.create_body(body).value;
 
     for (int tick = 0; tick < 29; ++tick) {
@@ -369,7 +473,8 @@ NINHO_TEST("contract spherical six radius world exit does not fabricate ejection
     const WorldBounds bounds{SphericalWorldBounds{.center_m = {}, .removal_radius_m = 60.0f}};
     NINHO_REQUIRE(!bounds.contains({0.0f, 60.0f, 0.0f}));
 
-    PhysicsWorld physics(WorldConfig{.planet_radius = 10.0f, .surface_gravity = 0.0f});
+    PhysicsWorld physics(make_legacy_radial_world_config(
+        {.planet_radius = 10.0f, .surface_gravity = 0.0f}));
     BodyDesc body = BodyDesc::dynamic_sphere(0.5f, {{0, 61, 0}, {}}, 10.0f);
     const BodyHandle handle = physics.create_body(body).value;
 

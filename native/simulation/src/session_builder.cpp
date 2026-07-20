@@ -108,12 +108,14 @@ namespace {
         : ninho::physics::BodyType::Static;
     result.transform = transform_from(body.transform);
     result.shapes.push_back(make_shape(body, materials));
-    result.radial_gravity = body.body_type == BodyType::Dynamic;
+    result.affected_by_world_gravity = body.body_type == BodyType::Dynamic;
     // A physics-side body removal also invalidates every attached solver joint.
     // Keep jointed bodies under simulation ownership so public/canonical joint
     // state can never claim an invalid solver constraint is still active.
-    result.remove_beyond_six_r = body.body_type == BodyType::Dynamic
-        && !participates_in_joint;
+    result.world_exit_policy = body.body_type == BodyType::Dynamic
+            && !participates_in_joint
+        ? ninho::physics::WorldExitPolicy::RemoveOutsideBounds
+        : ninho::physics::WorldExitPolicy::KeepOutsideBounds;
     result.name = body.visual.asset_id;
     return result;
 }
@@ -133,8 +135,10 @@ namespace {
 
 SimulationSession::Impl::Impl(ContentBundle source)
     : bundle(std::move(source))
-    , physics({.planet_radius = static_cast<float>(bundle.level.planet.radius_m),
-          .surface_gravity = static_cast<float>(bundle.level.planet.surface_gravity_m_s2)})
+    , physics(ninho::physics::make_legacy_radial_world_config({
+          .planet_radius = static_cast<float>(bundle.level.planet.radius_m),
+          .surface_gravity = static_cast<float>(bundle.level.planet.surface_gravity_m_s2),
+      }))
 {
 }
 

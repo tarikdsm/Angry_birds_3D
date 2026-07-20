@@ -210,16 +210,18 @@ std::uint64_t canonical_signature(const Trace& trace)
 
 NINHO_SIM_TEST("legacy orbital characterization freezes radial world ejection and removal")
 {
-    const ninho::physics::WorldConfig config{};
+    const ninho::physics::LegacyRadialWorldConfig legacy{};
+    const ninho::physics::WorldConfig config =
+        ninho::physics::make_legacy_radial_world_config(legacy);
     NINHO_SIM_REQUIRE(config.time_step == 1.0F / 60.0F);
     NINHO_SIM_REQUIRE(config.substeps == 4);
-    NINHO_SIM_REQUIRE(config.planet_radius == 10.0F);
-    NINHO_SIM_REQUIRE(config.surface_gravity == 9.0F);
+    NINHO_SIM_REQUIRE(legacy.planet_radius == 10.0F);
+    NINHO_SIM_REQUIRE(legacy.surface_gravity == 9.0F);
     NINHO_SIM_REQUIRE(config.max_bodies == 500U);
 
     const ninho::physics::RadialGravity gravity{
-        ninho::physics::LegacyRadialGravityConfig{{}, config.planet_radius,
-            config.surface_gravity}};
+        ninho::physics::LegacyRadialGravityConfig{{}, legacy.planet_radius,
+            legacy.surface_gravity}};
     NINHO_SIM_REQUIRE(std::abs(gravity.acceleration({10.0F, 0.0F, 0.0F}).x + 9.0F)
         < 1.0e-6F);
     NINHO_SIM_REQUIRE(std::abs(gravity.acceleration({20.0F, 0.0F, 0.0F}).x + 2.25F)
@@ -231,37 +233,38 @@ NINHO_SIM_TEST("legacy orbital characterization freezes radial world ejection an
         ninho::physics::EjectionTracker tracker;
         for (int tick_index = 1; tick_index <= 60; ++tick_index) {
             if (tracker.update({1U, 1U}, radius, speed,
-                    config.time_step, config.planet_radius)) {
+                    config.time_step, legacy.planet_radius)) {
                 return tick_index;
             }
         }
         return 0;
     };
-    NINHO_SIM_REQUIRE(arm_tick(4.0F * config.planet_radius, 2.0F) == 30);
+    NINHO_SIM_REQUIRE(arm_tick(4.0F * legacy.planet_radius, 2.0F) == 30);
     NINHO_SIM_REQUIRE(arm_tick(
-        std::nextafter(4.0F * config.planet_radius, 0.0F), 2.0F) == 0);
-    NINHO_SIM_REQUIRE(arm_tick(4.0F * config.planet_radius,
+        std::nextafter(4.0F * legacy.planet_radius, 0.0F), 2.0F) == 0);
+    NINHO_SIM_REQUIRE(arm_tick(4.0F * legacy.planet_radius,
         std::nextafter(2.0F, 0.0F)) == 0);
 
     ninho::physics::EjectionTracker interrupted;
     for (int tick_index = 0; tick_index < 29; ++tick_index) {
         NINHO_SIM_REQUIRE(!interrupted.update({2U, 1U}, 40.0F, 2.0F,
-            config.time_step, config.planet_radius));
+            config.time_step, legacy.planet_radius));
     }
     NINHO_SIM_REQUIRE(!interrupted.update({2U, 1U}, 40.0F, 1.99F,
-        config.time_step, config.planet_radius));
+        config.time_step, legacy.planet_radius));
     for (int tick_index = 0; tick_index < 29; ++tick_index) {
         NINHO_SIM_REQUIRE(!interrupted.update({2U, 1U}, 40.0F, 2.0F,
-            config.time_step, config.planet_radius));
+            config.time_step, legacy.planet_radius));
     }
     NINHO_SIM_REQUIRE(interrupted.update({2U, 1U}, 40.0F, 2.0F,
-        config.time_step, config.planet_radius));
+        config.time_step, legacy.planet_radius));
 
     const auto body_lifetime_at = [](float radius) {
-        ninho::physics::PhysicsWorld world({.surface_gravity = 0.0F, .max_bodies = 1U});
+        ninho::physics::PhysicsWorld world(
+            ninho::physics::make_legacy_radial_world_config(
+                {.surface_gravity = 0.0F, .max_bodies = 1U}));
         auto body = ninho::physics::BodyDesc::dynamic_sphere(
             0.1F, {{radius, 0.0F, 0.0F}, {}}, 1.0F);
-        body.radial_gravity = false;
         const auto created = world.create_body(body);
         NINHO_SIM_REQUIRE(created);
         world.step();

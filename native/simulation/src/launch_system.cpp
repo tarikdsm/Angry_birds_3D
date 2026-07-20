@@ -189,17 +189,19 @@ TrajectoryPreview SimulationSession::preview(const AimState& source) const
     try {
         const auto& world_config = impl_->physics.config();
         const float dt = world_config.time_step;
-        const float removal_radius = 6.0f * world_config.planet_radius;
+        const auto* spherical_bounds =
+            std::get_if<ninho::physics::SphericalWorldBounds>(&world_config.bounds);
+        if (spherical_bounds == nullptr) {
+            result.status.error = error(ContentErrorCode::InternalError, "/preview",
+                "legacy orbital preview requires spherical world bounds");
+            return result;
+        }
+        const float removal_radius = spherical_bounds->removal_radius_m;
         if (!std::isfinite(dt) || dt <= 0.0f) {
             result.status.error = error(ContentErrorCode::InternalError, "/preview",
                 "current physics timestep is not representable");
             return result;
         }
-        ninho::physics::RadialGravity gravity(ninho::physics::RadialGravityConfig{
-            .center_m = {},
-            .reference_radius_m = world_config.planet_radius,
-            .reference_acceleration_m_s2 = world_config.surface_gravity,
-        });
         auto position = result.quantized_aim.origin_m;
         auto velocity = result.quantized_aim.tangent_direction
             * static_cast<float>(result.quantized_aim.speed_m_s);
@@ -207,7 +209,7 @@ TrajectoryPreview SimulationSession::preview(const AimState& source) const
         result.samples.push_back(position);
         std::uint64_t hash = 14695981039346656037ULL;
         for (std::uint32_t tick = 0; tick < projectile_lifetime_ticks; ++tick) {
-            velocity = velocity + gravity.acceleration(position) * dt;
+            velocity = velocity + impl_->physics.gravity_at(position) * dt;
             const auto translation = velocity * dt;
             if (!ninho::physics::is_finite(translation)
                 || ninho::physics::length(translation) <= 0.0f) {
@@ -338,11 +340,11 @@ SessionStatus SimulationSession::Impl::create_projectile()
     description.linear_velocity = session_state.aim->tangent_direction
         * static_cast<float>(session_state.aim->speed_m_s);
     description.bullet = bird->bullet;
-    description.radial_gravity = true;
     // The simulation FSM owns projectile lifetime. In particular, an active
     // ability still needs its source body after crossing the world's 6R cleanup
     // boundary so it can deterministically publish its final pulse and end.
-    description.remove_beyond_six_r = false;
+    description.world_exit_policy =
+        ninho::physics::WorldExitPolicy::KeepOutsideBounds;
     description.name = "CHR_LaunchBird";
     description.shapes.front().friction = static_cast<float>(bird->friction);
     description.shapes.front().restitution = static_cast<float>(bird->restitution);

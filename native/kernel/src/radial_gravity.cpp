@@ -49,33 +49,49 @@ void EjectionTracker::reset(BodyHandle body)
 }
 
 detail::WorldExitTracker::WorldExitTracker(
-    WorldBoundsConfig bounds, RadialEjectionPolicy radial_ejection_policy)
+    WorldBoundsConfig bounds,
+    RadialEjectionPolicy radial_ejection_policy,
+    RadialGravityConfig radial_gravity_config)
     : bounds_(std::move(bounds))
-    , radial_ejection_policy_(radial_ejection_policy)
+    , radial_center_m_(radial_gravity_config.center_m)
+    , radial_reference_radius_m_(radial_gravity_config.reference_radius_m)
+    , ejection_evaluator_(radial_ejection_policy == RadialEjectionPolicy::Enabled
+              ? radial_ejection
+              : disabled_ejection)
 {
 }
 
-detail::WorldExitKind detail::WorldExitTracker::update(
+detail::WorldExitEvents detail::WorldExitTracker::update(
     BodyHandle body,
     Vec3 position_m,
     Vec3 linear_velocity_m_s,
-    float dt,
-    float planet_radius_m)
+    float dt)
 {
-    if (!bounds_.contains(position_m)) {
-        radial_ejection_.reset(body);
-        return WorldExitKind::BoundsExit;
-    }
-    if (radial_ejection_policy_ == RadialEjectionPolicy::Disabled) {
-        return WorldExitKind::None;
-    }
+    WorldExitEvents events{.bounds_exit = !bounds_.contains(position_m)};
+    events.radial_ejection =
+        ejection_evaluator_(*this, body, position_m, linear_velocity_m_s, dt);
+    return events;
+}
 
-    const float radius = length(position_m);
-    const Vec3 radial_direction = normalized_or_zero(position_m);
+bool detail::WorldExitTracker::disabled_ejection(
+    WorldExitTracker&, BodyHandle, Vec3, Vec3, float)
+{
+    return false;
+}
+
+bool detail::WorldExitTracker::radial_ejection(
+    WorldExitTracker& tracker,
+    BodyHandle body,
+    Vec3 position_m,
+    Vec3 linear_velocity_m_s,
+    float dt)
+{
+    const Vec3 radial_offset = position_m - tracker.radial_center_m_;
+    const float radius = length(radial_offset);
+    const Vec3 radial_direction = normalized_or_zero(radial_offset);
     const float radial_speed = dot(linear_velocity_m_s, radial_direction);
-    return radial_ejection_.update(body, radius, radial_speed, dt, planet_radius_m)
-        ? WorldExitKind::RadialEjection
-        : WorldExitKind::None;
+    return tracker.radial_ejection_.update(
+        body, radius, radial_speed, dt, tracker.radial_reference_radius_m_);
 }
 
 void detail::WorldExitTracker::reset(BodyHandle body)

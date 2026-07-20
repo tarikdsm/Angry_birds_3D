@@ -6,6 +6,12 @@
 
 namespace ninho::physics {
 
+namespace detail {
+#if defined(NINHO_ENABLE_TEST_FACADES)
+class PhysicsWorldTestFacade;
+#endif
+}
+
 struct UniformGravityConfig {
     Vec3 acceleration_m_s2{};
 };
@@ -26,7 +32,19 @@ public:
     [[nodiscard]] const GravityFieldConfig& config() const noexcept;
 
 private:
+    using Evaluator = Vec3 (*)(const GravityField&, Vec3) noexcept;
+    [[nodiscard]] static Vec3 evaluate_uniform(
+        const GravityField&, Vec3) noexcept;
+    [[nodiscard]] static Vec3 evaluate_radial(
+        const GravityField&, Vec3) noexcept;
+
+#if defined(NINHO_ENABLE_TEST_FACADES)
+    friend class detail::PhysicsWorldTestFacade;
+#endif
     GravityFieldConfig config_;
+    Vec3 uniform_acceleration_{};
+    RadialGravityConfig radial_config_{};
+    Evaluator evaluator_{};
 };
 
 }
