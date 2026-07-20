@@ -229,7 +229,7 @@ Declara:
 
 ### 8.1 Terra
 
-- aceleração: (0, -9,81, 0) m/s²;
+- aceleração: (0.0, -9.81, 0.0) m/s²;
 - bounds iniciais: mínimo (-24, -12, -12) m e máximo (48, 32, 12) m;
 - qualquer corpo dinâmico usa gravidade por default;
 - exceções exigem affected_by_world_gravity = false explícito e só são válidas para corpos estáticos/ancorados ou estados temporários de habilidade documentados;
@@ -557,6 +557,30 @@ Um único cenário integrado contém:
 
 Posições autorais são congeladas no manifesto; nenhuma composição depende de node físico Godot.
 
+### 18.2.1 Layout nominal v1
+
+Coordenadas são `(x, y, z)` em metros, com o topo do chão em `y=0`. Yaw é zero salvo indicação. A Task de autoria expande cada assembly em corpos e juntas explícitos e congela o resultado num fixture; depois disso não há posicionamento procedural.
+
+| ID/assembly | Transform/envelope nominal | Conteúdo físico obrigatório |
+|---|---|---|
+| `TER_EarthFarm_Ground` | centro `(1,-0.5,0)`, tamanho `(44,1,16)` | chão static; nenhum body abaixo de `y=-1` |
+| `DEV_SlingshotFarm` | rest `(-16,2,0)` | launcher; plano terrestre usa `+Y` e `camera_right` travado |
+| `ASM_NearShelter` | origem `(2.6,0,-3.4)`, envelope `(4.2,3.8,3.0)` | madeira/palha e `PIG_FARM_01` em `(2.6,0.55,-3.4)` |
+| `ASM_ChainGate` | origem `(5.0,0,0)`, envelope `(4.5,5.0,3.2)` | travessa em `(4.4,4.2,0)` tamanho `(3.6,0.25,0.40)`; contrapeso de chapa em `(5.8,4.0,0)` tamanho `(0.8,1.2,0.40)`; painel de vidro em `(6.7,2.2,0)` tamanho `(0.16,3.2,2.8)` |
+| `ASM_HayRamp` | origem `(8.8,0,0)`, envelope `(5.0,4.5,3.2)` | rampa descendente em `+X`, pitch `-12°`; três fardos centrados em `(7.8,3.4,-0.75)`, `(7.8,3.4,0)` e `(7.8,3.4,0.75)` |
+| `BLD_Farm_Barn` | origem `(8.2,0,2.8)`, envelope `(5.2,5.5,4.0)` | madeira/vidro; `PIG_FARM_02` em `(7.4,1.05,1.8)` |
+| `ASM_FarmSilo` | origem `(12.8,0,0)`, envelope `(4.2,7.0,4.2)` | argamassa lateral alvo em `(10.9,1.4,0)`; segmentos de tijolo/chapa; `PIG_FARM_03` em `(13.0,1.40,0)` sobre plataforma |
+| `ASM_FarmEquipment` | origem `(17.0,0,-2.5)`, envelope `(5.0,3.5,4.5)` | `DEV_Farm_FuelTank` em `(16.2,1.10,-1.6)`, `DEV_Farm_PressurizedTank` em `(17.6,1.00,-3.3)` e `PIG_FARM_04` em `(17.0,0.55,-2.5)` |
+| `BLD_Farm_Windmill` | origem `(15.5,0,4.8)`, envelope `(3.5,7.0,2.5)` | base com colisão autorada; pás visuais não criam dano sem body declarado |
+| `KIT_Farm_Fences` | faixa `x=1..19`, bordas `z≈±6.5` | módulos static/dynamic declarados individualmente, nunca barreira invisível |
+
+Regras de congelamento:
+
+- `farm_reaction.level.json` enumera cada body, joint, assembly, trigger e objective; nenhuma peça física nasce de mesh visual.
+- O fixture registra ID, transform, shape, material, massa, junta, trigger e objective de cada entrada e produz `layout_hash` canônico.
+- Os dois dispositivos ambientais usam `DamageThreshold` com fuse/cooldown autorados e causa rastreável.
+- Qualquer mudança após o congelamento invalida rotas, score, hashes e capturas, exigindo repetir balanceamento e certificação.
+
 ### 18.3 Cadeia principal
 
 1. uma travessa de madeira sustenta um contrapeso de chapa;
@@ -600,7 +624,8 @@ Rotas normativas:
 
 Tanque e recipiente pressurizado usam PressureBurstDefinition:
 
-- trigger por dano/temperatura;
+- trigger por DamageThreshold;
+- temperatura fica fora do schema v2 inicial e é rejeitada fail-closed;
 - fuse opcional;
 - raio, impulso, energia, line-of-sight, máximo de corpos e cooldown autorados;
 - candidatos ordenados por IDs;
