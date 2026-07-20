@@ -112,22 +112,27 @@ SessionStatus SimulationSession::Impl::apply_before_step(ShotState& active_shot,
     const ninho::physics::Vec3 target_velocity = direction * target_speed;
     const ninho::physics::Vec3 delta_velocity = quantized(
         target_velocity - state->linear_velocity);
-    const ninho::physics::Vec3 impulse = quantized(
-        delta_velocity * state->mass);
+    const ninho::physics::Vec3 physical_impulse =
+        delta_velocity * state->mass;
+    // Canonical telemetry has its own 1e-5 quantum and may honestly resolve to
+    // zero for tiny masses. The physical command keeps representable float
+    // precision so a published SpeedChanged always accompanies a real boost.
+    const ninho::physics::Vec3 telemetry_impulse = quantized(physical_impulse);
     if (!ninho::physics::is_finite(delta_velocity)
-        || !ninho::physics::is_finite(impulse)) {
+        || !ninho::physics::is_finite(physical_impulse)
+        || !ninho::physics::is_finite(telemetry_impulse)) {
         return speed_boost_failure("speed boost impulse is invalid");
     }
 
     // Product-v2 projectile bodies are centered spheres. Therefore the body
     // transform origin is their center of mass and applying here cannot add torque.
     const ninho::physics::Status status = physics.apply_impulse(
-        projectile->physics_handle, impulse, state->transform.position);
+        projectile->physics_handle, physical_impulse, state->transform.position);
     if (!status.ok()) {
         return speed_boost_failure(status.message);
     }
     publish_ability_event(DomainEventKind::SpeedChanged, nullptr, 0.0, {},
-        impulse, delta_velocity);
+        telemetry_impulse, delta_velocity);
     return {};
 }
 

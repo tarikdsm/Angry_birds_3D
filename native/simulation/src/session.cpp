@@ -415,6 +415,31 @@ void detail::SessionTestFacade::clear_speed_boost_direction_for_testing(
     }
 }
 
+void detail::SessionTestFacade::set_speed_boost_direction_for_testing(
+    SimulationSession& session, ninho::physics::Vec3 direction)
+{
+    if (!session.impl_->shot) {
+        return;
+    }
+    if (auto* runtime = std::get_if<SpeedBoostAbilityRuntime>(
+            &session.impl_->shot->runtime)) {
+        runtime->last_valid_flight_direction = direction;
+    }
+}
+
+bool detail::SessionTestFacade::set_last_speed_changed_delta_for_testing(
+    SimulationSession& session, ninho::physics::Vec3 delta_velocity)
+{
+    const auto event = std::ranges::find(
+        session.impl_->domain_events.rbegin(), session.impl_->domain_events.rend(),
+        DomainEventKind::SpeedChanged, &DomainEvent::kind);
+    if (event == session.impl_->domain_events.rend()) {
+        return false;
+    }
+    event->delta_velocity_m_s = delta_velocity;
+    return true;
+}
+
 bool detail::SessionTestFacade::impulse_entity(
     SimulationSession& session, EntityId entity, ninho::physics::Vec3 impulse)
 {

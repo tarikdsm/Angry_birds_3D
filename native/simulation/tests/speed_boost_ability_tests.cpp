@@ -48,7 +48,15 @@ void require_vector_near(Vec3 actual, Vec3 expected, double tolerance)
 {
     NINHO_SIM_REQUIRE(is_finite(actual));
     NINHO_SIM_REQUIRE(is_finite(expected));
-    NINHO_SIM_REQUIRE(length(actual - expected) <= tolerance);
+    const double difference = length(actual - expected);
+    if (difference > tolerance) {
+        std::ostringstream message;
+        message << "expected (" << expected.x << ", " << expected.y << ", "
+                << expected.z << ") +/- " << tolerance << ", got ("
+                << actual.x << ", " << actual.y << ", " << actual.z
+                << ") (vector delta " << difference << ')';
+        ninho::simulation::test::fail(__FILE__, __LINE__, message.str());
+    }
 }
 
 void require_quantized(Vec3 value)
@@ -79,7 +87,8 @@ MaterialCatalog materials()
     return result;
 }
 
-ArchetypeCatalog archetypes(double fallback = fallback_speed_m_s)
+ArchetypeCatalog archetypes(double fallback = fallback_speed_m_s,
+    double bird_mass_kg = 6.0)
 {
     ArchetypeCatalog result;
     result.schema_version = result.source_schema_version = 2U;
@@ -92,7 +101,7 @@ ArchetypeCatalog archetypes(double fallback = fallback_speed_m_s)
         bird.key = "yellow_" + std::to_string(id);
         bird.ability_id = AbilityId{1};
         bird.surface_id = SurfaceId{1001};
-        bird.mass_kg = 6.0;
+        bird.mass_kg = bird_mass_kg;
         bird.radius_m = 0.25;
         bird.friction = 0.4;
         bird.restitution = 0.1;
@@ -107,14 +116,15 @@ ArchetypeCatalog archetypes(double fallback = fallback_speed_m_s)
     return result;
 }
 
-LevelManifest level(double spring_constant_n_m = 520.0)
+LevelManifest level(double spring_constant_n_m = 520.0,
+    std::array<double, 3> acceleration_m_s2 = {})
 {
     LevelManifest result;
     result.schema_version = result.source_schema_version = 2U;
     result.id = "speed_boost_ability";
     result.world_id = "earth";
     result.world = UniformWorldDefinition{
-        .acceleration_m_s2 = {},
+        .acceleration_m_s2 = acceleration_m_s2,
         .bounds_min_m = {-10000.0, -10000.0, -10000.0},
         .bounds_max_m = {10000.0, 10000.0, 10000.0},
     };
@@ -137,10 +147,13 @@ LevelManifest level(double spring_constant_n_m = 520.0)
 }
 
 std::unique_ptr<SimulationSession> create_session(
-    double spring_constant_n_m = 520.0, double fallback = fallback_speed_m_s)
+    double spring_constant_n_m = 520.0, double fallback = fallback_speed_m_s,
+    double bird_mass_kg = 6.0,
+    std::array<double, 3> acceleration_m_s2 = {})
 {
     auto created = SimulationSession::create(
-        materials(), archetypes(fallback), level(spring_constant_n_m));
+        materials(), archetypes(fallback, bird_mass_kg),
+        level(spring_constant_n_m, acceleration_m_s2));
     NINHO_SIM_REQUIRE(created.ok());
     return std::move(created.value);
 }
@@ -181,6 +194,14 @@ EntitySnapshot projectile_snapshot(const SimulationSession& session)
         session.snapshots(), [](const auto& value) { return value.is_projectile; });
     NINHO_SIM_REQUIRE(found != session.snapshots().end());
     return *found;
+}
+
+void queue_projectile_velocity(SimulationSession& session, Vec3 target)
+{
+    const EntitySnapshot before = projectile_snapshot(session);
+    NINHO_SIM_REQUIRE(SessionTestFacade::impulse_entity(session,
+        before.entity_id, (target - before.linear_velocity_m_s)
+            * static_cast<float>(before.mass_kg)));
 }
 
 const DomainEvent& require_event(
@@ -387,6 +408,92 @@ NINHO_SIM_TEST("speed boost ability clamps post ability speed to forty five mete
         normalized_or_zero(boosted.linear_velocity_m_s), direction, 1.0e-4);
 }
 
+NINHO_SIM_TEST("speed boost ability changes real velocity for a tiny accepted mass under gravity")
+{
+    constexpr double tiny_mass_kg = 1.0e-7;
+    constexpr Vec3 initial_velocity{6.0F, 8.0F, 0.0F};
+    constexpr std::array<double, 3> gravity{0.0, -9.81, 0.0};
+    auto active = create_session(
+        520.0, fallback_speed_m_s, tiny_mass_kg, gravity);
+    auto control = create_session(
+        520.0, fallback_speed_m_s, tiny_mass_kg, gravity);
+    launch(*active);
+    launch(*control);
+    advance_to_offset(*active, 7U);
+    advance_to_offset(*control, 7U);
+    constexpr Vec3 gravity_per_tick{0.0F, -9.81F / 60.0F, 0.0F};
+    queue_projectile_velocity(*active, initial_velocity - gravity_per_tick);
+    queue_projectile_velocity(*control, initial_velocity - gravity_per_tick);
+    NINHO_SIM_REQUIRE(active->tick().ok());
+    NINHO_SIM_REQUIRE(control->tick().ok());
+    const EntitySnapshot before = projectile_snapshot(*active);
+    require_vector_near(before.linear_velocity_m_s, initial_velocity, 3.0e-5);
+    NINHO_SIM_REQUIRE(before.mass_kg > 0.0);
+    NINHO_SIM_REQUIRE(before.mass_kg < 2.0e-7);
+
+    NINHO_SIM_REQUIRE(active->enqueue(ActivateAbilityCommand{}).ok());
+    NINHO_SIM_REQUIRE(active->tick().ok());
+    NINHO_SIM_REQUIRE(control->tick().ok());
+
+    const DomainEvent& started = require_event(
+        active->events(), DomainEventKind::AbilityStarted);
+    const DomainEvent& changed = require_event(
+        active->events(), DomainEventKind::SpeedChanged);
+    NINHO_SIM_REQUIRE(started.entity_id == before.entity_id);
+    NINHO_SIM_REQUIRE(changed.entity_id == before.entity_id);
+    const EntitySnapshot boosted = projectile_snapshot(*active);
+    const EntitySnapshot unboosted = projectile_snapshot(*control);
+    constexpr Vec3 expected_delta_velocity{3.3F, 4.4F, 0.0F};
+    require_vector_near(boosted.linear_velocity_m_s
+            - unboosted.linear_velocity_m_s,
+        expected_delta_velocity, 3.0e-4);
+    require_vector_near(changed.delta_velocity_m_s,
+        expected_delta_velocity, 1.0e-5);
+    NINHO_SIM_REQUIRE(changed.impulse_n_s == Vec3{});
+    require_vector_near(boosted.angular_velocity_rad_s,
+        before.angular_velocity_rad_s, 1.0e-6);
+    require_vector_near(unboosted.angular_velocity_rad_s,
+        before.angular_velocity_rad_s, 1.0e-6);
+}
+
+NINHO_SIM_TEST("speed boost ability preserves fractional mass precision in normal and near rest paths")
+{
+    constexpr double fractional_mass_kg = 0.1234567;
+    constexpr Vec3 initial_velocity{6.0F, 8.0F, 0.0F};
+    auto normal = create_session(
+        520.0, fallback_speed_m_s, fractional_mass_kg);
+    launch(*normal);
+    advance_to_offset(*normal, 8U);
+    queue_projectile_velocity(*normal, initial_velocity);
+    NINHO_SIM_REQUIRE(normal->tick().ok());
+    require_vector_near(projectile_snapshot(*normal).linear_velocity_m_s,
+        initial_velocity, 2.0e-5);
+    NINHO_SIM_REQUIRE(normal->enqueue(ActivateAbilityCommand{}).ok());
+    NINHO_SIM_REQUIRE(normal->tick().ok());
+    require_vector_near(projectile_snapshot(*normal).linear_velocity_m_s,
+        initial_velocity * static_cast<float>(speed_multiplier), 3.0e-4);
+
+    auto fallback = create_session(
+        520.0, fallback_speed_m_s, fractional_mass_kg);
+    launch(*fallback);
+    const Vec3 last_direction = normalized_or_zero(
+        projectile_snapshot(*fallback).linear_velocity_m_s);
+    advance_to_offset(*fallback, 8U);
+    constexpr Vec3 almost_stopped{6.0e-5F, 8.0e-5F, 0.0F};
+    queue_projectile_velocity(*fallback, almost_stopped);
+    NINHO_SIM_REQUIRE(fallback->tick().ok());
+    require_vector_near(projectile_snapshot(*fallback).linear_velocity_m_s,
+        almost_stopped, 2.0e-5);
+    NINHO_SIM_REQUIRE(fallback->enqueue(ActivateAbilityCommand{}).ok());
+    NINHO_SIM_REQUIRE(fallback->tick().ok());
+    const EntitySnapshot restarted = projectile_snapshot(*fallback);
+    require_vector_near(restarted.linear_velocity_m_s,
+        last_direction * static_cast<float>(fallback_speed_m_s), 3.0e-4);
+    require_vector_near(restarted.angular_velocity_rad_s, {}, 1.0e-6);
+    require_quantized(require_event(
+        fallback->events(), DomainEventKind::SpeedChanged).impulse_n_s);
+}
+
 void cancel_projectile_velocity(SimulationSession& session)
 {
     const EntitySnapshot before = projectile_snapshot(session);
@@ -503,6 +610,45 @@ NINHO_SIM_TEST("speed boost ability fifty repetitions preserve event and canonic
     for (int repetition = 1; repetition < 50; ++repetition) {
         NINHO_SIM_REQUIRE(speed_replay() == expected);
     }
+}
+
+NINHO_SIM_TEST("speed boost ability canonical bytes and hash distinguish only last valid direction")
+{
+    auto session = create_session();
+    launch(*session);
+    SessionTestFacade::set_speed_boost_direction_for_testing(
+        *session, {1.0F, 0.0F, 0.0F});
+    SessionTestFacade::refresh_canonical_state(*session);
+    const std::vector<std::uint8_t> first_bytes = session->canonical_state_v3();
+    const std::uint64_t first_hash = session->canonical_hash_v3();
+
+    SessionTestFacade::set_speed_boost_direction_for_testing(
+        *session, {0.0F, 1.0F, 0.0F});
+    SessionTestFacade::refresh_canonical_state(*session);
+    NINHO_SIM_REQUIRE(session->canonical_state_v3() != first_bytes);
+    NINHO_SIM_REQUIRE(session->canonical_hash_v3() != first_hash);
+}
+
+NINHO_SIM_TEST("speed boost ability canonical bytes and hash distinguish only event delta velocity")
+{
+    auto session = create_session();
+    launch(*session);
+    advance_to_offset(*session, 8U);
+    NINHO_SIM_REQUIRE(session->enqueue(ActivateAbilityCommand{}).ok());
+    NINHO_SIM_REQUIRE(session->tick().ok());
+    require_event(session->events(), DomainEventKind::SpeedChanged);
+
+    NINHO_SIM_REQUIRE(SessionTestFacade::set_last_speed_changed_delta_for_testing(
+        *session, {1.0F, 2.0F, 3.0F}));
+    SessionTestFacade::refresh_canonical_state(*session);
+    const std::vector<std::uint8_t> first_bytes = session->canonical_state_v3();
+    const std::uint64_t first_hash = session->canonical_hash_v3();
+
+    NINHO_SIM_REQUIRE(SessionTestFacade::set_last_speed_changed_delta_for_testing(
+        *session, {3.0F, 2.0F, 1.0F}));
+    SessionTestFacade::refresh_canonical_state(*session);
+    NINHO_SIM_REQUIRE(session->canonical_state_v3() != first_bytes);
+    NINHO_SIM_REQUIRE(session->canonical_hash_v3() != first_hash);
 }
 
 NINHO_SIM_TEST("speed boost ability is the only newly promoted kind and appends event tag fourteen")
