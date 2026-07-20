@@ -40,6 +40,17 @@ namespace {
     };
 }
 
+[[nodiscard]] LockedPlaneFrameData locked_plane_from(
+    const simulation::LockedLaunchPlaneView& plane) noexcept
+{
+    return {
+        .camera_right = plane.camera_right,
+        .up = plane.up,
+        .horizontal = plane.horizontal,
+        .plane_normal = plane.plane_normal,
+    };
+}
+
 [[nodiscard]] std::pair<std::string, physics::Vec3> gravity_frame_from(
     const simulation::LevelManifest& level)
 {
@@ -64,8 +75,7 @@ namespace {
 [[nodiscard]] GameplayFrameFields gameplay_fields_from(
     const simulation::SimulationSession& session,
     const simulation::ContentBundle& content,
-    std::optional<LockedPlaneFrameData> locked_plane,
-    std::optional<simulation::BirdArchetypeId> active_bird)
+    const std::optional<simulation::ShotStateView>& shot)
 {
     GameplayFrameFields fields;
     const std::uint32_t remaining = session.birds_remaining();
@@ -79,20 +89,30 @@ namespace {
     if (!fields.bird_queue.empty()) {
         fields.current_bird = fields.bird_queue.front();
     }
-    fields.locked_plane = locked_plane;
-
-    for (const simulation::EntitySnapshot& snapshot : session.snapshots()) {
-        if (snapshot.is_projectile) {
-            fields.projectiles.push_back(snapshot);
+    if (shot) {
+        fields.locked_plane = locked_plane_from(shot->locked_plane);
+        fields.shot = ShotFrameData{
+            .shot_id = shot->shot_id,
+            .bird_archetype_id = shot->bird_archetype_id,
+            .ability_id = shot->ability_id,
+            .launch_tick = shot->launch_tick,
+            .pull_horizontal_m = shot->pull_horizontal_m,
+            .pull_vertical_m = shot->pull_vertical_m,
+            .activation_consumed = shot->activation_consumed,
+            .projectile_ids = shot->projectile_ids,
+        };
+        fields.projectiles.reserve(shot->projectile_ids.size());
+        for (const simulation::EntityId projectile_id : shot->projectile_ids) {
+            const auto snapshot = std::ranges::find(
+                session.snapshots(), projectile_id,
+                &simulation::EntitySnapshot::entity_id);
+            if (snapshot != session.snapshots().end()) {
+                fields.projectiles.push_back(*snapshot);
+            }
         }
-    }
-    if (active_bird && !fields.projectiles.empty()) {
-        ShotFrameData shot{.bird_archetype_id = *active_bird};
-        shot.projectile_ids.reserve(fields.projectiles.size());
-        for (const simulation::EntitySnapshot& projectile : fields.projectiles) {
-            shot.projectile_ids.push_back(projectile.entity_id);
-        }
-        fields.shot = std::move(shot);
+    } else if (session.state().phase == simulation::SessionPhase::Grabbed
+        && session.state().launcher) {
+        fields.locked_plane = locked_plane_from(*session.state().launcher);
     }
 
     auto [gravity_kind, local_gravity] = gravity_frame_from(content.level);
@@ -180,6 +200,8 @@ bool GameplaySessionAdapter::configure(
         SessionFrameBatch candidate_batch;
         const std::vector<simulation::ObjectiveTargetStatus> objective_targets =
             candidate.value->objective_target_statuses();
+        const std::optional<simulation::ShotStateView> shot =
+            candidate.value->shot_state();
         candidate_batch.capture_latest(
             candidate.value->snapshots(),
             candidate.value->state(),
@@ -187,16 +209,13 @@ bool GameplaySessionAdapter::configure(
             candidate.value->objectives_complete(),
             candidate.value->physics_metrics(),
             objective_targets,
-            candidate.value->ability_readiness());
+            shot ? shot->ability_readiness : candidate.value->ability_readiness());
         candidate_batch.set_gameplay_fields(gameplay_fields_from(
-            *candidate.value, candidate_content, std::nullopt, std::nullopt));
+            *candidate.value, candidate_content, shot));
 
         session_ = std::move(candidate.value);
         content_ = std::move(candidate_content);
         batch_ = std::move(candidate_batch);
-        locked_plane_.reset();
-        active_bird_.reset();
-        pending_release_bird_.reset();
         accumulator_.reset();
         return true;
     } catch (const std::exception& error) {
@@ -257,13 +276,7 @@ bool GameplaySessionAdapter::queue_pull(
 
 bool GameplaySessionAdapter::queue_release() noexcept
 {
-    const std::optional<simulation::BirdArchetypeId> released_bird =
-        batch_.peek().current_bird;
-    if (!enqueue(simulation::ReleaseBirdCommand{})) {
-        return false;
-    }
-    pending_release_bird_ = released_bird;
-    return true;
+    return enqueue(simulation::ReleaseBirdCommand{});
 }
 
 bool GameplaySessionAdapter::queue_activate_ability() noexcept
@@ -293,6 +306,8 @@ bool GameplaySessionAdapter::restart() noexcept
         SessionFrameBatch candidate_batch;
         const std::vector<simulation::ObjectiveTargetStatus> objective_targets =
             candidate.value->objective_target_statuses();
+        const std::optional<simulation::ShotStateView> shot =
+            candidate.value->shot_state();
         candidate_batch.capture_latest(
             candidate.value->snapshots(),
             candidate.value->state(),
@@ -300,15 +315,12 @@ bool GameplaySessionAdapter::restart() noexcept
             candidate.value->objectives_complete(),
             candidate.value->physics_metrics(),
             objective_targets,
-            candidate.value->ability_readiness());
+            shot ? shot->ability_readiness : candidate.value->ability_readiness());
         candidate_batch.set_gameplay_fields(gameplay_fields_from(
-            *candidate.value, content_, std::nullopt, std::nullopt));
+            *candidate.value, content_, shot));
 
         session_ = std::move(candidate.value);
         batch_ = std::move(candidate_batch);
-        locked_plane_.reset();
-        active_bird_.reset();
-        pending_release_bird_.reset();
         accumulator_.reset();
         return true;
     } catch (const std::exception& error) {
@@ -323,6 +335,7 @@ bool GameplaySessionAdapter::restart() noexcept
 
 void GameplaySessionAdapter::capture_latest()
 {
+    const std::optional<simulation::ShotStateView> shot = session_->shot_state();
     const std::vector<simulation::ObjectiveTargetStatus> objective_targets =
         session_->objective_target_statuses();
     batch_.capture_latest(
@@ -332,31 +345,8 @@ void GameplaySessionAdapter::capture_latest()
         session_->objectives_complete(),
         session_->physics_metrics(),
         objective_targets,
-        session_->ability_readiness());
-
-    if (session_->state().launcher) {
-        locked_plane_ = locked_plane_from(*session_->state().launcher);
-    }
-    for (const simulation::DomainEvent& event : session_->events()) {
-        if (event.kind == simulation::DomainEventKind::BirdLaunched) {
-            active_bird_ = event.bird_archetype_id;
-        }
-    }
-    const bool has_projectile = std::ranges::any_of(
-        session_->snapshots(), &simulation::EntitySnapshot::is_projectile);
-    if (has_projectile && !active_bird_ && pending_release_bird_) {
-        active_bird_ = pending_release_bird_;
-    }
-    if (has_projectile) {
-        pending_release_bird_.reset();
-    }
-    if (!has_projectile && session_->state().phase != simulation::SessionPhase::Grabbed) {
-        active_bird_.reset();
-        locked_plane_.reset();
-        pending_release_bird_.reset();
-    }
-    batch_.set_gameplay_fields(gameplay_fields_from(
-        *session_, content_, locked_plane_, active_bird_));
+        shot ? shot->ability_readiness : session_->ability_readiness());
+    batch_.set_gameplay_fields(gameplay_fields_from(*session_, content_, shot));
 
     if (session_->state().phase == simulation::SessionPhase::Grabbed) {
         simulation::TrajectoryPreview preview = session_->preview();
@@ -698,8 +688,14 @@ namespace {
         return {};
     }
     godot::Dictionary result;
+    result["shot_id"] = static_cast<std::int64_t>(shot->shot_id);
     result["bird_archetype_id"] =
         static_cast<std::int64_t>(shot->bird_archetype_id.value());
+    result["ability_id"] = static_cast<std::int64_t>(shot->ability_id.value());
+    result["launch_tick"] = static_cast<std::int64_t>(shot->launch_tick.value());
+    result["pull_horizontal_m"] = shot->pull_horizontal_m;
+    result["pull_vertical_m"] = shot->pull_vertical_m;
+    result["activation_consumed"] = shot->activation_consumed;
     godot::Array projectile_ids;
     for (const simulation::EntityId id : shot->projectile_ids) {
         projectile_ids.push_back(static_cast<std::int64_t>(id.value()));

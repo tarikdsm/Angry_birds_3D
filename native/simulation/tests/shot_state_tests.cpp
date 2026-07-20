@@ -127,6 +127,120 @@ std::unique_ptr<SimulationSession> create_session(LevelManifest source = level()
     return std::move(created.value);
 }
 
+void launch_v2(SimulationSession& session)
+{
+    NINHO_SIM_REQUIRE(session.enqueue(
+        BeginGrabCommand{{1.0F, 0.0F, 0.0F}}).ok());
+    NINHO_SIM_REQUIRE(session.enqueue(SetPullCommand{-1.25, 0.5}).ok());
+    NINHO_SIM_REQUIRE(session.tick().ok());
+    NINHO_SIM_REQUIRE(session.enqueue(ReleaseBirdCommand{}).ok());
+    NINHO_SIM_REQUIRE(session.tick().ok());
+}
+
+}
+
+static_assert(std::is_same_v<
+    decltype(std::declval<const SimulationSession&>().shot_state()),
+    std::optional<ShotStateView>>);
+
+NINHO_SIM_TEST("shot state public view is a value snapshot with ordered membership")
+{
+    using detail::SessionTestFacade;
+    auto session = create_session();
+    NINHO_SIM_REQUIRE(!session->shot_state().has_value());
+    launch_v2(*session);
+
+    const auto canonical_before_view = session->canonical_state_v3();
+    const auto view = session->shot_state();
+    NINHO_SIM_REQUIRE(view.has_value());
+    NINHO_SIM_REQUIRE(view->shot_id == 1U);
+    NINHO_SIM_REQUIRE(view->bird_archetype_id == BirdArchetypeId{1});
+    NINHO_SIM_REQUIRE(view->ability_id == AbilityId{1});
+    NINHO_SIM_REQUIRE(view->launch_tick == TickIndex{2});
+    NINHO_SIM_REQUIRE((view->locked_plane.camera_right
+        == ninho::physics::Vec3{1.0F, 0.0F, 0.0F}));
+    NINHO_SIM_REQUIRE(view->pull_horizontal_m == -1.25);
+    NINHO_SIM_REQUIRE(view->pull_vertical_m == 0.5);
+    NINHO_SIM_REQUIRE(!view->activation_consumed);
+    NINHO_SIM_REQUIRE(view->ability_readiness == AbilityReadiness::Arming);
+    NINHO_SIM_REQUIRE((view->projectile_ids
+        == std::vector{EntityId{0x80000000U}}));
+    NINHO_SIM_REQUIRE(session->canonical_state_v3() == canonical_before_view);
+
+    NINHO_SIM_REQUIRE(SessionTestFacade::append_projectile_for_testing(
+        *session, EntityId{0x80000003U}));
+    NINHO_SIM_REQUIRE(SessionTestFacade::append_projectile_for_testing(
+        *session, EntityId{0x80000002U}));
+    const auto expanded = session->shot_state();
+    NINHO_SIM_REQUIRE(expanded.has_value());
+    NINHO_SIM_REQUIRE((expanded->projectile_ids == std::vector{
+        EntityId{0x80000000U}, EntityId{0x80000002U}, EntityId{0x80000003U}}));
+    NINHO_SIM_REQUIRE(std::ranges::count(
+        session->snapshots(), true, &EntitySnapshot::is_projectile) == 1);
+    NINHO_SIM_REQUIRE((view->projectile_ids
+        == std::vector{EntityId{0x80000000U}}));
+}
+
+NINHO_SIM_TEST("shot state public view follows authoritative resolution lifecycle")
+{
+    using detail::SessionTestFacade;
+    auto session = create_session();
+    launch_v2(*session);
+    const ShotStateView launched = *session->shot_state();
+
+    SessionTestFacade::finish_projectile(*session);
+    NINHO_SIM_REQUIRE(session->tick().ok());
+    NINHO_SIM_REQUIRE(session->state().phase == SessionPhase::Resolution);
+    const auto resolution = session->shot_state();
+    NINHO_SIM_REQUIRE(resolution.has_value());
+    NINHO_SIM_REQUIRE(resolution->shot_id == launched.shot_id);
+    NINHO_SIM_REQUIRE(resolution->bird_archetype_id == launched.bird_archetype_id);
+    NINHO_SIM_REQUIRE(resolution->locked_plane == launched.locked_plane);
+    NINHO_SIM_REQUIRE(resolution->projectile_ids == launched.projectile_ids);
+    NINHO_SIM_REQUIRE(resolution->ability_readiness == AbilityReadiness::Spent);
+    NINHO_SIM_REQUIRE(std::ranges::none_of(
+        session->snapshots(), &EntitySnapshot::is_projectile));
+
+    for (int tick = 0;
+         tick < 64 && session->state().phase != SessionPhase::Evaluation;
+         ++tick) {
+        NINHO_SIM_REQUIRE(session->tick().ok());
+        NINHO_SIM_REQUIRE(session->shot_state().has_value());
+    }
+    NINHO_SIM_REQUIRE(session->state().phase == SessionPhase::Evaluation);
+    const auto evaluation = session->shot_state();
+    NINHO_SIM_REQUIRE(evaluation.has_value());
+    NINHO_SIM_REQUIRE(evaluation->shot_id == launched.shot_id);
+    NINHO_SIM_REQUIRE(evaluation->bird_archetype_id == launched.bird_archetype_id);
+    NINHO_SIM_REQUIRE(evaluation->locked_plane == launched.locked_plane);
+    NINHO_SIM_REQUIRE(evaluation->projectile_ids == launched.projectile_ids);
+    NINHO_SIM_REQUIRE(evaluation->ability_readiness == AbilityReadiness::Spent);
+
+    NINHO_SIM_REQUIRE(session->tick().ok());
+    NINHO_SIM_REQUIRE(session->state().phase == SessionPhase::Inspection);
+    NINHO_SIM_REQUIRE(!session->shot_state().has_value());
+}
+
+NINHO_SIM_TEST("shot state public view preserves atomic reconfigure and clears restart state")
+{
+    auto session = create_session();
+    launch_v2(*session);
+    const auto launched = session->shot_state();
+    const auto canonical_launched = session->canonical_state_v3();
+
+    LevelManifest invalid = level();
+    invalid.bird_queue.clear();
+    NINHO_SIM_REQUIRE(!session->reconfigure(materials(), archetypes(), invalid).ok());
+    NINHO_SIM_REQUIRE(session->shot_state() == launched);
+    NINHO_SIM_REQUIRE(session->canonical_state_v3() == canonical_launched);
+
+    NINHO_SIM_REQUIRE(session->restart().ok());
+    NINHO_SIM_REQUIRE(!session->shot_state().has_value());
+    launch_v2(*session);
+    NINHO_SIM_REQUIRE(session->shot_state().has_value());
+    NINHO_SIM_REQUIRE(session->reconfigure(
+        materials(), archetypes(), level({0.0, -9.5, 0.0})).ok());
+    NINHO_SIM_REQUIRE(!session->shot_state().has_value());
 }
 
 NINHO_SIM_TEST("shot state owns the locked plane runtime and ordered projectiles")

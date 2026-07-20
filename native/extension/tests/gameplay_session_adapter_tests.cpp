@@ -2,6 +2,8 @@
 
 #include <ninho/extension/gameplay_session_node.hpp>
 
+#include "session_test_facade.hpp"
+
 #include <nlohmann/json.hpp>
 
 #include <array>
@@ -17,10 +19,29 @@
 #include <utility>
 #include <vector>
 
+namespace ninho::extension::detail {
+
+class GameplaySessionAdapterTestFacade {
+public:
+    [[nodiscard]] static simulation::SimulationSession& session(
+        GameplaySessionAdapter& adapter) noexcept
+    {
+        return *adapter.session_;
+    }
+
+    static void refresh_frame(GameplaySessionAdapter& adapter)
+    {
+        adapter.capture_latest();
+    }
+};
+
+}
+
 namespace {
 
 using json = nlohmann::json;
 using ninho::extension::detail::GameplaySessionAdapter;
+using ninho::extension::detail::GameplaySessionAdapterTestFacade;
 using ninho::physics::Vec3;
 using ninho::simulation::SessionPhase;
 
@@ -265,18 +286,33 @@ NINHO_TEST("gameplay adapter keeps configuration atomic and restart recovers the
     const JsonFixture json;
     GameplaySessionAdapter adapter;
     require_configured(adapter, json);
-    const auto initial = adapter.consume_frame();
-    NINHO_REQUIRE(!initial.snapshots.empty());
+    NINHO_REQUIRE(adapter.queue_begin_grab(Vec3{1.0F, 0.0F, 0.0F}));
+    NINHO_REQUIRE(adapter.queue_pull(-2.0, 1.0));
+    NINHO_REQUIRE(adapter.queue_release());
+    NINHO_REQUIRE(adapter.advance(3.0 / 60.0));
+    const auto launched = adapter.consume_frame();
+    NINHO_REQUIRE(launched.shot.has_value());
 
     NINHO_REQUIRE(!adapter.configure("{", json.archetypes, json.level));
     NINHO_REQUIRE(adapter.configured());
     NINHO_REQUIRE(adapter.fault().has_value());
-    NINHO_REQUIRE(adapter.peek_frame().snapshots == initial.snapshots);
+    NINHO_REQUIRE(adapter.peek_frame().shot == launched.shot);
+    NINHO_REQUIRE(adapter.peek_frame().locked_plane == launched.locked_plane);
 
     NINHO_REQUIRE(adapter.restart());
     NINHO_REQUIRE(!adapter.fault().has_value());
     NINHO_REQUIRE(adapter.peek_frame().state.tick.value() == 0U);
-    NINHO_REQUIRE(adapter.peek_frame().snapshots == initial.snapshots);
+    NINHO_REQUIRE(!adapter.peek_frame().shot.has_value());
+    NINHO_REQUIRE(!adapter.peek_frame().locked_plane.has_value());
+
+    NINHO_REQUIRE(adapter.queue_begin_grab(Vec3{1.0F, 0.0F, 0.0F}));
+    NINHO_REQUIRE(adapter.queue_pull(-2.0, 1.0));
+    NINHO_REQUIRE(adapter.queue_release());
+    NINHO_REQUIRE(adapter.advance(3.0 / 60.0));
+    NINHO_REQUIRE(adapter.peek_frame().shot.has_value());
+    NINHO_REQUIRE(adapter.configure(json.materials, json.archetypes, json.level));
+    NINHO_REQUIRE(!adapter.peek_frame().shot.has_value());
+    NINHO_REQUIRE(!adapter.peek_frame().locked_plane.has_value());
 }
 
 NINHO_TEST("gameplay frame consumption clears events once and retains latest snapshots")
@@ -297,6 +333,79 @@ NINHO_TEST("gameplay frame consumption clears events once and retains latest sna
     NINHO_REQUIRE(second.events.empty());
     NINHO_REQUIRE(second.snapshots == first.snapshots);
     NINHO_REQUIRE(second.state.tick == first.state.tick);
+}
+
+NINHO_TEST("gameplay frame follows authoritative shot lifecycle and ordered membership")
+{
+    using ninho::simulation::detail::SessionTestFacade;
+    const JsonFixture json;
+    GameplaySessionAdapter adapter;
+    require_configured(adapter, json);
+    NINHO_REQUIRE(adapter.queue_begin_grab(Vec3{1.0F, 0.0F, 0.0F}));
+    NINHO_REQUIRE(adapter.queue_pull(-2.0, 1.0));
+    NINHO_REQUIRE(adapter.queue_release());
+    NINHO_REQUIRE(adapter.advance(3.0 / 60.0));
+
+    auto& session = GameplaySessionAdapterTestFacade::session(adapter);
+    const auto authoritative = session.shot_state();
+    NINHO_REQUIRE(authoritative.has_value());
+    NINHO_REQUIRE(SessionTestFacade::append_projectile_for_testing(
+        session, ninho::simulation::EntityId{0x80000003U}));
+    NINHO_REQUIRE(SessionTestFacade::append_projectile_for_testing(
+        session, ninho::simulation::EntityId{0x80000002U}));
+    GameplaySessionAdapterTestFacade::refresh_frame(adapter);
+
+    const auto expanded = adapter.peek_frame();
+    NINHO_REQUIRE(expanded.shot.has_value());
+    NINHO_REQUIRE(expanded.shot->shot_id == authoritative->shot_id);
+    NINHO_REQUIRE(expanded.shot->bird_archetype_id
+        == authoritative->bird_archetype_id);
+    NINHO_REQUIRE((expanded.shot->projectile_ids == std::vector{
+        ninho::simulation::EntityId{0x80000000U},
+        ninho::simulation::EntityId{0x80000002U},
+        ninho::simulation::EntityId{0x80000003U}}));
+    NINHO_REQUIRE(expanded.projectiles.size() == 1U);
+    NINHO_REQUIRE(expanded.locked_plane.has_value());
+
+    SessionTestFacade::finish_projectile(session);
+    NINHO_REQUIRE(adapter.advance(1.0 / 60.0));
+    NINHO_REQUIRE(adapter.peek_frame().state.phase == SessionPhase::Resolution);
+    NINHO_REQUIRE(adapter.peek_frame().shot.has_value());
+    NINHO_REQUIRE(adapter.peek_frame().locked_plane.has_value());
+    NINHO_REQUIRE(adapter.peek_frame().projectiles.empty());
+    NINHO_REQUIRE(adapter.peek_frame().shot->projectile_ids
+        == expanded.shot->projectile_ids);
+
+    for (int tick = 0;
+         tick < 64 && adapter.peek_frame().state.phase != SessionPhase::Evaluation;
+         ++tick) {
+        NINHO_REQUIRE(adapter.advance(1.0 / 60.0));
+        NINHO_REQUIRE(adapter.peek_frame().shot.has_value());
+        NINHO_REQUIRE(adapter.peek_frame().locked_plane.has_value());
+    }
+    NINHO_REQUIRE(adapter.peek_frame().state.phase == SessionPhase::Evaluation);
+    NINHO_REQUIRE(adapter.peek_frame().shot.has_value());
+
+    NINHO_REQUIRE(adapter.advance(1.0 / 60.0));
+    NINHO_REQUIRE(adapter.peek_frame().state.phase == SessionPhase::Inspection);
+    NINHO_REQUIRE(!adapter.peek_frame().shot.has_value());
+    NINHO_REQUIRE(!adapter.peek_frame().locked_plane.has_value());
+    NINHO_REQUIRE(adapter.peek_frame().projectiles.empty());
+}
+
+NINHO_TEST("gameplay adapter has no external shot identity or event inference cache")
+{
+    const std::string header = read_source_file(
+        "native/extension/include/ninho/extension/gameplay_session_node.hpp");
+    const std::string source = read_source_file(
+        "native/extension/src/gameplay_session_node.cpp");
+    NINHO_REQUIRE(header.find("active_bird_") == std::string::npos);
+    NINHO_REQUIRE(header.find("pending_release_bird_") == std::string::npos);
+    NINHO_REQUIRE(source.find("active_bird_") == std::string::npos);
+    NINHO_REQUIRE(source.find("pending_release_bird_") == std::string::npos);
+    NINHO_REQUIRE(source.find("simulation::DomainEventKind::BirdLaunched")
+        == std::string::npos);
+    NINHO_REQUIRE(source.find("session_->shot_state()") != std::string::npos);
 }
 
 NINHO_TEST("gameplay frame schema freezes exact version two top level dictionary keys")

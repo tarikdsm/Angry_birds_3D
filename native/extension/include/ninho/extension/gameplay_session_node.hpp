@@ -12,6 +12,10 @@
 
 namespace ninho::extension::detail {
 
+#if defined(NINHO_ENABLE_TEST_FACADES)
+class GameplaySessionAdapterTestFacade;
+#endif
+
 class GameplaySessionAdapter {
 public:
     [[nodiscard]] bool configure(
@@ -35,6 +39,10 @@ public:
     void fail(std::string_view code, std::string_view message) noexcept;
 
 private:
+#if defined(NINHO_ENABLE_TEST_FACADES)
+    friend class GameplaySessionAdapterTestFacade;
+#endif
+
     [[nodiscard]] bool enqueue(simulation::PlayerCommand command) noexcept;
     [[nodiscard]] bool accept_status(const simulation::SessionStatus& status) noexcept;
     void capture_latest();
@@ -45,9 +53,6 @@ private:
     simulation::ContentBundle content_;
     SessionFixedStepAccumulator accumulator_;
     SessionFrameBatch batch_;
-    std::optional<LockedPlaneFrameData> locked_plane_;
-    std::optional<simulation::BirdArchetypeId> active_bird_;
-    std::optional<simulation::BirdArchetypeId> pending_release_bird_;
     std::uint64_t fault_generation_{};
 };
 

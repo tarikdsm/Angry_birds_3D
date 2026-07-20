@@ -85,6 +85,30 @@ enum class AbilityReadiness : std::uint8_t {
     Spent = 4,
 };
 
+struct LockedLaunchPlaneView {
+    ninho::physics::Vec3 camera_right{};
+    ninho::physics::Vec3 up{};
+    ninho::physics::Vec3 horizontal{};
+    ninho::physics::Vec3 plane_normal{};
+
+    bool operator==(const LockedLaunchPlaneView&) const = default;
+};
+
+struct ShotStateView {
+    std::uint64_t shot_id{};
+    BirdArchetypeId bird_archetype_id{};
+    AbilityId ability_id{};
+    TickIndex launch_tick{};
+    LockedLaunchPlaneView locked_plane;
+    double pull_horizontal_m{};
+    double pull_vertical_m{};
+    bool activation_consumed{};
+    AbilityReadiness ability_readiness{AbilityReadiness::Unavailable};
+    std::vector<EntityId> projectile_ids;
+
+    bool operator==(const ShotStateView&) const = default;
+};
+
 struct SessionStatus {
     ContentError error{};
 
@@ -187,6 +211,11 @@ public:
     [[nodiscard]] bool objectives_complete() const noexcept;
     [[nodiscard]] std::vector<ObjectiveTargetStatus> objective_target_statuses() const;
     [[nodiscard]] AbilityReadiness ability_readiness() const noexcept;
+    // Owning value snapshot of the authoritative shot. No pointer or span into
+    // the session survives this call. Allocation failures propagate to the
+    // caller, and GDExtension adapters must keep this call inside their ABI
+    // exception boundary.
+    [[nodiscard]] std::optional<ShotStateView> shot_state() const;
     [[nodiscard]] ninho::physics::WorldMetrics physics_metrics() const noexcept;
     // Versioned contracts never alias one another: schema-v1 sessions publish
     // only v2, while schema-v2 sessions publish only v3. The inactive version

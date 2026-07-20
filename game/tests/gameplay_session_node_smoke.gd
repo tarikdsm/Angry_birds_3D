@@ -177,6 +177,13 @@ func _initialize() -> void:
 			or (released.projectiles as Array).size() != 1:
 		_fail("release did not publish one authoritative projectile")
 		return
+	var released_shot := released.shot as Dictionary
+	if int(released_shot.shot_id) != 1 or int(released_shot.bird_archetype_id) != 1 \
+			or int(released_shot.ability_id) != 1 \
+			or (released_shot.projectile_ids as Array).size() != 1 \
+			or released.locked_plane == null:
+		_fail("release did not publish authoritative shot identity and plane")
+		return
 	var acknowledged: Dictionary = _session.consume_frame()
 	if not (acknowledged.events as Array).is_empty() \
 			or (acknowledged.snapshots as Array).size() != (released.snapshots as Array).size():

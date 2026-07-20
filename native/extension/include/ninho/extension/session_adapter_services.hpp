@@ -73,7 +73,13 @@ struct LockedPlaneFrameData {
 };
 
 struct ShotFrameData {
+    std::uint64_t shot_id{};
     simulation::BirdArchetypeId bird_archetype_id{};
+    simulation::AbilityId ability_id{};
+    simulation::TickIndex launch_tick{};
+    double pull_horizontal_m{};
+    double pull_vertical_m{};
+    bool activation_consumed{};
     std::vector<simulation::EntityId> projectile_ids;
 
     bool operator==(const ShotFrameData&) const = default;

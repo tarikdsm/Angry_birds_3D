@@ -2,13 +2,30 @@
 
 ## Status
 
-Implementação concluída no branch `codex/game-2-0`, sem push. O commit desta
-entrega usa a mensagem exata
-`feat(gdextension): expor sessão genérica de gameplay`.
+Implementação concluída no branch `codex/game-2-0`, sem push. A entrega original
+usa `feat(gdextension): expor sessão genérica de gameplay`; a correção após
+revisão usa `fix(gdextension): publicar disparo autoritativo`.
 
 `GameplaySessionNode` passa a expor a sessão genérica v2 em paralelo com
 `OrbitalSessionNode`. O adapter legado continua usando exclusivamente o caminho
 de anel v1 e seu frame canônico de 15 chaves permanece inalterado.
+
+## Correção após revisão
+
+- O frame deixou de reconstruir identidade e lifecycle do disparo por snapshots,
+  eventos ou caches externos. `SimulationSession::shot_state()` publica uma
+  `ShotStateView` proprietária por valor, sem ponteiros/spans internos.
+- A view inclui shot, ave, habilidade, tick, plano, pull, consumo/readiness e a
+  lista ordenada de EntityIds. Alocação pode lançar, mas todas as chamadas do
+  adapter ficam dentro de seus fault/exception boundaries.
+- `shot` e `locked_plane` permanecem publicados em Resolution e Evaluation,
+  mesmo depois que o snapshot físico desaparece; são limpos somente quando o
+  ShotState autoritativo deixa de existir em Inspection.
+- `projectiles` contém apenas os snapshots físicos encontrados pelos IDs da
+  membership; ausência temporária de snapshot não altera `shot.projectile_ids`.
+- `active_bird_`, `pending_release_bird_` e inferência por `BirdLaunched` foram
+  removidos. Configure, restart e reconfigure continuam atômicos e sem estado
+  stale.
 
 ## TDD
 
@@ -31,8 +48,10 @@ de anel v1 e seu frame canônico de 15 chaves permanece inalterado.
   falhou com `grabbed frame did not publish locked plane`; o teste passou a
   respeitar a ordem real do physics process.
 - Um teste adversarial de catch-up revelou que `shot` se perdia quando grab,
-  pull e release eram consumidos no mesmo lote de três ticks. O adapter agora
-  preserva a ave do release até o projétil autoritativo aparecer.
+  pull e release eram consumidos no mesmo lote de três ticks.
+- Na revisão, o build RED falhou por `ShotStateView`/`shot_state()` ausentes. O
+  RED do adapter falhou por acesso de facade ausente, `ShotFrameData::shot_id`
+  ausente e pelos caches externos ainda existentes.
 
 ### GREEN
 
@@ -44,7 +63,10 @@ de anel v1 e seu frame canônico de 15 chaves permanece inalterado.
 - O frame batch mantém eventos de todos os ticks e somente o estado mais novo;
   acknowledge limpa eventos, contagem e tempo descartado sem perder snapshots.
 - O smoke configura um mundo uniforme mínimo, congela as 23 chaves v2, exercita
-  grab/pull/release, preview, plano, projétil, acknowledge e restart.
+  grab/pull/release, preview, identidade/plano/membership do shot, acknowledge e
+  restart.
+- Testes controlados preservam membership ordenada de três IDs com somente um
+  snapshot, atravessam Resolution/Evaluation sem snapshot e limpam em Inspection.
 
 ## Contratos implementados
 
@@ -61,8 +83,8 @@ de anel v1 e seu frame canônico de 15 chaves permanece inalterado.
   readiness, preview, score/estrelas, gravidade e métricas/tempo descartado.
 - A gravidade local é consultada em `physics::GravityField` na posição de
   repouso do estilingue, sem duplicar a fórmula uniforme ou radial.
-- Fila autoral preserva ordem e duplicatas; `shot` conserva a ave lançada e IDs
-  dos projéteis autoritativos mesmo sob catch-up.
+- Fila autoral preserva ordem e duplicatas; `shot` conserva identidade, ave,
+  plano, pull e IDs autoritativos mesmo sob catch-up/transições.
 - Score e estrelas permanecem reservados como zero nesta task, conforme o estado
   canônico v3; a lógica de scoring continua reservada para a Task 16.
 - Accumulator, fault handling e frame batching foram extraídos para
@@ -86,7 +108,8 @@ de anel v1 e seu frame canônico de 15 chaves permanece inalterado.
 - CTest oficial focado
   `gameplay_session|gdextension_adapter|gdextension_vertical_slice`: 6/6 PASS,
   incluindo import, smoke orbital v1 e smoke gameplay v2.
-- Binário completo `ninho_extension_adapter_tests.exe`: 29/29 PASS.
+- Binários completos de simulação e `ninho_extension_adapter_tests.exe`: PASS,
+  incluindo canonical/goldens v1 e os novos contratos da view.
 - Binário `ninho_session_frame_batch_tests.exe`: 6/6 PASS.
 - `tools/test.ps1 -Configuration Debug`: todos os contratos executados antes do
   agregado passaram; o comando encerrou somente com o stale esperado

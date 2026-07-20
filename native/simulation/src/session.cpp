@@ -187,6 +187,35 @@ AbilityReadiness SimulationSession::ability_readiness() const noexcept
         ? AbilityReadiness::Armed : AbilityReadiness::Arming;
 }
 
+std::optional<ShotStateView> SimulationSession::shot_state() const
+{
+    if (!impl_->shot) {
+        return std::nullopt;
+    }
+    const ShotState& shot = *impl_->shot;
+    ShotStateView result{
+        .shot_id = shot.shot_id,
+        .bird_archetype_id = shot.bird_archetype_id,
+        .ability_id = shot.ability_id,
+        .launch_tick = shot.launch_tick,
+        .locked_plane = {
+            .camera_right = shot.locked_plane.camera_right,
+            .up = shot.locked_plane.up,
+            .horizontal = shot.locked_plane.horizontal,
+            .plane_normal = shot.locked_plane.plane_normal,
+        },
+        .pull_horizontal_m = shot.pull_horizontal_m,
+        .pull_vertical_m = shot.pull_vertical_m,
+        .activation_consumed = shot.activation_consumed,
+        .ability_readiness = ability_readiness(),
+    };
+    result.projectile_ids.reserve(shot.projectiles().size());
+    for (const ProjectileState& projectile : shot.projectiles()) {
+        result.projectile_ids.push_back(projectile.entity_id());
+    }
+    return result;
+}
+
 ninho::physics::WorldMetrics SimulationSession::physics_metrics() const noexcept
 {
     return impl_->physics.metrics();
