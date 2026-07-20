@@ -156,15 +156,19 @@ NINHO_TEST("world exit classifier separates bounds exits from radial ejection")
     detail::WorldExitTracker earth{AabbWorldBounds{
         .minimum_m = {-24.0f, -12.0f, -12.0f},
         .maximum_m = {48.0f, 32.0f, 12.0f},
-    }};
+    }, detail::RadialEjectionPolicy::Disabled};
 
+    for (int tick = 0; tick < 30; ++tick) {
+        NINHO_REQUIRE(earth.update(body, {41.0f, 0.0f, 0.0f}, {3.0f, 0.0f, 0.0f}, dt, 10.0f)
+            == detail::WorldExitKind::None);
+    }
     NINHO_REQUIRE(earth.update(body, {48.001f, 0.0f, 0.0f}, {3.0f, 0.0f, 0.0f}, dt, 10.0f)
         == detail::WorldExitKind::BoundsExit);
 
     detail::WorldExitTracker orbital{SphericalWorldBounds{
         .center_m = {10.0f, 0.0f, 0.0f},
         .removal_radius_m = 60.0f,
-    }};
+    }, detail::RadialEjectionPolicy::Enabled};
     for (int tick = 0; tick < 29; ++tick) {
         NINHO_REQUIRE(orbital.update(body, {51.0f, 0.0f, 0.0f}, {3.0f, 0.0f, 0.0f}, dt, 10.0f)
             == detail::WorldExitKind::None);
@@ -174,7 +178,20 @@ NINHO_TEST("world exit classifier separates bounds exits from radial ejection")
     NINHO_REQUIRE(orbital.update(body, {70.0f, 0.0f, 0.0f}, {}, dt, 10.0f)
         == detail::WorldExitKind::BoundsExit);
 
-    detail::WorldExitTracker unbounded{NoWorldBounds{}};
+    detail::WorldExitTracker reentry{SphericalWorldBounds{
+        .center_m = {},
+        .removal_radius_m = 60.0f,
+    }, detail::RadialEjectionPolicy::Enabled};
+    for (int tick = 0; tick < 29; ++tick) {
+        NINHO_REQUIRE(reentry.update(body, {41.0f, 0.0f, 0.0f}, {3.0f, 0.0f, 0.0f}, dt, 10.0f)
+            == detail::WorldExitKind::None);
+    }
+    NINHO_REQUIRE(reentry.update(body, {60.0f, 0.0f, 0.0f}, {}, dt, 10.0f)
+        == detail::WorldExitKind::BoundsExit);
+    NINHO_REQUIRE(reentry.update(body, {41.0f, 0.0f, 0.0f}, {3.0f, 0.0f, 0.0f}, dt, 10.0f)
+        == detail::WorldExitKind::None);
+
+    detail::WorldExitTracker unbounded{NoWorldBounds{}, detail::RadialEjectionPolicy::Disabled};
     NINHO_REQUIRE(unbounded.update(body, {100.0f, 0.0f, 0.0f}, {}, dt, 10.0f)
         == detail::WorldExitKind::None);
 }

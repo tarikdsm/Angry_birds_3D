@@ -54,9 +54,11 @@ private:
 
 namespace detail {
 
+enum class RadialEjectionPolicy { Disabled, Enabled };
+
 class WorldExitTracker {
 public:
-    explicit WorldExitTracker(WorldBoundsConfig bounds);
+    WorldExitTracker(WorldBoundsConfig bounds, RadialEjectionPolicy radial_ejection_policy);
 
     [[nodiscard]] WorldExitKind update(
         BodyHandle body,
@@ -69,6 +71,7 @@ public:
 private:
     WorldBounds bounds_;
     EjectionTracker radial_ejection_;
+    RadialEjectionPolicy radial_ejection_policy_;
 };
 
 }

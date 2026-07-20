@@ -48,8 +48,10 @@ void EjectionTracker::reset(BodyHandle body)
     elapsed_.erase(body_key(body));
 }
 
-detail::WorldExitTracker::WorldExitTracker(WorldBoundsConfig bounds)
+detail::WorldExitTracker::WorldExitTracker(
+    WorldBoundsConfig bounds, RadialEjectionPolicy radial_ejection_policy)
     : bounds_(std::move(bounds))
+    , radial_ejection_policy_(radial_ejection_policy)
 {
 }
 
@@ -63,6 +65,9 @@ detail::WorldExitKind detail::WorldExitTracker::update(
     if (!bounds_.contains(position_m)) {
         radial_ejection_.reset(body);
         return WorldExitKind::BoundsExit;
+    }
+    if (radial_ejection_policy_ == RadialEjectionPolicy::Disabled) {
+        return WorldExitKind::None;
     }
 
     const float radius = length(position_m);
