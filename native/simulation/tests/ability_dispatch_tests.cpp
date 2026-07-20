@@ -316,6 +316,62 @@ NINHO_SIM_TEST("ability dispatch rejects unknown and incompatible definitions du
     NINHO_SIM_REQUIRE(wrong_kind.error.pointer == "/abilities/0/kind");
 }
 
+NINHO_SIM_TEST("ability dispatch rejects activation for abilities without a concrete system")
+{
+    const std::array unsupported{AbilityKind::MassBoost, AbilityKind::SpeedBoost,
+        AbilityKind::Explosion, AbilityKind::Split};
+    for (const AbilityKind kind : unsupported) {
+        RecordingHooks hooks;
+        AbilitySystem system{hooks};
+        const AbilityArchetype selected = ability(kind);
+        auto selected_shot = shot(kind);
+        set_ability_runtime_active(selected_shot->runtime, false);
+        const AbilityRuntime runtime_before = selected_shot->runtime;
+
+        const SessionStatus status = AbilitySystem::activate(
+            selected, *selected_shot, TickIndex{42});
+
+        NINHO_SIM_REQUIRE(!status.ok());
+        NINHO_SIM_REQUIRE(!selected_shot->activation_consumed);
+        NINHO_SIM_REQUIRE(selected_shot->runtime == runtime_before);
+        NINHO_SIM_REQUIRE(std::ranges::count(hooks.before, 0U) == 5U);
+        NINHO_SIM_REQUIRE(std::ranges::count(hooks.after, 0U) == 5U);
+        NINHO_SIM_REQUIRE(std::ranges::count(hooks.finish, 0U) == 5U);
+    }
+}
+
+NINHO_SIM_TEST("ability dispatch fails closed for unimplemented session abilities")
+{
+    const std::array unsupported{AbilityKind::MassBoost, AbilityKind::SpeedBoost,
+        AbilityKind::Explosion, AbilityKind::Split};
+    auto session = create_session();
+    launch(*session);
+    advance_to_armed(*session);
+    NINHO_SIM_REQUIRE(session->enqueue(ActivateAbilityCommand{}).ok());
+    NINHO_SIM_REQUIRE(session->tick().ok());
+    const auto canonical_before = session->canonical_state_v3();
+    const auto shot_before = session->shot_state();
+    const std::vector<DomainEvent> events_before{
+        session->events().begin(), session->events().end()};
+
+    for (const AbilityKind kind : unsupported) {
+        const auto created = SimulationSession::create(
+            materials(), archetypes(ability(kind)), level());
+        NINHO_SIM_REQUIRE(!created.ok());
+        NINHO_SIM_REQUIRE(created.error.code == ContentErrorCode::InvalidInvariant);
+        NINHO_SIM_REQUIRE(created.error.pointer == "/abilities/0/kind");
+
+        const SessionStatus status = session->reconfigure(
+            materials(), archetypes(ability(kind)), level());
+        NINHO_SIM_REQUIRE(!status.ok());
+        NINHO_SIM_REQUIRE(status.error.code == ContentErrorCode::InvalidInvariant);
+        NINHO_SIM_REQUIRE(status.error.pointer == "/abilities/0/kind");
+        NINHO_SIM_REQUIRE(session->canonical_state_v3() == canonical_before);
+        NINHO_SIM_REQUIRE(session->shot_state() == shot_before);
+        NINHO_SIM_REQUIRE(std::ranges::equal(session->events(), events_before));
+    }
+}
+
 NINHO_SIM_TEST("ability dispatch consumes activation once and restart reconfigure stay atomic")
 {
     auto session = create_session();
@@ -390,6 +446,52 @@ NINHO_SIM_TEST("ability dispatch removes one child without skipping the remainin
     NINHO_SIM_REQUIRE(!SessionTestFacade::has_body_record(*session, removed));
     NINHO_SIM_REQUIRE((session->shot_state()->projectile_ids == std::vector{
         primary, first, last}));
+}
+
+NINHO_SIM_TEST("ability dispatch watchdog expires only the old projectile in either order")
+{
+    using detail::SessionTestFacade;
+    for (const bool expired_before_survivor : {false, true}) {
+        auto session = create_session();
+        launch(*session);
+        const EntityId parent = session->shot_state()->projectile_ids.front();
+        const EntityId clone{0x80000010U};
+        NINHO_SIM_REQUIRE(SessionTestFacade::append_projectile_body_for_testing(
+            *session, clone, {8.0F, 8.0F, 0.0F}, {0.0F, 1.0F, 0.0F}));
+        const EntityId expired = expired_before_survivor ? parent : clone;
+        const EntityId survivor = expired_before_survivor ? clone : parent;
+        SessionTestFacade::age_projectile(*session, expired, 1499U);
+        const std::uint32_t survivor_age =
+            SessionTestFacade::projectile_age(*session, survivor);
+
+        NINHO_SIM_REQUIRE(session->tick().ok());
+        NINHO_SIM_REQUIRE(session->state().phase == SessionPhase::FlightAbility);
+        NINHO_SIM_REQUIRE((session->shot_state()->projectile_ids
+            == std::vector{survivor}));
+        NINHO_SIM_REQUIRE(SessionTestFacade::has_body_record(*session, survivor));
+        NINHO_SIM_REQUIRE(SessionTestFacade::projectile_age(*session, survivor)
+            == survivor_age + 1U);
+
+        for (std::uint32_t tick = 0U; tick < 3U; ++tick) {
+            const std::uint32_t age_before =
+                SessionTestFacade::projectile_age(*session, survivor);
+            NINHO_SIM_REQUIRE(session->tick().ok());
+            NINHO_SIM_REQUIRE(session->state().phase == SessionPhase::FlightAbility);
+            NINHO_SIM_REQUIRE((session->shot_state()->projectile_ids
+                == std::vector{survivor}));
+            NINHO_SIM_REQUIRE(!SessionTestFacade::has_body_record(*session, expired));
+            NINHO_SIM_REQUIRE(SessionTestFacade::projectile_age(*session, survivor)
+                == age_before + 1U);
+        }
+
+        SessionTestFacade::age_projectile(*session, survivor, 1499U);
+        NINHO_SIM_REQUIRE(session->tick().ok());
+        NINHO_SIM_REQUIRE(session->state().phase == SessionPhase::Evaluation);
+        NINHO_SIM_REQUIRE(session->birds_remaining() == 1U);
+        NINHO_SIM_REQUIRE(session->tick().ok());
+        NINHO_SIM_REQUIRE(session->state().phase == SessionPhase::Inspection);
+        NINHO_SIM_REQUIRE(session->birds_remaining() == 1U);
+    }
 }
 
 NINHO_SIM_TEST("ability dispatch watchdog waits for an active bounded ability")

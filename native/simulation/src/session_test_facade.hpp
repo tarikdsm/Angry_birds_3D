@@ -35,6 +35,8 @@ public:
     static void complete_objective(SimulationSession&);
     static void set_ability_active(SimulationSession&, bool);
     static void age_projectile(SimulationSession&, std::uint32_t age_ticks);
+    static void age_projectile(
+        SimulationSession&, EntityId, std::uint32_t age_ticks);
     static bool ability_requested(const SimulationSession&);
     static bool ability_active(const SimulationSession&);
     static bool impulse_entity(SimulationSession&, EntityId, ninho::physics::Vec3);

@@ -808,6 +808,13 @@ ContentResult<std::unique_ptr<SimulationSession>> SimulationSession::create(
                 materials, archetypes, level)) {
             return {{}, *semantic_error};
         }
+        for (std::size_t index = 0; index < archetypes.abilities.size(); ++index) {
+            if (const auto support_error = detail::AbilitySystem::validate_session_support(
+                    archetypes.abilities[index],
+                    "/abilities/" + std::to_string(index))) {
+                return {{}, *support_error};
+            }
+        }
         std::size_t expanded_primitives{};
         for (std::size_t index = 0; index < level.bodies.size(); ++index) {
             const BodyDefinition& body = level.bodies[index];

@@ -15,6 +15,27 @@ namespace {
     return {{ContentErrorCode::InternalError, "/ability", std::move(message)}};
 }
 
+[[nodiscard]] SessionStatus unsupported_failure()
+{
+    return {{ContentErrorCode::InvalidInvariant, "/ability/kind",
+        "ability kind has no concrete simulation system"}};
+}
+
+[[nodiscard]] bool has_concrete_system(AbilityKind kind) noexcept
+{
+    switch (kind) {
+    case AbilityKind::LegacyGravityField:
+    case AbilityKind::GravityField:
+        return true;
+    case AbilityKind::MassBoost:
+    case AbilityKind::SpeedBoost:
+    case AbilityKind::Explosion:
+    case AbilityKind::Split:
+        return false;
+    }
+    return false;
+}
+
 [[nodiscard]] const char* kind_name(AbilityKind kind) noexcept
 {
     switch (kind) {
@@ -128,8 +149,6 @@ SessionStatus dispatch(const AbilityArchetype& ability, ShotState& shot,
     case AbilityKind::SpeedBoost:
     case AbilityKind::Explosion:
     case AbilityKind::Split:
-        // Task 10 defines the lifecycle boundary only. Later ability tasks replace
-        // this single-tick stub with their typed active-state duration.
         return 1U;
     }
     return 0U;
@@ -193,9 +212,23 @@ std::optional<ContentError> AbilitySystem::validate_definition(
     return std::nullopt;
 }
 
+std::optional<ContentError> AbilitySystem::validate_session_support(
+    const AbilityArchetype& ability, std::string_view pointer)
+{
+    if (has_concrete_system(ability.kind_v2)) {
+        return std::nullopt;
+    }
+    return ContentError{ContentErrorCode::InvalidInvariant,
+        std::string{pointer} + "/kind",
+        "ability kind has no concrete simulation system"};
+}
+
 SessionStatus AbilitySystem::activate(const AbilityArchetype& ability,
     ShotState& shot, TickIndex activation_tick)
 {
+    if (!has_concrete_system(ability.kind_v2)) {
+        return unsupported_failure();
+    }
     if (!payload_matches(ability.kind_v2, ability.payload)
         || !runtime_matches(ability.kind_v2, shot.runtime)) {
         return dispatch_failure("ability definition or runtime is incompatible");

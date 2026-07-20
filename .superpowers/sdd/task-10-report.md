@@ -2,13 +2,27 @@
 
 ## Status
 
-Implementação concluída no branch `codex/game-2-0`, sem push. A entrega usa o
-commit `refactor(habilidades): adicionar dispatcher e grupos de projéteis`.
+Implementação concluída no branch `codex/game-2-0`, sem push. A entrega original
+usa `refactor(habilidades): adicionar dispatcher e grupos de projéteis`; a
+correção após revisão usa
+`fix(habilidades): validar suporte e expirar projéteis individualmente`.
 
 O tick da simulação deixou de conhecer a Virela nominalmente. Um dispatcher
 tipado agora seleciona explicitamente o par payload/runtime, executa o lifecycle
 comum e encaminha os hooks da habilidade concreta. O mesmo `ShotState` mantém um
 grupo ordenado e não vazio de projéteis até todos deixarem de ser relevantes.
+
+## Correções após revisão
+
+- MassBoost, SpeedBoost, Explosion e Split continuam representáveis no parser,
+  catálogo, bundle e dispatcher tipado, mas uma sessão não pode carregá-las
+  antes do respectivo sistema concreto existir. Create/reconfigure falham no
+  boundary transacional em `/abilities/<n>/kind`; ativação direta também rejeita
+  antes de alterar `activation_consumed`, runtime ou hooks/eventos.
+- Watchdog passou de uma redução global por `any_of` para expiração por membro.
+  Um pai velho não descarta clone jovem e um clone velho não descarta o pai; a
+  remoção física continua diferida e Evaluation/próxima ave só ocorre quando o
+  grupo inteiro deixa de ser relevante.
 
 ## TDD
 
@@ -23,6 +37,17 @@ grupo ordenado e não vazio de projéteis até todos deixarem de ser relevantes.
   atômico; finalizar o primário liberava o shot com filho relevante; remover um
   filho pulava a atualização dos demais; watchdog encerrava uma habilidade ativa
   com término limitado.
+- Na revisão, os quatro kinds futuros falharam RED porque `activate()` retornava
+  sucesso e `SimulationSession::create()` aceitava conteúdo sem sistema físico.
+  O teste congelou runtime/consumo/hooks e a atomicidade byte a byte de
+  reconfigure para cada alternativa.
+- O watchdog RED reproduziu Evaluation prematura quando somente um membro com
+  1.500 ticks coexistia com um irmão jovem. O caso foi repetido com pai/clone
+  velhos em ambas as ordens canônicas e três ticks adicionais do sobrevivente.
+- A primeira separação de suporte revelou quatro REDs já existentes de
+  `product v2 content`: o check estava cedo demais e impedia o bundle de
+  representar variants futuros. O check foi movido exclusivamente para a
+  criação de `SimulationSession`.
 
 ### GREEN
 
@@ -41,6 +66,9 @@ grupo ordenado e não vazio de projéteis até todos deixarem de ser relevantes.
 - Watchdog v2 usa `level.watchdog_ticks` e aguarda runtime ativo com `end_tick`
   válido. O fallback v1 de 1.800 ticks e o tratamento fail-safe de runtime ativo
   malformado foram preservados.
+- Expiração watchdog marca somente membros que atingiram o limite, retira os
+  irrelevantes depois da iteração e mantém `FlightAbility` enquanto houver um
+  sobrevivente.
 
 ## Dispatcher e lifecycle
 
@@ -48,8 +76,9 @@ grupo ordenado e não vazio de projéteis até todos deixarem de ser relevantes.
   `process_ability_after_step`, dano/fratura/objetivo,
   `finish_ability_after_step`, remoções confirmadas e FSM pós-step.
 - Os hooks são tipados para GravityField, MassBoost, SpeedBoost, Explosion e
-  Split. As quatro habilidades futuras permanecem sem efeito físico nesta task;
-  seus pontos de extensão estão prontos para as Tasks 11–14.
+  Split. As quatro habilidades futuras permanecem sem efeito físico nesta task e
+  são recusadas pela sessão; parser/bundle e seus pontos de extensão continuam
+  prontos para as Tasks 11–14.
 - Falha de hook é latched como `Faulted`, sem ser convertida em derrota.
 - A Virela recebe o `GravityFieldAbilityDefinition` tipado, conservando seleção
   canônica, smoothstep, força, pulso e ordem dos eventos. Todos os handles dos
@@ -86,7 +115,9 @@ artificial nesses arquivos. Os goldens v1 permaneceram intactos.
 - Filtros adicionais `launch fsm`, `shot state`, `session bootstrap`,
   `session restart`, `session reconfigure`, `simulation contracts` e
   `product v2 content`: PASS.
-- Binário completo `ninho_simulation_tests.exe`: 180/180 PASS, exit 0.
+- `product v2 content`: 12/12 PASS, incluindo catálogo fechado com todos os
+  payloads futuros.
+- Binário completo `ninho_simulation_tests.exe`: 183/183 PASS, exit 0.
 - Virela preservou ticks, eventos e hashes dos contratos de
   `vertical_slice_determinism` e `legacy_orbital_characterization`.
 - `git diff --check`: exit 0; somente o aviso de conversão LF/CRLF do CMake foi

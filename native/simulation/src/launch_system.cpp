@@ -943,25 +943,24 @@ void SimulationSession::Impl::update_fsm_after_step()
     const std::uint32_t configured_watchdog =
         bundle.level.source_schema_version == 2U && bundle.level.watchdog_ticks != 0U
         ? bundle.level.watchdog_ticks : watchdog_ticks;
-    const bool watchdog_expired = std::ranges::any_of(
-        shot->projectiles(), [configured_watchdog](const ProjectileState& projectile) {
-            return projectile.age_ticks >= configured_watchdog;
-        });
     const auto ability_end_tick = ability_runtime_end_tick(shot->runtime);
     const bool bounded_active_ability = ability_runtime_active(shot->runtime)
         && ability_end_tick && session_state.tick <= *ability_end_tick;
-    if (watchdog_expired && !bounded_active_ability) {
-        std::vector<ProjectileState> completed{
+    bool watchdog_expired = false;
+    if (!bounded_active_ability) {
+        std::vector<ProjectileState> watchdog_updates{
             shot->projectiles().begin(), shot->projectiles().end()};
-        for (ProjectileState& projectile : completed) {
+        for (ProjectileState& projectile : watchdog_updates) {
+            if (projectile.age_ticks < configured_watchdog) {
+                continue;
+            }
+            watchdog_expired = true;
             projectile.finished = true;
             static_cast<void>(shot->replace_projectile(std::move(projectile)));
         }
-        set_ability_runtime_active(shot->runtime, false);
-        retire_finished_projectiles();
-        session_state.phase = SessionPhase::Evaluation;
-        resolution_rest_ticks = rest_required_ticks;
-        return;
+        if (watchdog_expired && ability_runtime_active(shot->runtime)) {
+            set_ability_runtime_active(shot->runtime, false);
+        }
     }
 
     if (!ability_runtime_active(shot->runtime)) {
@@ -969,6 +968,11 @@ void SimulationSession::Impl::update_fsm_after_step()
     }
     const bool all_finished = std::ranges::all_of(
         shot->projectiles(), &ProjectileState::finished);
+    if (watchdog_expired && all_finished) {
+        session_state.phase = SessionPhase::Evaluation;
+        resolution_rest_ticks = rest_required_ticks;
+        return;
+    }
     if (all_finished && !ability_runtime_active(shot->runtime)
         && session_state.phase == SessionPhase::FlightAbility) {
         session_state.phase = SessionPhase::Resolution;

@@ -369,10 +369,25 @@ void detail::SessionTestFacade::set_ability_active(SimulationSession& session, b
 void detail::SessionTestFacade::age_projectile(
     SimulationSession& session, std::uint32_t age_ticks)
 {
-    if (session.impl_->shot) {
-        if (auto* projectile = session.impl_->shot->primary_projectile()) {
-            projectile->age_ticks = age_ticks;
-        }
+    if (session.impl_->shot && session.impl_->shot->primary_projectile()) {
+        age_projectile(session,
+            session.impl_->shot->primary_projectile()->entity_id(), age_ticks);
+    }
+}
+
+void detail::SessionTestFacade::age_projectile(
+    SimulationSession& session, EntityId entity, std::uint32_t age_ticks)
+{
+    if (!session.impl_->shot) {
+        return;
+    }
+    const auto found = std::ranges::find(
+        session.impl_->shot->projectiles(), entity, &ProjectileState::entity_id);
+    if (found != session.impl_->shot->projectiles().end()) {
+        ProjectileState replacement = *found;
+        replacement.age_ticks = age_ticks;
+        static_cast<void>(
+            session.impl_->shot->replace_projectile(std::move(replacement)));
     }
 }
 

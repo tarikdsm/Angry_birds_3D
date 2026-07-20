@@ -56,6 +56,8 @@ public:
 
     [[nodiscard]] static std::optional<ContentError> validate_definition(
         const AbilityArchetype&, std::string_view pointer);
+    [[nodiscard]] static std::optional<ContentError> validate_session_support(
+        const AbilityArchetype&, std::string_view pointer);
     [[nodiscard]] static SessionStatus activate(
         const AbilityArchetype&, ShotState&, TickIndex activation_tick);
 
