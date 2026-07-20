@@ -11,6 +11,8 @@ $expectedScene = 'res://scenes/vertical_slice.tscn'
 $sceneFailure = 'Legacy capture must pass exactly one executable explicit res:// scene argument'
 $argvFailure = 'Legacy capture recorder observed invalid executable argv'
 $recorderFailure = 'Legacy capture recorder did not remain isolated'
+$reachabilityFailure = 'Legacy capture top-level must reach Invoke-CaptureRun and the timed process interceptor'
+$reachabilitySentinel = 'NINHO_TOP_LEVEL_REACHABILITY_INTERCEPT:'
 
 Import-Module (Join-Path $root 'tools\VerticalSliceGate.psm1') -Force
 Import-Module (Join-Path $root 'tools\SafePath.psm1') -Force
@@ -113,6 +115,170 @@ function New-CaptureFixture {
         -Search $Search -Replacement $Replacement
     [IO.File]::WriteAllText($path, $text, [Text.UTF8Encoding]::new($false))
     return $path
+}
+
+function Disable-CaptureCallSites {
+    param([Parameter(Mandatory)]$FunctionContract)
+
+    $text = $FunctionContract.ScriptText
+    foreach ($callSite in @($FunctionContract.CallSites |
+            Sort-Object { $_.Extent.StartOffset } -Descending)) {
+        $replacement = "if (`$false) { $($callSite.Extent.Text) }"
+        $text = $text.Substring(0, $callSite.Extent.StartOffset) +
+            $replacement + $text.Substring($callSite.Extent.EndOffset)
+    }
+    return $text
+}
+
+function Add-TopLevelReachabilityInterceptor {
+    param(
+        [Parameter(Mandatory)]$FunctionContract,
+        [Parameter(Mandatory)][string]$ScriptText
+    )
+
+    $functionStart = $FunctionContract.Function.Extent.StartOffset
+    $functionEnd = $FunctionContract.Function.Extent.EndOffset
+    Assert-True ($ScriptText.Substring(
+                $functionStart, $functionEnd - $functionStart) -ceq
+            $FunctionContract.FunctionText) `
+        'Reachability instrumentation must preserve the exact real function Extent'
+    $interceptor = @'
+
+function Invoke-NinhoTimedProcess {
+    param(
+        [string]$FilePath,
+        [string[]]$ArgumentList,
+        [int]$TimeoutMs,
+        [string]$StdoutPath,
+        [string]$StderrPath,
+        [string]$WorkingDirectory,
+        [string]$FatalMarker
+    )
+    $payload = [ordered]@{
+        name = $Name
+        call_stack = @(Get-PSCallStack | ForEach-Object { $_.FunctionName })
+        file_path = $FilePath
+        argument_list = [string[]]@($ArgumentList)
+        timeout_ms = $TimeoutMs
+        stdout_path = $StdoutPath
+        stderr_path = $StderrPath
+        working_directory = $WorkingDirectory
+        fatal_marker = $FatalMarker
+        script_root = $PSScriptRoot
+    }
+    throw ('__REACHABILITY_SENTINEL__' +
+        ($payload | ConvertTo-Json -Depth 5 -Compress))
+}
+'@.Replace('__REACHABILITY_SENTINEL__', $reachabilitySentinel)
+    return $ScriptText.Substring(0, $functionEnd) + $interceptor +
+        $ScriptText.Substring($functionEnd)
+}
+
+function Invoke-TopLevelReachabilityProbe {
+    param(
+        [Parameter(Mandatory)][string]$ProbeScriptPath,
+        [Parameter(Mandatory)][string]$OutputDirectory,
+        [Parameter(Mandatory)][string]$GoldenDirectory
+    )
+
+    $harness = @'
+param($ProbeScriptPath, $OutputDirectory, $GoldenDirectory)
+$ErrorActionPreference = 'Stop'
+$breakpointsBefore = @(Get-PSBreakpoint).Count
+$completed = $false
+$failure = ''
+try {
+    $null = & $ProbeScriptPath -Configuration Debug `
+        -OutputDirectory $OutputDirectory -GoldenDirectory $GoldenDirectory
+    $completed = $true
+} catch {
+    $failure = $_.Exception.Message
+}
+[pscustomobject]@{
+    Completed = $completed
+    Failure = $failure
+    BreakpointsBefore = $breakpointsBefore
+    BreakpointsAfter = @(Get-PSBreakpoint).Count
+}
+'@
+    $powerShell = [PowerShell]::Create()
+    try {
+        $null = $powerShell.AddScript($harness).
+            AddParameter('ProbeScriptPath', $ProbeScriptPath).
+            AddParameter('OutputDirectory', $OutputDirectory).
+            AddParameter('GoldenDirectory', $GoldenDirectory)
+        $output = @($powerShell.Invoke())
+        $errors = @($powerShell.Streams.Error)
+        # A caught terminating error sets HadErrors; the exact sentinel is validated below.
+        Assert-True ($errors.Count -eq 0 -and $output.Count -eq 1) `
+            ($reachabilityFailure + ': isolated top-level runspace failed ' +
+                "had_errors=$($powerShell.HadErrors) outputs=$($output.Count) " +
+                "errors=[$(@($errors | ForEach-Object { $_.ToString() }) -join '; ')]")
+        return $output[0]
+    } finally {
+        $powerShell.Dispose()
+    }
+}
+
+function Get-TopLevelReachabilityContract {
+    param(
+        [Parameter(Mandatory)]$FunctionContract,
+        [Parameter(Mandatory)][string]$ScriptText,
+        [Parameter(Mandatory)][string]$ProbeScriptPath,
+        [Parameter(Mandatory)][string]$OutputDirectory,
+        [Parameter(Mandatory)][string]$GoldenDirectory
+    )
+
+    $instrumentedText = Add-TopLevelReachabilityInterceptor `
+        -FunctionContract $FunctionContract -ScriptText $ScriptText
+    [IO.File]::WriteAllText(
+        $ProbeScriptPath, $instrumentedText, [Text.UTF8Encoding]::new($false))
+    $probe = Invoke-TopLevelReachabilityProbe `
+        -ProbeScriptPath $ProbeScriptPath `
+        -OutputDirectory $OutputDirectory `
+        -GoldenDirectory $GoldenDirectory
+    if ($probe.Completed -or
+            -not $probe.Failure.StartsWith(
+                $reachabilitySentinel, [StringComparison]::Ordinal) -or
+            $probe.BreakpointsBefore -ne 0 -or $probe.BreakpointsAfter -ne 0) {
+        throw $reachabilityFailure
+    }
+
+    $payloadText = $probe.Failure.Substring($reachabilitySentinel.Length)
+    try {
+        $payload = $payloadText | ConvertFrom-Json
+    } catch {
+        throw $reachabilityFailure
+    }
+    $callStack = @($payload.call_stack | ForEach-Object { [string]$_ })
+    if ($callStack -cnotcontains 'Invoke-CaptureRun' -or
+            $callStack -cnotcontains 'Invoke-NinhoLimitedRetry') {
+        throw $reachabilityFailure
+    }
+
+    $expectedMovie = Join-Path $OutputDirectory 'vertical-slice-vulkan-source.avi'
+    $expectedCase = [pscustomobject]@{
+        Renderer = 'Vulkan'
+        Scale = 100
+        Movie = $expectedMovie
+        Metrics = ''
+        MovieEnabled = $true
+        MetricsEnabled = $false
+    }
+    $expectedArguments = @(Get-ExpectedCaptureArguments `
+            -Case $expectedCase -RecorderRoot $root)
+    if ($payload.name -cne 'capture-vulkan' -or
+            $payload.file_path -cne $godotPath -or
+            -not (Test-ExactSequence -Actual @($payload.argument_list) `
+                -Expected $expectedArguments) -or
+            $payload.timeout_ms -ne 600000 -or
+            $payload.working_directory -cne $root -or
+            $payload.fatal_marker -cne
+                'NINHO_CAPTURE_FATAL name=capture-vulkan reason=timeout' -or
+            $payload.script_root -cne (Join-Path $root 'tools')) {
+        throw $reachabilityFailure
+    }
+    return $payload
 }
 
 function Get-RecorderRelativePath {
@@ -498,13 +664,32 @@ $sceneStatement = "`$arguments.Add('$expectedScene')"
 $temporaryParent = [IO.Path]::GetFullPath([IO.Path]::GetTempPath())
 $temporaryRoot = Join-Path $temporaryParent `
     ('ninho-legacy-scene-contract-' + [Guid]::NewGuid().ToString('N'))
+$reachabilityId = [Guid]::NewGuid().ToString('N')
+$toolsDirectory = Join-Path $root 'tools'
+$probeScriptPath = Join-Path $toolsDirectory `
+    "capture_vertical_slice.reachability-$reachabilityId.ps1"
+$artifactsDirectory = Join-Path $root 'artifacts'
+$reachabilityRoot = Join-Path $artifactsDirectory `
+    "vertical-slice-reachability-$reachabilityId"
 Assert-NinhoNoReparseAncestors -Path $temporaryRoot -AllowedRoot $temporaryParent |
     Out-Null
+Assert-NinhoNoReparseAncestors `
+    -Path $probeScriptPath -AllowedRoot $toolsDirectory | Out-Null
+Assert-NinhoNoReparseAncestors `
+    -Path $reachabilityRoot -AllowedRoot $artifactsDirectory | Out-Null
 New-Item -ItemType Directory -Path $temporaryRoot | Out-Null
 try {
     $recorderOutput = Join-Path $temporaryRoot 'recorder-output'
     $contract = Get-ValidatedCaptureContract `
         -ScriptPath $captureScriptPath -RecorderOutput $recorderOutput
+    $canonicalReachabilityOutput = Join-Path $reachabilityRoot 'canonical\output'
+    $canonicalReachabilityGolden = Join-Path $reachabilityRoot 'canonical\golden'
+    $topLevelReachability = Get-TopLevelReachabilityContract `
+        -FunctionContract $functionContract `
+        -ScriptText $functionContract.ScriptText `
+        -ProbeScriptPath $probeScriptPath `
+        -OutputDirectory $canonicalReachabilityOutput `
+        -GoldenDirectory $canonicalReachabilityGolden
 
     $fixtureDefinitions = @(
         [pscustomobject]@{
@@ -581,6 +766,28 @@ try {
             -Label $fixture.Label
     }
 
+    $unreachableText = Disable-CaptureCallSites `
+        -FunctionContract $functionContract
+    $unreachableReachabilityOutput = Join-Path $reachabilityRoot 'unreachable\output'
+    $unreachableReachabilityGolden = Join-Path $reachabilityRoot 'unreachable\golden'
+    $reachabilityRed = ''
+    try {
+        $null = Get-TopLevelReachabilityContract `
+            -FunctionContract $functionContract `
+            -ScriptText $unreachableText `
+            -ProbeScriptPath $probeScriptPath `
+            -OutputDirectory $unreachableReachabilityOutput `
+            -GoldenDirectory $unreachableReachabilityGolden
+    } catch {
+        $reachabilityRed = $_.Exception.Message
+    }
+    Assert-True ($reachabilityRed -ceq $reachabilityFailure) `
+        "False-guarded call sites did not cause the exact reachability RED: $reachabilityRed"
+    $reachabilityFiles = @(Get-ChildItem -LiteralPath $reachabilityRoot `
+        -Recurse -File -ErrorAction SilentlyContinue)
+    Assert-True ($reachabilityFiles.Count -eq 0) `
+        'Top-level reachability proof performed an external file operation'
+
     $gameSource = Join-Path $root 'game'
     $reparseSources = @(Get-ChildItem -LiteralPath $gameSource -Recurse -Force |
         Where-Object { $_.Attributes -band [IO.FileAttributes]::ReparsePoint })
@@ -642,8 +849,33 @@ try {
         "recorded_attempts=$($contract.RecordCount) " +
         "recorder_external_launches=$($contract.ExternalLaunchCount) " +
         "recorder_output_writes=$($contract.OutputWriteCount) " +
+        'top_level_red=false-guarded-call-sites ' +
+        'top_level_reachability=Invoke-CaptureRun>Invoke-NinhoTimedProcess ' +
+        "top_level_case=$($topLevelReachability.name) " +
+        'top_level_external_launches=0 top_level_breakpoints=0 ' +
         "runtime_marker=$completionMarker argv=$($contract.ArgumentList -join '|')")
 } finally {
+    $resolvedProbeScript = [IO.Path]::GetFullPath($probeScriptPath)
+    Assert-True ((Split-Path -Parent $resolvedProbeScript) -ceq $toolsDirectory -and
+            [IO.Path]::GetFileName($resolvedProbeScript).StartsWith(
+                'capture_vertical_slice.reachability-', [StringComparison]::Ordinal) -and
+            [IO.Path]::GetExtension($resolvedProbeScript) -ceq '.ps1') `
+        'Refusing to remove an unexpected top-level reachability probe'
+    if (Test-Path -LiteralPath $resolvedProbeScript) {
+        Remove-Item -LiteralPath $resolvedProbeScript -Force
+    }
+    $resolvedReachabilityRoot = [IO.Path]::GetFullPath($reachabilityRoot)
+    Assert-True ((Split-Path -Parent $resolvedReachabilityRoot) -ceq
+            $artifactsDirectory -and
+            [IO.Path]::GetFileName($resolvedReachabilityRoot).StartsWith(
+                'vertical-slice-reachability-', [StringComparison]::Ordinal)) `
+        'Refusing to remove an unexpected reachability artifact root'
+    if (Test-Path -LiteralPath $resolvedReachabilityRoot) {
+        Assert-NinhoNoReparseAncestors `
+            -Path $resolvedReachabilityRoot -AllowedRoot $artifactsDirectory |
+            Out-Null
+        Remove-Item -LiteralPath $resolvedReachabilityRoot -Recurse -Force
+    }
     $resolvedTemporaryRoot = [IO.Path]::GetFullPath($temporaryRoot)
     $resolvedParent = [IO.Path]::GetFullPath((Split-Path -Parent $resolvedTemporaryRoot))
     Assert-True ($resolvedParent.TrimEnd('\', '/') -ceq
