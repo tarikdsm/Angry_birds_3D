@@ -22,6 +22,70 @@ NINHO_TEST("contract Box3D world remains single worker")
     NINHO_REQUIRE(detail::PhysicsWorldTestFacade::worker_count(world) == 1);
 }
 
+NINHO_TEST("world applies one uniform gravity sample to every runtime dynamic body")
+{
+    PhysicsWorld world(WorldConfig{
+        .gravity = UniformGravityConfig{.acceleration_m_s2 = {0.0f, -9.0f, 0.0f}},
+        .bounds = NoWorldBounds{},
+    });
+    NINHO_REQUIRE((world.gravity_at({17.0f, -3.0f, 2.0f}) == Vec3{0.0f, -9.0f, 0.0f}));
+    NINHO_REQUIRE(detail::PhysicsWorldTestFacade::box3d_gravity(world) == Vec3{});
+
+    world.step();
+    const BodyHandle body = world.create_body(
+        BodyDesc::dynamic_sphere(0.5f, {{0.0f, 5.0f, 0.0f}, {}}, 1.0f)).value;
+    world.step();
+    const auto state = world.state(body);
+    NINHO_REQUIRE(state.has_value());
+    NINHO_REQUIRE_NEAR(state->linear_velocity.y, -9.0f / 60.0f, 1.0e-5f);
+}
+
+NINHO_TEST("world rejects authored dynamic gravity opt out")
+{
+    PhysicsWorld world(WorldConfig{
+        .gravity = UniformGravityConfig{.acceleration_m_s2 = {0.0f, -9.0f, 0.0f}},
+        .bounds = NoWorldBounds{},
+    });
+    BodyDesc dynamic = BodyDesc::dynamic_sphere(0.5f, {{0.0f, 5.0f, 0.0f}, {}}, 1.0f);
+    dynamic.affected_by_world_gravity = false;
+    NINHO_REQUIRE(world.create_body(dynamic).status.code == StatusCode::InvalidArgument);
+
+    BodyDesc anchored = BodyDesc::static_box({0.5f, 0.5f, 0.5f}, {});
+    anchored.affected_by_world_gravity = false;
+    const BodyHandle anchored_handle = world.create_body(anchored).value;
+    world.step();
+    const auto anchored_state = world.state(anchored_handle);
+    NINHO_REQUIRE(anchored_state.has_value());
+    NINHO_REQUIRE(anchored_state->transform.position == Vec3{});
+    NINHO_REQUIRE(anchored_state->linear_velocity == Vec3{});
+}
+
+NINHO_TEST("world AABB exit removal follows body policy")
+{
+    PhysicsWorld world(WorldConfig{
+        .gravity = UniformGravityConfig{},
+        .bounds = AabbWorldBounds{
+            .minimum_m = {-1.0f, -1.0f, -1.0f},
+            .maximum_m = {1.0f, 1.0f, 1.0f},
+        },
+    });
+    BodyDesc removed = BodyDesc::dynamic_sphere(0.1f, {{2.0f, 0.0f, 0.0f}, {}}, 1.0f);
+    removed.world_exit_policy = WorldExitPolicy::RemoveOutsideBounds;
+    BodyDesc retained = BodyDesc::dynamic_sphere(0.1f, {{3.0f, 0.0f, 0.0f}, {}}, 1.0f);
+    retained.world_exit_policy = WorldExitPolicy::KeepOutsideBounds;
+    const BodyHandle removed_handle = world.create_body(removed).value;
+    const BodyHandle retained_handle = world.create_body(retained).value;
+
+    world.step();
+    NINHO_REQUIRE(world.state(removed_handle)->exited_world);
+    NINHO_REQUIRE(world.state(retained_handle)->exited_world);
+    NINHO_REQUIRE(!world.state(removed_handle)->ejected);
+    NINHO_REQUIRE(!world.state(retained_handle)->ejected);
+    world.step();
+    NINHO_REQUIRE(!world.state(removed_handle).has_value());
+    NINHO_REQUIRE(world.state(retained_handle).has_value());
+}
+
 NINHO_TEST("world rejects destroyed handle after slot reuse")
 {
     PhysicsWorld world(WorldConfig{});

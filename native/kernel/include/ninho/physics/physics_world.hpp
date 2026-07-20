@@ -1,6 +1,8 @@
 #pragma once
 
+#include <ninho/physics/gravity_field.hpp>
 #include <ninho/physics/physics_types.hpp>
+#include <ninho/physics/world_bounds.hpp>
 
 #include <algorithm>
 #include <cstddef>
@@ -38,6 +40,7 @@ struct Result {
 };
 
 enum class BodyType { Static, Kinematic, Dynamic };
+enum class WorldExitPolicy { KeepOutsideBounds, RemoveOutsideBounds };
 
 struct SphereShape {
     float radius{};
@@ -86,6 +89,10 @@ struct BodyDesc {
     std::vector<ShapeDesc> shapes;
     bool bullet{};
     bool enable_sleep{true};
+    bool affected_by_world_gravity{true};
+    WorldExitPolicy world_exit_policy{WorldExitPolicy::RemoveOutsideBounds};
+    // Compatibility fields for authored v1 call sites. New content uses the
+    // typed fields above.
     bool radial_gravity{true};
     bool remove_beyond_six_r{true};
     std::string name;
@@ -102,6 +109,15 @@ struct WorldConfig {
     float planet_radius{10.0f};
     float surface_gravity{9.0f};
     std::size_t max_bodies{500};
+    GravityFieldConfig gravity{RadialGravityConfig{
+        .center_m = {},
+        .reference_radius_m = 10.0f,
+        .reference_acceleration_m_s2 = 9.0f,
+    }};
+    WorldBoundsConfig bounds{SphericalWorldBounds{
+        .center_m = {},
+        .removal_radius_m = 60.0f,
+    }};
 };
 
 struct BodyState {
@@ -112,6 +128,7 @@ struct BodyState {
     float mass{};
     bool awake{};
     bool ejected{};
+    bool exited_world{};
 };
 
 struct DistanceJointDesc {
@@ -231,6 +248,7 @@ public:
     [[nodiscard]] std::span<const JointReaction> joint_reactions() const;
     [[nodiscard]] std::optional<JointReaction> joint_reaction(JointHandle joint) const;
     [[nodiscard]] WorldMetrics metrics() const;
+    [[nodiscard]] Vec3 gravity_at(Vec3 position) const noexcept;
     [[nodiscard]] const WorldConfig& config() const;
 
 private:
