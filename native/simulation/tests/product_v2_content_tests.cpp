@@ -1258,4 +1258,150 @@ NINHO_SIM_TEST("product v2 allows large authored fracture catalogs but caps acti
     NINHO_SIM_REQUIRE(second_parent->part_id == PartId{1});
 }
 
+NINHO_SIM_TEST("product v2 content releases physical fragment budget after bounds cleanup across waves")
+{
+    auto level_json = level_manifest();
+    const auto patterned_body = [](std::uint32_t body_id,
+        std::uint32_t entity_id, double x, std::size_t count) {
+        auto body = static_body(body_id, entity_id);
+        body["body_type"] = "dynamic";
+        body["affected_by_world_gravity"] = true;
+        body["density_kg_m3"] = 120.0;
+        body["transform"]["position_m"] = json::array({x, -11.99, 0.0});
+        json fragments = json::array();
+        const double half_width = 0.5 / static_cast<double>(count);
+        for (std::size_t index = 0; index < count; ++index) {
+            const double center = -0.5 + half_width
+                + 2.0 * half_width * static_cast<double>(index);
+            fragments.push_back({
+                {"ordinal", index + 1U},
+                {"shape", {{"type", "box"},
+                    {"half_extents_m", json::array({half_width, 0.5, 0.5})}}},
+                {"local_transform", {{"position_m", json::array({center, 0.0, 0.0})},
+                    {"rotation_xyzw", json::array({0.0, 0.0, 0.0, 1.0})}}},
+                {"density_kg_m3", 120.0},
+                {"visual_id", "fragment_" + std::to_string(index + 1U)}});
+        }
+        body["fracture_pattern"] = {
+            {"physical_fragments", std::move(fragments)},
+            {"cosmetic_asset_ids", json::array()}};
+        return body;
+    };
+
+    constexpr std::array<EntityId, 3> entities{
+        EntityId{200}, EntityId{300}, EntityId{400}};
+    constexpr std::array<JointId, 3> joints{
+        JointId{1}, JointId{2}, JointId{3}};
+    for (std::size_t index = 0; index < entities.size(); ++index) {
+        const std::uint32_t body_id = 2U + static_cast<std::uint32_t>(index);
+        const std::uint32_t anchor_id = 5U + static_cast<std::uint32_t>(index);
+        const std::uint32_t anchor_entity = 201U
+            + 100U * static_cast<std::uint32_t>(index);
+        const double x = 8.0 + 10.0 * static_cast<double>(index);
+        const std::size_t fragment_count = index < 2U ? 80U : 1U;
+        level_json["bodies"].push_back(patterned_body(
+            body_id, entities[index].value(), x, fragment_count));
+        auto anchor = static_body(anchor_id, anchor_entity);
+        anchor["transform"]["position_m"] = json::array({x, -9.0, 0.0});
+        level_json["bodies"].push_back(std::move(anchor));
+        level_json["joints"].push_back({
+            {"id", joints[index].value()},
+            {"assembly_id", index + 1U},
+            {"kind", "pine_fit"},
+            {"body_a_id", body_id},
+            {"body_b_id", anchor_id},
+            {"force_limit_n", 1000000000.0},
+            {"torque_limit_nm", 1000000000.0}});
+        level_json["assemblies"].push_back({
+            {"id", index + 1U},
+            {"key", "wave_" + std::to_string(index + 1U)},
+            {"body_ids", json::array({body_id, anchor_id})},
+            {"joint_ids", json::array({joints[index].value()})}});
+    }
+
+    const auto materials = parse_material_catalog_v2(material_catalog().dump());
+    auto archetypes_json = archetype_catalog();
+    archetypes_json["abilities"] = json::array({archetypes_json["abilities"][0]});
+    const auto archetypes = parse_archetype_catalog_v2(archetypes_json.dump());
+    const auto level = parse_level_manifest_v2(level_json.dump());
+    NINHO_SIM_REQUIRE(materials.ok() && archetypes.ok() && level.ok());
+    auto created = SimulationSession::create(
+        materials.value, archetypes.value, level.value);
+    if (!created.ok()) ninho::simulation::test::fail(__FILE__, __LINE__,
+        created.error.pointer + ": " + created.error.message);
+    auto session = std::move(created.value);
+    const std::size_t initial_body_records =
+        detail::SessionTestFacade::body_record_count(*session);
+
+    for (std::size_t index = 0; index < entities.size(); ++index) {
+        detail::SessionTestFacade::fracture_piece_after_solver(
+            *session, entities[index], PartId{1},
+            {8.0f + 10.0f * static_cast<float>(index), -11.99f, 0.0f});
+        detail::SessionTestFacade::override_joint_ratio_after_solver(
+            *session, joints[index], 0.0);
+    }
+    NINHO_SIM_REQUIRE(session->tick().ok());
+    std::array<EventId, 3> trigger_ids{};
+    for (const DomainEvent& event : session->events()) {
+        if (event.kind != DomainEventKind::PieceFractureTriggered) {
+            continue;
+        }
+        const auto found = std::ranges::find(
+            entities, event.affected_entity_id);
+        NINHO_SIM_REQUIRE(found != entities.end());
+        trigger_ids[static_cast<std::size_t>(found - entities.begin())] = event.id;
+    }
+    NINHO_SIM_REQUIRE(std::ranges::none_of(trigger_ids,
+        [](EventId id) { return id == EventId{}; }));
+
+    const auto snapshot_count = [&](EntityId entity) {
+        return std::ranges::count(
+            session->snapshots(), entity, &EntitySnapshot::entity_id);
+    };
+    const auto require_wave = [&](std::size_t wave, std::size_t expected_count) {
+        NINHO_SIM_REQUIRE(snapshot_count(entities[wave])
+            == static_cast<std::ptrdiff_t>(expected_count));
+        std::vector<PartId> identities;
+        for (const EntitySnapshot& snapshot : session->snapshots()) {
+            if (snapshot.entity_id == entities[wave]) {
+                NINHO_SIM_REQUIRE((snapshot.part_id.value() & 0x80000000U) != 0U);
+                identities.push_back(snapshot.part_id);
+            }
+        }
+        std::ranges::sort(identities);
+        NINHO_SIM_REQUIRE(std::ranges::adjacent_find(identities) == identities.end());
+        const auto fractured = std::ranges::find_if(
+            session->events(), [&](const DomainEvent& event) {
+                return event.kind == DomainEventKind::PieceFractured
+                    && event.affected_entity_id == entities[wave];
+            });
+        NINHO_SIM_REQUIRE(fractured != session->events().end());
+        NINHO_SIM_REQUIRE(fractured->cause_event_id == trigger_ids[wave]);
+    };
+
+    NINHO_SIM_REQUIRE(session->tick().ok());
+    require_wave(0U, 80U);
+    NINHO_SIM_REQUIRE(snapshot_count(entities[1]) == 1);
+    NINHO_SIM_REQUIRE(snapshot_count(entities[2]) == 1);
+
+    for (int tick = 0; tick < 30 && snapshot_count(entities[0]) != 0; ++tick) {
+        NINHO_SIM_REQUIRE(session->tick().ok());
+    }
+    NINHO_SIM_REQUIRE(snapshot_count(entities[0]) == 0);
+    NINHO_SIM_REQUIRE(detail::SessionTestFacade::body_record_count(*session)
+        == initial_body_records - 1U);
+    NINHO_SIM_REQUIRE(session->tick().ok());
+    require_wave(1U, 80U);
+    NINHO_SIM_REQUIRE(snapshot_count(entities[2]) == 1);
+
+    for (int tick = 0; tick < 30 && snapshot_count(entities[1]) != 0; ++tick) {
+        NINHO_SIM_REQUIRE(session->tick().ok());
+    }
+    NINHO_SIM_REQUIRE(snapshot_count(entities[1]) == 0);
+    NINHO_SIM_REQUIRE(detail::SessionTestFacade::body_record_count(*session)
+        == initial_body_records - 2U);
+    NINHO_SIM_REQUIRE(session->tick().ok());
+    require_wave(2U, 1U);
+}
+
 } // namespace

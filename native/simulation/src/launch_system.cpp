@@ -531,7 +531,11 @@ std::optional<JointEndpoint> SimulationSession::Impl::domain_identity(
 void SimulationSession::Impl::remove_confirmed_runtime_body_records()
 {
     std::erase_if(body_records, [&](const BodyRecord& record) {
-        return (record.entity_id.value() & detail::runtime_entity_namespace_bit) != 0U
+        // Physical fragments are runtime-created records that deliberately
+        // retain their authored EntityId; the typed flag owns that lifecycle.
+        const bool runtime_owned = record.is_physical_fragment
+            || (record.entity_id.value() & detail::runtime_entity_namespace_bit) != 0U;
+        return runtime_owned
             && !physics.state(record.physics_handle).has_value();
     });
 }
