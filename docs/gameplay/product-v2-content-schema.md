@@ -273,6 +273,11 @@ JSON canônico publica a identidade explicitamente.
   vezes o volume assinado do tetraedro e é o critério exato de não degeneração;
 - `compound`: `children`, 1–16 shapes, profundidade máxima 4.
 
+O parser aceita a faixa geral acima. A autoria física da Fazenda adota um
+contrato mais estrito: toda primitiva `box` usada por body ou fragmento possui
+half-extent mínimo de 0,01 m. Superfícies visuais finas são representadas por
+molduras, grelhas ou gaiolas esparsas, não por sólidos submilimétricos.
+
 Cada body é um objeto fechado com os campos abaixo. `bodies` contém de 0 a
 500 itens; `body_id` é único e o par `(entity_id, part_id)` também é único.
 
@@ -573,3 +578,12 @@ evidência de autoria e não é campo de LevelManifest nem parte do canonical da
 sessão. A tabela normativa tipada mantém `brick/masonry=5` e
 `glass/brittle=9`; qualquer resumo posterior que inverta 5/9 é stale e não
 renumera o contrato.
+
+A projeção é sempre derivada de um `LevelManifest` v2 aceito pelo parser e
+resserializado por `to_canonical_json`; não se calcula hash diretamente de uma
+árvore JSON sem tipo. Depois disso, reais finitos são quantizados em `10^-5`,
+de modo que grafias semanticamente equivalentes (`1`/`1.0`, `-0`/`0`) geram os
+mesmos bytes. Mutation probes também precisam continuar válidos no parser e no
+bundle fechado antes de poderem demonstrar mudança de hash. O gate físico da
+Fazenda ainda executa 120 ticks ociosos e exige zero dano, yield, ruptura,
+fratura, trigger ou neutralização, com todas as juntas ativas ao final.
