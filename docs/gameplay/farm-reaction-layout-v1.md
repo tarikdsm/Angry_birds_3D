@@ -8,7 +8,7 @@ bodies, shapes, juntas, triggers ou objetivos.
 
 ## Identidade congelada
 
-- `layout_hash`: `fnv1a64:7d7420643d85203f`.
+- `layout_hash`: `fnv1a64:b886659855e6b13`.
 - 72 bodies, dos quais 54 dynamic e 18 static.
 - 52 joints em oito assemblies conexas.
 - quatro objetivos de porco e dois triggers `damage_threshold`.
@@ -17,6 +17,8 @@ bodies, shapes, juntas, triggers ou objetivos.
 - aceitação de repouso: 120 ticks sem dano, yield, ruptura, fratura, trigger ou
   neutralização; as 52 juntas permanecem ativas.
 - proxies `box`, inclusive fragmentos, têm half-extent mínimo de 0,01 m.
+- cada `visual.bounds_m` é exatamente o tamanho do AABB local recursivo de seu
+  collider, por eixo e com tolerância de autoria de `1e-6 m`.
 
 ## Transforms normativos
 
@@ -84,8 +86,19 @@ de carga explícitos:
 - as pás 49–51 mantêm o alcance externo, mas seus colliders começam fora do
   miolo; elas encaixam no hub sem se interpenetrar mutuamente.
 
-O teste faz broadphase AABB e SAT OBB para boxes e rejeita qualquer overlap
-externo não autorizado. Contatos tangentes usam tolerância de `1e-5 m`.
+As únicas permissões de interpenetração deliberada são os encaixes estruturais
+`15–16`, `20–24` e `20–25`, medidos por SAT OBB, e os encaixes de `0,05 m` do
+hub esférico com as pás `48–49`, `48–50` e `48–51`, medidos por esfera/OBB. O
+teste exige que cada entrada dessa allowlist ainda corresponda a contato real;
+as antigas permissões `6–8`, `6–9`, `49–50`, `49–51` e `50–51` foram removidas
+depois que deixaram de sobrepor. O mesmo gate faz broadphase AABB, SAT OBB e
+teste esfera/OBB para rejeitar qualquer overlap externo não autorizado.
+Contatos tangentes usam tolerância de `1e-5 m`.
+
+Os envelopes visuais não são caixas decorativas independentes: eles são as
+dimensões do AABB local da união recursiva do collider, compondo todos os
+`local_transform`. Os assets finais das Tasks 25–27 devem ser produzidos dentro
+desses envelopes físicos, com tolerância de `1e-6 m` no gate de autoria.
 
 ## Materiais, shapes e juntas
 

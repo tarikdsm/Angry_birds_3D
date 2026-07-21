@@ -16,6 +16,7 @@
 #include <cstdint>
 #include <filesystem>
 #include <fstream>
+#include <iomanip>
 #include <limits>
 #include <numbers>
 #include <ranges>
@@ -491,6 +492,13 @@ std::vector<TestLeaf> body_leaf_bounds(const BodyDefinition& definition)
     return result;
 }
 
+std::vector<TestLeaf> body_local_leaf_bounds(const BodyDefinition& definition)
+{
+    std::vector<TestLeaf> result;
+    append_leaf_bounds(definition.shape, TestPose{}, result);
+    return result;
+}
+
 double dot(const std::array<double, 3>& a, const std::array<double, 3>& b)
 {
     return a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
@@ -546,6 +554,31 @@ bool box_strictly_overlaps(const TestLeaf& a, const TestLeaf& b)
     return true;
 }
 
+bool sphere_strictly_overlaps_box(const TestLeaf& sphere, const TestLeaf& box)
+{
+    constexpr double tolerance_m = 1.0e-5;
+    const double radius_m = (sphere.bounds.maximum[0]
+        - sphere.bounds.minimum[0]) * 0.5;
+    const std::array center_delta{
+        sphere.pose.position[0] - box.pose.position[0],
+        sphere.pose.position[1] - box.pose.position[1],
+        sphere.pose.position[2] - box.pose.position[2]};
+    const std::array box_axes{
+        rotate_vector(box.pose.rotation, {1.0, 0.0, 0.0}),
+        rotate_vector(box.pose.rotation, {0.0, 1.0, 0.0}),
+        rotate_vector(box.pose.rotation, {0.0, 0.0, 1.0})};
+    double squared_distance_m2 = 0.0;
+    for (std::size_t axis = 0; axis < 3U; ++axis) {
+        const double coordinate_m = dot(center_delta, box_axes[axis]);
+        const double outside_m = std::max(
+            std::abs(coordinate_m) - box.half_extents[axis], 0.0);
+        squared_distance_m2 += outside_m * outside_m;
+    }
+    const double strict_radius_m = radius_m - tolerance_m;
+    return strict_radius_m > 0.0
+        && squared_distance_m2 < strict_radius_m * strict_radius_m;
+}
+
 bool strictly_overlaps(const TestLeaf& a, const TestLeaf& b)
 {
     constexpr double tolerance_m = 1.0e-5;
@@ -556,6 +589,10 @@ bool strictly_overlaps(const TestLeaf& a, const TestLeaf& b)
     }
     if (a.type == ShapeType::Box && b.type == ShapeType::Box)
         return box_strictly_overlaps(a, b);
+    if (a.type == ShapeType::Sphere && b.type == ShapeType::Box)
+        return sphere_strictly_overlaps_box(a, b);
+    if (a.type == ShapeType::Box && b.type == ShapeType::Sphere)
+        return sphere_strictly_overlaps_box(b, a);
     return true;
 }
 
@@ -623,6 +660,42 @@ NINHO_SIM_TEST("product v2 levels load both closed bundles and preserve catalogs
     }
 }
 
+NINHO_SIM_TEST("product v2 levels align every visual bound with recursive collider aabb")
+{
+    constexpr double tolerance_m = 1.0e-6;
+    const LevelManifest& farm = load_product().farm;
+    std::ostringstream mismatches;
+    std::size_t mismatch_count = 0U;
+    for (const BodyDefinition& definition : farm.bodies) {
+        const auto leaves = body_local_leaf_bounds(definition);
+        NINHO_SIM_REQUIRE(!leaves.empty());
+        TestAabb collider_bounds;
+        for (const TestLeaf& leaf : leaves) {
+            for (std::size_t axis = 0; axis < 3U; ++axis) {
+                collider_bounds.minimum[axis] = std::min(
+                    collider_bounds.minimum[axis], leaf.bounds.minimum[axis]);
+                collider_bounds.maximum[axis] = std::max(
+                    collider_bounds.maximum[axis], leaf.bounds.maximum[axis]);
+            }
+        }
+        for (std::size_t axis = 0; axis < 3U; ++axis) {
+            const double collider_size = collider_bounds.maximum[axis]
+                - collider_bounds.minimum[axis];
+            const double visual_size = definition.visual.bounds_m[axis];
+            if (std::abs(visual_size - collider_size) <= tolerance_m) continue;
+            mismatches << std::setprecision(17)
+                       << " body=" << definition.body_id << " axis=" << axis
+                       << " visual=" << visual_size
+                       << " collider=" << collider_size << ';';
+            ++mismatch_count;
+        }
+    }
+    if (mismatch_count != 0U) {
+        throw std::runtime_error("visual/collider AABB mismatches (tolerance 1e-6 m):"
+            + mismatches.str());
+    }
+}
+
 NINHO_SIM_TEST("product v2 levels freeze the complete farm inventory and physics")
 {
     const LoadedProduct product = load_product();
@@ -687,10 +760,35 @@ NINHO_SIM_TEST("product v2 levels freeze the complete farm inventory and physics
         return (static_cast<std::uint64_t>(low) << 32U) | high;
     };
     const std::unordered_set<std::uint64_t> deliberate_interlocks{
-        pair_key(6U, 8U), pair_key(6U, 9U), pair_key(15U, 16U),
-        pair_key(20U, 24U), pair_key(20U, 25U), pair_key(48U, 49U),
-        pair_key(48U, 50U), pair_key(48U, 51U), pair_key(49U, 50U),
-        pair_key(49U, 51U), pair_key(50U, 51U)};
+        // Encaixe estrutural medido por SAT: travessa/gaiola e rampa/suportes.
+        pair_key(15U, 16U),
+        pair_key(20U, 24U), pair_key(20U, 25U),
+        // As três pás penetram 0,05 m no hub esférico, sem se tocarem entre si.
+        pair_key(48U, 49U), pair_key(48U, 50U), pair_key(48U, 51U)};
+    const auto bodies_strictly_overlap = [&](std::uint32_t a_id,
+                                             std::uint32_t b_id) {
+        const auto a_bounds = body_leaf_bounds(body(farm, a_id));
+        const auto b_bounds = body_leaf_bounds(body(farm, b_id));
+        for (const TestLeaf& a_leaf : a_bounds) {
+            for (const TestLeaf& b_leaf : b_bounds) {
+                if (strictly_overlaps(a_leaf, b_leaf)) return true;
+            }
+        }
+        return false;
+    };
+    std::ostringstream stale_interlocks;
+    std::size_t stale_interlock_count = 0U;
+    for (std::uint64_t key : deliberate_interlocks) {
+        const auto a_id = static_cast<std::uint32_t>(key >> 32U);
+        const auto b_id = static_cast<std::uint32_t>(key);
+        if (bodies_strictly_overlap(a_id, b_id)) continue;
+        stale_interlocks << ' ' << a_id << '-' << b_id;
+        ++stale_interlock_count;
+    }
+    if (stale_interlock_count != 0U) {
+        throw std::runtime_error("stale deliberate interlock allowlist entries:"
+            + stale_interlocks.str());
+    }
     for (std::size_t left = 0; left < farm.bodies.size(); ++left) {
         for (std::size_t right = left + 1U; right < farm.bodies.size(); ++right) {
             const BodyDefinition& a = farm.bodies[left];

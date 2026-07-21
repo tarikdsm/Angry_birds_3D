@@ -301,6 +301,13 @@ Exatamente um entre `material_id` e `surface_id` é não nulo. Um enemy body é
 dynamic, não usa material, usa a surface de seu EnemyArchetype e sua entidade
 contém exatamente um archetype inimigo, sem partes não inimigas.
 
+`visual.bounds_m` é o tamanho, por eixo, do AABB local da união recursiva de
+todas as folhas do collider. O cálculo compõe cada `local_transform`, inclusive
+rotações de compounds aninhados, e não aplica o transform root do body. O gate
+de autoria compara os três eixos de todos os bodies com tolerância explícita de
+`1e-6 m`. Assets finais das Tasks 25–27 devem obedecer a esses envelopes; o
+campo não pode conservar uma caixa visual histórica diferente da física.
+
 `fracture_pattern` contém exatamente `physical_fragments` e
 `cosmetic_asset_ids`. Cada fragmento físico declara `ordinal` positivo e único,
 `shape`, `local_transform`, `density_kg_m3` e `visual_id`. A soma das massas
@@ -588,12 +595,13 @@ bundle fechado antes de poderem demonstrar mudança de hash. O gate físico da
 Fazenda ainda executa 120 ticks ociosos e exige zero dano, yield, ruptura,
 fratura, trigger ou neutralização, com todas as juntas ativas ao final.
 
-O fixture vigente da Fazenda usa `fnv1a64:7d7420643d85203f`. Além da projeção
+O fixture vigente da Fazenda usa `fnv1a64:b886659855e6b13`. Além da projeção
 integral, testes nomeados congelam os landmarks normativos de porcos, portão,
 rampa/fardos e dispositivos, bem como a tabela completa de limites por kind:
 `pine_fit=5500/900`, `glass_clamp=2200/350`, `mortar=1400/160`,
 `straw_bind=800/90` e `steel_ductile=7500/900` em N/N·m. O inventário também
 exige massa de 65 kg e inércia positiva para cada porco, half-extent mínimo de
-0,01 m, grafo conectado e ausência de overlap externo não autorizado. Apoios e
-folgas são expressos em shapes/local transforms; transforms de body não são
-usados para mascarar instabilidade.
+0,01 m, grafo conectado, igualdade entre bounds visuais e AABB recursivo e
+ausência de overlap externo não autorizado. Apoios e folgas são expressos em
+shapes/local transforms; transforms de body não são usados para mascarar
+instabilidade.
