@@ -587,3 +587,13 @@ mesmos bytes. Mutation probes também precisam continuar válidos no parser e no
 bundle fechado antes de poderem demonstrar mudança de hash. O gate físico da
 Fazenda ainda executa 120 ticks ociosos e exige zero dano, yield, ruptura,
 fratura, trigger ou neutralização, com todas as juntas ativas ao final.
+
+O fixture vigente da Fazenda usa `fnv1a64:7d7420643d85203f`. Além da projeção
+integral, testes nomeados congelam os landmarks normativos de porcos, portão,
+rampa/fardos e dispositivos, bem como a tabela completa de limites por kind:
+`pine_fit=5500/900`, `glass_clamp=2200/350`, `mortar=1400/160`,
+`straw_bind=800/90` e `steel_ductile=7500/900` em N/N·m. O inventário também
+exige massa de 65 kg e inércia positiva para cada porco, half-extent mínimo de
+0,01 m, grafo conectado e ausência de overlap externo não autorizado. Apoios e
+folgas são expressos em shapes/local transforms; transforms de body não são
+usados para mascarar instabilidade.

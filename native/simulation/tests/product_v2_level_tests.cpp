@@ -794,18 +794,6 @@ NINHO_SIM_TEST("product v2 levels freeze the complete farm inventory and physics
         NINHO_SIM_REQUIRE(ninho::physics::detail::PhysicsWorldTestFacade::
             local_center(physics, created_pig.value).x > 0.01F);
     }
-    NINHO_SIM_REQUIRE((body(farm, 2).transform.position_m
-        == std::array{3.2, 0.61, -2.5}));
-    NINHO_SIM_REQUIRE((body(farm, 3).transform.position_m
-        == std::array{7.4, 0.61, 1.8}));
-    NINHO_SIM_REQUIRE((body(farm, 4).transform.position_m
-        == std::array{13.0, 1.83, 0.0}));
-    NINHO_SIM_REQUIRE((body(farm, 5).transform.position_m
-        == std::array{18.8, 0.61, -2.6}));
-    NINHO_SIM_REQUIRE((body(farm, 58).transform.position_m
-        == std::array{15.1, 1.4, -1.0}));
-    NINHO_SIM_REQUIRE((body(farm, 59).transform.position_m
-        == std::array{17.3, 2.0, -2.7}));
     for (const auto& joint : farm.joints) {
         if (joint.kind != JointKind::SteelDuctile) continue;
         const auto ductile = [&](std::uint32_t body_id) {
@@ -816,6 +804,52 @@ NINHO_SIM_TEST("product v2 levels freeze the complete farm inventory and physics
     auto created = SimulationSession::create(
         product.materials, product.archetypes, product.farm);
     NINHO_SIM_REQUIRE(created.ok());
+}
+
+NINHO_SIM_TEST("product v2 levels preserve normative farm landmarks")
+{
+    const LevelManifest& farm = load_product().farm;
+    const std::array normative_landmarks{
+        std::pair{2U, std::array{2.6, 0.55, -3.4}},
+        std::pair{3U, std::array{7.4, 1.05, 1.8}},
+        std::pair{4U, std::array{13.0, 1.4, 0.0}},
+        std::pair{5U, std::array{17.0, 0.55, -2.5}},
+        std::pair{14U, std::array{6.7, 2.2, 0.0}},
+        std::pair{15U, std::array{4.4, 4.2, 0.0}},
+        std::pair{16U, std::array{5.8, 4.0, 0.0}},
+        std::pair{20U, std::array{8.8, 1.8, 0.0}},
+        std::pair{21U, std::array{7.8, 3.4, -0.75}},
+        std::pair{22U, std::array{7.8, 3.4, 0.0}},
+        std::pair{23U, std::array{7.8, 3.4, 0.75}},
+        std::pair{24U, std::array{10.5, 0.8, -1.0}},
+        std::pair{25U, std::array{10.5, 0.8, 1.0}},
+        std::pair{26U, std::array{6.8, 3.2, 0.0}},
+        std::pair{58U, std::array{16.2, 1.1, -1.6}},
+        std::pair{59U, std::array{17.6, 1.0, -3.3}},
+    };
+    for (const auto& [body_id, expected_position] : normative_landmarks) {
+        NINHO_SIM_REQUIRE(body(farm, body_id).transform.position_m
+            == expected_position);
+    }
+}
+
+NINHO_SIM_TEST("product v2 levels preserve normative farm joint limits")
+{
+    const LevelManifest& farm = load_product().farm;
+    for (const auto& joint : farm.joints) {
+        const std::pair expected_limits = [&] {
+            switch (joint.kind) {
+            case JointKind::PineFit: return std::pair{5500.0, 900.0};
+            case JointKind::GlassClamp: return std::pair{2200.0, 350.0};
+            case JointKind::Mortar: return std::pair{1400.0, 160.0};
+            case JointKind::StrawBind: return std::pair{800.0, 90.0};
+            case JointKind::SteelDuctile: return std::pair{7500.0, 900.0};
+            }
+            throw std::runtime_error("unknown normative joint kind");
+        }();
+        NINHO_SIM_REQUIRE(joint.force_limit_n == expected_limits.first);
+        NINHO_SIM_REQUIRE(joint.torque_limit_nm == expected_limits.second);
+    }
 }
 
 NINHO_SIM_TEST("product v2 levels keep the farm intact for 120 idle ticks")
@@ -880,7 +914,10 @@ NINHO_SIM_TEST("product v2 levels freeze farm layout hash and semantic reorder")
     const LoadedProduct product = load_product();
     const auto require_valid_mutation = [&](const json& changed) {
         const auto typed = parse_level_manifest_v2(changed.dump());
-        NINHO_SIM_REQUIRE(typed.ok());
+        if (!typed.ok()) {
+            throw std::runtime_error("invalid semantic hash mutation at "
+                + typed.error.pointer + ": " + typed.error.message);
+        }
         NINHO_SIM_REQUIRE(make_product_v2_content_bundle(product.materials,
             product.archetypes, product.campaign, typed.value).ok());
         NINHO_SIM_REQUIRE(layout_hash(changed) != layout_hash(farm));
@@ -905,7 +942,7 @@ NINHO_SIM_TEST("product v2 levels freeze farm layout hash and semantic reorder")
     transform_changed["bodies"][61]["transform"]["position_m"][0] = 3.1;
     require_valid_mutation(transform_changed);
     json shape_changed = farm;
-    shape_changed["bodies"][61]["shape"]["half_extents_m"][0] = 1.9;
+    shape_changed["bodies"][11]["shape"]["half_extents_m"][0] = 1.4;
     require_valid_mutation(shape_changed);
 
     json reordered = farm;
