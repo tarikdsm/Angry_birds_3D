@@ -83,6 +83,9 @@ std::uint8_t canonical_tag_of(DomainEventKind value)
     case DomainEventKind::EnvironmentalTriggerDetonated: return 20U;
     case DomainEventKind::MaterialYielded: return 21U;
     case DomainEventKind::CrushDamageApplied: return 22U;
+    case DomainEventKind::ScoreAwarded: return 23U;
+    case DomainEventKind::ChainChanged: return 24U;
+    case DomainEventKind::StarsAwarded: return 25U;
     }
     throw std::invalid_argument("unknown canonical domain event");
 }
@@ -1164,8 +1167,42 @@ std::vector<std::uint8_t> SimulationSession::Impl::serialize_canonical_state_v3(
     writer.integer(launch_count);
     writer.integer(resolution_rest_ticks);
     writer.boolean(objective_complete);
-    writer.integer<std::uint64_t>(0U); // current_score, reserved until Task 16.
-    writer.integer<std::uint8_t>(0U);  // stars, reserved until Task 16.
+    const detail::ScoreState& score = score_system.state();
+    writer.integer(score.current_score);
+    writer.integer(score.stars);
+    if (score_system.configured()) {
+        writer.integer(score.chain_index);
+        writer.integer(score.multiplier_percent);
+        identifier(writer, score.last_scoring_tick);
+        identifier(writer, score.current_chain_root_cause_event_id);
+        writer.integer(score.current_chain_shot_id);
+        writer.boolean(score.terminal_bonus_awarded);
+        auto scored_identities = score.scored_identities;
+        std::ranges::sort(scored_identities);
+        writer.integer<std::uint32_t>(static_cast<std::uint32_t>(
+            scored_identities.size()));
+        for (const detail::ScoringIdentity& identity : scored_identities) {
+            writer.integer(static_cast<std::uint8_t>(identity.kind));
+            identifier(writer, identity.entity_id);
+            identifier(writer, identity.part_id);
+            writer.integer(identity.queue_slot_id);
+        }
+        writer.integer(score_system.observed_launches());
+        writer.integer<std::uint32_t>(static_cast<std::uint32_t>(
+            score_system.causal_records().size()));
+        for (const auto& record : score_system.causal_records()) {
+            identifier(writer, record.event_id);
+            identifier(writer, record.root_event_id);
+            writer.integer(record.shot_id);
+        }
+        writer.integer<std::uint32_t>(static_cast<std::uint32_t>(
+            score_system.entity_roots().size()));
+        for (const auto& root : score_system.entity_roots()) {
+            identifier(writer, root.entity_id);
+            identifier(writer, root.root_event_id);
+            writer.integer(root.shot_id);
+        }
+    }
 
     writer.boolean(session_state.aim.has_value());
     if (session_state.aim) {
@@ -1264,6 +1301,20 @@ std::vector<std::uint8_t> SimulationSession::Impl::serialize_canonical_state_v3(
             || event.kind == DomainEventKind::EnvironmentalTriggerDetonated) {
             writer.integer(event.environmental_trigger_id);
         }
+        if (event.kind == DomainEventKind::ScoreAwarded
+            || event.kind == DomainEventKind::ChainChanged
+            || event.kind == DomainEventKind::StarsAwarded) {
+            writer.integer(static_cast<std::uint8_t>(event.scoring_identity_kind));
+            writer.integer(event.queue_slot_id);
+            writer.integer(event.base_points);
+            writer.integer(event.multiplier_percent);
+            writer.integer(event.chain_index);
+            writer.integer(event.awarded_points);
+            writer.integer(event.total_score);
+            identifier(writer, event.root_cause_event_id);
+            writer.integer(event.shot_id);
+            writer.integer(event.stars);
+        }
     }
 
     std::vector<const detail::DamageState*> damage_states;
@@ -1322,6 +1373,9 @@ std::vector<std::uint8_t> SimulationSession::Impl::serialize_canonical_state_v3(
             writer.integer(state->streak);
             writer.quantized(state->excess_delta_v_m_s);
             identifier(writer, state->cause_event_id);
+            if (score_system.configured()) {
+                identifier(writer, state->load_cause_entity_id);
+            }
         }
         writer.integer<std::uint32_t>(
             static_cast<std::uint32_t>(damage_states.size()));

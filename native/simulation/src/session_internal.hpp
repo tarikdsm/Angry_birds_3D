@@ -8,6 +8,7 @@
 #include "environmental_trigger_system.hpp"
 #include "crush_damage_system.hpp"
 #include "ductile_joint_system.hpp"
+#include "score_system.hpp"
 
 #include <ninho/physics/physics_world.hpp>
 
@@ -140,6 +141,7 @@ struct SimulationSession::Impl : detail::AbilityLifecycleHooks {
     void apply_pending_fractures_before_step();
     void evaluate_fractures_after_step();
     void evaluate_objectives_after_step();
+    void evaluate_score_after_step();
     void remove_confirmed_runtime_body_records();
     void publish_event(DomainEventKind, EntityId = {}, BirdArchetypeId = {},
         CommandRejectionReason = CommandRejectionReason::None);
@@ -168,6 +170,7 @@ struct SimulationSession::Impl : detail::AbilityLifecycleHooks {
     detail::DamageSystem damage_system;
     detail::CrushDamageSystem crush_damage_system;
     detail::DuctileJointSystem ductile_joint_system;
+    detail::ScoreSystem score_system;
     std::optional<detail::LauncherSystem> launcher_system;
     detail::AbilitySystem ability_system;
     SessionState session_state;

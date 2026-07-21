@@ -96,6 +96,8 @@ struct GameplayFrameFields {
     std::vector<simulation::EntitySnapshot> projectiles;
     std::uint64_t score{};
     std::uint32_t stars{};
+    std::uint32_t chain_index{};
+    std::uint32_t multiplier_percent{100U};
     std::string gravity_kind;
     physics::Vec3 local_gravity_m_s2{};
 };
@@ -119,6 +121,8 @@ struct SessionFrameData {
     std::vector<simulation::EntitySnapshot> projectiles;
     std::uint64_t score{};
     std::uint32_t stars{};
+    std::uint32_t chain_index{};
+    std::uint32_t multiplier_percent{100U};
     std::string gravity_kind;
     physics::Vec3 local_gravity_m_s2{};
     physics::WorldMetrics metrics;

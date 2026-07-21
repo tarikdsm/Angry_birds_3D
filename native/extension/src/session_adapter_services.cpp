@@ -34,6 +34,9 @@ std::string_view domain_event_kind_name(
     case EnvironmentalTriggerDetonated: return "environmental_trigger_detonated";
     case MaterialYielded: return "material_yielded";
     case CrushDamageApplied: return "crush_damage_applied";
+    case ScoreAwarded: return "score_awarded";
+    case ChainChanged: return "chain_changed";
+    case StarsAwarded: return "stars_awarded";
     }
     return "unknown";
 }
@@ -176,6 +179,8 @@ void SessionFrameBatch::set_gameplay_fields(GameplayFrameFields fields)
     pending_.projectiles = std::move(fields.projectiles);
     pending_.score = fields.score;
     pending_.stars = fields.stars;
+    pending_.chain_index = fields.chain_index;
+    pending_.multiplier_percent = fields.multiplier_percent;
     pending_.gravity_kind = std::move(fields.gravity_kind);
     pending_.local_gravity_m_s2 = fields.local_gravity_m_s2;
 }

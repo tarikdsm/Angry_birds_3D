@@ -78,6 +78,11 @@ namespace {
     const std::optional<simulation::ShotStateView>& shot)
 {
     GameplayFrameFields fields;
+    const simulation::ScorePresentationState score = session.score_state();
+    fields.score = score.score;
+    fields.stars = score.stars;
+    fields.chain_index = score.chain_index;
+    fields.multiplier_percent = score.multiplier_percent;
     const std::uint32_t remaining = session.birds_remaining();
     const std::size_t queue_size = content.level.bird_queue.size();
     const std::size_t first_remaining = remaining <= queue_size
@@ -606,6 +611,24 @@ namespace {
     if (event.kind == simulation::DomainEventKind::SpeedChanged) {
         result["delta_velocity"] = detail::to_godot(event.delta_velocity_m_s);
     }
+    if (event.kind == simulation::DomainEventKind::ScoreAwarded
+        || event.kind == simulation::DomainEventKind::ChainChanged
+        || event.kind == simulation::DomainEventKind::StarsAwarded) {
+        result["scoring_identity_kind"] =
+            static_cast<std::int64_t>(event.scoring_identity_kind);
+        result["queue_slot_id"] = static_cast<std::int64_t>(event.queue_slot_id);
+        result["base_points"] = static_cast<std::int64_t>(event.base_points);
+        result["multiplier_percent"] =
+            static_cast<std::int64_t>(event.multiplier_percent);
+        result["chain_index"] = static_cast<std::int64_t>(event.chain_index);
+        result["awarded_points"] =
+            static_cast<std::int64_t>(event.awarded_points);
+        result["total_score"] = static_cast<std::int64_t>(event.total_score);
+        result["root_cause_event_id"] =
+            static_cast<std::int64_t>(event.root_cause_event_id.value());
+        result["shot_id"] = static_cast<std::int64_t>(event.shot_id);
+        result["stars"] = static_cast<std::int64_t>(event.stars);
+    }
     return result;
 }
 
@@ -749,7 +772,7 @@ namespace {
     }
 
     godot::Dictionary result;
-    result["frame_schema_version"] = 2;
+    result["frame_schema_version"] = 3;
     result["tick"] = static_cast<std::int64_t>(frame.state.tick.value());
     result["ticks_executed"] = frame.ticks_executed;
     result["phase"] = phase_name(frame.state.phase);
@@ -769,6 +792,9 @@ namespace {
     result["trajectory_preview"] = preview_variant(frame.preview);
     result["score"] = static_cast<std::int64_t>(frame.score);
     result["stars"] = static_cast<std::int64_t>(frame.stars);
+    result["chain_index"] = static_cast<std::int64_t>(frame.chain_index);
+    result["multiplier_percent"] =
+        static_cast<std::int64_t>(frame.multiplier_percent);
     result["gravity_kind"] = godot_string(frame.gravity_kind);
     result["local_gravity"] = detail::to_godot(frame.local_gravity_m_s2);
     result["metrics"] = metrics_dictionary(frame.metrics);

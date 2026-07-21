@@ -29,6 +29,16 @@ enum class DomainEventKind : std::uint8_t {
     EnvironmentalTriggerDetonated = 20,
     MaterialYielded = 21,
     CrushDamageApplied = 22,
+    ScoreAwarded = 23,
+    ChainChanged = 24,
+    StarsAwarded = 25,
+};
+
+enum class ScoringIdentityKind : std::uint8_t {
+    None = 0,
+    EnemyEntity = 1,
+    MaterialPiece = 2,
+    UnusedBirdSlot = 3,
 };
 
 enum class CommandRejectionReason : std::uint8_t {
@@ -80,6 +90,16 @@ struct DomainEvent {
     double fracture_ratio{};
     ninho::physics::Vec3 delta_velocity_m_s{};
     std::uint32_t environmental_trigger_id{};
+    ScoringIdentityKind scoring_identity_kind{ScoringIdentityKind::None};
+    std::uint32_t queue_slot_id{};
+    std::uint32_t base_points{};
+    std::uint32_t multiplier_percent{};
+    std::uint32_t chain_index{};
+    std::uint64_t awarded_points{};
+    std::uint64_t total_score{};
+    EventId root_cause_event_id{};
+    std::uint64_t shot_id{};
+    std::uint8_t stars{};
 
     bool operator==(const DomainEvent&) const = default;
 };

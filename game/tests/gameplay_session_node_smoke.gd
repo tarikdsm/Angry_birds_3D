@@ -123,14 +123,19 @@ func _initialize() -> void:
 		"frame_schema_version", "tick", "ticks_executed", "phase", "outcome",
 		"launcher", "locked_plane", "bird_queue", "current_bird", "shot",
 		"projectiles", "snapshots", "events", "objectives", "ability_readiness",
-		"ability_armed", "trajectory_preview", "score", "stars", "gravity_kind",
+		"ability_armed", "trajectory_preview", "score", "stars", "chain_index",
+		"multiplier_percent", "gravity_kind",
 		"local_gravity", "metrics", "discarded_time_seconds"
 	]
 	if initial.size() != expected_keys.size() or not initial.has_all(expected_keys):
-		_fail("frame v2 top-level keys drifted")
+		_fail("frame v3 top-level keys drifted")
 		return
-	if int(initial.frame_schema_version) != 2 or str(initial.phase) != "inspection":
+	if int(initial.frame_schema_version) != 3 or str(initial.phase) != "inspection":
 		_fail("initial frame version or phase is invalid")
+		return
+	if int(initial.score) != 0 or int(initial.stars) != 0 \
+			or int(initial.chain_index) != 0 or int(initial.multiplier_percent) != 100:
+		_fail("initial persistent score state is invalid")
 		return
 	if str(initial.gravity_kind) != "uniform" \
 			or not (initial.local_gravity as Vector3).is_equal_approx(Vector3(0.0, -9.81, 0.0)):

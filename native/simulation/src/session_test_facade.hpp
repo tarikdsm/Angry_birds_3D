@@ -112,6 +112,16 @@ public:
         PartId target_part, double energy_j, EventId cause_event_id);
     static void inject_crush_load(SimulationSession&, EntityId, PartId,
         double total_normal_impulse_n_s);
+    static bool set_crush_load_cause_for_testing(
+        SimulationSession&, EntityId, PartId, EntityId);
+    static bool bump_score_total(SimulationSession&);
+    static bool bump_score_root(SimulationSession&);
+    static bool shift_score_tick(SimulationSession&);
+    static bool bump_score_chain(SimulationSession&);
+    static bool append_score_identity(SimulationSession&);
+    static bool reverse_score_identities(SimulationSession&);
+    static bool toggle_score_terminal_gate(SimulationSession&);
+    static bool bump_score_stars(SimulationSession&);
 };
 
 }

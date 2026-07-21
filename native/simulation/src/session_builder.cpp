@@ -530,6 +530,11 @@ SessionStatus SimulationSession::Impl::build() noexcept
         } else {
             remaining_birds = static_cast<std::uint32_t>(bundle.level.bird_queue.size());
             launcher_system.emplace(bundle.level.world, bundle.level.slingshot);
+            if (bundle.level.scoring.chain_window_ticks != 0U
+                && bundle.level.scoring.max_chain_multiplier >= 1.0) {
+                score_system = detail::ScoreSystem{bundle.level.scoring,
+                    static_cast<std::uint32_t>(bundle.level.bird_queue.size())};
+            }
         }
 
         std::unordered_map<std::uint32_t, ninho::physics::BodyHandle> handles_by_body_id;

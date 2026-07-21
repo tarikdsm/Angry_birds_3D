@@ -226,6 +226,8 @@ NINHO_TEST("gameplay adapter accepts only grab pull and release launcher command
     NINHO_REQUIRE(initial.projectiles.empty());
     NINHO_REQUIRE(initial.score == 0U);
     NINHO_REQUIRE(initial.stars == 0U);
+    NINHO_REQUIRE(initial.chain_index == 0U);
+    NINHO_REQUIRE(initial.multiplier_percent == 100U);
 
     NINHO_REQUIRE(adapter.queue_begin_grab(Vec3{1.0F, 0.0F, 0.0F}));
     NINHO_REQUIRE(adapter.advance(1.0 / 60.0));
@@ -427,7 +429,7 @@ NINHO_TEST("gameplay adapter has no external shot identity or event inference ca
     NINHO_REQUIRE(source.find("session_->shot_state()") != std::string::npos);
 }
 
-NINHO_TEST("gameplay nodes expose typed mass speed and split domain events")
+NINHO_TEST("gameplay nodes expose typed ability material and score domain events")
 {
     const std::string gameplay = read_source_file(
         "native/extension/src/gameplay_session_node.cpp");
@@ -447,6 +449,14 @@ NINHO_TEST("gameplay nodes expose typed mass speed and split domain events")
         "case MaterialYielded: return \"material_yielded\";";
     constexpr std::string_view crush_mapping =
         "case CrushDamageApplied: return \"crush_damage_applied\";";
+    constexpr std::string_view score_mapping =
+        "case ScoreAwarded: return \"score_awarded\";";
+    constexpr std::string_view chain_mapping =
+        "case ChainChanged: return \"chain_changed\";";
+    constexpr std::string_view stars_mapping =
+        "case StarsAwarded: return \"stars_awarded\";";
+    constexpr std::string_view total_mapping =
+        "result[\"total_score\"] = static_cast<std::int64_t>(event.total_score);";
     constexpr std::string_view delta_mapping =
         "result[\"delta_velocity\"] = detail::to_godot(event.delta_velocity_m_s);";
     constexpr std::string_view shared_delegate =
@@ -459,11 +469,16 @@ NINHO_TEST("gameplay nodes expose typed mass speed and split domain events")
     NINHO_REQUIRE(shared.find(spawned_mapping) != std::string::npos);
     NINHO_REQUIRE(shared.find(yielded_mapping) != std::string::npos);
     NINHO_REQUIRE(shared.find(crush_mapping) != std::string::npos);
+    NINHO_REQUIRE(shared.find(score_mapping) != std::string::npos);
+    NINHO_REQUIRE(shared.find(chain_mapping) != std::string::npos);
+    NINHO_REQUIRE(shared.find(stars_mapping) != std::string::npos);
     NINHO_REQUIRE(gameplay.find(delta_mapping) != std::string::npos);
     NINHO_REQUIRE(orbital.find(delta_mapping) != std::string::npos);
+    NINHO_REQUIRE(gameplay.find(total_mapping) != std::string::npos);
+    NINHO_REQUIRE(orbital.find(total_mapping) == std::string::npos);
 }
 
-NINHO_TEST("gameplay frame schema freezes exact version two top level dictionary keys")
+NINHO_TEST("gameplay frame schema versions persistent chain state without changing legacy frame")
 {
     const std::string source = read_source_file(
         "native/extension/src/gameplay_session_node.cpp");
@@ -488,7 +503,8 @@ NINHO_TEST("gameplay frame schema freezes exact version two top level dictionary
         std::string_view{"events"}, std::string_view{"objectives"},
         std::string_view{"ability_readiness"}, std::string_view{"ability_armed"},
         std::string_view{"trajectory_preview"}, std::string_view{"score"},
-        std::string_view{"stars"}, std::string_view{"gravity_kind"},
+        std::string_view{"stars"}, std::string_view{"chain_index"},
+        std::string_view{"multiplier_percent"}, std::string_view{"gravity_kind"},
         std::string_view{"local_gravity"}, std::string_view{"metrics"},
         std::string_view{"discarded_time_seconds"},
     };
@@ -496,6 +512,13 @@ NINHO_TEST("gameplay frame schema freezes exact version two top level dictionary
     for (std::size_t index = 0; index < expected.size(); ++index) {
         NINHO_REQUIRE(keys[index] == expected[index]);
     }
+    NINHO_REQUIRE(body.find("result[\"frame_schema_version\"] = 3;")
+        != std::string::npos);
+    const std::string legacy = read_source_file(
+        "native/extension/src/orbital_session_node.cpp");
+    NINHO_REQUIRE(legacy.find("result[\"chain_index\"]") == std::string::npos);
+    NINHO_REQUIRE(legacy.find("result[\"multiplier_percent\"]")
+        == std::string::npos);
 }
 
 }

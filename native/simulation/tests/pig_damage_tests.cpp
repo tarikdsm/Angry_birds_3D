@@ -206,6 +206,28 @@ NINHO_SIM_TEST("pig damage crush requires strictly over four weights for twenty 
         == EventId{73});
 }
 
+NINHO_SIM_TEST("pig damage crush preserves the deterministic causal load entity")
+{
+    using namespace ninho::simulation::detail;
+    CrushDamageSystem system;
+    const CrushBody pig{EntityId{200}, PartId{1}, 65.0, 9.81,
+        false, {}, {0.0f, 1.0f, 0.0f}};
+    constexpr double dt = 1.0 / 60.0;
+    const double qualifying = pig.mass_kg * pig.gravity_m_s2 * dt * 5.0;
+    std::vector<CrushDamagePlan> plans;
+    for (std::uint64_t tick = 1U; tick <= 21U; ++tick) {
+        const std::array loads{
+            CrushContactLoad{pig.entity_id, pig.part_id, qualifying,
+                EntityId{77}},
+            CrushContactLoad{pig.entity_id, pig.part_id, qualifying,
+                EntityId{66}},
+        };
+        plans = system.update(TickIndex{tick}, dt, std::span{&pig, 1U}, loads);
+    }
+    NINHO_SIM_REQUIRE(plans.size() == 1U);
+    NINHO_SIM_REQUIRE(plans.front().cause_entity_id == EntityId{66});
+}
+
 NINHO_SIM_TEST("pig damage uniform world exit uses append only BoundsExit cause")
 {
     static_assert(static_cast<std::uint8_t>(NeutralizationCause::BoundsExit) == 3U);

@@ -654,6 +654,7 @@ SessionStatus SimulationSession::Impl::create_projectile(const AimState& launch_
     session_state.last_impact_m.reset();
     resolution_rest_ticks = 0U;
     publish_event(DomainEventKind::BirdLaunched, entity, bird->id);
+    domain_events.back().shot_id = next_shot.shot_id;
     return {};
 }
 

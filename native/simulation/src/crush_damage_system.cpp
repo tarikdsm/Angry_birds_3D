@@ -38,11 +38,17 @@ std::vector<CrushDamagePlan> CrushDamageSystem::update(TickIndex, double dt,
             });
         }
         double impulse = 0.0;
+        EntityId load_cause{};
         for (const auto& contact : contacts) {
             if (contact.entity_id == body.entity_id && contact.part_id == body.part_id
                 && std::isfinite(contact.total_normal_impulse_n_s)
                 && contact.total_normal_impulse_n_s > 0.0) {
                 impulse += contact.total_normal_impulse_n_s;
+                if (contact.cause_entity_id != EntityId{}
+                    && (load_cause == EntityId{}
+                        || contact.cause_entity_id < load_cause)) {
+                    load_cause = contact.cause_entity_id;
+                }
             }
         }
         const double weight_impulse = body.mass_kg * body.gravity_m_s2 * dt;
@@ -50,13 +56,20 @@ std::vector<CrushDamagePlan> CrushDamageSystem::update(TickIndex, double dt,
             || !std::isfinite(weight_impulse) || weight_impulse <= 0.0) {
             runtime->streak = 0U;
             runtime->excess_delta_v_m_s = 0.0;
+            runtime->load_cause_entity_id = {};
             continue;
         }
         const double ratio = quantize_ratio(impulse / weight_impulse);
         if (!(ratio > 4.0)) {
             runtime->streak = 0U;
             runtime->excess_delta_v_m_s = 0.0;
+            runtime->load_cause_entity_id = {};
             continue;
+        }
+        if (load_cause != EntityId{}
+            && (runtime->load_cause_entity_id == EntityId{}
+                || load_cause < runtime->load_cause_entity_id)) {
+            runtime->load_cause_entity_id = load_cause;
         }
         ++runtime->streak;
         runtime->excess_delta_v_m_s +=
@@ -68,9 +81,11 @@ std::vector<CrushDamagePlan> CrushDamageSystem::update(TickIndex, double dt,
                 + 0.5 * runtime->excess_delta_v_m_s * runtime->excess_delta_v_m_s;
             plans.push_back({body.entity_id, body.part_id, body.position_m, body.normal,
                 body.mass_kg * specific_energy,
-                std::clamp((specific_energy - 18.0) * 0.9, 0.0, 70.0)});
+                std::clamp((specific_energy - 18.0) * 0.9, 0.0, 70.0),
+                runtime->load_cause_entity_id});
             runtime->streak = 0U;
             runtime->excess_delta_v_m_s = 0.0;
+            runtime->load_cause_entity_id = {};
         }
     }
     return plans;
@@ -96,5 +111,20 @@ bool CrushDamageSystem::record_cause(
     found->cause_event_id = cause;
     return true;
 }
+
+#if defined(NINHO_ENABLE_TEST_FACADES)
+bool CrushDamageSystem::set_load_cause_for_testing(
+    EntityId entity, PartId part, EntityId cause) noexcept
+{
+    const auto found = std::ranges::find_if(states_, [&](const auto& value) {
+        return value.entity_id == entity && value.part_id == part;
+    });
+    if (found == states_.end()) {
+        return false;
+    }
+    found->load_cause_entity_id = cause;
+    return true;
+}
+#endif
 
 }

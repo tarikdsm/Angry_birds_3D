@@ -346,20 +346,29 @@ void SimulationSession::Impl::process_damage_after_step()
     };
     std::vector<detail::CrushContactLoad> crush_loads;
     for (const auto& physical : physics.physical_contacts()) {
-        for (const auto handle : {physical.a, physical.b}) {
+        const auto append_load = [&](ninho::physics::BodyHandle handle,
+                                     ninho::physics::BodyHandle other_handle) {
             const auto record = std::ranges::find(
                 body_records, handle, &BodyRecord::physics_handle);
-            if (record == body_records.end()) continue;
+            if (record == body_records.end()) return;
             const EnemyArchetype* enemy = enemy_definition(record->enemy_archetype_id);
             if (enemy != nullptr
                 && enemy->damage_model == EnemyDamageModel::TerrestrialPig) {
                 const auto representative = pig_representative_part(record->entity_id);
                 if (representative) {
+                    const auto other = std::ranges::find(
+                        body_records, other_handle, &BodyRecord::physics_handle);
+                    const EntityId cause_entity = other != body_records.end()
+                            && score_system.has_root_for(other->entity_id)
+                        ? other->entity_id : EntityId{};
                     crush_loads.push_back({record->entity_id, *representative,
-                        physical.total_normal_impulse_n_s});
+                        physical.total_normal_impulse_n_s,
+                        cause_entity});
                 }
             }
-        }
+        };
+        append_load(physical.a, physical.b);
+        append_load(physical.b, physical.a);
     }
 #if defined(NINHO_ENABLE_TEST_FACADES)
     for (const auto& load : crush_load_overrides_for_testing) {
@@ -379,6 +388,7 @@ void SimulationSession::Impl::process_damage_after_step()
             .id = cause,
             .tick = session_state.tick,
             .kind = DomainEventKind::CrushDamageApplied,
+            .entity_id = plan.cause_entity_id,
             .affected_entity_id = plan.target_entity_id,
             .affected_part_id = plan.target_part_id,
             .position_m = plan.position_m,

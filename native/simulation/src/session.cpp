@@ -167,6 +167,7 @@ SessionStatus SimulationSession::tick()
         }
         impl_->remove_confirmed_runtime_body_records();
         impl_->update_fsm_after_step();
+        impl_->evaluate_score_after_step();
         impl_->rebuild_snapshots();
 #if defined(NINHO_ENABLE_TEST_FACADES)
         if (impl_->snapshot_mass_override_for_testing && !impl_->entity_snapshots.empty()) {
@@ -293,6 +294,171 @@ AbilityReadiness SimulationSession::ability_readiness() const noexcept
     return impl_->session_state.tick.value() >= armed_tick
         ? AbilityReadiness::Armed : AbilityReadiness::Arming;
 }
+
+ScorePresentationState SimulationSession::score_state() const noexcept
+{
+    const detail::ScoreState& score = impl_->score_system.state();
+    return {score.current_score, score.stars, score.chain_index,
+        score.multiplier_percent};
+}
+
+void SimulationSession::Impl::evaluate_score_after_step()
+{
+    if (!score_system.configured()) {
+        return;
+    }
+    std::vector<detail::ScoringCandidate> candidates;
+    candidates.reserve(domain_events.size());
+    const auto material_points = [&](MaterialId material_id) {
+        const auto found = std::ranges::find(
+            bundle.materials.materials, material_id, &MaterialDefinition::id);
+        return found == bundle.materials.materials.end()
+            ? 0U : detail::ScoreSystem::material_points(found->response);
+    };
+    for (const DomainEvent& event : domain_events) {
+        if (event.kind == DomainEventKind::EntityNeutralized) {
+            const bool enemy = std::ranges::any_of(body_records,
+                [&](const BodyRecord& body) {
+                    return body.entity_id == event.affected_entity_id
+                        && body.enemy_archetype_id.has_value();
+                });
+            if (enemy) {
+                candidates.push_back({detail::ScoringIdentity::enemy(
+                    event.affected_entity_id), event.id,
+                    bundle.level.scoring.pig_points});
+            }
+        } else if (event.kind == DomainEventKind::MaterialYielded
+            || event.kind == DomainEventKind::PieceFractured) {
+            MaterialId material_id = event.material_id;
+            if (material_id == MaterialId{}) {
+                const auto body = std::ranges::find_if(body_records,
+                    [&](const BodyRecord& value) {
+                        return value.entity_id == event.affected_entity_id
+                            && value.part_id == event.affected_part_id;
+                    });
+                if (body != body_records.end() && body->material_id) {
+                    material_id = *body->material_id;
+                }
+            }
+            const std::uint32_t points = material_points(material_id);
+            if (points != 0U) {
+                candidates.push_back({detail::ScoringIdentity::material(
+                    event.affected_entity_id, event.affected_part_id),
+                    event.id, points});
+            }
+        }
+    }
+    detail::ScoreTerminalState terminal = detail::ScoreTerminalState::None;
+    if (session_state.phase == SessionPhase::Result) {
+        terminal = session_state.outcome == Outcome::Victory
+            ? detail::ScoreTerminalState::Victory
+            : session_state.outcome == Outcome::Defeat
+                ? detail::ScoreTerminalState::Defeat
+                : detail::ScoreTerminalState::None;
+    }
+    const auto transitions = score_system.consume({session_state.tick,
+        domain_events, candidates, terminal, remaining_birds});
+    for (const detail::ScoreTransition& transition : transitions) {
+        DomainEvent event;
+        event.id = EventId{next_event_sequence++};
+        event.tick = session_state.tick;
+        event.total_score = transition.total_score;
+        event.root_cause_event_id = transition.root_cause_event_id;
+        event.shot_id = transition.shot_id;
+        event.multiplier_percent = transition.multiplier_percent;
+        event.chain_index = transition.chain_index;
+        if (transition.kind == detail::ScoreTransitionKind::ChainChanged) {
+            event.kind = DomainEventKind::ChainChanged;
+        } else if (transition.kind == detail::ScoreTransitionKind::StarsAwarded) {
+            event.kind = DomainEventKind::StarsAwarded;
+            event.stars = transition.stars;
+        } else {
+            event.kind = DomainEventKind::ScoreAwarded;
+            event.scoring_identity_kind = transition.identity.kind;
+            event.cause_event_id = transition.source_event_id;
+            event.base_points = transition.base_points;
+            event.awarded_points = transition.awarded_points;
+            if (transition.identity.kind == ScoringIdentityKind::UnusedBirdSlot) {
+                event.queue_slot_id = transition.identity.queue_slot_id;
+            } else {
+                event.affected_entity_id = transition.identity.entity_id;
+                event.affected_part_id = transition.identity.part_id;
+            }
+        }
+        domain_events.push_back(event);
+    }
+}
+
+#if defined(NINHO_ENABLE_TEST_FACADES)
+bool detail::SessionTestFacade::bump_score_total(SimulationSession& session)
+{
+    if (!session.impl_->score_system.configured()) return false;
+    ++session.impl_->score_system.state_for_testing().current_score;
+    return true;
+}
+
+bool detail::SessionTestFacade::bump_score_root(SimulationSession& session)
+{
+    if (!session.impl_->score_system.configured()) return false;
+    auto& value = session.impl_->score_system.state_for_testing()
+        .current_chain_root_cause_event_id;
+    value = EventId{value.value() + 1U};
+    return true;
+}
+
+bool detail::SessionTestFacade::shift_score_tick(SimulationSession& session)
+{
+    if (!session.impl_->score_system.configured()) return false;
+    auto& value = session.impl_->score_system.state_for_testing().last_scoring_tick;
+    value = TickIndex{value.value() + 1U};
+    return true;
+}
+
+bool detail::SessionTestFacade::bump_score_chain(SimulationSession& session)
+{
+    if (!session.impl_->score_system.configured()) return false;
+    auto& state = session.impl_->score_system.state_for_testing();
+    ++state.chain_index;
+    state.multiplier_percent += 10U;
+    return true;
+}
+
+bool detail::SessionTestFacade::append_score_identity(SimulationSession& session)
+{
+    if (!session.impl_->score_system.configured()) return false;
+    auto& identities = session.impl_->score_system.state_for_testing().scored_identities;
+    const auto identity = detail::ScoringIdentity::material(
+        EntityId{0x7FFFFFFEU}, PartId{0xFFFFFFFEU});
+    identities.insert(std::lower_bound(identities.begin(), identities.end(), identity),
+        identity);
+    return true;
+}
+
+bool detail::SessionTestFacade::reverse_score_identities(SimulationSession& session)
+{
+    if (!session.impl_->score_system.configured()) return false;
+    auto& identities = session.impl_->score_system.state_for_testing().scored_identities;
+    std::ranges::reverse(identities);
+    return identities.size() > 1U;
+}
+
+bool detail::SessionTestFacade::toggle_score_terminal_gate(SimulationSession& session)
+{
+    if (!session.impl_->score_system.configured()) return false;
+    auto& value = session.impl_->score_system.state_for_testing()
+        .terminal_bonus_awarded;
+    value = !value;
+    return true;
+}
+
+bool detail::SessionTestFacade::bump_score_stars(SimulationSession& session)
+{
+    if (!session.impl_->score_system.configured()) return false;
+    auto& value = session.impl_->score_system.state_for_testing().stars;
+    value = static_cast<std::uint8_t>((value + 1U) % 4U);
+    return true;
+}
+#endif
 
 std::optional<ShotStateView> SimulationSession::shot_state() const
 {
@@ -1055,6 +1221,13 @@ void detail::SessionTestFacade::inject_crush_load(SimulationSession& session,
 {
     session.impl_->crush_load_overrides_for_testing.push_back(
         {entity, part, total_normal_impulse_n_s});
+}
+
+bool detail::SessionTestFacade::set_crush_load_cause_for_testing(
+    SimulationSession& session, EntityId entity, PartId part, EntityId cause)
+{
+    return session.impl_->crush_damage_system.set_load_cause_for_testing(
+        entity, part, cause);
 }
 
 std::int64_t detail::SessionTestFacade::quantize_canonical(double value)

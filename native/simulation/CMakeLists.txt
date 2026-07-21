@@ -22,6 +22,7 @@ add_library(ninho_simulation_kernel STATIC
   src/damage_system.cpp
   src/crush_damage_system.cpp
   src/ductile_joint_system.cpp
+  src/score_system.cpp
   src/fracture_system.cpp
   src/objective_system.cpp
 )
@@ -67,6 +68,7 @@ if(BUILD_TESTING)
     tests/explosion_ability_tests.cpp
     tests/terrestrial_material_tests.cpp
     tests/pig_damage_tests.cpp
+    tests/score_system_tests.cpp
     tests/damage_anchor_tests.cpp
     tests/fracture_objective_tests.cpp
     tests/playthrough_tests.cpp
@@ -149,6 +151,10 @@ if(BUILD_TESTING)
   add_test(
     NAME pig_damage
     COMMAND ninho_simulation_tests --filter "pig damage"
+  )
+  add_test(
+    NAME score_system
+    COMMAND ninho_simulation_tests --filter "score system"
   )
   add_test(
     NAME damage_anchor

@@ -159,6 +159,19 @@ NINHO_TEST("session frame batch preserves append only event names and typed fiel
         DomainEvent{.id = EventId{22}, .kind = DomainEventKind::CrushDamageApplied,
             .affected_entity_id = EntityId{200}, .affected_part_id = PartId{1},
             .energy_j = 1300.0, .damage = 1.8},
+        DomainEvent{.id = EventId{23}, .kind = DomainEventKind::ScoreAwarded,
+            .affected_entity_id = EntityId{200},
+            .scoring_identity_kind = ScoringIdentityKind::EnemyEntity,
+            .base_points = 5000U, .multiplier_percent = 110U,
+            .chain_index = 2U, .awarded_points = 5500U,
+            .total_score = 10500U, .root_cause_event_id = EventId{1},
+            .shot_id = 1U},
+        DomainEvent{.id = EventId{24}, .kind = DomainEventKind::ChainChanged,
+            .multiplier_percent = 110U, .chain_index = 2U,
+            .total_score = 5000U, .root_cause_event_id = EventId{1},
+            .shot_id = 1U},
+        DomainEvent{.id = EventId{25}, .kind = DomainEventKind::StarsAwarded,
+            .total_score = 50000U, .stars = 3U},
     };
     const std::array expected_names{
         std::string_view{"explosion_fuse_armed"},
@@ -167,6 +180,9 @@ NINHO_TEST("session frame batch preserves append only event names and typed fiel
         std::string_view{"environmental_trigger_detonated"},
         std::string_view{"material_yielded"},
         std::string_view{"crush_damage_applied"},
+        std::string_view{"score_awarded"},
+        std::string_view{"chain_changed"},
+        std::string_view{"stars_awarded"},
     };
 
     SessionFrameBatch batch;
@@ -186,6 +202,10 @@ NINHO_TEST("session frame batch preserves append only event names and typed fiel
     NINHO_REQUIRE(frame.events[4].cause_event_id == EventId{7});
     NINHO_REQUIRE(frame.events[5].affected_entity_id == EntityId{200});
     NINHO_REQUIRE(frame.events[5].energy_j == 1300.0);
+    NINHO_REQUIRE(frame.events[6].awarded_points == 5500U);
+    NINHO_REQUIRE(frame.events[6].root_cause_event_id == EventId{1});
+    NINHO_REQUIRE(frame.events[7].chain_index == 2U);
+    NINHO_REQUIRE(frame.events[8].stars == 3U);
 }
 
 NINHO_TEST("session frame batch clears trajectory preview after cancel launch and result")

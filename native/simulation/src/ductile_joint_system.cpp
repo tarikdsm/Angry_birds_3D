@@ -242,6 +242,14 @@ void SimulationSession::Impl::evaluate_ductile_joints_after_step()
                     transition.force_n / 3200.0,
                     transition.torque_nm / 450.0),
             });
+            const auto yielded_body = std::ranges::find_if(body_records,
+                [&](const BodyRecord& body) {
+                    return body.entity_id == joint->snapshot.a.entity_id
+                        && body.part_id == joint->snapshot.a.part_id;
+                });
+            if (yielded_body != body_records.end() && yielded_body->material_id) {
+                domain_events.back().material_id = *yielded_body->material_id;
+            }
         } else if (!std::ranges::any_of(pending_joint_breaks,
             [&](const auto& pending) {
                 return pending.joint_id == transition.joint_id;

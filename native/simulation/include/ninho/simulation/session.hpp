@@ -119,6 +119,15 @@ struct SessionStatus {
     }
 };
 
+struct ScorePresentationState {
+    std::uint64_t score{};
+    std::uint32_t stars{};
+    std::uint32_t chain_index{};
+    std::uint32_t multiplier_percent{100U};
+
+    bool operator==(const ScorePresentationState&) const = default;
+};
+
 struct EntitySnapshot {
     EntityId entity_id;
     PartId part_id;
@@ -212,6 +221,7 @@ public:
     [[nodiscard]] bool objectives_complete() const noexcept;
     [[nodiscard]] std::vector<ObjectiveTargetStatus> objective_target_statuses() const;
     [[nodiscard]] AbilityReadiness ability_readiness() const noexcept;
+    [[nodiscard]] ScorePresentationState score_state() const noexcept;
     // Owning value snapshot of the authoritative shot. No pointer or span into
     // the session survives this call. Allocation failures propagate to the
     // caller, and GDExtension adapters must keep this call inside their ABI
