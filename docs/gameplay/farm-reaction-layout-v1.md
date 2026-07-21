@@ -8,7 +8,7 @@ bodies, shapes, juntas, triggers ou objetivos.
 
 ## Identidade congelada
 
-- `layout_hash`: `fnv1a64:b886659855e6b13`.
+- `layout_hash`: `fnv1a64:8324ce8a44754dad`.
 - 72 bodies, dos quais 54 dynamic e 18 static.
 - 52 joints em oito assemblies conexas.
 - quatro objetivos de porco e dois triggers `damage_threshold`.
@@ -76,7 +76,8 @@ de carga explícitos:
 - as fundações 6, 27, 36 e 52 são baldrames perimetrais; plintos do terreno
   atravessam seus vãos e apoiam postes, painéis, vagão e porcos;
 - a base 13 sustenta os fardos, a moldura de vidro e as vigas do portão por
-  prateleiras, pedestais e montantes tangentes;
+  prateleiras, pedestais e montantes tangentes; sua laje central ocupa somente
+  `z=-0,6..0,6`, e os montantes voltados à rampa ficam em `x=2,1` local;
 - a rampa 20 inclui um console local que apoia o painel 37 sem mover nenhum
   root;
 - a fundação 27 possui colunas sob a cobertura 34 e pedestais sob os painéis
@@ -85,6 +86,9 @@ de carga explícitos:
 - cada travessa 62–65 possui um montante central até o terreno;
 - as pás 49–51 mantêm o alcance externo, mas seus colliders começam fora do
   miolo; elas encaixam no hub sem se interpenetrar mutuamente.
+- os baldrames 36 e 52 abrem apenas os trechos voltados às fundações vizinhas;
+  suas faces externas e caminhos de carga permanecem, sem duplicar superfícies
+  estáticas com 27/36/52 nem com os plintos do terreno 1.
 
 As únicas permissões de interpenetração deliberada são os encaixes estruturais
 `15–16`, `20–24` e `20–25`, medidos por SAT OBB, e os encaixes de `0,05 m` do
@@ -92,7 +96,9 @@ hub esférico com as pás `48–49`, `48–50` e `48–51`, medidos por esfera/O
 teste exige que cada entrada dessa allowlist ainda corresponda a contato real;
 as antigas permissões `6–8`, `6–9`, `49–50`, `49–51` e `50–51` foram removidas
 depois que deixaram de sobrepor. O mesmo gate faz broadphase AABB, SAT OBB e
-teste esfera/OBB para rejeitar qualquer overlap externo não autorizado.
+teste esfera/OBB em todos os pares, inclusive `static–static`, para rejeitar
+qualquer overlap externo não autorizado. Os pares estáticos `1–13`, `13–20`,
+`13–27`, `27–36` e `36–52` são tangentes ou separados, sem allowlist.
 Contatos tangentes usam tolerância de `1e-5 m`.
 
 Os envelopes visuais não são caixas decorativas independentes: eles são as

@@ -789,24 +789,51 @@ NINHO_SIM_TEST("product v2 levels freeze the complete farm inventory and physics
         throw std::runtime_error("stale deliberate interlock allowlist entries:"
             + stale_interlocks.str());
     }
+    std::ostringstream unexpected_overlaps;
+    std::size_t unexpected_overlap_count = 0U;
     for (std::size_t left = 0; left < farm.bodies.size(); ++left) {
         for (std::size_t right = left + 1U; right < farm.bodies.size(); ++right) {
             const BodyDefinition& a = farm.bodies[left];
             const BodyDefinition& b = farm.bodies[right];
-            if (a.body_type == BodyType::Static && b.body_type == BodyType::Static) continue;
             if (deliberate_interlocks.contains(pair_key(a.body_id, b.body_id))) continue;
             const auto a_bounds = body_leaf_bounds(a);
             const auto b_bounds = body_leaf_bounds(b);
-            for (const TestLeaf& a_leaf : a_bounds) {
-                for (const TestLeaf& b_leaf : b_bounds) {
+            bool pair_overlaps = false;
+            std::size_t overlapping_a_leaf = 0U;
+            std::size_t overlapping_b_leaf = 0U;
+            double minimum_aabb_depth_m = std::numeric_limits<double>::infinity();
+            for (std::size_t a_index = 0; a_index < a_bounds.size(); ++a_index) {
+                for (std::size_t b_index = 0; b_index < b_bounds.size(); ++b_index) {
+                    const TestLeaf& a_leaf = a_bounds[a_index];
+                    const TestLeaf& b_leaf = b_bounds[b_index];
                     if (strictly_overlaps(a_leaf, b_leaf)) {
-                        throw std::runtime_error("unexpected initial overlap between bodies "
-                            + std::to_string(a.body_id) + " and "
-                            + std::to_string(b.body_id));
+                        pair_overlaps = true;
+                        overlapping_a_leaf = a_index;
+                        overlapping_b_leaf = b_index;
+                        for (std::size_t axis = 0; axis < 3U; ++axis) {
+                            minimum_aabb_depth_m = std::min(minimum_aabb_depth_m,
+                                std::min(a_leaf.bounds.maximum[axis],
+                                    b_leaf.bounds.maximum[axis])
+                                    - std::max(a_leaf.bounds.minimum[axis],
+                                        b_leaf.bounds.minimum[axis]));
+                        }
+                        break;
                     }
                 }
+                if (pair_overlaps) break;
+            }
+            if (pair_overlaps) {
+                unexpected_overlaps << ' ' << a.body_id << '-' << b.body_id
+                    << "[leaves=" << overlapping_a_leaf << '/'
+                    << overlapping_b_leaf << ",aabb_depth_m="
+                    << std::setprecision(17) << minimum_aabb_depth_m << ']';
+                ++unexpected_overlap_count;
             }
         }
+    }
+    if (unexpected_overlap_count != 0U) {
+        throw std::runtime_error("unexpected initial overlaps:"
+            + unexpected_overlaps.str());
     }
     for (const AssemblyDefinition& assembly : farm.assemblies) {
         std::unordered_map<std::uint32_t, std::vector<std::uint32_t>> adjacency;
