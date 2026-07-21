@@ -1,5 +1,6 @@
 #include "content_semantic_validation.hpp"
 #include "ability_system.hpp"
+#include "shape_volume.hpp"
 
 #include <array>
 #include <cmath>
@@ -141,6 +142,16 @@ std::optional<ContentError> validate_level_semantics(
             return error(ContentErrorCode::InvalidInvariant,
                 indexed("/bodies", i) + "/surface_id",
                 "enemy body surface differs from its archetype");
+        }
+        if (found_enemy->second->damage_model == EnemyDamageModel::TerrestrialPig) {
+            const double physical_mass = detail::shape_volume_m3(body.shape)
+                * body.density_kg_m3;
+            if (!std::isfinite(physical_mass)
+                || std::abs(physical_mass - 65.0) > 0.065) {
+                return error(ContentErrorCode::InvalidInvariant,
+                    indexed("/bodies", i) + "/density_kg_m3",
+                    "terrestrial pig body mass must be 65 kg within 0.1 percent");
+            }
         }
         entity.enemy_archetype_ids.insert(body.enemy_archetype_id->value());
     }
@@ -301,6 +312,8 @@ std::optional<ContentError> validate_product_v2_session_content(
     std::unordered_set<std::uint32_t> bird_ids;
     std::unordered_set<std::uint32_t> weakpoint_ids;
     std::unordered_set<std::uint32_t> enemy_ids;
+    std::unordered_map<std::uint32_t, const WeakpointProfile*> weakpoints;
+    std::unordered_map<std::uint32_t, const PhysicsSurfaceDefinition*> surfaces;
     for (std::size_t index = 0; index < materials.materials.size(); ++index) {
         if (!material_ids.insert(materials.materials[index].id.value()).second) {
             return duplicate(indexed("/materials", index) + "/id", "material");
@@ -310,6 +323,8 @@ std::optional<ContentError> validate_product_v2_session_content(
         if (!surface_ids.insert(materials.surfaces[index].id.value()).second) {
             return duplicate(indexed("/surfaces", index) + "/id", "surface");
         }
+        surfaces.emplace(materials.surfaces[index].id.value(),
+            &materials.surfaces[index]);
     }
     for (std::size_t index = 0; index < archetypes.abilities.size(); ++index) {
         if (const auto definition_error = AbilitySystem::validate_definition(
@@ -324,6 +339,8 @@ std::optional<ContentError> validate_product_v2_session_content(
         if (!weakpoint_ids.insert(archetypes.weakpoints[index].id.value()).second) {
             return duplicate(indexed("/weakpoints", index) + "/id", "weakpoint");
         }
+        weakpoints.emplace(archetypes.weakpoints[index].id.value(),
+            &archetypes.weakpoints[index]);
     }
     const std::unordered_set<std::string> presentation_ids(
         archetypes.presentation_ids.begin(), archetypes.presentation_ids.end());
@@ -391,6 +408,21 @@ std::optional<ContentError> validate_product_v2_session_content(
             return error(ContentErrorCode::MissingReference, pointer + "/surface_id",
                 "surface reference not found");
         }
+        if (enemy.damage_model == EnemyDamageModel::TerrestrialPig) {
+            const auto* weakpoint = weakpoints.at(enemy.weakpoint_id.value());
+            const auto* surface = surfaces.at(enemy.surface_id.value());
+            const bool calibrated = std::abs(enemy.mass_kg - 65.0) <= 0.065
+                && enemy.damage_energy_j_per_kg == 18.0
+                && enemy.max_damage == 70.0
+                && weakpoint->protected_multiplier == 1.0
+                && weakpoint->exposed_multiplier == 1.0
+                && surface->friction == 0.65
+                && surface->restitution == 0.05;
+            if (!calibrated) {
+                return error(ContentErrorCode::InvalidInvariant, pointer,
+                    "terrestrial pig physics calibration is invalid");
+            }
+        }
     }
     if (level.bird_queue.empty()) {
         return error(ContentErrorCode::OutOfRange, "/bird_queue",
@@ -410,6 +442,7 @@ std::optional<ContentError> validate_product_v2_session_content(
     std::unordered_set<std::uint64_t> entity_parts;
     std::unordered_set<std::uint32_t> entity_ids;
     std::unordered_map<std::uint32_t, std::size_t> entity_body_counts;
+    std::size_t authored_fragment_count = 0U;
     for (std::size_t index = 0; index < level.bodies.size(); ++index) {
         const BodyDefinition& body = level.bodies[index];
         const std::string pointer = indexed("/bodies", index);
@@ -440,6 +473,45 @@ std::optional<ContentError> validate_product_v2_session_content(
             && !enemy_ids.contains(body.enemy_archetype_id->value())) {
             return error(ContentErrorCode::MissingReference,
                 pointer + "/enemy_archetype_id", "enemy reference not found");
+        }
+        if (body.fracture_pattern) {
+            if (body.enemy_archetype_id || !body.material_id) {
+                return error(ContentErrorCode::InvalidInvariant,
+                    pointer + "/fracture_pattern",
+                    "fracture patterns are allowed only on material bodies");
+            }
+            authored_fragment_count +=
+                body.fracture_pattern->physical_fragments.size();
+            if (authored_fragment_count > 80U) {
+                return error(ContentErrorCode::ResourceLimit,
+                    pointer + "/fracture_pattern/physical_fragments",
+                    "active physical fragment capacity exceeded");
+            }
+            double mass = 0.0;
+            std::unordered_set<std::uint32_t> ordinals;
+            for (const auto& fragment :
+                body.fracture_pattern->physical_fragments) {
+                if (fragment.ordinal == 0U
+                    || !ordinals.insert(fragment.ordinal).second
+                    || !std::isfinite(fragment.density_kg_m3)
+                    || fragment.density_kg_m3 <= 0.0
+                    || fragment.visual_id.empty()) {
+                    return error(ContentErrorCode::InvalidInvariant,
+                        pointer + "/fracture_pattern/physical_fragments",
+                        "physical fragment descriptor is invalid");
+                }
+                mass += detail::shape_volume_m3(fragment.shape)
+                    * fragment.density_kg_m3;
+            }
+            const double parent_mass = detail::shape_volume_m3(body.shape)
+                * body.density_kg_m3;
+            if (body.fracture_pattern->physical_fragments.empty()
+                || parent_mass <= 0.0
+                || std::abs(mass - parent_mass) > parent_mass * 0.001) {
+                return error(ContentErrorCode::InvalidInvariant,
+                    pointer + "/fracture_pattern",
+                    "physical fragment mass must equal parent mass within 0.1 percent");
+            }
         }
     }
     std::unordered_set<std::uint32_t> trigger_ids;

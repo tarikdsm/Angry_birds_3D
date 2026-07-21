@@ -192,6 +192,7 @@ struct PhysicalContact {
     Vec3 point{};
     Vec3 normal{};
     float approach_speed_m_s{};
+    float effective_mass_kg{};
     float total_normal_impulse_n_s{};
 };
 
@@ -245,6 +246,10 @@ public:
     Status prepare_body_creations(std::size_t count);
     Status destroy_body(BodyHandle body);
     Result<JointHandle> create_joint(const JointDesc& desc);
+    // Queues an atomic solver-constraint replacement without changing the
+    // public handle or consuming joint capacity. The old constraint remains
+    // live until the replacement has been created successfully.
+    Status replace_joint(JointHandle joint, const JointDesc& desc);
     Status destroy_joint(JointHandle joint);
     Status apply_force(BodyHandle body, Vec3 force, Vec3 point, bool wake = true);
     Status apply_impulse(BodyHandle body, Vec3 impulse, Vec3 point, bool wake = true);

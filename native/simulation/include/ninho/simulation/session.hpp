@@ -18,6 +18,7 @@ namespace ninho::simulation {
 
 namespace detail {
 struct FractureAccess;
+struct DuctileAccess;
 #if defined(NINHO_ENABLE_TEST_FACADES)
 class SessionTestFacade;
 #endif
@@ -227,6 +228,7 @@ public:
 
 private:
     friend struct detail::FractureAccess;
+    friend struct detail::DuctileAccess;
 #if defined(NINHO_ENABLE_TEST_FACADES)
     friend class detail::SessionTestFacade;
 #endif

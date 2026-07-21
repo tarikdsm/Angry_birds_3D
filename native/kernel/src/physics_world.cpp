@@ -395,6 +395,11 @@ struct PhysicsWorld::Impl {
         JointHandle handle;
     };
 
+    struct ReplaceJointCommand {
+        JointHandle handle;
+        JointDesc desc;
+    };
+
     struct ForceCommand {
         BodyHandle handle;
         Vec3 force;
@@ -435,6 +440,7 @@ struct PhysicsWorld::Impl {
         DestroyCommand,
         CreateJointCommand,
         DestroyJointCommand,
+        ReplaceJointCommand,
         ForceCommand,
         ImpulseCommand,
         CentralImpulseCommand>;
@@ -710,6 +716,7 @@ struct PhysicsWorld::Impl {
         for (std::uint32_t index = 1; index < joint_slots.size(); ++index) {
             const JointSlot& joint_slot = joint_slots[index];
             if (joint_slot.state != SlotState::Free
+                && joint_slot.state != SlotState::PendingDestroy
                 && (joint_slot.a == body || joint_slot.b == body)) {
                 invalidate_joint_handle({index, joint_slot.generation});
             }
@@ -947,6 +954,24 @@ struct PhysicsWorld::Impl {
         release_slot(command.handle, slot->native);
     }
 
+    [[nodiscard]] JointDesc normalize_native_joint_desc(const JointDesc& source) const
+    {
+        JointDesc normalized = source;
+        auto* weld = std::get_if<WeldJointDesc>(&normalized);
+        if (weld == nullptr) {
+            return normalized;
+        }
+        const Slot* body_a = matching_slot(weld->a);
+        const Slot* body_b = matching_slot(weld->b);
+        if (body_a != nullptr && body_b != nullptr
+            && body_a->type == BodyType::Dynamic
+            && body_b->type != BodyType::Dynamic) {
+            std::swap(weld->a, weld->b);
+            std::swap(weld->frame_a, weld->frame_b);
+        }
+        return normalized;
+    }
+
     void create_native_joint(const CreateJointCommand& command)
     {
         JointSlot* slot = matching_joint_slot(command.handle);
@@ -957,8 +982,9 @@ struct PhysicsWorld::Impl {
             return;
         }
 
-        const BodyHandle a = std::visit([](const auto& desc) { return desc.a; }, command.desc);
-        const BodyHandle b = std::visit([](const auto& desc) { return desc.b; }, command.desc);
+        const JointDesc native_desc = normalize_native_joint_desc(command.desc);
+        const BodyHandle a = std::visit([](const auto& desc) { return desc.a; }, native_desc);
+        const BodyHandle b = std::visit([](const auto& desc) { return desc.b; }, native_desc);
         Slot* body_a = matching_slot(a);
         Slot* body_b = matching_slot(b);
         if (body_a == nullptr || body_b == nullptr || body_a->state != SlotState::Live
@@ -997,7 +1023,7 @@ struct PhysicsWorld::Impl {
                     return {b3CreateWeldJoint(world, &def), "b3CreateWeldJoint"};
                 }
             },
-            command.desc);
+            native_desc);
         if (B3_IS_NULL(created.first) || !b3Joint_IsValid(created.first)) {
             fail_native_joint_create(command.handle, created.first, created.second);
         }
@@ -1018,6 +1044,70 @@ struct PhysicsWorld::Impl {
         release_joint_slot(command.handle, slot->native);
     }
 
+    void replace_native_joint(const ReplaceJointCommand& command)
+    {
+        JointSlot* slot = matching_joint_slot(command.handle);
+        if (slot == nullptr || slot->state != SlotState::Live
+            || B3_IS_NULL(slot->native) || !b3Joint_IsValid(slot->native)) {
+            return;
+        }
+        const JointDesc native_desc = normalize_native_joint_desc(command.desc);
+        const BodyHandle a = std::visit([](const auto& desc) { return desc.a; }, native_desc);
+        const BodyHandle b = std::visit([](const auto& desc) { return desc.b; }, native_desc);
+        Slot* body_a = matching_slot(a);
+        Slot* body_b = matching_slot(b);
+        if (body_a == nullptr || body_b == nullptr || body_a->state != SlotState::Live
+            || body_b->state != SlotState::Live || B3_IS_NULL(body_a->native)
+            || B3_IS_NULL(body_b->native) || !b3Body_IsValid(body_a->native)
+            || !b3Body_IsValid(body_b->native)) {
+            throw std::runtime_error("Box3DFault: replacement joint body unavailable");
+        }
+        const auto created = std::visit(
+            [&](const auto& desc) -> std::pair<b3JointId, const char*> {
+                using Description = std::decay_t<decltype(desc)>;
+                if constexpr (std::is_same_v<Description, DistanceJointDesc>) {
+                    b3DistanceJointDef def = b3DefaultDistanceJointDef();
+                    def.base.bodyIdA = body_a->native;
+                    def.base.bodyIdB = body_b->native;
+                    def.base.localFrameA = detail::to_box3d_local(desc.frame_a);
+                    def.base.localFrameB = detail::to_box3d_local(desc.frame_b);
+                    def.base.collideConnected = desc.collide_connected;
+                    def.length = desc.length;
+                    def.enableSpring = desc.hertz > 0.0f;
+                    def.hertz = desc.hertz;
+                    def.dampingRatio = desc.damping_ratio;
+                    return {b3CreateDistanceJoint(world, &def), "b3CreateDistanceJoint"};
+                } else {
+                    b3WeldJointDef def = b3DefaultWeldJointDef();
+                    def.base.bodyIdA = body_a->native;
+                    def.base.bodyIdB = body_b->native;
+                    def.base.localFrameA = detail::to_box3d_local(desc.frame_a);
+                    def.base.localFrameB = detail::to_box3d_local(desc.frame_b);
+                    def.base.collideConnected = desc.collide_connected;
+                    def.linearHertz = desc.hertz;
+                    def.angularHertz = desc.hertz;
+                    def.linearDampingRatio = desc.damping_ratio;
+                    def.angularDampingRatio = desc.damping_ratio;
+                    return {b3CreateWeldJoint(world, &def), "b3CreateWeldJoint"};
+                }
+            }, native_desc);
+        if (B3_IS_NULL(created.first) || !b3Joint_IsValid(created.first)) {
+            if (B3_IS_NON_NULL(created.first) && b3Joint_IsValid(created.first)) {
+                b3DestroyJoint(created.first, true);
+            }
+            throw std::runtime_error(std::string{"Box3DFault: "} + created.second);
+        }
+        const b3JointId previous = slot->native;
+        slot->native = created.first;
+        slot->a = a;
+        slot->b = b;
+        if (B3_IS_NON_NULL(previous) && b3Joint_IsValid(previous)) {
+            b3DestroyJoint(previous, true);
+        }
+        std::erase_if(joint_reaction_storage,
+            [&](const JointReaction& reaction) { return reaction.joint == command.handle; });
+    }
+
     void apply(const Command& command)
     {
         std::visit(
@@ -1031,6 +1121,8 @@ struct PhysicsWorld::Impl {
                     create_native_joint(value);
                 } else if constexpr (std::is_same_v<Value, DestroyJointCommand>) {
                     destroy_native_joint(value);
+                } else if constexpr (std::is_same_v<Value, ReplaceJointCommand>) {
+                    replace_native_joint(value);
                 } else {
                     Slot* slot = matching_slot(value.handle);
                     if (slot == nullptr || B3_IS_NULL(slot->native)
@@ -1235,6 +1327,13 @@ struct PhysicsWorld::Impl {
                         .point = point / static_cast<float>(contributing_points),
                         .normal = detail::from_box3d_vector(manifold.normal),
                         .approach_speed_m_s = approach_speed,
+                        .effective_mass_kg = [&] {
+                            const float mass_a = b3Body_GetMass(slot_a->native);
+                            const float mass_b = b3Body_GetMass(slot_b->native);
+                            if (mass_a <= 0.0f) return mass_b;
+                            if (mass_b <= 0.0f) return mass_a;
+                            return mass_a * mass_b / (mass_a + mass_b);
+                        }(),
                         .total_normal_impulse_n_s = total_impulse,
                     };
                     if (value.b < value.a) {
@@ -1258,6 +1357,8 @@ struct PhysicsWorld::Impl {
                         existing->approach_speed_m_s = std::max(
                             existing->approach_speed_m_s,
                             value.approach_speed_m_s);
+                        existing->effective_mass_kg = std::max(
+                            existing->effective_mass_kg, value.effective_mass_kg);
                     }
                 }
             }
@@ -1724,6 +1825,23 @@ Status PhysicsWorld::destroy_body(BodyHandle body)
     if (!impl_->accepts(body)) {
         return invalid_handle_status();
     }
+    // Attached native constraints must be destroyed before the body. Marking
+    // handles invalid without queuing their native destruction leaves Box3D
+    // with a dangling joint during same-step authored replacement.
+    for (std::uint32_t index = 1; index < impl_->joint_slots.size(); ++index) {
+        Impl::JointSlot& joint = impl_->joint_slots[index];
+        if (joint.state != Impl::SlotState::Live
+            || (joint.a != body && joint.b != body)) {
+            continue;
+        }
+        const JointHandle handle{index, joint.generation};
+        impl_->commands.emplace_back(Impl::DestroyJointCommand{handle});
+        joint.state = Impl::SlotState::PendingDestroy;
+        std::erase_if(impl_->joint_reaction_storage,
+            [handle](const JointReaction& reaction) {
+                return reaction.joint == handle;
+            });
+    }
     impl_->commands.emplace_back(Impl::DestroyCommand{body});
     impl_->transition_body_to_pending_destroy(body);
     std::erase_if(impl_->snapshots, [body](const BodyState& value) { return value.handle == body; });
@@ -1773,6 +1891,25 @@ Status PhysicsWorld::destroy_joint(JointHandle joint)
     std::erase_if(
         impl_->joint_reaction_storage,
         [joint](const JointReaction& reaction) { return reaction.joint == joint; });
+    return {};
+}
+
+Status PhysicsWorld::replace_joint(JointHandle joint, const JointDesc& desc)
+{
+    const Impl::JointSlot* slot = impl_->matching_joint_slot(joint);
+    if (slot == nullptr || slot->state != Impl::SlotState::Live) {
+        return invalid_joint_handle_status();
+    }
+    const BodyHandle a = std::visit([](const auto& value) { return value.a; }, desc);
+    const BodyHandle b = std::visit([](const auto& value) { return value.b; }, desc);
+    if (!impl_->accepts(a) || !impl_->accepts(b)) {
+        return {StatusCode::InvalidHandle, "replacement joint body handle is not live"};
+    }
+    const Status validation = validate_joint_desc(desc);
+    if (!validation.ok()) {
+        return validation;
+    }
+    impl_->commands.emplace_back(Impl::ReplaceJointCommand{joint, desc});
     return {};
 }
 

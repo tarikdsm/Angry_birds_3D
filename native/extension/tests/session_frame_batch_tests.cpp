@@ -133,7 +133,7 @@ NINHO_TEST("session frame batch accumulates events without recapturing latest st
     NINHO_REQUIRE(after_consume.preview->canonical_hash == frame.preview->canonical_hash);
 }
 
-NINHO_TEST("session frame batch preserves explosion event names and environmental trigger id")
+NINHO_TEST("session frame batch preserves append only event names and typed fields")
 {
     for (const auto path : {
              "native/extension/src/gameplay_session_node.cpp",
@@ -153,12 +153,20 @@ NINHO_TEST("session frame batch preserves explosion event names and environmenta
             .environmental_trigger_id = 43U},
         DomainEvent{.id = EventId{20}, .kind = DomainEventKind::EnvironmentalTriggerDetonated,
             .environmental_trigger_id = 44U},
+        DomainEvent{.id = EventId{21}, .kind = DomainEventKind::MaterialYielded,
+            .cause_event_id = EventId{7}, .joint_id = JointId{11},
+            .joint_load_ratio = 1.25},
+        DomainEvent{.id = EventId{22}, .kind = DomainEventKind::CrushDamageApplied,
+            .affected_entity_id = EntityId{200}, .affected_part_id = PartId{1},
+            .energy_j = 1300.0, .damage = 1.8},
     };
     const std::array expected_names{
         std::string_view{"explosion_fuse_armed"},
         std::string_view{"pressure_burst"},
         std::string_view{"environmental_trigger_armed"},
         std::string_view{"environmental_trigger_detonated"},
+        std::string_view{"material_yielded"},
+        std::string_view{"crush_damage_applied"},
     };
 
     SessionFrameBatch batch;
@@ -169,9 +177,15 @@ NINHO_TEST("session frame batch preserves explosion event names and environmenta
         NINHO_REQUIRE(domain_event_kind_name(events[index].kind)
             == expected_names[index]);
         NINHO_REQUIRE(domain_event_kind_name(events[index].kind) != "unknown");
-        NINHO_REQUIRE(frame.events[index].environmental_trigger_id
-            == 41U + static_cast<std::uint32_t>(index));
+        if (index < 4U) {
+            NINHO_REQUIRE(frame.events[index].environmental_trigger_id
+                == 41U + static_cast<std::uint32_t>(index));
+        }
     }
+    NINHO_REQUIRE(frame.events[4].joint_id == JointId{11});
+    NINHO_REQUIRE(frame.events[4].cause_event_id == EventId{7});
+    NINHO_REQUIRE(frame.events[5].affected_entity_id == EntityId{200});
+    NINHO_REQUIRE(frame.events[5].energy_j == 1300.0);
 }
 
 NINHO_TEST("session frame batch clears trajectory preview after cancel launch and result")

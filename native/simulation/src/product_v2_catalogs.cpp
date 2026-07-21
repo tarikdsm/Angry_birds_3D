@@ -29,6 +29,15 @@ MaterialResponse material_response(std::string_view value, const std::string& po
     fail(ContentErrorCode::InvalidEnum, pointer, "invalid material response");
 }
 
+EnemyDamageModel enemy_damage_model(std::string_view value, const std::string& pointer)
+{
+    if (value == "legacy_directional_energy")
+        return EnemyDamageModel::LegacyDirectionalEnergy;
+    if (value == "terrestrial_pig")
+        return EnemyDamageModel::TerrestrialPig;
+    fail(ContentErrorCode::InvalidEnum, pointer, "invalid enemy damage model");
+}
+
 AbilityArchetype parse_ability(const json& item, const std::string& pointer)
 {
     keys(item, pointer, {"id", "key", "kind", "payload"});
@@ -307,7 +316,7 @@ ContentResult<ArchetypeCatalog> parse_archetype_catalog_v2(std::string_view inpu
                 const auto& item = enemies[i];
                 keys(item, pointer,
                      {"id", "key", "weakpoint_id", "surface_id", "mass_kg", "integrity",
-                      "damage_energy_j_per_kg", "max_damage"});
+                      "damage_energy_j_per_kg", "max_damage"}, {"damage_model"});
                 EnemyArchetype value;
                 value.id = id<EnemyArchetypeId>(item, "id", pointer);
                 unique_id(enemy_ids, value.id.value(), child(pointer, "id"));
@@ -319,6 +328,9 @@ ContentResult<ArchetypeCatalog> parse_archetype_catalog_v2(std::string_view inpu
                 value.damage_energy_j_per_kg =
                     number(item, "damage_energy_j_per_kg", pointer, 0.0, 100000.0, false);
                 value.max_damage = number(item, "max_damage", pointer, 0.0, value.integrity, false);
+                if (item.contains("damage_model"))
+                    value.damage_model = enemy_damage_model(
+                        text(item, "damage_model", pointer), child(pointer, "damage_model"));
                 if (!weakpoint_ids.contains(value.weakpoint_id.value()))
                     fail(ContentErrorCode::MissingReference, child(pointer, "weakpoint_id"),
                          "weakpoint reference not found");

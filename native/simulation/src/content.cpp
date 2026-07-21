@@ -355,6 +355,8 @@ JointKind parse_joint_kind(std::string_view value, const std::string& pointer)
     if (value == "pine_fit") return JointKind::PineFit;
     if (value == "glass_clamp") return JointKind::GlassClamp;
     if (value == "mortar") return JointKind::Mortar;
+    if (value == "straw_bind") return JointKind::StrawBind;
+    if (value == "steel_ductile") return JointKind::SteelDuctile;
     fail(ContentErrorCode::InvalidEnum, pointer, "invalid joint kind");
 }
 
@@ -837,6 +839,8 @@ const char* joint_kind_name(JointKind value)
     case JointKind::PineFit: return "pine_fit";
     case JointKind::GlassClamp: return "glass_clamp";
     case JointKind::Mortar: return "mortar";
+    case JointKind::StrawBind: return "straw_bind";
+    case JointKind::SteelDuctile: return "steel_ductile";
     }
     return "invalid";
 }

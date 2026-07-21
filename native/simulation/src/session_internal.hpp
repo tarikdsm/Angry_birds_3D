@@ -6,6 +6,8 @@
 #include "launcher_system.hpp"
 #include "pressure_burst_system.hpp"
 #include "environmental_trigger_system.hpp"
+#include "crush_damage_system.hpp"
+#include "ductile_joint_system.hpp"
 
 #include <ninho/physics/physics_world.hpp>
 
@@ -65,12 +67,14 @@ struct SimulationSession::Impl : detail::AbilityLifecycleHooks {
         bool neutralized{};
         bool is_projectile{};
         bool affected_by_world_gravity{};
+        std::optional<FracturePatternDefinition> fracture_pattern;
     };
 
     struct JointRecord {
         StructuralJointSnapshot snapshot;
         ninho::physics::JointHandle physics_handle;
         std::uint8_t consecutive_overload_ticks{};
+        EventId ductile_yield_event_id{};
     };
 
     struct PendingJointBreak {
@@ -125,6 +129,8 @@ struct SimulationSession::Impl : detail::AbilityLifecycleHooks {
         const SplitAbilityDefinition&, SplitAbilityRuntime&) override;
     void retire_finished_projectiles();
     void process_damage_after_step();
+    [[nodiscard]] SessionStatus apply_pending_ductile_recreations_before_step();
+    void evaluate_ductile_joints_after_step();
     [[nodiscard]] SessionStatus collect_environmental_bursts_before_step();
     [[nodiscard]] SessionStatus process_pending_pressure_bursts_before_step();
     [[nodiscard]] SessionStatus observe_environmental_triggers_after_damage();
@@ -159,6 +165,8 @@ struct SimulationSession::Impl : detail::AbilityLifecycleHooks {
     ContentBundle bundle;
     ninho::physics::PhysicsWorld physics;
     detail::DamageSystem damage_system;
+    detail::CrushDamageSystem crush_damage_system;
+    detail::DuctileJointSystem ductile_joint_system;
     std::optional<detail::LauncherSystem> launcher_system;
     detail::AbilitySystem ability_system;
     SessionState session_state;
@@ -172,6 +180,7 @@ struct SimulationSession::Impl : detail::AbilityLifecycleHooks {
     std::optional<ninho::physics::PhysicalContact>
         explosion_contact_override_for_testing;
     bool pressure_burst_failure_after_plan_for_testing{};
+    std::vector<detail::CrushContactLoad> crush_load_overrides_for_testing;
 #endif
     std::uint32_t remaining_birds{};
     std::uint64_t next_command_sequence{1};

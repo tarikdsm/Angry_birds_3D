@@ -20,6 +20,7 @@ struct DamageBody {
     double mass_kg{};
     ninho::physics::Vec3 linear_velocity_m_s{};
     bool ejected{};
+    bool bounds_exit{};
 };
 
 struct DamageContact {
@@ -30,6 +31,8 @@ struct DamageContact {
     ninho::physics::Vec3 position_m{};
     ninho::physics::Vec3 normal_a_to_b{};
     double energy_j{};
+    double normal_speed_m_s{};
+    double effective_mass_kg{};
 };
 
 struct ExternalDamage {
@@ -70,6 +73,7 @@ struct DamageState {
     double material_damage_energy_j{};
     double remaining_integrity{};
     bool was_ejected{};
+    bool was_bounds_exit{};
     bool neutralized{};
 };
 
@@ -79,6 +83,7 @@ public:
         std::span<const DamageBody>, std::span<const DamageContact>,
         std::span<const ExternalDamage> external_damage = {});
     [[nodiscard]] std::optional<DamageState> state(EntityId, PartId) const;
+    bool erase_state(EntityId, PartId) noexcept;
     [[nodiscard]] std::span<const DamageState> states() const noexcept { return states_; }
 
 private:

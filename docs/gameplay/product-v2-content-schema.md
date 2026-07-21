@@ -31,6 +31,7 @@ conteúdo v1.
 | Primitivas expandidas por sessão | 256 |
 | Bird queue | 32 |
 | Triggers / objectives | 64 / 64 |
+| Fragmentos físicos autorados ativos | 80 |
 | Worlds / levels por world | 16 / 64 |
 
 Strings têm 1–128 bytes. IDs numéricos pertencem a `[1, 2^32-1]`, salvo campos
@@ -57,6 +58,20 @@ Cada material contém:
 
 Cada surface contém `id` (único e `>= 1000`), `key` (única),
 `density_kg_m3` `(0,30000]`, `friction` `[0,1]` e `restitution` `[0,1]`.
+
+O preset terrestre recomendado preserva os IDs históricos e usa:
+
+| Material | Response | Densidade | Atrito | Restituição | Falha específica |
+|---|---|---:|---:|---:|---:|
+| pinho (`id=1`) | `fibrous` | 520 | 0,55 | 0,15 | 65 J/kg acumulados (`toughness=0,26`) |
+| tijolo (`id=5`) | `masonry` | 1.800 | 0,72 | 0,05 | 130 J/kg acumulados (`toughness=0,52`) |
+| vidro (`id=9`) | `brittle` | 2.450 | 0,38 | 0,08 | pico individual de 18 J/kg (`toughness=0,072`) |
+| palha (`id=13`) | `compressible` | 110 | 0,82 | 0,12 | 22 J/kg acumulados (`toughness=0,088`) |
+| chapa (`id=17`) | `ductile` | 7.800 | 0,48 | 0,10 | não usa a fratura comum |
+
+`brittle` conserva o maior pico individual; `fibrous`, `masonry` e
+`compressible` acumulam energia. `ductile` somente cede e rompe por juntas
+`steel_ductile`.
 
 ## ArchetypeCatalog v2
 
@@ -151,10 +166,20 @@ adicional de massa.
 | `integrity` | pontos | `(0,100000]` |
 | `damage_energy_j_per_kg` | J/kg | `(0,100000]` |
 | `max_damage` | pontos | `(0,integrity]` |
+| `damage_model` | enum opcional | `legacy_directional_energy` (omissão) ou `terrestrial_pig` |
 
 No bundle, cada body marcado como enemy deve ser dynamic, usar somente
 `surface_id`, usar a mesma surface do archetype e pertencer a uma entidade sem
 partes não inimigas nem mistura de archetypes.
+
+`terrestrial_pig` é um contrato tipado, nunca inferido de `key` ou visual. Ele
+exige massa de 65 kg ±0,065 kg, surface com atrito 0,65 e restituição 0,05,
+weakpoint uniforme (`protected_multiplier=exposed_multiplier=1`),
+`damage_energy_j_per_kg=18` e `max_damage=70`. O contato usa as grandezas raw:
+`E=0,5*m_effective*v_normal²` e
+`damage=clamp((E/m_pig-18)*0,9,0,70)`. Burst/explosão passa a energia externa
+pelo mesmo DamageSystem. Em mundo uniforme, sair do AABB neutraliza uma vez por
+`BoundsExit`; em mundo radial permanece `Ejection`.
 
 ## CampaignManifest v2
 
@@ -260,10 +285,19 @@ Cada body é um objeto fechado com os campos abaixo. `bodies` contém de 0 a
 | `transform` | objeto | exatamente `position_m` e `rotation_xyzw` normalizado |
 | `shape` | objeto | uma das variantes fechadas acima |
 | `visual` | objeto | exatamente `asset_id` e `bounds_m` vec3 em `[0.0001,2000]` |
+| `fracture_pattern` | objeto opcional | somente para body de material não inimigo |
 
 Exatamente um entre `material_id` e `surface_id` é não nulo. Um enemy body é
 dynamic, não usa material, usa a surface de seu EnemyArchetype e sua entidade
 contém exatamente um archetype inimigo, sem partes não inimigas.
+
+`fracture_pattern` contém exatamente `physical_fragments` e
+`cosmetic_asset_ids`. Cada fragmento físico declara `ordinal` positivo e único,
+`shape`, `local_transform`, `density_kg_m3` e `visual_id`. A soma das massas
+geométricas dos fragmentos deve igualar a massa do pai em ±0,1%; convex hull
+usa o volume do hull, não o AABB. Há no máximo 80 fragmentos físicos autorados.
+IDs cosméticos não criam body, DamageState ou identidade física. Enemy bodies
+não podem declarar padrão de fratura.
 
 ### Ownership, joints e assemblies
 
@@ -283,10 +317,15 @@ Cada joint é um objeto fechado:
 |---|---|---|
 | `id` | ID | positivo e único |
 | `assembly_id` | ID | deve existir e coincidir com a dona do joint |
-| `kind` | enum | `pine_fit`, `glass_clamp` ou `mortar` |
+| `kind` | enum | `pine_fit`, `glass_clamp`, `mortar`, `straw_bind` ou `steel_ductile` |
 | `body_a_id`, `body_b_id` | ID | existentes, distintos e ambos na mesma assembly do joint |
 | `force_limit_n` | N | `(0,10^12]` |
 | `torque_limit_nm` | N·m | `(0,10^12]` |
+
+O preset terrestre usa argamassa em 1.400 N/160 N·m e `straw_bind` em
+800 N/90 N·m. `steel_ductile` faz `Elastic→Yielded` em 3.200 N ou 450 N·m,
+recria a constraint no tick seguinte sob o mesmo handle e somente um solver
+posterior pode rompê-la em 7.500 N ou 900 N·m.
 
 Cada assembly é um objeto fechado:
 
@@ -341,6 +380,16 @@ Pressure burst contém exatamente:
 - `line_of_sight`: bool;
 - `max_bodies`: `[1,32]`, limitado por identidade de domÃ­nio.
 
+### Esmagamento terrestre
+
+Para cada porco terrestre, o runtime soma uma vez o impulso normal agregado do
+tick e compara `impulse/(mass*|gravity|*dt)`, quantizado em `10^-5`. Somente
+razão estritamente maior que 4 mantida por 21 ticks produz dano. O excesso
+acumula `delta_v += (ratio-4)*g*dt`; no 21º tick a energia externa é
+`mass*(18+0,5*delta_v²)`. Qualquer interrupção zera a janela. A ordem causal é
+`CrushDamageApplied → DamageApplied → EntityNeutralized`, com os dois
+últimos apontando diretamente ao primeiro.
+
 ### Settle e watchdog
 
 `settle_policy` contém `linear_speed_m_s` e `angular_speed_rad_s`, ambos
@@ -390,15 +439,15 @@ Nenhuma tag depende da posição de `std::variant`. As tags são append-only:
 | phase | `inspection=0`, `aim=1`, `flight_ability=2`, `resolution=3`, `evaluation=4`, `result=5`, `faulted=6`, `grabbed=7` |
 | outcome | `none=0`, `victory=1`, `defeat=2` |
 | command rejection | `none=0`, `invalid_phase=1`, `invalid_aim=2`, `not_armed=3`, `no_bird_available=4`, `ability_unavailable=5` |
-| neutralization cause | `none=0`, `integrity_depleted=1`, `ejection=2` |
+| neutralization cause | `none=0`, `integrity_depleted=1`, `ejection=2`, `bounds_exit=3` |
 | damage classification | `none=0`, `protected=1`, `vulnerable=2` |
 | material response | `fibrous=0`, `masonry=1`, `brittle=2`, `compressible=3`, `ductile=4` |
 | body | `static=0`, `dynamic=1` |
 | shape | `box=0`, `sphere=1`, `capsule=2`, `convex_hull=3`, `compound=4` |
-| joint | `pine_fit=0`, `glass_clamp=1`, `mortar=2` |
+| joint | `pine_fit=0`, `glass_clamp=1`, `mortar=2`, `straw_bind=3`, `steel_ductile=4` |
 | objective | `neutralize_entity=0` |
 | environmental trigger | `damage_threshold=0` |
-| event | `bird_launched=0`, `ability_activation_requested=1`, `command_rejected=2`, `ability_started=3`, `ability_affected_body=4`, `ability_pulse=5`, `ability_ended=6`, `damage_applied=7`, `entity_neutralized=8`, `joint_overloaded=9`, `piece_fracture_triggered=10`, `joint_broken=11`, `piece_fractured=12`, `mass_changed=13`, `speed_changed=14`, `projectile_split=15`, `projectile_spawned=16` |
+| event | `bird_launched=0`, `ability_activation_requested=1`, `command_rejected=2`, `ability_started=3`, `ability_affected_body=4`, `ability_pulse=5`, `ability_ended=6`, `damage_applied=7`, `entity_neutralized=8`, `joint_overloaded=9`, `piece_fracture_triggered=10`, `joint_broken=11`, `piece_fractured=12`, `mass_changed=13`, `speed_changed=14`, `projectile_split=15`, `projectile_spawned=16`, `explosion_fuse_armed=17`, `pressure_burst=18`, `environmental_trigger_armed=19`, `environmental_trigger_detonated=20`, `material_yielded=21`, `crush_damage_applied=22` |
 
 ### Ordem do stream v3
 
@@ -414,6 +463,12 @@ O stream possui exatamente esta ordem de blocos:
 6. snapshots, joints publicados, eventos e estados de dano;
 7. peças fraturadas, quebras/fraturas pendentes e fila de comandos;
 8. ShotState opcional e contadores runtime de joints.
+
+Conteúdo sem os novos contratos preserva os bytes anteriores. Quando existe
+um `terrestrial_pig`, o bloco condicional acrescenta estados Crush ordenados por
+`(EntityId,PartId)` (`streak`, excesso e causa) e `was_bounds_exit`. Quando
+existem juntas `steel_ductile`, outro bloco condicional acrescenta JointId,
+estado, pending, frames capturados, causa, tick de yield e confirmação de solver.
 
 O bloco imutável escreve catálogos por ID crescente; registries de strings por
 ordem lexicográfica; e bodies, joints, assemblies, objectives e triggers por ID.

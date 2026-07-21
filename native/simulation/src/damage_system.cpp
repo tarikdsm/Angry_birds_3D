@@ -133,9 +133,9 @@ void apply_enemy_damage(std::vector<DamageState>& states,
     std::vector<DamageOutcome>& outcomes, const ArchetypeCatalog& archetypes,
     const DamageBody& target, EntityId cause_entity, PartId cause_part,
     ninho::physics::Vec3 position, ninho::physics::Vec3 cause_to_target, double energy,
-    EventId cause_event_id = {})
+    EventId cause_event_id = {}, double raw_contact_energy = -1.0)
 {
-    if (!target.enemy_archetype_id || energy <= 0.0) {
+    if (!target.enemy_archetype_id) {
         return;
     }
     const EnemyArchetype* enemy = find_enemy(archetypes, *target.enemy_archetype_id);
@@ -145,12 +145,32 @@ void apply_enemy_damage(std::vector<DamageState>& states,
     if (enemy == nullptr || weakpoint == nullptr || state == nullptr || state->neutralized) {
         return;
     }
-    const double denominator = enemy->mass_kg * enemy->damage_energy_j_per_kg;
-    const double uncapped = enemy->integrity * energy / denominator;
     const DirectionalDamageResponse response =
         directional_response(*weakpoint, target, cause_to_target);
-    const double damage = std::min(enemy->max_damage,
-        uncapped * response.multiplier);
+    double damage = 0.0;
+    double applied_energy = energy;
+    if (enemy->damage_model == EnemyDamageModel::TerrestrialPig) {
+        if (!std::isfinite(target.mass_kg) || target.mass_kg <= 0.0) {
+            return;
+        }
+        const double selected_energy = raw_contact_energy >= 0.0
+            ? raw_contact_energy : energy;
+        if (!std::isfinite(selected_energy) || selected_energy <= 0.0) {
+            return;
+        }
+        applied_energy = selected_energy;
+        const double specific_energy = selected_energy / target.mass_kg;
+        damage = std::clamp((specific_energy - 18.0) * 0.9,
+            0.0, enemy->max_damage) * response.multiplier;
+    } else {
+        if (!std::isfinite(energy) || energy <= 0.0) {
+            return;
+        }
+        const double denominator = enemy->mass_kg * enemy->damage_energy_j_per_kg;
+        const double uncapped = enemy->integrity * energy / denominator;
+        damage = std::min(enemy->max_damage,
+            uncapped * response.multiplier);
+    }
     const double applied = std::min(state->remaining_integrity, damage);
     if (applied <= 0.0) {
         return;
@@ -158,14 +178,14 @@ void apply_enemy_damage(std::vector<DamageState>& states,
     state->remaining_integrity -= applied;
     outcomes.push_back({DamageOutcomeKind::DamageApplied,
         cause_entity, cause_part, target.entity_id, target.part_id,
-        position, cause_to_target, energy, applied,
+        position, cause_to_target, applied_energy, applied,
         NeutralizationCause::None, response.classification, cause_event_id});
     if (state->remaining_integrity <= 0.0) {
         state->remaining_integrity = 0.0;
         state->neutralized = true;
         outcomes.push_back({DamageOutcomeKind::EntityNeutralized,
             cause_entity, cause_part, target.entity_id, target.part_id,
-            position, cause_to_target, energy, applied,
+            position, cause_to_target, applied_energy, applied,
             NeutralizationCause::IntegrityDepleted, response.classification,
             cause_event_id});
     }
@@ -180,7 +200,18 @@ void apply_ejection_transitions(std::vector<DamageState>& states,
         if (state == nullptr) {
             continue;
         }
-        if (body.ejected && !state->was_ejected && !state->neutralized) {
+        if (body.bounds_exit && !state->was_bounds_exit && !state->neutralized) {
+            const auto outward = ninho::physics::normalized_or_zero(
+                body.linear_velocity_m_s);
+            const double kinetic_energy = 0.5 * body.mass_kg
+                * static_cast<double>(ninho::physics::dot(
+                    body.linear_velocity_m_s, body.linear_velocity_m_s));
+            state->remaining_integrity = 0.0;
+            state->neutralized = true;
+            outcomes.push_back({DamageOutcomeKind::EntityNeutralized,
+                {}, {}, body.entity_id, body.part_id, body.transform.position,
+                outward, kinetic_energy, 0.0, NeutralizationCause::BoundsExit});
+        } else if (body.ejected && !state->was_ejected && !state->neutralized) {
             const auto outward = ninho::physics::normalized_or_zero(
                 body.transform.position);
             const float radial_speed = std::max(0.0f,
@@ -194,6 +225,7 @@ void apply_ejection_transitions(std::vector<DamageState>& states,
                 outward, radial_energy, 0.0, NeutralizationCause::Ejection});
         }
         state->was_ejected = body.ejected;
+        state->was_bounds_exit = body.bounds_exit;
     }
 }
 
@@ -203,6 +235,15 @@ void apply_ejection_transitions(std::vector<DamageState>& states,
 
 void SimulationSession::Impl::process_damage_after_step()
 {
+    const bool uniform_world = bundle.level.source_schema_version == 2U
+        && std::holds_alternative<UniformWorldDefinition>(bundle.level.world);
+    const auto enemy_definition = [&](std::optional<EnemyArchetypeId> id)
+        -> const EnemyArchetype* {
+        if (!id) return nullptr;
+        const auto found = std::ranges::find(
+            bundle.archetypes.enemies, *id, &EnemyArchetype::id);
+        return found == bundle.archetypes.enemies.end() ? nullptr : &*found;
+    };
     std::vector<detail::DamageBody> bodies;
     bodies.reserve(body_records.size());
     for (const BodyRecord& record : body_records) {
@@ -212,7 +253,8 @@ void SimulationSession::Impl::process_damage_after_step()
         }
         bodies.push_back({record.entity_id, record.part_id, record.material_id,
             record.enemy_archetype_id, state->transform, state->mass,
-            state->linear_velocity, state->ejected});
+            state->linear_velocity, state->ejected,
+            uniform_world && state->exited_world});
     }
 
     std::vector<detail::DamageContact> contacts;
@@ -224,7 +266,89 @@ void SimulationSession::Impl::process_damage_after_step()
             continue;
         }
         contacts.push_back({a->entity_id, a->part_id, b->entity_id, b->part_id,
-            hit.point, hit.normal, hit.derived_energy});
+            hit.point, hit.normal, hit.derived_energy,
+            hit.approach_speed, hit.effective_mass});
+    }
+    for (const ninho::physics::PhysicalContact& physical : physics.physical_contacts()) {
+        const auto a = std::ranges::find(
+            body_records, physical.a, &BodyRecord::physics_handle);
+        const auto b = std::ranges::find(
+            body_records, physical.b, &BodyRecord::physics_handle);
+        if (a == body_records.end() || b == body_records.end()) {
+            continue;
+        }
+        const auto found = std::ranges::find_if(contacts, [&](const auto& contact) {
+            return contact.a_entity_id == a->entity_id
+                && contact.a_part_id == a->part_id
+                && contact.b_entity_id == b->entity_id
+                && contact.b_part_id == b->part_id;
+        });
+        if (found == contacts.end()) {
+            contacts.push_back({a->entity_id, a->part_id,
+                b->entity_id, b->part_id, physical.point, physical.normal, 0.0,
+                physical.approach_speed_m_s, physical.effective_mass_kg});
+        } else {
+            found->normal_speed_m_s = physical.approach_speed_m_s;
+            found->effective_mass_kg = physical.effective_mass_kg;
+        }
+    }
+
+    std::vector<detail::CrushBody> crush_bodies;
+    for (const BodyRecord& record : body_records) {
+        const EnemyArchetype* enemy = enemy_definition(record.enemy_archetype_id);
+        const auto state = physics.state(record.physics_handle);
+        if (enemy == nullptr || enemy->damage_model != EnemyDamageModel::TerrestrialPig
+            || !state) {
+            continue;
+        }
+        const auto gravity = physics.gravity_at(state->world_center_of_mass);
+        crush_bodies.push_back({record.entity_id, record.part_id, state->mass,
+            ninho::physics::length(gravity), record.neutralized,
+            state->world_center_of_mass,
+            ninho::physics::normalized_or_zero(-gravity)});
+    }
+    std::vector<detail::CrushContactLoad> crush_loads;
+    for (const auto& physical : physics.physical_contacts()) {
+        for (const auto handle : {physical.a, physical.b}) {
+            const auto record = std::ranges::find(
+                body_records, handle, &BodyRecord::physics_handle);
+            if (record == body_records.end()) continue;
+            const EnemyArchetype* enemy = enemy_definition(record->enemy_archetype_id);
+            if (enemy != nullptr
+                && enemy->damage_model == EnemyDamageModel::TerrestrialPig) {
+                crush_loads.push_back({record->entity_id, record->part_id,
+                    physical.total_normal_impulse_n_s});
+            }
+        }
+    }
+#if defined(NINHO_ENABLE_TEST_FACADES)
+    crush_loads.insert(crush_loads.end(),
+        crush_load_overrides_for_testing.begin(),
+        crush_load_overrides_for_testing.end());
+    crush_load_overrides_for_testing.clear();
+#endif
+    const auto crush_plans = crush_damage_system.update(session_state.tick,
+        physics.config().time_step, crush_bodies, crush_loads);
+    for (const auto& plan : crush_plans) {
+        const EventId cause{next_event_sequence++};
+        domain_events.push_back({
+            .id = cause,
+            .tick = session_state.tick,
+            .kind = DomainEventKind::CrushDamageApplied,
+            .affected_entity_id = plan.target_entity_id,
+            .affected_part_id = plan.target_part_id,
+            .position_m = plan.position_m,
+            .normal = plan.normal,
+            .energy_j = plan.external_energy_j,
+            .damage = plan.predicted_damage,
+        });
+        if (!crush_damage_system.record_cause(
+                plan.target_entity_id, plan.target_part_id, cause)) {
+            throw std::runtime_error("crush cause could not be committed");
+        }
+        pending_external_damage.push_back({{}, {}, plan.target_entity_id,
+            plan.target_part_id, plan.position_m, plan.normal,
+            plan.external_energy_j, cause});
     }
 
     const auto outcomes = damage_system.process(
@@ -275,6 +399,15 @@ std::optional<DamageState> DamageSystem::state(EntityId entity, PartId part) con
         return current.entity_id == entity && current.part_id == part;
     });
     return found == states_.end() ? std::nullopt : std::optional{*found};
+}
+
+bool DamageSystem::erase_state(EntityId entity, PartId part) noexcept
+{
+    const auto before = states_.size();
+    std::erase_if(states_, [&](const DamageState& current) {
+        return current.entity_id == entity && current.part_id == part;
+    });
+    return states_.size() != before;
 }
 
 std::vector<DamageOutcome> DamageSystem::process(
@@ -340,13 +473,17 @@ std::vector<DamageOutcome> DamageSystem::process(
             -contact.normal_a_to_b, contact.energy_j);
         apply_enemy_damage(next_states, outcomes, archetypes,
             *a, b->entity_id, b->part_id, contact.position_m,
-            -contact.normal_a_to_b, contact.energy_j);
+            -contact.normal_a_to_b, contact.energy_j, {},
+            0.5 * contact.effective_mass_kg * contact.normal_speed_m_s
+                * contact.normal_speed_m_s);
         apply_material_damage(next_states, outcomes, materials,
             *b, a->entity_id, a->part_id, contact.position_m,
             contact.normal_a_to_b, contact.energy_j);
         apply_enemy_damage(next_states, outcomes, archetypes,
             *b, a->entity_id, a->part_id, contact.position_m,
-            contact.normal_a_to_b, contact.energy_j);
+            contact.normal_a_to_b, contact.energy_j, {},
+            0.5 * contact.effective_mass_kg * contact.normal_speed_m_s
+                * contact.normal_speed_m_s);
     }
     apply_ejection_transitions(next_states, outcomes, bodies);
     std::ranges::sort(next_states, [](const DamageState& lhs, const DamageState& rhs) {

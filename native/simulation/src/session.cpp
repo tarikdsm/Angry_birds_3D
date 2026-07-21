@@ -101,6 +101,13 @@ SessionStatus SimulationSession::tick()
         impl_->domain_events.clear();
         impl_->session_state.tick = TickIndex{impl_->session_state.tick.value() + 1U};
         impl_->apply_pending_fractures_before_step();
+        const SessionStatus ductile_recreate_status =
+            impl_->apply_pending_ductile_recreations_before_step();
+        if (!ductile_recreate_status.ok()) {
+            impl_->session_state.phase = SessionPhase::Faulted;
+            impl_->latched_fault = ductile_recreate_status;
+            return ductile_recreate_status;
+        }
         const SessionStatus command_status = impl_->process_commands();
         if (!command_status.ok()) {
             impl_->session_state.phase = SessionPhase::Faulted;
@@ -148,6 +155,7 @@ SessionStatus SimulationSession::tick()
             impl_->latched_fault = observed_trigger_status;
             return observed_trigger_status;
         }
+        impl_->evaluate_ductile_joints_after_step();
         impl_->evaluate_fractures_after_step();
         impl_->evaluate_objectives_after_step();
         const SessionStatus finish_status = impl_->finish_ability_after_step();
@@ -1026,6 +1034,13 @@ bool detail::SessionTestFacade::queue_external_damage(
         target, target_part, state->world_center_of_mass, {1, 0, 0},
         energy_j, cause_event_id});
     return true;
+}
+
+void detail::SessionTestFacade::inject_crush_load(SimulationSession& session,
+    EntityId entity, PartId part, double total_normal_impulse_n_s)
+{
+    session.impl_->crush_load_overrides_for_testing.push_back(
+        {entity, part, total_normal_impulse_n_s});
 }
 
 std::int64_t detail::SessionTestFacade::quantize_canonical(double value)

@@ -188,6 +188,27 @@ NINHO_TEST("capability weld joint keeps loaded bodies together")
     NINHO_REQUIRE(std::abs(reaction->linear_separation) < 0.02f);
 }
 
+NINHO_TEST("capability weld joint accepts dynamic endpoint before static endpoint")
+{
+    PhysicsWorld world(make_legacy_radial_world_config({.surface_gravity = 0}));
+    const BodyHandle dynamic = world.create_body(BodyDesc::dynamic_box(
+        {0.5f, 0.5f, 0.5f}, {{0, 5, 0}, {}}, 500)).value;
+    const BodyHandle fixed = world.create_body(
+        BodyDesc::static_box({0.5f, 0.5f, 0.5f}, {{0, 4, 0}, {}})).value;
+    world.step();
+
+    const auto joint = world.create_joint(WeldJointDesc{
+        .a = dynamic,
+        .b = fixed,
+        .frame_a = {{0, -0.5f, 0}, {}},
+        .frame_b = {{0, 0.5f, 0}, {}},
+    });
+    NINHO_REQUIRE(joint.status.ok());
+    world.step();
+
+    NINHO_REQUIRE(world.joint_reaction(joint.value).has_value());
+}
+
 NINHO_TEST("capability nontrivial weld frames map to world and resist applied torque")
 {
     PhysicsWorld world(make_legacy_radial_world_config({.substeps = 6, .surface_gravity = 0}));

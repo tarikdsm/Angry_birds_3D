@@ -1,10 +1,13 @@
 #include "session_internal.hpp"
+#include "material_mapping.hpp"
 
 #include <algorithm>
 #include <cmath>
 #include <limits>
 #include <ranges>
+#include <stdexcept>
 #include <tuple>
+#include <unordered_set>
 
 namespace ninho::simulation {
 namespace detail {
@@ -31,6 +34,130 @@ const MaterialDefinition* find_material(const MaterialCatalog& catalog, Material
 {
     const auto found = std::ranges::find(catalog.materials, id, &MaterialDefinition::id);
     return found == catalog.materials.end() ? nullptr : &*found;
+}
+
+ninho::physics::Vec3 vector_from(const std::array<double, 3>& value)
+{
+    return {static_cast<float>(value[0]), static_cast<float>(value[1]),
+        static_cast<float>(value[2])};
+}
+
+ninho::physics::Quat quaternion_from(const std::array<double, 4>& value)
+{
+    return {static_cast<float>(value[0]), static_cast<float>(value[1]),
+        static_cast<float>(value[2]), static_cast<float>(value[3])};
+}
+
+ninho::physics::Quat multiply(
+    ninho::physics::Quat a, ninho::physics::Quat b) noexcept
+{
+    return {
+        a.w * b.x + a.x * b.w + a.y * b.z - a.z * b.y,
+        a.w * b.y - a.x * b.z + a.y * b.w + a.z * b.x,
+        a.w * b.z + a.x * b.y - a.y * b.x + a.z * b.w,
+        a.w * b.w - a.x * b.x - a.y * b.y - a.z * b.z,
+    };
+}
+
+ninho::physics::Vec3 rotate(
+    ninho::physics::Quat rotation, ninho::physics::Vec3 value) noexcept
+{
+    const ninho::physics::Vec3 q{rotation.x, rotation.y, rotation.z};
+    const auto twice_cross = 2.0f * ninho::physics::cross(q, value);
+    return value + rotation.w * twice_cross
+        + ninho::physics::cross(q, twice_cross);
+}
+
+ninho::physics::Transform compose(const ninho::physics::Transform& parent,
+    const ninho::physics::Transform& local) noexcept
+{
+    return {parent.position + rotate(parent.rotation, local.position),
+        multiply(parent.rotation, local.rotation)};
+}
+
+void append_fragment_primitives(const ShapeDefinition& shape,
+    std::vector<ninho::physics::PrimitiveShape>& output,
+    const ninho::physics::Transform& parent = {})
+{
+    const auto local = compose(parent,
+        {vector_from(shape.local_position_m),
+         quaternion_from(shape.local_rotation_xyzw)});
+    switch (shape.type) {
+    case ShapeType::Box:
+        output.push_back(ninho::physics::BoxShape{
+            vector_from(shape.half_extents_m), local});
+        break;
+    case ShapeType::Sphere:
+        output.push_back(ninho::physics::SphereShape{
+            static_cast<float>(shape.radius_m), local});
+        break;
+    case ShapeType::Capsule:
+        output.push_back(ninho::physics::CapsuleShape{
+            static_cast<float>(shape.half_height_m),
+            static_cast<float>(shape.radius_m), local});
+        break;
+    case ShapeType::ConvexHull: {
+        std::vector<ninho::physics::Vec3> vertices;
+        vertices.reserve(shape.vertices_m.size());
+        for (const auto& vertex : shape.vertices_m) {
+            vertices.push_back(vector_from(vertex));
+        }
+        output.push_back(ninho::physics::HullShape{std::move(vertices), local});
+        break;
+    }
+    case ShapeType::Compound:
+        for (const auto& child : shape.children) {
+            append_fragment_primitives(child, output, local);
+        }
+        break;
+    }
+}
+
+PartId fragment_part_id(EntityId entity, PartId parent, std::uint32_t ordinal)
+{
+    std::uint32_t hash = 2166136261U;
+    for (const std::uint32_t value : {entity.value(), parent.value(), ordinal}) {
+        for (int byte = 0; byte < 4; ++byte) {
+            hash ^= (value >> (byte * 8)) & 0xFFU;
+            hash *= 16777619U;
+        }
+    }
+    return PartId{0x80000000U | (hash & 0x7FFFFFFFU)};
+}
+
+ninho::physics::BodyDesc fragment_body_desc(const MaterialDefinition& material,
+    const PhysicalFragmentDefinition& fragment,
+    const ninho::physics::BodyState& parent)
+{
+    const ninho::physics::Transform local{
+        vector_from(fragment.local_transform.position_m),
+        quaternion_from(fragment.local_transform.rotation_xyzw)};
+    ninho::physics::BodyDesc result;
+    result.type = ninho::physics::BodyType::Dynamic;
+    result.transform = compose(parent.transform, local);
+    const auto offset = result.transform.position - parent.world_center_of_mass;
+    result.linear_velocity = parent.linear_velocity
+        + ninho::physics::cross(parent.angular_velocity, offset);
+    result.angular_velocity = parent.angular_velocity;
+    std::vector<ninho::physics::PrimitiveShape> primitives;
+    append_fragment_primitives(fragment.shape, primitives);
+    ninho::physics::ShapeDesc shape;
+    if (fragment.shape.type == ShapeType::Compound) {
+        shape.geometry = ninho::physics::CompoundShape{std::move(primitives)};
+    } else {
+        shape.geometry = std::visit([](auto value) -> ninho::physics::ShapeGeometry {
+            return value;
+        }, std::move(primitives.front()));
+    }
+    shape.density = static_cast<float>(fragment.density_kg_m3);
+    shape.friction = static_cast<float>(material.friction);
+    shape.restitution = static_cast<float>(material.restitution);
+    shape.material_id = detail::physics_material_tag(material.id);
+    result.shapes.push_back(std::move(shape));
+    result.affected_by_world_gravity = true;
+    result.world_exit_policy = ninho::physics::WorldExitPolicy::RemoveOutsideBounds;
+    result.name = fragment.visual_id;
+    return result;
 }
 
 ninho::physics::Vec3 joint_midpoint(
@@ -256,7 +383,102 @@ void SimulationSession::Impl::apply_pending_fractures_before_step()
         return std::pair{lhs.entity_id, lhs.part_id}
             < std::pair{rhs.entity_id, rhs.part_id};
     });
+    std::vector<PendingPieceFracture> retained;
     for (const PendingPieceFracture& pending : pending_piece_fractures) {
+        BodyRecord* parent = find_body(body_records, pending.entity_id, pending.part_id);
+        if (parent != nullptr && parent->fracture_pattern) {
+            const auto parent_state = physics.state(parent->physics_handle);
+            const MaterialDefinition* material = parent->material_id
+                ? find_material(bundle.materials, *parent->material_id) : nullptr;
+            const auto& fragments = parent->fracture_pattern->physical_fragments;
+            if (!parent_state || material == nullptr
+                || physics.remaining_body_capacity() < fragments.size()) {
+                retained.push_back(pending);
+                continue;
+            }
+            std::unordered_set<std::uint32_t> identities;
+            bool collision = false;
+            for (const auto& fragment : fragments) {
+                const PartId part = fragment_part_id(
+                    pending.entity_id, pending.part_id, fragment.ordinal);
+                if (!identities.insert(part.value()).second
+                    || std::ranges::any_of(body_records, [&](const BodyRecord& record) {
+                        return record.entity_id == pending.entity_id
+                            && record.part_id == part;
+                    })) {
+                    collision = true;
+                    break;
+                }
+            }
+            if (collision || !physics.prepare_body_creations(fragments.size()).ok()) {
+                retained.push_back(pending);
+                continue;
+            }
+            struct PlannedFragment {
+                PartId part_id{};
+                ShapeDefinition shape;
+                std::string visual_id;
+                ninho::physics::BodyDesc body;
+            };
+            std::vector<PlannedFragment> planned;
+            planned.reserve(fragments.size());
+            for (const auto& fragment : fragments) {
+                planned.push_back({fragment_part_id(pending.entity_id,
+                    pending.part_id, fragment.ordinal), fragment.shape,
+                    fragment.visual_id,
+                    fragment_body_desc(*material, fragment, *parent_state)});
+            }
+            for (JointRecord& joint : joint_records) {
+                if (!joint.snapshot.active
+                    || (joint.snapshot.a != JointEndpoint{pending.entity_id, pending.part_id}
+                        && joint.snapshot.b != JointEndpoint{
+                            pending.entity_id, pending.part_id})) {
+                    continue;
+                }
+                // Destroying the parent atomically removes the native attached
+                // constraints. Mark the stable public joint now; queueing a
+                // separate destroy would race the body's handle invalidation.
+                joint.snapshot.active = false;
+                domain_events.push_back({
+                    .id = EventId{next_event_sequence++},
+                    .tick = session_state.tick,
+                    .kind = DomainEventKind::JointBroken,
+                    .affected_entity_id = joint.snapshot.a.entity_id,
+                    .affected_part_id = joint.snapshot.a.part_id,
+                    .cause_event_id = pending.cause_event_id,
+                    .joint_id = joint.snapshot.id,
+                });
+            }
+            const auto parent_handle = parent->physics_handle;
+            static_cast<void>(physics.destroy_body(parent_handle));
+            std::vector<BodyRecord> created_records;
+            created_records.reserve(planned.size());
+            bool creation_failed = false;
+            for (auto& fragment : planned) {
+                const auto created = physics.create_body(std::move(fragment.body));
+                if (!created) {
+                    creation_failed = true;
+                    break;
+                }
+                created_records.push_back({0U, pending.entity_id,
+                    fragment.part_id, BodyType::Dynamic, pending.material_id,
+                    std::nullopt, std::nullopt, std::move(fragment.shape),
+                    std::move(fragment.visual_id), created.value, false, false,
+                    true, std::nullopt});
+            }
+            if (creation_failed) {
+                throw std::runtime_error(
+                    "authored fragment creation failed after successful preflight");
+            }
+            std::erase_if(body_records, [&](const BodyRecord& record) {
+                return record.physics_handle == parent_handle;
+            });
+            body_records.insert(body_records.end(),
+                std::make_move_iterator(created_records.begin()),
+                std::make_move_iterator(created_records.end()));
+            static_cast<void>(damage_system.erase_state(
+                pending.entity_id, pending.part_id));
+        }
         domain_events.push_back({
             .id = EventId{next_event_sequence++},
             .tick = session_state.tick,
@@ -270,14 +492,15 @@ void SimulationSession::Impl::apply_pending_fractures_before_step()
         });
         fractured_pieces.emplace_back(pending.entity_id, pending.part_id);
     }
-    pending_piece_fractures.clear();
+    pending_piece_fractures = std::move(retained);
     std::ranges::sort(fractured_pieces);
 }
 
 void SimulationSession::Impl::evaluate_fractures_after_step()
 {
     for (JointRecord& joint : joint_records) {
-        if (!joint.snapshot.active || already_pending(*this, joint.snapshot.id)) {
+        if (!joint.snapshot.active || joint.snapshot.kind == JointKind::SteelDuctile
+            || already_pending(*this, joint.snapshot.id)) {
             continue;
         }
         double ratio = 0.0;
@@ -329,6 +552,9 @@ void SimulationSession::Impl::evaluate_fractures_after_step()
         const auto state = physics.state(body->physics_handle);
         const MaterialDefinition* material = find_material(bundle.materials, *body->material_id);
         if (!damage || !state || material == nullptr) {
+            continue;
+        }
+        if (material->response == MaterialResponse::Ductile) {
             continue;
         }
         const double fracture_energy = state->mass * 250.0 * material->toughness;

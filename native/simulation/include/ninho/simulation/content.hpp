@@ -91,7 +91,10 @@ enum class MaterialResponse : std::uint8_t {
 enum class BodyType : std::uint8_t { Static = 0, Dynamic = 1 };
 enum class ShapeType : std::uint8_t {
     Box = 0, Sphere = 1, Capsule = 2, ConvexHull = 3, Compound = 4};
-enum class JointKind : std::uint8_t { PineFit = 0, GlassClamp = 1, Mortar = 2 };
+enum class JointKind : std::uint8_t {
+    PineFit = 0, GlassClamp = 1, Mortar = 2, StrawBind = 3, SteelDuctile = 4};
+enum class EnemyDamageModel : std::uint8_t {
+    LegacyDirectionalEnergy = 0, TerrestrialPig = 1};
 enum class ObjectiveKind : std::uint8_t { NeutralizeEntity = 0 };
 enum class AbilityKind : std::uint8_t {
     LegacyGravityField = 0,
@@ -219,6 +222,7 @@ struct EnemyArchetype {
     double integrity{};
     double damage_energy_j_per_kg{};
     double max_damage{};
+    EnemyDamageModel damage_model{EnemyDamageModel::LegacyDirectionalEnergy};
 };
 
 struct ArchetypeCatalog {
@@ -279,6 +283,23 @@ struct VisualDefinition {
     std::array<double, 3> bounds_m{};
 };
 
+struct PhysicalFragmentDefinition {
+    std::uint32_t ordinal{};
+    ShapeDefinition shape;
+    TransformDefinition local_transform;
+    double density_kg_m3{};
+    std::string visual_id;
+
+    bool operator==(const PhysicalFragmentDefinition&) const = default;
+};
+
+struct FracturePatternDefinition {
+    std::vector<PhysicalFragmentDefinition> physical_fragments;
+    std::vector<std::string> cosmetic_asset_ids;
+
+    bool operator==(const FracturePatternDefinition&) const = default;
+};
+
 struct BodyDefinition {
     std::uint32_t body_id{};
     EntityId entity_id;
@@ -293,6 +314,7 @@ struct BodyDefinition {
     ShapeDefinition shape;
     VisualDefinition visual;
     bool affected_by_world_gravity{true};
+    std::optional<FracturePatternDefinition> fracture_pattern;
 };
 
 struct JointDefinition {

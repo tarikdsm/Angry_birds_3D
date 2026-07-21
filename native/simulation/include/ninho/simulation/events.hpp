@@ -27,6 +27,8 @@ enum class DomainEventKind : std::uint8_t {
     PressureBurst = 18,
     EnvironmentalTriggerArmed = 19,
     EnvironmentalTriggerDetonated = 20,
+    MaterialYielded = 21,
+    CrushDamageApplied = 22,
 };
 
 enum class CommandRejectionReason : std::uint8_t {
@@ -42,6 +44,7 @@ enum class NeutralizationCause : std::uint8_t {
     None = 0,
     IntegrityDepleted = 1,
     Ejection = 2,
+    BoundsExit = 3,
 };
 
 enum class DamageClassification : std::uint8_t {

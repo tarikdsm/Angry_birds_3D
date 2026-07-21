@@ -32,6 +32,8 @@ std::string_view domain_event_kind_name(
     case PressureBurst: return "pressure_burst";
     case EnvironmentalTriggerArmed: return "environmental_trigger_armed";
     case EnvironmentalTriggerDetonated: return "environmental_trigger_detonated";
+    case MaterialYielded: return "material_yielded";
+    case CrushDamageApplied: return "crush_damage_applied";
     }
     return "unknown";
 }

@@ -602,7 +602,7 @@ SessionStatus SimulationSession::Impl::build() noexcept
                     std::nullopt,
                     {.type = ShapeType::Sphere, .radius_m = bundle.level.planet.radius_m},
                     bundle.level.planet.visual_id,
-                    created.value, false, false, false});
+                    created.value, false, false, false, std::nullopt});
                 continue;
             }
 
@@ -625,7 +625,8 @@ SessionStatus SimulationSession::Impl::build() noexcept
                 created.value,
                 false,
                 false,
-                body.body_type == BodyType::Dynamic && body.affected_by_world_gravity});
+                body.body_type == BodyType::Dynamic && body.affected_by_world_gravity,
+                body.fracture_pattern});
         }
 
         std::vector<const JointDefinition*> ordered_joints;

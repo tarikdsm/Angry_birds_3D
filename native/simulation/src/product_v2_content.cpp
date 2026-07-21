@@ -1,10 +1,12 @@
 #include "ninho/simulation/content.hpp"
 
 #include "product_v2_reader.hpp"
+#include "shape_volume.hpp"
 
 #include <algorithm>
 #include <cmath>
 #include <limits>
+#include <numbers>
 #include <set>
 #include <stdexcept>
 #include <unordered_map>
@@ -33,6 +35,10 @@ JointKind joint_kind(std::string_view value, const std::string& pointer)
         return JointKind::GlassClamp;
     if (value == "mortar")
         return JointKind::Mortar;
+    if (value == "straw_bind")
+        return JointKind::StrawBind;
+    if (value == "steel_ductile")
+        return JointKind::SteelDuctile;
     fail(ContentErrorCode::InvalidEnum, pointer, "invalid joint kind");
 }
 
@@ -305,7 +311,7 @@ ContentResult<LevelManifest> parse_level_manifest_v2(std::string_view input) noe
                 keys(item, pointer,
                      {"body_id", "entity_id", "part_id", "body_type", "affected_by_world_gravity",
                       "material_id", "surface_id", "enemy_archetype_id", "density_kg_m3",
-                      "transform", "shape", "visual"});
+                      "transform", "shape", "visual"}, {"fracture_pattern"});
                 BodyDefinition value;
                 value.body_id = uint(item, "body_id", pointer);
                 unique_id(body_ids, value.body_id, child(pointer, "body_id"));
@@ -347,6 +353,57 @@ ContentResult<LevelManifest> parse_level_manifest_v2(std::string_view input) noe
                 value.visual.asset_id = text(visual, "asset_id", visual_pointer);
                 value.visual.bounds_m =
                     vector<3>(visual, "bounds_m", visual_pointer, 0.0001, 2000.0);
+                if (item.contains("fracture_pattern")) {
+                    const auto pattern_pointer = child(pointer, "fracture_pattern");
+                    const auto& pattern = member(item, "fracture_pattern", pointer);
+                    keys(pattern, pattern_pointer,
+                        {"physical_fragments", "cosmetic_asset_ids"});
+                    FracturePatternDefinition authored;
+                    const auto& physical = member(
+                        pattern, "physical_fragments", pattern_pointer);
+                    array(physical, child(pattern_pointer, "physical_fragments"), 80U, true);
+                    std::unordered_set<std::uint32_t> ordinals;
+                    double fragment_mass = 0.0;
+                    for (std::size_t fragment_index = 0;
+                        fragment_index < physical.size(); ++fragment_index) {
+                        const auto fragment_pointer = indexed(
+                            child(pattern_pointer, "physical_fragments"), fragment_index);
+                        const auto& fragment = physical[fragment_index];
+                        keys(fragment, fragment_pointer,
+                            {"ordinal", "shape", "local_transform",
+                             "density_kg_m3", "visual_id"});
+                        PhysicalFragmentDefinition definition;
+                        definition.ordinal = uint(fragment, "ordinal", fragment_pointer,
+                            1U, std::numeric_limits<std::uint32_t>::max());
+                        unique_id(ordinals, definition.ordinal,
+                            child(fragment_pointer, "ordinal"));
+                        definition.shape = parse_shape(member(fragment, "shape",
+                            fragment_pointer), child(fragment_pointer, "shape"));
+                        definition.local_transform = parse_transform(
+                            member(fragment, "local_transform", fragment_pointer),
+                            child(fragment_pointer, "local_transform"));
+                        definition.density_kg_m3 = number(fragment,
+                            "density_kg_m3", fragment_pointer, 0.0, 30000.0, false);
+                        definition.visual_id = text(fragment, "visual_id", fragment_pointer);
+                        fragment_mass += detail::shape_volume_m3(definition.shape)
+                            * definition.density_kg_m3;
+                        authored.physical_fragments.push_back(std::move(definition));
+                    }
+                    authored.cosmetic_asset_ids = string_set(
+                        pattern, "cosmetic_asset_ids", 80U, false);
+                    const double parent_mass = detail::shape_volume_m3(value.shape)
+                        * value.density_kg_m3;
+                    if (parent_mass <= 0.0
+                        || std::abs(fragment_mass - parent_mass) > parent_mass * 0.001) {
+                        fail(ContentErrorCode::InvalidInvariant, pattern_pointer,
+                            "physical fragment mass must equal parent mass within 0.1 percent");
+                    }
+                    if (value.enemy_archetype_id) {
+                        fail(ContentErrorCode::InvalidInvariant, pattern_pointer,
+                            "enemy bodies cannot reference fracture patterns");
+                    }
+                    value.fracture_pattern = std::move(authored);
+                }
                 result.bodies.push_back(std::move(value));
             }
             std::unordered_set<std::uint32_t> joint_ids;

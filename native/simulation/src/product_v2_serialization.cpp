@@ -72,6 +72,10 @@ const char* joint_name(JointKind kind)
         return "glass_clamp";
     case JointKind::Mortar:
         return "mortar";
+    case JointKind::StrawBind:
+        return "straw_bind";
+    case JointKind::SteelDuctile:
+        return "steel_ductile";
     }
     return "invalid";
 }
@@ -183,15 +187,19 @@ std::string to_canonical_json_v2(const ArchetypeCatalog& catalog)
                                       {"protected_cone_deg", item.protected_cone_deg},
                                       {"protected_multiplier", item.protected_multiplier},
                                       {"exposed_multiplier", item.exposed_multiplier}});
-    for (const auto& item : catalog.enemies)
-        root["enemies"].push_back({{"id", item.id.value()},
+    for (const auto& item : catalog.enemies) {
+        json enemy{{"id", item.id.value()},
                                    {"key", item.key},
                                    {"weakpoint_id", item.weakpoint_id.value()},
                                    {"surface_id", item.surface_id.value()},
                                    {"mass_kg", item.mass_kg},
                                    {"integrity", item.integrity},
                                    {"damage_energy_j_per_kg", item.damage_energy_j_per_kg},
-                                   {"max_damage", item.max_damage}});
+                                   {"max_damage", item.max_damage}};
+        if (item.damage_model == EnemyDamageModel::TerrestrialPig)
+            enemy["damage_model"] = "terrestrial_pig";
+        root["enemies"].push_back(std::move(enemy));
+    }
     return root.dump();
 }
 
@@ -251,9 +259,8 @@ std::string to_canonical_json_v2(const LevelManifest& level)
                 {"angular_speed_rad_s", level.settle_policy.angular_speed_rad_s},
                 {"rest_ticks", level.settle_policy.rest_ticks}}},
               {"watchdog_ticks", level.watchdog_ticks}};
-    for (const auto& item : level.bodies)
-        root["bodies"].push_back(
-            {{"body_id", item.body_id},
+    for (const auto& item : level.bodies) {
+        json body{{"body_id", item.body_id},
              {"entity_id", item.entity_id.value()},
              {"part_id", item.part_id.value()},
              {"body_type", item.body_type == BodyType::Static ? "static" : "dynamic"},
@@ -267,7 +274,25 @@ std::string to_canonical_json_v2(const LevelManifest& level)
               {{"position_m", item.transform.position_m},
                {"rotation_xyzw", item.transform.rotation_xyzw}}},
              {"shape", shape_json(item.shape)},
-             {"visual", {{"asset_id", item.visual.asset_id}, {"bounds_m", item.visual.bounds_m}}}});
+             {"visual", {{"asset_id", item.visual.asset_id}, {"bounds_m", item.visual.bounds_m}}}};
+        if (item.fracture_pattern) {
+            json physical = json::array();
+            for (const auto& fragment : item.fracture_pattern->physical_fragments) {
+                physical.push_back({
+                    {"ordinal", fragment.ordinal},
+                    {"shape", shape_json(fragment.shape)},
+                    {"local_transform", {
+                        {"position_m", fragment.local_transform.position_m},
+                        {"rotation_xyzw", fragment.local_transform.rotation_xyzw}}},
+                    {"density_kg_m3", fragment.density_kg_m3},
+                    {"visual_id", fragment.visual_id}});
+            }
+            body["fracture_pattern"] = {
+                {"physical_fragments", std::move(physical)},
+                {"cosmetic_asset_ids", item.fracture_pattern->cosmetic_asset_ids}};
+        }
+        root["bodies"].push_back(std::move(body));
+    }
     for (const auto& item : level.joints)
         root["joints"].push_back({{"id", item.id.value()},
                                   {"assembly_id", item.assembly_id},

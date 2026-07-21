@@ -108,6 +108,8 @@ public:
     static bool shift_trigger_captured_origin(SimulationSession&, std::uint32_t);
     static bool queue_external_damage(SimulationSession&, EntityId target,
         PartId target_part, double energy_j, EventId cause_event_id);
+    static void inject_crush_load(SimulationSession&, EntityId, PartId,
+        double total_normal_impulse_n_s);
 };
 
 }

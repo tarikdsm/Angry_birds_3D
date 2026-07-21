@@ -81,6 +81,8 @@ std::uint8_t canonical_tag_of(DomainEventKind value)
     case DomainEventKind::PressureBurst: return 18U;
     case DomainEventKind::EnvironmentalTriggerArmed: return 19U;
     case DomainEventKind::EnvironmentalTriggerDetonated: return 20U;
+    case DomainEventKind::MaterialYielded: return 21U;
+    case DomainEventKind::CrushDamageApplied: return 22U;
     }
     throw std::invalid_argument("unknown canonical domain event");
 }
@@ -104,6 +106,7 @@ std::uint8_t canonical_tag_of(NeutralizationCause value)
     case NeutralizationCause::None: return 0U;
     case NeutralizationCause::IntegrityDepleted: return 1U;
     case NeutralizationCause::Ejection: return 2U;
+    case NeutralizationCause::BoundsExit: return 3U;
     }
     throw std::invalid_argument("unknown canonical neutralization cause");
 }
@@ -157,6 +160,8 @@ std::uint8_t canonical_tag_of(JointKind value)
     case JointKind::PineFit: return 0U;
     case JointKind::GlassClamp: return 1U;
     case JointKind::Mortar: return 2U;
+    case JointKind::StrawBind: return 3U;
+    case JointKind::SteelDuctile: return 4U;
     }
     throw std::invalid_argument("unknown canonical joint kind");
 }
@@ -601,6 +606,9 @@ std::vector<std::uint8_t> canonical_archetype_catalog(const ArchetypeCatalog& ca
         writer.quantized(enemy->integrity);
         writer.quantized(enemy->damage_energy_j_per_kg);
         writer.quantized(enemy->max_damage);
+        if (enemy->damage_model == EnemyDamageModel::TerrestrialPig) {
+            writer.integer<std::uint8_t>(1U);
+        }
     }
     return std::move(writer.bytes);
 }
@@ -869,6 +877,25 @@ void write_canonical_v3_content(CanonicalWriter& writer, const ContentBundle& bu
         writer.text(body->visual.asset_id);
         write_vector(writer, body->visual.bounds_m);
         writer.boolean(body->affected_by_world_gravity);
+        if (body->fracture_pattern) {
+            const auto fragments = ordered_by(
+                body->fracture_pattern->physical_fragments,
+                &PhysicalFragmentDefinition::ordinal);
+            writer.integer<std::uint32_t>(
+                static_cast<std::uint32_t>(fragments.size()));
+            for (const auto* fragment : fragments) {
+                writer.integer(fragment->ordinal);
+                write_shape_v3(writer, fragment->shape);
+                write_transform(writer, fragment->local_transform);
+                writer.quantized(fragment->density_kg_m3);
+                writer.text(fragment->visual_id);
+            }
+            auto cosmetics = body->fracture_pattern->cosmetic_asset_ids;
+            std::ranges::sort(cosmetics);
+            writer.integer<std::uint32_t>(
+                static_cast<std::uint32_t>(cosmetics.size()));
+            for (const auto& asset : cosmetics) writer.text(asset);
+        }
     }
 
     const auto joints = ordered_by(level.joints, &JointDefinition::id);
@@ -1265,6 +1292,37 @@ std::vector<std::uint8_t> SimulationSession::Impl::serialize_canonical_state_v3(
         writer.boolean(damage->neutralized);
     }
 
+    const bool terrestrial_pigs = std::ranges::any_of(
+        bundle.archetypes.enemies, [](const EnemyArchetype& enemy) {
+            return enemy.damage_model == EnemyDamageModel::TerrestrialPig;
+        });
+    if (terrestrial_pigs) {
+        std::vector<const detail::CrushRuntime*> crush_states;
+        for (const auto& state : crush_damage_system.states()) {
+            crush_states.push_back(&state);
+        }
+        std::ranges::sort(crush_states, [](const auto* lhs, const auto* rhs) {
+            return std::pair{lhs->entity_id, lhs->part_id}
+                < std::pair{rhs->entity_id, rhs->part_id};
+        });
+        writer.integer<std::uint32_t>(
+            static_cast<std::uint32_t>(crush_states.size()));
+        for (const auto* state : crush_states) {
+            identifier(writer, state->entity_id);
+            identifier(writer, state->part_id);
+            writer.integer(state->streak);
+            writer.quantized(state->excess_delta_v_m_s);
+            identifier(writer, state->cause_event_id);
+        }
+        writer.integer<std::uint32_t>(
+            static_cast<std::uint32_t>(damage_states.size()));
+        for (const auto* damage : damage_states) {
+            identifier(writer, damage->entity_id);
+            identifier(writer, damage->part_id);
+            writer.boolean(damage->was_bounds_exit);
+        }
+    }
+
     auto fractured = fractured_pieces;
     std::ranges::sort(fractured);
     writer.integer<std::uint32_t>(static_cast<std::uint32_t>(fractured.size()));
@@ -1357,6 +1415,24 @@ std::vector<std::uint8_t> SimulationSession::Impl::serialize_canonical_state_v3(
     for (const JointRecord& joint : joint_records) {
         identifier(writer, joint.snapshot.id);
         writer.integer(joint.consecutive_overload_ticks);
+    }
+    const bool ductile_joints = std::ranges::any_of(
+        joint_records, [](const JointRecord& joint) {
+            return joint.snapshot.kind == JointKind::SteelDuctile;
+        });
+    if (ductile_joints) {
+        writer.integer<std::uint32_t>(static_cast<std::uint32_t>(
+            ductile_joint_system.states().size()));
+        for (const auto& runtime : ductile_joint_system.states()) {
+            identifier(writer, runtime.joint_id);
+            writer.integer(static_cast<std::uint8_t>(runtime.state));
+            writer.boolean(runtime.pending_recreate);
+            writer.transform(runtime.frame_a);
+            writer.transform(runtime.frame_b);
+            identifier(writer, runtime.cause_event_id);
+            identifier(writer, runtime.yielded_tick);
+            writer.boolean(runtime.solver_ran_after_recreate);
+        }
     }
     return std::move(writer.bytes);
 }

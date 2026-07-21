@@ -443,6 +443,10 @@ NINHO_TEST("gameplay nodes expose typed mass speed and split domain events")
         "case ProjectileSplit: return \"projectile_split\";";
     constexpr std::string_view spawned_mapping =
         "case ProjectileSpawned: return \"projectile_spawned\";";
+    constexpr std::string_view yielded_mapping =
+        "case MaterialYielded: return \"material_yielded\";";
+    constexpr std::string_view crush_mapping =
+        "case CrushDamageApplied: return \"crush_damage_applied\";";
     constexpr std::string_view delta_mapping =
         "result[\"delta_velocity\"] = detail::to_godot(event.delta_velocity_m_s);";
     constexpr std::string_view shared_delegate =
@@ -453,6 +457,8 @@ NINHO_TEST("gameplay nodes expose typed mass speed and split domain events")
     NINHO_REQUIRE(shared.find(speed_mapping) != std::string::npos);
     NINHO_REQUIRE(shared.find(split_mapping) != std::string::npos);
     NINHO_REQUIRE(shared.find(spawned_mapping) != std::string::npos);
+    NINHO_REQUIRE(shared.find(yielded_mapping) != std::string::npos);
+    NINHO_REQUIRE(shared.find(crush_mapping) != std::string::npos);
     NINHO_REQUIRE(gameplay.find(delta_mapping) != std::string::npos);
     NINHO_REQUIRE(orbital.find(delta_mapping) != std::string::npos);
 }

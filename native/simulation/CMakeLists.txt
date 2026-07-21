@@ -20,6 +20,8 @@ add_library(ninho_simulation_kernel STATIC
   src/environmental_trigger_system.cpp
   src/explosion_ability_system.cpp
   src/damage_system.cpp
+  src/crush_damage_system.cpp
+  src/ductile_joint_system.cpp
   src/fracture_system.cpp
   src/objective_system.cpp
 )
@@ -63,6 +65,8 @@ if(BUILD_TESTING)
     tests/pressure_burst_tests.cpp
     tests/environmental_trigger_tests.cpp
     tests/explosion_ability_tests.cpp
+    tests/terrestrial_material_tests.cpp
+    tests/pig_damage_tests.cpp
     tests/damage_anchor_tests.cpp
     tests/fracture_objective_tests.cpp
     tests/playthrough_tests.cpp
@@ -137,6 +141,14 @@ if(BUILD_TESTING)
   add_test(
     NAME explosion_ability
     COMMAND ninho_simulation_tests --filter "explosion ability"
+  )
+  add_test(
+    NAME terrestrial_materials
+    COMMAND ninho_simulation_tests --filter "terrestrial materials"
+  )
+  add_test(
+    NAME pig_damage
+    COMMAND ninho_simulation_tests --filter "pig damage"
   )
   add_test(
     NAME damage_anchor
