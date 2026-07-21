@@ -715,10 +715,77 @@ NINHO_SIM_TEST("product v2 content accepts mass conserving authored fracture pat
     const auto roundtrip = parse_level_manifest_v2(to_canonical_json(parsed.value));
     NINHO_SIM_REQUIRE(roundtrip.ok());
 
+    auto shifted = level;
+    shifted["bodies"][1]["fracture_pattern"]["physical_fragments"][0]
+        ["local_transform"]["position_m"] = json::array({-0.1, 0.0, 0.0});
+    shifted["bodies"][1]["fracture_pattern"]["physical_fragments"][1]
+        ["local_transform"]["position_m"] = json::array({0.4, 0.0, 0.0});
+    const auto shifted_level = parse_level_manifest_v2(shifted.dump());
+    const auto materials = parse_material_catalog_v2(material_catalog().dump());
+    auto archetypes_json = archetype_catalog();
+    archetypes_json["abilities"] = json::array({archetypes_json["abilities"][0]});
+    const auto archetypes = parse_archetype_catalog_v2(archetypes_json.dump());
+    NINHO_SIM_REQUIRE(shifted_level.ok() && materials.ok() && archetypes.ok());
+    auto baseline = SimulationSession::create(
+        materials.value, archetypes.value, parsed.value);
+    if (!baseline.ok()) {
+        ninho::simulation::test::fail(__FILE__, __LINE__,
+            baseline.error.pointer + ": " + baseline.error.message);
+    }
+    NINHO_SIM_REQUIRE(!SimulationSession::create(
+        materials.value, archetypes.value, shifted_level.value).ok());
+
     level["bodies"][1]["enemy_archetype_id"] = 1;
     level["bodies"][1]["surface_id"] = 1002;
     level["bodies"][1]["material_id"] = nullptr;
     NINHO_SIM_REQUIRE(!parse_level_manifest_v2(level.dump()).ok());
+}
+
+NINHO_SIM_TEST("product v2 physical canonical ignores cosmetic fracture assets")
+{
+    auto level_json = level_manifest();
+    auto body = static_body(2, 200);
+    body["body_type"] = "dynamic";
+    body["affected_by_world_gravity"] = true;
+    body["density_kg_m3"] = 480.0;
+    body["fracture_pattern"] = {
+        {"physical_fragments", json::array({
+            {{"ordinal", 1}, {"shape", {{"type", "box"},
+                {"half_extents_m", json::array({0.25, 0.5, 0.5})}}},
+             {"local_transform", {{"position_m", json::array({-0.25, 0.0, 0.0})},
+                {"rotation_xyzw", json::array({0.0, 0.0, 0.0, 1.0})}}},
+             {"density_kg_m3", 480.0}, {"visual_id", "left"}},
+            {{"ordinal", 2}, {"shape", {{"type", "box"},
+                {"half_extents_m", json::array({0.25, 0.5, 0.5})}}},
+             {"local_transform", {{"position_m", json::array({0.25, 0.0, 0.0})},
+                {"rotation_xyzw", json::array({0.0, 0.0, 0.0, 1.0})}}},
+             {"density_kg_m3", 480.0}, {"visual_id", "right"}}
+        })},
+        {"cosmetic_asset_ids", json::array({"dust"})}
+    };
+    level_json["bodies"].push_back(body);
+    level_json["free_body_ids"].push_back(2);
+
+    const auto materials = parse_material_catalog_v2(material_catalog().dump());
+    auto archetypes_json = archetype_catalog();
+    archetypes_json["abilities"] = json::array({archetypes_json["abilities"][0]});
+    const auto archetypes = parse_archetype_catalog_v2(archetypes_json.dump());
+    const auto dust_level = parse_level_manifest_v2(level_json.dump());
+    NINHO_SIM_REQUIRE(materials.ok() && archetypes.ok() && dust_level.ok());
+    auto dust = SimulationSession::create(
+        materials.value, archetypes.value, dust_level.value);
+    NINHO_SIM_REQUIRE(dust.ok());
+
+    level_json["bodies"][1]["fracture_pattern"]["cosmetic_asset_ids"]
+        = json::array({"spark"});
+    const auto spark_level = parse_level_manifest_v2(level_json.dump());
+    NINHO_SIM_REQUIRE(spark_level.ok());
+    auto spark = SimulationSession::create(
+        materials.value, archetypes.value, spark_level.value);
+    NINHO_SIM_REQUIRE(spark.ok());
+
+    NINHO_SIM_REQUIRE(dust.value->canonical_state_v3()
+        == spark.value->canonical_state_v3());
 }
 
 NINHO_SIM_TEST("product v2 content conserves authored convex hull mass by hull volume not its aabb")
@@ -783,6 +850,7 @@ NINHO_SIM_TEST("product v2 content integrates ductile yield recreation and later
         {"force_limit_n", 7500.0}, {"torque_limit_nm", 900.0}}});
     level_json["assemblies"] = json::array({{{"id", 1}, {"key", "steel_pair"},
         {"body_ids", json::array({2, 3})}, {"joint_ids", json::array({1})}}});
+    level_json["triggers"] = json::array();
     const auto materials = parse_material_catalog_v2(material_catalog().dump());
     auto archetypes_source = archetype_catalog();
     archetypes_source["abilities"] = json::array({archetypes_source["abilities"][0]});
@@ -796,6 +864,16 @@ NINHO_SIM_TEST("product v2 content integrates ductile yield recreation and later
     auto session = std::move(created.value);
     const auto initial_hash = session->canonical_hash_v3();
 
+    NINHO_SIM_REQUIRE(detail::SessionTestFacade::queue_external_damage(
+        *session, EntityId{100}, PartId{1}, 100.0, EventId{501}));
+    detail::SessionTestFacade::override_joint_ratio_after_solver(
+        *session, JointId{1}, 0.0);
+    NINHO_SIM_REQUIRE(session->tick().ok());
+    NINHO_SIM_REQUIRE(std::ranges::count(session->events(),
+        DomainEventKind::DamageApplied, &DomainEvent::kind) == 1);
+
+    NINHO_SIM_REQUIRE(detail::SessionTestFacade::queue_external_damage(
+        *session, EntityId{100}, PartId{1}, 100.0, EventId{502}));
     detail::SessionTestFacade::override_joint_ratio_after_solver(
         *session, JointId{1}, 1.0);
     NINHO_SIM_REQUIRE(session->tick().ok());
@@ -803,6 +881,10 @@ NINHO_SIM_TEST("product v2 content integrates ductile yield recreation and later
         DomainEventKind::MaterialYielded, &DomainEvent::kind) == 1);
     NINHO_SIM_REQUIRE(std::ranges::count(session->events(),
         DomainEventKind::JointOverloaded, &DomainEvent::kind) == 0);
+    const auto yielded_event = std::ranges::find(
+        session->events(), DomainEventKind::MaterialYielded, &DomainEvent::kind);
+    NINHO_SIM_REQUIRE(yielded_event != session->events().end());
+    NINHO_SIM_REQUIRE(yielded_event->cause_event_id == EventId{});
     NINHO_SIM_REQUIRE(session->structural_joints().front().active);
     const auto yielded_hash = session->canonical_hash_v3();
     NINHO_SIM_REQUIRE(yielded_hash != initial_hash);
@@ -893,6 +975,68 @@ NINHO_SIM_TEST("product v2 content integrates compound pig mass crush causality 
         materials.value, archetypes.value, invalid_mass).ok());
 }
 
+NINHO_SIM_TEST("product v2 terrestrial pig mass is authoritative per multi body entity")
+{
+    auto materials_json = material_catalog();
+    materials_json["surfaces"][1]["density_kg_m3"] = 65.0;
+    materials_json["surfaces"][1]["friction"] = 0.65;
+    materials_json["surfaces"][1]["restitution"] = 0.05;
+    auto archetypes_json = archetype_catalog();
+    archetypes_json["weakpoints"][0]["protected_multiplier"] = 1.0;
+    archetypes_json["weakpoints"][0]["exposed_multiplier"] = 1.0;
+    archetypes_json["enemies"][0]["damage_model"] = "terrestrial_pig";
+    archetypes_json["enemies"][0]["mass_kg"] = 65.0;
+    archetypes_json["enemies"][0]["damage_energy_j_per_kg"] = 18.0;
+    archetypes_json["enemies"][0]["max_damage"] = 70.0;
+    archetypes_json["abilities"] = json::array({archetypes_json["abilities"][0]});
+    auto level_json = level_manifest();
+    level_json["triggers"] = json::array();
+    level_json["bodies"][0]["density_kg_m3"] = 32.5;
+    auto second_part = level_json["bodies"][0];
+    second_part["body_id"] = 2;
+    second_part["part_id"] = 2;
+    second_part["transform"]["position_m"] = json::array({1.25, 0.0, 0.0});
+    level_json["bodies"].push_back(second_part);
+    level_json["free_body_ids"].push_back(2);
+
+    const auto materials = parse_material_catalog_v2(materials_json.dump());
+    const auto archetypes = parse_archetype_catalog_v2(archetypes_json.dump());
+    const auto level = parse_level_manifest_v2(level_json.dump());
+    NINHO_SIM_REQUIRE(materials.ok() && archetypes.ok() && level.ok());
+    auto created = SimulationSession::create(
+        materials.value, archetypes.value, level.value);
+    if (!created.ok()) ninho::simulation::test::fail(__FILE__, __LINE__,
+        created.error.pointer + ": " + created.error.message);
+
+    double entity_mass = 0.0;
+    for (const auto& snapshot : created.value->snapshots()) {
+        if (snapshot.entity_id == EntityId{100}) entity_mass += snapshot.mass_kg;
+    }
+    NINHO_SIM_REQUIRE(std::abs(entity_mass - 65.0) <= 0.065);
+
+    const double half_of_five_weights = entity_mass * 9.81 / 60.0 * 2.5;
+    for (int tick = 0; tick < 21; ++tick) {
+        detail::SessionTestFacade::inject_crush_load(
+            *created.value, EntityId{100}, PartId{1}, half_of_five_weights);
+        detail::SessionTestFacade::inject_crush_load(
+            *created.value, EntityId{100}, PartId{2}, half_of_five_weights);
+        NINHO_SIM_REQUIRE(created.value->tick().ok());
+    }
+    const auto crush_count = std::ranges::count(created.value->events(),
+        DomainEventKind::CrushDamageApplied, &DomainEvent::kind);
+    NINHO_SIM_REQUIRE(crush_count == 1);
+    const auto crush = std::ranges::find(created.value->events(),
+        DomainEventKind::CrushDamageApplied, &DomainEvent::kind);
+    NINHO_SIM_REQUIRE(crush != created.value->events().end());
+    const auto damage = std::ranges::find_if(created.value->events(),
+        [&](const DomainEvent& event) {
+            return event.kind == DomainEventKind::DamageApplied
+                && event.cause_event_id == crush->id;
+        });
+    NINHO_SIM_REQUIRE(damage != created.value->events().end());
+    NINHO_SIM_REQUIRE(std::abs(damage->damage - 5.3055) < 0.02);
+}
+
 NINHO_SIM_TEST("product v2 content replaces an authored fracture with physical children under gravity")
 {
     auto level_json = level_manifest();
@@ -952,6 +1096,166 @@ NINHO_SIM_TEST("product v2 content replaces an authored fracture with physical c
     NINHO_SIM_REQUIRE(std::abs(mass - 120.0) < 0.12);
     NINHO_SIM_REQUIRE(children[0].linear_velocity_m_s.y < 0.0f);
     NINHO_SIM_REQUIRE(children[1].linear_velocity_m_s.y < 0.0f);
+}
+
+NINHO_SIM_TEST("product v2 fracture velocity uses each authored fragment center of mass")
+{
+    auto level_json = level_manifest();
+    auto parent = static_body(2, 200);
+    parent["body_type"] = "dynamic";
+    parent["affected_by_world_gravity"] = true;
+    parent["density_kg_m3"] = 600.0;
+    parent["transform"]["position_m"] = json::array({10.0, 15.0, 0.0});
+    const json off_center_hull = {{"type", "convex_hull"},
+        {"vertices_m", json::array({
+            json::array({0.0, 0.0, 0.0}), json::array({1.0, 0.0, 0.0}),
+            json::array({0.0, 1.0, 0.0}), json::array({0.0, 0.0, 1.0})})}};
+    parent["shape"] = off_center_hull;
+    parent["fracture_pattern"] = {
+        {"physical_fragments", json::array({{{"ordinal", 1},
+            {"shape", off_center_hull},
+            {"local_transform", {{"position_m", json::array({0.0, 0.0, 0.0})},
+                {"rotation_xyzw", json::array({0.0, 0.0, 0.0, 1.0})}}},
+            {"density_kg_m3", 600.0}, {"visual_id", "whole_hull"}}})},
+        {"cosmetic_asset_ids", json::array()}};
+    auto anchor = static_body(3, 300);
+    anchor["transform"]["position_m"] = json::array({10.0, 13.0, 0.0});
+    level_json["bodies"].push_back(parent);
+    level_json["bodies"].push_back(anchor);
+    level_json["joints"] = json::array({{{"id", 1}, {"assembly_id", 1},
+        {"kind", "pine_fit"}, {"body_a_id", 2}, {"body_b_id", 3},
+        {"force_limit_n", 1000000000.0}, {"torque_limit_nm", 1000000000.0}}});
+    level_json["assemblies"] = json::array({{{"id", 1}, {"key", "fracturable"},
+        {"body_ids", json::array({2, 3})}, {"joint_ids", json::array({1})}}});
+
+    const auto materials = parse_material_catalog_v2(material_catalog().dump());
+    auto archetypes_json = archetype_catalog();
+    archetypes_json["abilities"] = json::array({archetypes_json["abilities"][0]});
+    const auto archetypes = parse_archetype_catalog_v2(archetypes_json.dump());
+    const auto level = parse_level_manifest_v2(level_json.dump());
+    NINHO_SIM_REQUIRE(materials.ok() && archetypes.ok() && level.ok());
+    auto created = SimulationSession::create(
+        materials.value, archetypes.value, level.value);
+    if (!created.ok()) ninho::simulation::test::fail(__FILE__, __LINE__,
+        created.error.pointer + ": " + created.error.message);
+    auto session = std::move(created.value);
+
+    NINHO_SIM_REQUIRE(detail::SessionTestFacade::impulse_entity(
+        *session, EntityId{200}, {0.0f, 10000.0f, 0.0f}));
+    detail::SessionTestFacade::fracture_piece_after_solver(
+        *session, EntityId{200}, PartId{1}, {10.0f, 15.0f, 0.0f});
+    detail::SessionTestFacade::override_joint_ratio_after_solver(
+        *session, JointId{1}, 0.0);
+    NINHO_SIM_REQUIRE(session->tick().ok());
+    const auto parent_snapshot = std::ranges::find(
+        session->snapshots(), EntityId{200}, &EntitySnapshot::entity_id);
+    NINHO_SIM_REQUIRE(parent_snapshot != session->snapshots().end());
+    NINHO_SIM_REQUIRE(ninho::physics::length(
+        parent_snapshot->angular_velocity_rad_s) > 1.0e-4f);
+    const auto parent_center = detail::SessionTestFacade::body_center_of_mass(
+        *session, EntityId{200}, PartId{1});
+    NINHO_SIM_REQUIRE(parent_center.has_value());
+    NINHO_SIM_REQUIRE(ninho::physics::length(ninho::physics::cross(
+        parent_snapshot->angular_velocity_rad_s,
+        parent_snapshot->transform.position - *parent_center)) > 1.0e-2f);
+
+    const auto parent_velocity = parent_snapshot->linear_velocity_m_s;
+    const auto gravity = detail::SessionTestFacade::gravity_at(*session, *parent_center);
+    NINHO_SIM_REQUIRE(session->tick().ok());
+    const auto child = std::ranges::find(
+        session->snapshots(), EntityId{200}, &EntitySnapshot::entity_id);
+    NINHO_SIM_REQUIRE(child != session->snapshots().end());
+    const auto expected = parent_velocity + gravity * (1.0f / 60.0f);
+    NINHO_SIM_REQUIRE(ninho::physics::length(
+        child->linear_velocity_m_s - expected) < 1.0e-3f);
+}
+
+NINHO_SIM_TEST("product v2 allows large authored fracture catalogs but caps active fragments atomically")
+{
+    auto level_json = level_manifest();
+    const auto patterned_body = [](std::uint32_t body_id,
+        std::uint32_t entity_id, double x) {
+        auto body = static_body(body_id, entity_id);
+        body["body_type"] = "dynamic";
+        body["affected_by_world_gravity"] = true;
+        body["density_kg_m3"] = 120.0;
+        body["transform"]["position_m"] = json::array({x, 8.0, 0.0});
+        json fragments = json::array();
+        constexpr std::size_t count = 41U;
+        const double half_width = 0.5 / static_cast<double>(count);
+        for (std::size_t index = 0; index < count; ++index) {
+            const double center = -0.5 + half_width
+                + 2.0 * half_width * static_cast<double>(index);
+            fragments.push_back({
+                {"ordinal", index + 1U},
+                {"shape", {{"type", "box"},
+                    {"half_extents_m", json::array({half_width, 0.5, 0.5})}}},
+                {"local_transform", {{"position_m", json::array({center, 0.0, 0.0})},
+                    {"rotation_xyzw", json::array({0.0, 0.0, 0.0, 1.0})}}},
+                {"density_kg_m3", 120.0},
+                {"visual_id", "fragment_" + std::to_string(index + 1U)}});
+        }
+        body["fracture_pattern"] = {
+            {"physical_fragments", std::move(fragments)},
+            {"cosmetic_asset_ids", json::array()}};
+        return body;
+    };
+    auto first = patterned_body(2, 200, 8.0);
+    auto second = patterned_body(3, 300, 18.0);
+    auto first_anchor = static_body(4, 201);
+    first_anchor["transform"]["position_m"] = json::array({8.0, 6.0, 0.0});
+    auto second_anchor = static_body(5, 301);
+    second_anchor["transform"]["position_m"] = json::array({18.0, 6.0, 0.0});
+    level_json["bodies"].push_back(first);
+    level_json["bodies"].push_back(second);
+    level_json["bodies"].push_back(first_anchor);
+    level_json["bodies"].push_back(second_anchor);
+    level_json["joints"] = json::array({
+        {{"id", 1}, {"assembly_id", 1}, {"kind", "pine_fit"},
+            {"body_a_id", 2}, {"body_b_id", 4},
+            {"force_limit_n", 1000000000.0}, {"torque_limit_nm", 1000000000.0}},
+        {{"id", 2}, {"assembly_id", 2}, {"kind", "pine_fit"},
+            {"body_a_id", 3}, {"body_b_id", 5},
+            {"force_limit_n", 1000000000.0}, {"torque_limit_nm", 1000000000.0}}});
+    level_json["assemblies"] = json::array({
+        {{"id", 1}, {"key", "first"}, {"body_ids", json::array({2, 4})},
+            {"joint_ids", json::array({1})}},
+        {{"id", 2}, {"key", "second"}, {"body_ids", json::array({3, 5})},
+            {"joint_ids", json::array({2})}}});
+
+    const auto materials = parse_material_catalog_v2(material_catalog().dump());
+    auto archetypes_json = archetype_catalog();
+    archetypes_json["abilities"] = json::array({archetypes_json["abilities"][0]});
+    const auto archetypes = parse_archetype_catalog_v2(archetypes_json.dump());
+    const auto level = parse_level_manifest_v2(level_json.dump());
+    NINHO_SIM_REQUIRE(materials.ok() && archetypes.ok() && level.ok());
+    auto created = SimulationSession::create(
+        materials.value, archetypes.value, level.value);
+    if (!created.ok()) ninho::simulation::test::fail(__FILE__, __LINE__,
+        created.error.pointer + ": " + created.error.message);
+    auto session = std::move(created.value);
+
+    detail::SessionTestFacade::fracture_piece_after_solver(
+        *session, EntityId{200}, PartId{1}, {8.0f, 8.0f, 0.0f});
+    detail::SessionTestFacade::fracture_piece_after_solver(
+        *session, EntityId{300}, PartId{1}, {18.0f, 8.0f, 0.0f});
+    detail::SessionTestFacade::override_joint_ratio_after_solver(
+        *session, JointId{1}, 0.0);
+    detail::SessionTestFacade::override_joint_ratio_after_solver(
+        *session, JointId{2}, 0.0);
+    NINHO_SIM_REQUIRE(session->tick().ok());
+    NINHO_SIM_REQUIRE(session->tick().ok());
+
+    const auto first_count = std::ranges::count(
+        session->snapshots(), EntityId{200}, &EntitySnapshot::entity_id);
+    const auto second_count = std::ranges::count(
+        session->snapshots(), EntityId{300}, &EntitySnapshot::entity_id);
+    NINHO_SIM_REQUIRE(first_count == 41);
+    NINHO_SIM_REQUIRE(second_count == 1);
+    const auto second_parent = std::ranges::find(
+        session->snapshots(), EntityId{300}, &EntitySnapshot::entity_id);
+    NINHO_SIM_REQUIRE(second_parent != session->snapshots().end());
+    NINHO_SIM_REQUIRE(second_parent->part_id == PartId{1});
 }
 
 } // namespace

@@ -173,13 +173,18 @@ No bundle, cada body marcado como enemy deve ser dynamic, usar somente
 partes não inimigas nem mistura de archetypes.
 
 `terrestrial_pig` é um contrato tipado, nunca inferido de `key` ou visual. Ele
-exige massa de 65 kg ±0,065 kg, surface com atrito 0,65 e restituição 0,05,
+exige massa física total de 65 kg ±0,065 kg por entidade (um compound ou a soma
+de vários bodies/parts), surface com atrito 0,65 e restituição 0,05,
 weakpoint uniforme (`protected_multiplier=exposed_multiplier=1`),
 `damage_energy_j_per_kg=18` e `max_damage=70`. O contato usa as grandezas raw:
 `E=0,5*m_effective*v_normal²` e
 `damage=clamp((E/m_pig-18)*0,9,0,70)`. Burst/explosão passa a energia externa
-pelo mesmo DamageSystem. Em mundo uniforme, sair do AABB neutraliza uma vez por
-`BoundsExit`; em mundo radial permanece `Ejection`.
+pelo mesmo DamageSystem. `m_pig` é sempre a massa autoritativa da entidade, não
+a massa do part atingido; o `m_effective` continua sendo o valor físico do par
+em contato. Um mesmo `EventId` causal aplica dano no máximo uma vez por entidade
+inimiga, mesmo se alcançar vários parts, e o receipt persistente integra o
+canonical. Em mundo uniforme, sair do AABB neutraliza uma vez por `BoundsExit`;
+em mundo radial permanece `Ejection`.
 
 ## CampaignManifest v2
 
@@ -295,9 +300,13 @@ contém exatamente um archetype inimigo, sem partes não inimigas.
 `cosmetic_asset_ids`. Cada fragmento físico declara `ordinal` positivo e único,
 `shape`, `local_transform`, `density_kg_m3` e `visual_id`. A soma das massas
 geométricas dos fragmentos deve igualar a massa do pai em ±0,1%; convex hull
-usa o volume do hull, não o AABB. Há no máximo 80 fragmentos físicos autorados.
-IDs cosméticos não criam body, DamageState ou identidade física. Enemy bodies
-não podem declarar padrão de fratura.
+usa o volume e o centroide do hull, não o AABB. A soma `Σm*r` também deve
+preservar o centro de massa do pai. O catálogo pode autorar mais de 80
+fragmentos entre padrões distintos, mas o runtime admite no máximo 80
+fragmentos físicos simultaneamente ativos e rejeita cada substituição excedente
+de forma atômica. IDs cosméticos não criam body, DamageState, identidade física
+nem alteram o canonical físico. Enemy bodies não podem declarar padrão de
+fratura.
 
 ### Ownership, joints e assemblies
 
@@ -325,7 +334,9 @@ Cada joint é um objeto fechado:
 O preset terrestre usa argamassa em 1.400 N/160 N·m e `straw_bind` em
 800 N/90 N·m. `steel_ductile` faz `Elastic→Yielded` em 3.200 N ou 450 N·m,
 recria a constraint no tick seguinte sob o mesmo handle e somente um solver
-posterior pode rompê-la em 7.500 N ou 900 N·m.
+posterior pode rompê-la em 7.500 N ou 900 N·m. A causa de `MaterialYielded`
+considera apenas dano do tick atual em um dos dois endpoints; sem incidente
+correspondente, a causa é zero e nunca reutiliza um evento global antigo.
 
 Cada assembly é um objeto fechado:
 
@@ -382,8 +393,9 @@ Pressure burst contém exatamente:
 
 ### Esmagamento terrestre
 
-Para cada porco terrestre, o runtime soma uma vez o impulso normal agregado do
-tick e compara `impulse/(mass*|gravity|*dt)`, quantizado em `10^-5`. Somente
+Para cada entidade de porco terrestre, o runtime soma uma vez o impulso normal
+agregado de todos os seus parts no tick, usa o COM ponderado da entidade e
+compara `impulse/(mass*|gravity|*dt)`, quantizado em `10^-5`. Somente
 razão estritamente maior que 4 mantida por 21 ticks produz dano. O excesso
 acumula `delta_v += (ratio-4)*g*dt`; no 21º tick a energia externa é
 `mass*(18+0,5*delta_v²)`. Qualquer interrupção zera a janela. A ordem causal é

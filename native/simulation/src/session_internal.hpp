@@ -68,6 +68,7 @@ struct SimulationSession::Impl : detail::AbilityLifecycleHooks {
         bool is_projectile{};
         bool affected_by_world_gravity{};
         std::optional<FracturePatternDefinition> fracture_pattern;
+        bool is_physical_fragment{};
     };
 
     struct JointRecord {

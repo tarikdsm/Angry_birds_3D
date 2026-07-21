@@ -890,11 +890,6 @@ void write_canonical_v3_content(CanonicalWriter& writer, const ContentBundle& bu
                 writer.quantized(fragment->density_kg_m3);
                 writer.text(fragment->visual_id);
             }
-            auto cosmetics = body->fracture_pattern->cosmetic_asset_ids;
-            std::ranges::sort(cosmetics);
-            writer.integer<std::uint32_t>(
-                static_cast<std::uint32_t>(cosmetics.size()));
-            for (const auto& asset : cosmetics) writer.text(asset);
         }
     }
 
@@ -1290,6 +1285,20 @@ std::vector<std::uint8_t> SimulationSession::Impl::serialize_canonical_state_v3(
         writer.quantized(damage->remaining_integrity);
         writer.boolean(damage->was_ejected);
         writer.boolean(damage->neutralized);
+    }
+    std::vector<const detail::DamageState*> external_damage_receipts;
+    std::ranges::copy_if(damage_states,
+        std::back_inserter(external_damage_receipts), [](const auto* damage) {
+            return damage->last_external_damage_event_id != EventId{};
+        });
+    if (!external_damage_receipts.empty()) {
+        writer.integer<std::uint32_t>(
+            static_cast<std::uint32_t>(external_damage_receipts.size()));
+        for (const auto* damage : external_damage_receipts) {
+            identifier(writer, damage->entity_id);
+            identifier(writer, damage->part_id);
+            identifier(writer, damage->last_external_damage_event_id);
+        }
     }
 
     const bool terrestrial_pigs = std::ranges::any_of(

@@ -1,5 +1,6 @@
 #include "session_internal.hpp"
 #include "material_mapping.hpp"
+#include "shape_volume.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -135,7 +136,11 @@ ninho::physics::BodyDesc fragment_body_desc(const MaterialDefinition& material,
     ninho::physics::BodyDesc result;
     result.type = ninho::physics::BodyType::Dynamic;
     result.transform = compose(parent.transform, local);
-    const auto offset = result.transform.position - parent.world_center_of_mass;
+    const auto fragment_properties = detail::shape_mass_properties(fragment.shape);
+    const auto child_center_of_mass = result.transform.position
+        + rotate(result.transform.rotation,
+            vector_from(fragment_properties.center_of_mass_m));
+    const auto offset = child_center_of_mass - parent.world_center_of_mass;
     result.linear_velocity = parent.linear_velocity
         + ninho::physics::cross(parent.angular_velocity, offset);
     result.angular_velocity = parent.angular_velocity;
@@ -391,8 +396,16 @@ void SimulationSession::Impl::apply_pending_fractures_before_step()
             const MaterialDefinition* material = parent->material_id
                 ? find_material(bundle.materials, *parent->material_id) : nullptr;
             const auto& fragments = parent->fracture_pattern->physical_fragments;
+            const std::size_t active_physical_fragments = std::ranges::count_if(
+                body_records, [](const BodyRecord& record) {
+                    // Records are committed immediately after create_body(),
+                    // while the native body remains queued until the solver.
+                    return record.is_physical_fragment;
+                });
             if (!parent_state || material == nullptr
-                || physics.remaining_body_capacity() < fragments.size()) {
+                || physics.remaining_body_capacity() < fragments.size()
+                || active_physical_fragments > 80U
+                || fragments.size() > 80U - active_physical_fragments) {
                 retained.push_back(pending);
                 continue;
             }
@@ -464,7 +477,7 @@ void SimulationSession::Impl::apply_pending_fractures_before_step()
                     fragment.part_id, BodyType::Dynamic, pending.material_id,
                     std::nullopt, std::nullopt, std::move(fragment.shape),
                     std::move(fragment.visual_id), created.value, false, false,
-                    true, std::nullopt});
+                    true, std::nullopt, true});
             }
             if (creation_failed) {
                 throw std::runtime_error(

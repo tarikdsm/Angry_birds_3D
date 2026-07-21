@@ -150,7 +150,7 @@ void apply_enemy_damage(std::vector<DamageState>& states,
     double damage = 0.0;
     double applied_energy = energy;
     if (enemy->damage_model == EnemyDamageModel::TerrestrialPig) {
-        if (!std::isfinite(target.mass_kg) || target.mass_kg <= 0.0) {
+        if (!std::isfinite(enemy->mass_kg) || enemy->mass_kg <= 0.0) {
             return;
         }
         const double selected_energy = raw_contact_energy >= 0.0
@@ -159,7 +159,7 @@ void apply_enemy_damage(std::vector<DamageState>& states,
             return;
         }
         applied_energy = selected_energy;
-        const double specific_energy = selected_energy / target.mass_kg;
+        const double specific_energy = selected_energy / enemy->mass_kg;
         damage = std::clamp((specific_energy - 18.0) * 0.9,
             0.0, enemy->max_damage) * response.multiplier;
     } else {
@@ -293,7 +293,15 @@ void SimulationSession::Impl::process_damage_after_step()
         }
     }
 
-    std::vector<detail::CrushBody> crush_bodies;
+    struct PigEntityAggregate {
+        EntityId entity_id{};
+        PartId representative_part_id{};
+        const EnemyArchetype* definition{};
+        double physical_mass_kg{};
+        ninho::physics::Vec3 mass_weighted_center{};
+        bool neutralized{};
+    };
+    std::vector<PigEntityAggregate> pig_entities;
     for (const BodyRecord& record : body_records) {
         const EnemyArchetype* enemy = enemy_definition(record.enemy_archetype_id);
         const auto state = physics.state(record.physics_handle);
@@ -301,12 +309,41 @@ void SimulationSession::Impl::process_damage_after_step()
             || !state) {
             continue;
         }
-        const auto gravity = physics.gravity_at(state->world_center_of_mass);
-        crush_bodies.push_back({record.entity_id, record.part_id, state->mass,
-            ninho::physics::length(gravity), record.neutralized,
-            state->world_center_of_mass,
+        auto aggregate = std::ranges::find(
+            pig_entities, record.entity_id, &PigEntityAggregate::entity_id);
+        if (aggregate == pig_entities.end()) {
+            pig_entities.push_back({record.entity_id, record.part_id, enemy});
+            aggregate = std::prev(pig_entities.end());
+        }
+        aggregate->representative_part_id = std::min(
+            aggregate->representative_part_id, record.part_id);
+        aggregate->physical_mass_kg += state->mass;
+        aggregate->mass_weighted_center = aggregate->mass_weighted_center
+            + state->world_center_of_mass * state->mass;
+        aggregate->neutralized = aggregate->neutralized || record.neutralized;
+    }
+    std::ranges::sort(pig_entities, {}, &PigEntityAggregate::entity_id);
+    std::vector<detail::CrushBody> crush_bodies;
+    crush_bodies.reserve(pig_entities.size());
+    for (const auto& pig : pig_entities) {
+        if (!std::isfinite(pig.physical_mass_kg) || pig.physical_mass_kg <= 0.0) {
+            continue;
+        }
+        const auto center = pig.mass_weighted_center
+            / static_cast<float>(pig.physical_mass_kg);
+        const auto gravity = physics.gravity_at(center);
+        crush_bodies.push_back({pig.entity_id, pig.representative_part_id,
+            pig.definition->mass_kg, ninho::physics::length(gravity),
+            pig.neutralized, center,
             ninho::physics::normalized_or_zero(-gravity)});
     }
+    const auto pig_representative_part = [&](EntityId entity)
+        -> std::optional<PartId> {
+        const auto found = std::ranges::find(
+            pig_entities, entity, &PigEntityAggregate::entity_id);
+        return found == pig_entities.end()
+            ? std::nullopt : std::optional{found->representative_part_id};
+    };
     std::vector<detail::CrushContactLoad> crush_loads;
     for (const auto& physical : physics.physical_contacts()) {
         for (const auto handle : {physical.a, physical.b}) {
@@ -316,15 +353,22 @@ void SimulationSession::Impl::process_damage_after_step()
             const EnemyArchetype* enemy = enemy_definition(record->enemy_archetype_id);
             if (enemy != nullptr
                 && enemy->damage_model == EnemyDamageModel::TerrestrialPig) {
-                crush_loads.push_back({record->entity_id, record->part_id,
-                    physical.total_normal_impulse_n_s});
+                const auto representative = pig_representative_part(record->entity_id);
+                if (representative) {
+                    crush_loads.push_back({record->entity_id, *representative,
+                        physical.total_normal_impulse_n_s});
+                }
             }
         }
     }
 #if defined(NINHO_ENABLE_TEST_FACADES)
-    crush_loads.insert(crush_loads.end(),
-        crush_load_overrides_for_testing.begin(),
-        crush_load_overrides_for_testing.end());
+    for (const auto& load : crush_load_overrides_for_testing) {
+        const auto representative = pig_representative_part(load.entity_id);
+        if (representative) {
+            crush_loads.push_back({load.entity_id, *representative,
+                load.total_normal_impulse_n_s});
+        }
+    }
     crush_load_overrides_for_testing.clear();
 #endif
     const auto crush_plans = crush_damage_system.update(session_state.tick,
@@ -453,6 +497,26 @@ std::vector<DamageOutcome> DamageSystem::process(
         if (target == nullptr) {
             continue;
         }
+        const auto receipt_for_target = [&]() -> DamageState* {
+            if (target->enemy_archetype_id) {
+                return find_enemy_state(next_states, target->entity_id);
+            }
+            const auto found = std::ranges::find_if(next_states,
+                [&](const DamageState& current) {
+                    return current.entity_id == target->entity_id
+                        && current.part_id == target->part_id;
+                });
+            return found == next_states.end() ? nullptr : &*found;
+        };
+        if (external.cause_event_id != EventId{}) {
+            const DamageState* receipt = receipt_for_target();
+            // EventIds are session-global and monotonic. A per-target watermark is
+            // therefore an exact, deterministic and body-capacity-bounded ledger.
+            if (receipt != nullptr
+                && external.cause_event_id <= receipt->last_external_damage_event_id) {
+                continue;
+            }
+        }
         apply_material_damage(next_states, outcomes, materials, *target,
             external.cause_entity_id, external.cause_part_id,
             external.position_m, external.normal_cause_to_target,
@@ -461,6 +525,11 @@ std::vector<DamageOutcome> DamageSystem::process(
             external.cause_entity_id, external.cause_part_id,
             external.position_m, external.normal_cause_to_target,
             external.energy_j, external.cause_event_id);
+        if (external.cause_event_id != EventId{}) {
+            if (DamageState* receipt = receipt_for_target()) {
+                receipt->last_external_damage_event_id = external.cause_event_id;
+            }
+        }
     }
     for (const DamageContact& contact : contacts) {
         const DamageBody* a = find_body(bodies, contact.a_entity_id, contact.a_part_id);

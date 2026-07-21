@@ -62,6 +62,8 @@ public:
         const SimulationSession&, ninho::physics::Vec3);
     static std::optional<ninho::physics::Aabb> body_bounds(
         const SimulationSession&, EntityId, PartId);
+    static std::optional<ninho::physics::Vec3> body_center_of_mass(
+        const SimulationSession&, EntityId, PartId);
     static bool set_body_neutralized(
         SimulationSession&, EntityId, PartId, bool neutralized);
     static void override_joint_ratio_after_solver(SimulationSession&, JointId, double ratio);

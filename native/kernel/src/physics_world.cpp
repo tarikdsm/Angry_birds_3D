@@ -934,6 +934,14 @@ struct PhysicsWorld::Impl {
             }
         }
 
+        // Box3D shifts linear velocity while recomputing mass data for an
+        // off-center shape. BodyDesc specifies the final center-of-mass
+        // velocities, so restore them after all shapes are attached.
+        b3Body_SetLinearVelocity(
+            native, detail::to_box3d_vector(desc.linear_velocity));
+        b3Body_SetAngularVelocity(
+            native, detail::to_box3d_vector(desc.angular_velocity));
+
         slot->native = native;
         slot->base_mass_data = b3Body_GetMassData(native);
         slot->mass_scale = 1.0f;

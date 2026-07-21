@@ -29,6 +29,8 @@ ContentError error(ContentErrorCode code, std::string pointer, std::string messa
 struct EntitySummary {
     std::unordered_set<std::uint32_t> enemy_archetype_ids;
     bool has_non_enemy_part{};
+    double physical_mass_kg{};
+    std::size_t first_enemy_body_index{};
 };
 
 }
@@ -123,6 +125,9 @@ std::optional<ContentError> validate_level_semantics(
             entity.has_non_enemy_part = true;
             continue;
         }
+        if (entity.enemy_archetype_ids.empty()) {
+            entity.first_enemy_body_index = i;
+        }
         const auto found_enemy = enemies.find(body.enemy_archetype_id->value());
         if (found_enemy == enemies.end()) {
             return error(ContentErrorCode::MissingReference,
@@ -146,12 +151,12 @@ std::optional<ContentError> validate_level_semantics(
         if (found_enemy->second->damage_model == EnemyDamageModel::TerrestrialPig) {
             const double physical_mass = detail::shape_volume_m3(body.shape)
                 * body.density_kg_m3;
-            if (!std::isfinite(physical_mass)
-                || std::abs(physical_mass - 65.0) > 0.065) {
+            if (!std::isfinite(physical_mass) || physical_mass <= 0.0) {
                 return error(ContentErrorCode::InvalidInvariant,
                     indexed("/bodies", i) + "/density_kg_m3",
-                    "terrestrial pig body mass must be 65 kg within 0.1 percent");
+                    "terrestrial pig body mass must be positive and finite");
             }
+            entity.physical_mass_kg += physical_mass;
         }
         entity.enemy_archetype_ids.insert(body.enemy_archetype_id->value());
     }
@@ -162,6 +167,18 @@ std::optional<ContentError> validate_level_semantics(
             && (summary.has_non_enemy_part || summary.enemy_archetype_ids.size() != 1U)) {
             return error(ContentErrorCode::InvalidInvariant, "/bodies",
                 "enemy entity must contain exactly one enemy archetype and no non-enemy parts");
+        }
+        if (summary.enemy_archetype_ids.size() == 1U) {
+            const auto* enemy = enemies.at(*summary.enemy_archetype_ids.begin());
+            if (enemy->damage_model == EnemyDamageModel::TerrestrialPig
+                && (!std::isfinite(summary.physical_mass_kg)
+                    || std::abs(summary.physical_mass_kg - enemy->mass_kg)
+                        > enemy->mass_kg * 0.001)) {
+                return error(ContentErrorCode::InvalidInvariant,
+                    indexed("/bodies", summary.first_enemy_body_index)
+                        + "/density_kg_m3",
+                    "terrestrial pig entity mass must match its archetype within 0.1 percent");
+            }
         }
     }
 
@@ -442,7 +459,6 @@ std::optional<ContentError> validate_product_v2_session_content(
     std::unordered_set<std::uint64_t> entity_parts;
     std::unordered_set<std::uint32_t> entity_ids;
     std::unordered_map<std::uint32_t, std::size_t> entity_body_counts;
-    std::size_t authored_fragment_count = 0U;
     for (std::size_t index = 0; index < level.bodies.size(); ++index) {
         const BodyDefinition& body = level.bodies[index];
         const std::string pointer = indexed("/bodies", index);
@@ -480,14 +496,8 @@ std::optional<ContentError> validate_product_v2_session_content(
                     pointer + "/fracture_pattern",
                     "fracture patterns are allowed only on material bodies");
             }
-            authored_fragment_count +=
-                body.fracture_pattern->physical_fragments.size();
-            if (authored_fragment_count > 80U) {
-                return error(ContentErrorCode::ResourceLimit,
-                    pointer + "/fracture_pattern/physical_fragments",
-                    "active physical fragment capacity exceeded");
-            }
             double mass = 0.0;
+            std::array<double, 3> first_moment{};
             std::unordered_set<std::uint32_t> ordinals;
             for (const auto& fragment :
                 body.fracture_pattern->physical_fragments) {
@@ -500,10 +510,20 @@ std::optional<ContentError> validate_product_v2_session_content(
                         pointer + "/fracture_pattern/physical_fragments",
                         "physical fragment descriptor is invalid");
                 }
-                mass += detail::shape_volume_m3(fragment.shape)
+                const auto fragment_properties =
+                    detail::shape_mass_properties(fragment.shape);
+                const double fragment_mass = fragment_properties.volume_m3
                     * fragment.density_kg_m3;
+                const auto center = detail::transform_point(
+                    fragment.local_transform,
+                    fragment_properties.center_of_mass_m);
+                for (std::size_t axis = 0; axis < 3U; ++axis) {
+                    first_moment[axis] += fragment_mass * center[axis];
+                }
+                mass += fragment_mass;
             }
-            const double parent_mass = detail::shape_volume_m3(body.shape)
+            const auto parent_properties = detail::shape_mass_properties(body.shape);
+            const double parent_mass = parent_properties.volume_m3
                 * body.density_kg_m3;
             if (body.fracture_pattern->physical_fragments.empty()
                 || parent_mass <= 0.0
@@ -511,6 +531,18 @@ std::optional<ContentError> validate_product_v2_session_content(
                 return error(ContentErrorCode::InvalidInvariant,
                     pointer + "/fracture_pattern",
                     "physical fragment mass must equal parent mass within 0.1 percent");
+            }
+            for (std::size_t axis = 0; axis < 3U; ++axis) {
+                const double fragments_center = first_moment[axis] / mass;
+                const double parent_center = parent_properties.center_of_mass_m[axis];
+                const double tolerance = 1.0e-6
+                    * std::max({1.0, std::abs(fragments_center),
+                        std::abs(parent_center)});
+                if (std::abs(fragments_center - parent_center) > tolerance) {
+                    return error(ContentErrorCode::InvalidInvariant,
+                        pointer + "/fracture_pattern",
+                        "physical fragments must preserve the parent center of mass");
+                }
             }
         }
     }

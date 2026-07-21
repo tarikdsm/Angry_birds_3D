@@ -75,6 +75,7 @@ struct DamageState {
     bool was_ejected{};
     bool was_bounds_exit{};
     bool neutralized{};
+    EventId last_external_damage_event_id{};
 };
 
 class DamageSystem {

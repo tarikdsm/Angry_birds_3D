@@ -39,7 +39,7 @@
 ### Porco terrestre e esmagamento
 
 - Novo contrato tipado `EnemyDamageModel::TerrestrialPig`; nenhuma inferência por nome, mesh ou visual.
-- Validação semântica exige compound físico de `65 kg ±0,065 kg`, superfície `μ=0,65`, restituição `0,05`, weakpoint uniforme e ausência de padrão de fratura.
+- Validação semântica exige massa física total de `65 kg ±0,065 kg` por entidade (compound ou multi-body), superfície `μ=0,65`, restituição `0,05`, weakpoint uniforme e ausência de padrão de fratura.
 - Contato usa diretamente `0,5 × effective_mass × normal_speed²`, sem a deadzone legada; `18 J/kg` é inclusivo sem dano e `18,001 J/kg` inicia dano.
 - Explosão e esmagamento entram no mesmo `DamageSystem`, preservando cap, integridade e deduplicação causal.
 - Novo `CrushDamageSystem`: soma de impulso por porco/tick, razão quantizada em `1e-5`, comparação estrita `>4`, janela de 21 ticks, reset por interrupção e proteção para `g=0`, massa/body inválidos ou neutralizados.
@@ -48,9 +48,9 @@
 
 ### Fragmentação, canonical e adapters
 
-- Padrões de fratura físicos são exclusivamente autorados e validados: massa dos filhos dentro de `0,1%`, máximo global de 80 e proibição para inimigos.
+- Padrões de fratura físicos são exclusivamente autorados e validados: massa e COM dos filhos conservados, máximo global de 80 fragmentos ativos e proibição para inimigos.
 - Substituição do pai por filhos ocorre antes do próximo solver step, com IDs determinísticos, `v_child = v_parent + ω×r`, velocidade angular e gravidade desde o primeiro step.
-- Fragmentos cosméticos não entram no kernel, `DamageState` ou identidade física.
+- Fragmentos cosméticos não entram no kernel, `DamageState`, identidade física ou canonical físico.
 - Canonical v3 ganhou blocos condicionais para ductilidade e crush; mutation probes provam mudança de hash por estado relevante e omissão quando o recurso não existe.
 - Eventos append-only `MaterialYielded=21` e `CrushDamageApplied=22` foram mapeados nos adapters e preservados no `SessionFrameBatch`, sem `unknown`.
 
@@ -75,3 +75,23 @@
 
 - Nenhum push foi realizado.
 - A revisão independente deve ocorrer após o commit; eventuais correções devem ser commits separados, conforme o brief operacional.
+
+## Correções da revisão independente
+
+Após o commit principal `577b5b26f651d55f20a4803fd0c70e05e0cba3a7`, a revisão independente encontrou seis lacunas. Todas foram reproduzidas antes da correção:
+
+1. **Canonical cosmético:** RED com `dust` versus `spark` mudou o canonical físico. GREEN remove `cosmetic_asset_ids` do blob físico, preservando-os somente no conteúdo/apresentação.
+2. **Exactly-once externo persistente:** RED reaplicou `EventId=51` em uma chamada posterior. GREEN mantém watermark causal monotônico por alvo, limitado pelos `DamageState`, serializado condicionalmente no canonical; inimigos usam escopo por entidade e materiais por part.
+3. **COM e momento de fragmentos:** RED aceitou massa correta com `Σm*r` deslocado. O cálculo de mass properties agora cobre primitivas, convex hull real, compound e transforms. Um segundo RED mostrou que Box3D alterava a velocidade solicitada ao anexar shape off-center (`y=11` em vez de `y=3`); o kernel restaura a velocidade de COM após criar shapes e a fragmentação usa `v_child=v_parent+ω×(COM_child-COM_parent)`.
+4. **Causa de yield:** RED fez uma junta 200/300 herdar dano alheio da entidade 100. GREEN considera apenas eventos de dano/neutralização do tick atual em endpoints exatos e usa causa zero quando não existe incidente correspondente.
+5. **Orçamento ativo:** RED rejeitou no conteúdo dois padrões de 41 fragmentos. Após liberar o catálogo, um segundo RED ativou 82. GREEN marca fragmentos físicos tipadamente no runtime e faz preflight atômico de `ativos + padrão <= 80`; o segundo pai permanece intacto e pendente.
+6. **Porco multi-body:** RED rejeitou dois parts de 32,5 kg e calculou dano pelo body atingido (`19,8` em vez de `1,8`). GREEN valida 65 kg ±0,1% pela soma da entidade, usa a massa autoritativa do archetype no dano, preserva o `effective_mass` do contato, deduplica a mesma causa entre parts e agrega COM/cargas de crush por entidade.
+
+Gates corretivos já concluídos:
+
+- Debug focado amplo: **11/11 testes passaram**, 0 falhas, 46,11 s.
+- Debug build com GDExtension: exit 0.
+- Debug completo serial e sem processos concorrentes: **64/64 testes passaram**, 0 falhas, 406,85 s.
+- Release build com GDExtension: exit 0.
+- Release focado: **11/11 testes passaram**, 0 falhas, 3,25 s.
+- A primeira tentativa de Debug completo foi descartada: o timeout do wrapper deixou um `ctest` filho vivo e uma reinicialização gerou duplicidade; a árvore tardia foi encerrada por PID, todos os processos terminaram e o gate acima foi repetido serialmente do zero.

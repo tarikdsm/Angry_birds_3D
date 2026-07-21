@@ -665,6 +665,20 @@ std::optional<ninho::physics::Aabb> detail::SessionTestFacade::body_bounds(
     return session.impl_->physics.body_bounds(record->physics_handle);
 }
 
+std::optional<ninho::physics::Vec3> detail::SessionTestFacade::body_center_of_mass(
+    const SimulationSession& session, EntityId entity, PartId part)
+{
+    const auto record = std::ranges::find_if(session.impl_->body_records,
+        [&](const auto& value) {
+            return value.entity_id == entity && value.part_id == part;
+        });
+    if (record == session.impl_->body_records.end()) {
+        return std::nullopt;
+    }
+    const auto state = session.impl_->physics.state(record->physics_handle);
+    return state ? std::optional{state->world_center_of_mass} : std::nullopt;
+}
+
 bool detail::SessionTestFacade::set_body_neutralized(SimulationSession& session,
     EntityId entity, PartId part, bool neutralized)
 {

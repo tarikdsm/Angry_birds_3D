@@ -791,6 +791,27 @@ NINHO_TEST("capability exposes compound world center of mass and deterministic s
     NINHO_REQUIRE(!world.cast_segment({0, 0, 0}, {0, 0, 0}, {}));
 }
 
+NINHO_TEST("capability body creation preserves requested center of mass velocities")
+{
+    PhysicsWorld world(make_legacy_radial_world_config({.surface_gravity = 0}));
+    BodyDesc body{.type = BodyType::Dynamic,
+        .transform = {{3, 4, 0}, {}},
+        .linear_velocity = {2, 3, 0},
+        .angular_velocity = {0, 0, 4}};
+    body.shapes.push_back({
+        .geometry = SphereShape{.radius = 0.5f, .local = {{2, 0, 0}, {}}},
+        .density = 100});
+    const BodyHandle handle = world.create_body(body).value;
+    world.step();
+
+    const auto state = world.state(handle);
+    NINHO_REQUIRE(state.has_value());
+    NINHO_REQUIRE_NEAR(state->linear_velocity.x, body.linear_velocity.x, 1.0e-6f);
+    NINHO_REQUIRE_NEAR(state->linear_velocity.y, body.linear_velocity.y, 1.0e-6f);
+    NINHO_REQUIRE_NEAR(state->linear_velocity.z, body.linear_velocity.z, 1.0e-6f);
+    NINHO_REQUIRE(state->angular_velocity == body.angular_velocity);
+}
+
 NINHO_TEST("capability central impulse batch is atomic and creates no spin")
 {
     PhysicsWorld world(make_legacy_radial_world_config({.surface_gravity = 0}));

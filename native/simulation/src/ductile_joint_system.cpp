@@ -108,6 +108,30 @@ Impl::BodyRecord* endpoint_body(Impl& session, JointEndpoint endpoint)
     return found == session.body_records.end() ? nullptr : &*found;
 }
 
+EventId incident_cause_for_current_tick(
+    const Impl& session, const Impl::JointRecord& joint) noexcept
+{
+    EventId cause{};
+    const auto matches_endpoint = [&](const DomainEvent& event) {
+        return (event.affected_entity_id == joint.snapshot.a.entity_id
+                && event.affected_part_id == joint.snapshot.a.part_id)
+            || (event.affected_entity_id == joint.snapshot.b.entity_id
+                && event.affected_part_id == joint.snapshot.b.part_id);
+    };
+    for (const DomainEvent& event : session.domain_events) {
+        if (event.tick != session.session_state.tick
+            || (event.kind != DomainEventKind::DamageApplied
+                && event.kind != DomainEventKind::EntityNeutralized)
+            || !matches_endpoint(event)) {
+            continue;
+        }
+        if (cause == EventId{} || event.id < cause) {
+            cause = event.id;
+        }
+    }
+    return cause;
+}
+
 }
 
 SessionStatus SimulationSession::Impl::apply_pending_ductile_recreations_before_step()
@@ -183,14 +207,7 @@ void SimulationSession::Impl::evaluate_ductile_joints_after_step()
             force = ninho::physics::length(reaction->force);
             torque = ninho::physics::length(reaction->torque);
         }
-        EventId cause{};
-        for (auto event = domain_events.rbegin(); event != domain_events.rend(); ++event) {
-            if (event->kind == DomainEventKind::DamageApplied
-                || event->kind == DomainEventKind::EntityNeutralized) {
-                cause = event->id;
-                break;
-            }
-        }
+        const EventId cause = incident_cause_for_current_tick(*this, joint);
         const auto midpoint = (state_a->transform.position
             + state_b->transform.position) * 0.5f;
         samples.push_back({joint.snapshot.id, force, torque,

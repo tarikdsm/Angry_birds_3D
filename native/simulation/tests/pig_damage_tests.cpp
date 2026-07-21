@@ -110,6 +110,68 @@ NINHO_SIM_TEST("pig damage is uniform by direction and explosions share the same
         EntityId{200}, PartId{1})->remaining_integrity - 98.2) < 1.0e-12);
 }
 
+NINHO_SIM_TEST("pig damage remembers external causal events across process calls")
+{
+    const MaterialCatalog materials{.schema_version = 2, .source_schema_version = 2};
+    const auto archetypes = pig_catalog();
+    const std::array bodies{pig_body()};
+    const detail::ExternalDamage first{EntityId{77}, PartId{1},
+        EntityId{200}, PartId{1}, {}, {0.0f, 1.0f, 0.0f},
+        65.0 * 20.0, EventId{51}};
+    auto distinct = first;
+    distinct.cause_event_id = EventId{52};
+
+    detail::DamageSystem system;
+    NINHO_SIM_REQUIRE(system.process(
+        materials, archetypes, bodies, {}, std::array{first}).size() == 1U);
+    NINHO_SIM_REQUIRE(system.process(
+        materials, archetypes, bodies, {}, std::array{first}).empty());
+    NINHO_SIM_REQUIRE(system.process(
+        materials, archetypes, bodies, {}, std::array{distinct}).size() == 1U);
+    NINHO_SIM_REQUIRE(std::abs(system.state(
+        EntityId{200}, PartId{1})->remaining_integrity - 96.4) < 1.0e-12);
+}
+
+NINHO_SIM_TEST("pig damage uses entity mass and deduplicates one cause across body parts")
+{
+    const MaterialCatalog materials{.schema_version = 2, .source_schema_version = 2};
+    const auto archetypes = pig_catalog();
+    auto first_part = pig_body();
+    first_part.mass_kg = 32.5;
+    auto second_part = first_part;
+    second_part.part_id = PartId{2};
+    const detail::DamageBody source{.entity_id = EntityId{99},
+        .part_id = PartId{1}, .mass_kg = 20.0};
+    const std::array bodies{source, first_part, second_part};
+
+    constexpr double effective_mass = 20.0;
+    constexpr double entity_specific_energy = 20.0;
+    const double raw_energy = 65.0 * entity_specific_energy;
+    const double normal_speed = std::sqrt(2.0 * raw_energy / effective_mass);
+    const detail::DamageContact contact{EntityId{99}, PartId{1},
+        EntityId{200}, PartId{2}, {}, {1.0f, 0.0f, 0.0f}, 0.0,
+        normal_speed, effective_mass};
+    detail::DamageSystem contact_system;
+    const auto contact_outcome = contact_system.process(
+        materials, archetypes, bodies, std::array{contact});
+    NINHO_SIM_REQUIRE(contact_outcome.size() == 1U);
+    NINHO_SIM_REQUIRE(std::abs(contact_outcome.front().energy_j - raw_energy) < 1.0e-8);
+    NINHO_SIM_REQUIRE(std::abs(contact_outcome.front().damage - 1.8) < 1.0e-10);
+
+    const detail::ExternalDamage first{EntityId{77}, PartId{1},
+        EntityId{200}, PartId{1}, {}, {0.0f, 1.0f, 0.0f},
+        raw_energy, EventId{61}};
+    auto second = first;
+    second.target_part_id = PartId{2};
+    detail::DamageSystem external_system;
+    const auto external_outcome = external_system.process(
+        materials, archetypes, bodies, {}, std::array{first, second});
+    NINHO_SIM_REQUIRE(external_outcome.size() == 1U);
+    NINHO_SIM_REQUIRE(std::abs(external_outcome.front().damage - 1.8) < 1.0e-10);
+    NINHO_SIM_REQUIRE(std::abs(external_system.state(
+        EntityId{200}, PartId{1})->remaining_integrity - 98.2) < 1.0e-10);
+}
+
 NINHO_SIM_TEST("pig damage crush requires strictly over four weights for twenty one continuous ticks")
 {
     using namespace ninho::simulation::detail;
