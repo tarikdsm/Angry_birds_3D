@@ -10,10 +10,14 @@
 #include <array>
 #include <cmath>
 #include <cstdint>
+#include <filesystem>
+#include <fstream>
 #include <limits>
 #include <memory>
 #include <ranges>
+#include <sstream>
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace {
@@ -158,6 +162,32 @@ LevelManifest level()
 std::unique_ptr<SimulationSession> create_session()
 {
     auto created = SimulationSession::create(materials(), archetypes(), level());
+    NINHO_SIM_REQUIRE(created.ok());
+    return std::move(created.value);
+}
+
+std::string read_product_file(std::string_view relative)
+{
+    std::ifstream stream{std::filesystem::path{NINHO_SOURCE_DIR} / relative,
+        std::ios::binary};
+    NINHO_SIM_REQUIRE(stream.is_open());
+    std::ostringstream text;
+    text << stream.rdbuf();
+    return text.str();
+}
+
+std::unique_ptr<SimulationSession> create_product_farm_session()
+{
+    const auto parsed_materials = parse_material_catalog(
+        read_product_file("game/data/materials/product_v2.materials.json"));
+    const auto parsed_archetypes = parse_archetype_catalog(
+        read_product_file("game/data/archetypes/product_v2.archetypes.json"));
+    const auto parsed_level = parse_level_manifest(
+        read_product_file("game/data/levels/earth/farm_reaction.level.json"));
+    NINHO_SIM_REQUIRE(parsed_materials.ok()
+        && parsed_archetypes.ok() && parsed_level.ok());
+    auto created = SimulationSession::create(parsed_materials.value,
+        parsed_archetypes.value, parsed_level.value);
     NINHO_SIM_REQUIRE(created.ok());
     return std::move(created.value);
 }
@@ -736,6 +766,45 @@ NINHO_SIM_TEST("mass boost ability remains until removal and emits lifecycle eve
         session->snapshots(), [](const EntitySnapshot& value) {
             return value.is_projectile;
         }));
+    NINHO_SIM_REQUIRE(std::ranges::count(
+        history, DomainEventKind::MassChanged, &DomainEvent::kind) == 1);
+    NINHO_SIM_REQUIRE(std::ranges::count(
+        history, DomainEventKind::AbilityEnded, &DomainEvent::kind) == 1);
+}
+
+NINHO_SIM_TEST("mass boost ability natural impact ends lifecycle without reverting mass")
+{
+    auto session = create_product_farm_session();
+    std::vector<DomainEvent> history;
+    const auto tick = [&] {
+        NINHO_SIM_REQUIRE(session->tick().ok());
+        append_events(*session, history);
+    };
+    NINHO_SIM_REQUIRE(session->enqueue(
+        BeginGrabCommand{{1.0F, 0.0F, 0.0F}}).ok());
+    tick();
+    NINHO_SIM_REQUIRE(session->enqueue(SetPullCommand{-4.0, -1.0}).ok());
+    NINHO_SIM_REQUIRE(session->enqueue(ReleaseBirdCommand{}).ok());
+    tick();
+    const auto shot = session->shot_state();
+    NINHO_SIM_REQUIRE(shot.has_value());
+    while (session->state().tick.value() < shot->launch_tick.value() + 9U) tick();
+    NINHO_SIM_REQUIRE(session->enqueue(ActivateAbilityCommand{}).ok());
+    tick();
+    const double boosted_mass = projectile_snapshot(*session).mass_kg;
+
+    for (int step = 0;
+         step < 180 && session->ability_readiness() != AbilityReadiness::Spent;
+         ++step) {
+        tick();
+        const auto projectile = std::ranges::find_if(
+            session->snapshots(), &EntitySnapshot::is_projectile);
+        if (projectile != session->snapshots().end()) {
+            require_near(projectile->mass_kg, boosted_mass, 1.0e-4);
+        }
+    }
+
+    NINHO_SIM_REQUIRE(session->ability_readiness() == AbilityReadiness::Spent);
     NINHO_SIM_REQUIRE(std::ranges::count(
         history, DomainEventKind::MassChanged, &DomainEvent::kind) == 1);
     NINHO_SIM_REQUIRE(std::ranges::count(

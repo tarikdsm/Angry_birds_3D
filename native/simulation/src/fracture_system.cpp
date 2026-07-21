@@ -558,7 +558,8 @@ void SimulationSession::Impl::evaluate_fractures_after_step()
     for (const DomainEvent& event : damage_events) {
         BodyRecord* body = find_body(
             body_records, event.affected_entity_id, event.affected_part_id);
-        if (body == nullptr || !body->material_id) {
+        if (body == nullptr || body->body_type != BodyType::Dynamic
+            || !body->material_id) {
             continue;
         }
         const auto damage = damage_system.state(body->entity_id, body->part_id);

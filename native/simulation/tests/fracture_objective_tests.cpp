@@ -40,6 +40,21 @@ std::unique_ptr<SimulationSession> create_session()
     return std::move(created.value);
 }
 
+std::unique_ptr<SimulationSession> create_farm_session()
+{
+    const auto materials = parse_material_catalog(
+        read_source_file("game/data/materials/product_v2.materials.json"));
+    const auto archetypes = parse_archetype_catalog(
+        read_source_file("game/data/archetypes/product_v2.archetypes.json"));
+    const auto level = parse_level_manifest(
+        read_source_file("game/data/levels/earth/farm_reaction.level.json"));
+    NINHO_SIM_REQUIRE(materials.ok() && archetypes.ok() && level.ok());
+    auto created = SimulationSession::create(
+        materials.value, archetypes.value, level.value);
+    NINHO_SIM_REQUIRE(created.ok());
+    return std::move(created.value);
+}
+
 const DomainEvent* find_event(
     const SimulationSession& session, DomainEventKind kind, JointId joint = {})
 {
@@ -47,6 +62,34 @@ const DomainEvent* find_event(
         return event.kind == kind && (joint == JointId{} || event.joint_id == joint);
     });
     return found == session.events().end() ? nullptr : &*found;
+}
+
+NINHO_SIM_TEST("fracture objective static authored support cannot emit a fracture ratio")
+{
+    auto session = create_farm_session();
+    std::vector<DomainEvent> history;
+    const auto tick = [&] {
+        NINHO_SIM_REQUIRE(session->tick().ok());
+        history.insert(history.end(), session->events().begin(), session->events().end());
+    };
+    NINHO_SIM_REQUIRE(session->enqueue(
+        BeginGrabCommand{{1.0F, 0.0F, 0.0F}}).ok());
+    tick();
+    NINHO_SIM_REQUIRE(session->enqueue(SetPullCommand{-4.0, -1.0}).ok());
+    NINHO_SIM_REQUIRE(session->enqueue(ReleaseBirdCommand{}).ok());
+    tick();
+    const auto shot = session->shot_state();
+    NINHO_SIM_REQUIRE(shot.has_value());
+    while (session->state().tick.value() < shot->launch_tick.value() + 9U) tick();
+    NINHO_SIM_REQUIRE(session->enqueue(ActivateAbilityCommand{}).ok());
+    tick();
+    for (int step = 0; step < 60; ++step) tick();
+
+    NINHO_SIM_REQUIRE(session->state().phase != SessionPhase::Faulted);
+    NINHO_SIM_REQUIRE(std::ranges::none_of(history, [](const DomainEvent& event) {
+        return event.kind == DomainEventKind::PieceFractureTriggered
+            && event.affected_entity_id == EntityId{3013};
+    }));
 }
 
 NINHO_SIM_TEST("fracture objective overload schedules after solver and applies next tick")

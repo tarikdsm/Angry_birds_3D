@@ -968,6 +968,19 @@ void SimulationSession::Impl::update_fsm_after_step()
         static_cast<void>(shot->replace_projectile(std::move(projectile)));
     }
 
+    const bool projectiles_finished_after_step = std::ranges::all_of(
+        shot->projectiles(), &ProjectileState::finished);
+    if (active_ability != nullptr
+        && active_ability->kind_v2 == AbilityKind::MassBoost
+        && ability_runtime_active(shot->runtime)
+        && projectiles_finished_after_step) {
+        // MassBoost changes the projectile's physical mass permanently. Once
+        // every projectile has finished, keeping only its lifecycle timer alive
+        // would stall the public shot FSM without changing any future physics.
+        publish_ability_event(DomainEventKind::AbilityEnded);
+        set_ability_runtime_active(shot->runtime, false);
+    }
+
     const bool pending_environmental_burst =
         has_pending_environmental_burst();
     if (objective_complete && !ability_runtime_active(shot->runtime)
