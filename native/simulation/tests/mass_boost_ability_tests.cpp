@@ -186,8 +186,12 @@ std::unique_ptr<SimulationSession> create_product_farm_session()
         read_product_file("game/data/levels/earth/farm_reaction.level.json"));
     NINHO_SIM_REQUIRE(parsed_materials.ok()
         && parsed_archetypes.ok() && parsed_level.ok());
+    ArchetypeCatalog farm_archetypes = parsed_archetypes.value;
+    std::get<MassBoostAbilityDefinition>(
+        farm_archetypes.abilities.at(1).payload).duration_ticks =
+        ability_duration_ticks;
     auto created = SimulationSession::create(parsed_materials.value,
-        parsed_archetypes.value, parsed_level.value);
+        farm_archetypes, parsed_level.value);
     NINHO_SIM_REQUIRE(created.ok());
     return std::move(created.value);
 }
@@ -792,6 +796,8 @@ NINHO_SIM_TEST("mass boost ability natural impact ends lifecycle without reverti
     NINHO_SIM_REQUIRE(session->enqueue(ActivateAbilityCommand{}).ok());
     tick();
     const double boosted_mass = projectile_snapshot(*session).mass_kg;
+    const TickIndex natural_end =
+        ninho::simulation::detail::SessionTestFacade::ability_end_tick(*session);
 
     for (int step = 0;
          step < 180 && session->ability_readiness() != AbilityReadiness::Spent;
@@ -805,8 +811,17 @@ NINHO_SIM_TEST("mass boost ability natural impact ends lifecycle without reverti
     }
 
     NINHO_SIM_REQUIRE(session->ability_readiness() == AbilityReadiness::Spent);
+    NINHO_SIM_REQUIRE(session->state().last_impact_m.has_value());
+    NINHO_SIM_REQUIRE(session->state().phase != SessionPhase::FlightAbility);
     NINHO_SIM_REQUIRE(std::ranges::count(
         history, DomainEventKind::MassChanged, &DomainEvent::kind) == 1);
+    NINHO_SIM_REQUIRE(std::ranges::count(
+        history, DomainEventKind::AbilityEnded, &DomainEvent::kind) == 1);
+    const DomainEvent& early_end = require_event(
+        history, DomainEventKind::AbilityEnded);
+    NINHO_SIM_REQUIRE(early_end.tick < natural_end);
+
+    while (session->state().tick <= natural_end) tick();
     NINHO_SIM_REQUIRE(std::ranges::count(
         history, DomainEventKind::AbilityEnded, &DomainEvent::kind) == 1);
 }
