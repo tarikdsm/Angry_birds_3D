@@ -32,6 +32,18 @@ struct DamageContact {
     double energy_j{};
 };
 
+struct ExternalDamage {
+    EntityId cause_entity_id{};
+    PartId cause_part_id{};
+    EntityId target_entity_id{};
+    PartId target_part_id{};
+    ninho::physics::Vec3 position_m{};
+    ninho::physics::Vec3 normal_cause_to_target{};
+    double energy_j{};
+    EventId cause_event_id{};
+    bool operator==(const ExternalDamage&) const = default;
+};
+
 enum class DamageOutcomeKind : std::uint8_t {
     DamageApplied = 0, EntityNeutralized = 1};
 
@@ -47,6 +59,7 @@ struct DamageOutcome {
     double damage{};
     NeutralizationCause neutralization_cause{NeutralizationCause::None};
     DamageClassification damage_classification{DamageClassification::None};
+    EventId cause_event_id{};
 };
 
 struct DamageState {
@@ -63,7 +76,8 @@ struct DamageState {
 class DamageSystem {
 public:
     std::vector<DamageOutcome> process(const MaterialCatalog&, const ArchetypeCatalog&,
-        std::span<const DamageBody>, std::span<const DamageContact>);
+        std::span<const DamageBody>, std::span<const DamageContact>,
+        std::span<const ExternalDamage> external_damage = {});
     [[nodiscard]] std::optional<DamageState> state(EntityId, PartId) const;
     [[nodiscard]] std::span<const DamageState> states() const noexcept { return states_; }
 

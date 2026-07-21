@@ -433,6 +433,8 @@ NINHO_TEST("gameplay nodes expose typed mass speed and split domain events")
         "native/extension/src/gameplay_session_node.cpp");
     const std::string orbital = read_source_file(
         "native/extension/src/orbital_session_node.cpp");
+    const std::string shared = read_source_file(
+        "native/extension/src/session_adapter_services.cpp");
     constexpr std::string_view mass_mapping =
         "case MassChanged: return \"mass_changed\";";
     constexpr std::string_view speed_mapping =
@@ -443,14 +445,14 @@ NINHO_TEST("gameplay nodes expose typed mass speed and split domain events")
         "case ProjectileSpawned: return \"projectile_spawned\";";
     constexpr std::string_view delta_mapping =
         "result[\"delta_velocity\"] = detail::to_godot(event.delta_velocity_m_s);";
-    NINHO_REQUIRE(gameplay.find(mass_mapping) != std::string::npos);
-    NINHO_REQUIRE(orbital.find(mass_mapping) != std::string::npos);
-    NINHO_REQUIRE(gameplay.find(speed_mapping) != std::string::npos);
-    NINHO_REQUIRE(orbital.find(speed_mapping) != std::string::npos);
-    NINHO_REQUIRE(gameplay.find(split_mapping) != std::string::npos);
-    NINHO_REQUIRE(orbital.find(split_mapping) != std::string::npos);
-    NINHO_REQUIRE(gameplay.find(spawned_mapping) != std::string::npos);
-    NINHO_REQUIRE(orbital.find(spawned_mapping) != std::string::npos);
+    constexpr std::string_view shared_delegate =
+        "return detail::domain_event_kind_name(kind).data();";
+    NINHO_REQUIRE(gameplay.find(shared_delegate) != std::string::npos);
+    NINHO_REQUIRE(orbital.find(shared_delegate) != std::string::npos);
+    NINHO_REQUIRE(shared.find(mass_mapping) != std::string::npos);
+    NINHO_REQUIRE(shared.find(speed_mapping) != std::string::npos);
+    NINHO_REQUIRE(shared.find(split_mapping) != std::string::npos);
+    NINHO_REQUIRE(shared.find(spawned_mapping) != std::string::npos);
     NINHO_REQUIRE(gameplay.find(delta_mapping) != std::string::npos);
     NINHO_REQUIRE(orbital.find(delta_mapping) != std::string::npos);
 }

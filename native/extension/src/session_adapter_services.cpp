@@ -6,6 +6,36 @@
 
 namespace ninho::extension::detail {
 
+std::string_view domain_event_kind_name(
+    simulation::DomainEventKind kind) noexcept
+{
+    using enum simulation::DomainEventKind;
+    switch (kind) {
+    case BirdLaunched: return "bird_launched";
+    case AbilityActivationRequested: return "ability_activation_requested";
+    case CommandRejected: return "command_rejected";
+    case AbilityStarted: return "ability_started";
+    case AbilityAffectedBody: return "ability_affected_body";
+    case AbilityPulse: return "ability_pulse";
+    case AbilityEnded: return "ability_ended";
+    case DamageApplied: return "damage_applied";
+    case EntityNeutralized: return "entity_neutralized";
+    case JointOverloaded: return "joint_overloaded";
+    case PieceFractureTriggered: return "piece_fracture_triggered";
+    case JointBroken: return "joint_broken";
+    case PieceFractured: return "piece_fractured";
+    case MassChanged: return "mass_changed";
+    case SpeedChanged: return "speed_changed";
+    case ProjectileSplit: return "projectile_split";
+    case ProjectileSpawned: return "projectile_spawned";
+    case ExplosionFuseArmed: return "explosion_fuse_armed";
+    case PressureBurst: return "pressure_burst";
+    case EnvironmentalTriggerArmed: return "environmental_trigger_armed";
+    case EnvironmentalTriggerDetonated: return "environmental_trigger_detonated";
+    }
+    return "unknown";
+}
+
 SessionTickSchedule SessionFixedStepAccumulator::schedule(double delta) noexcept
 {
     if (!std::isfinite(delta) || delta < 0.0) {

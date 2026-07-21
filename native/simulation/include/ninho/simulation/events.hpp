@@ -23,6 +23,10 @@ enum class DomainEventKind : std::uint8_t {
     SpeedChanged = 14,
     ProjectileSplit = 15,
     ProjectileSpawned = 16,
+    ExplosionFuseArmed = 17,
+    PressureBurst = 18,
+    EnvironmentalTriggerArmed = 19,
+    EnvironmentalTriggerDetonated = 20,
 };
 
 enum class CommandRejectionReason : std::uint8_t {
@@ -72,6 +76,7 @@ struct DomainEvent {
     double joint_load_ratio{};
     double fracture_ratio{};
     ninho::physics::Vec3 delta_velocity_m_s{};
+    std::uint32_t environmental_trigger_id{};
 
     bool operator==(const DomainEvent&) const = default;
 };

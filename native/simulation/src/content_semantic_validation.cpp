@@ -409,6 +409,7 @@ std::optional<ContentError> validate_product_v2_session_content(
     std::unordered_set<std::uint32_t> body_ids;
     std::unordered_set<std::uint64_t> entity_parts;
     std::unordered_set<std::uint32_t> entity_ids;
+    std::unordered_map<std::uint32_t, std::size_t> entity_body_counts;
     for (std::size_t index = 0; index < level.bodies.size(); ++index) {
         const BodyDefinition& body = level.bodies[index];
         const std::string pointer = indexed("/bodies", index);
@@ -422,6 +423,7 @@ std::optional<ContentError> validate_product_v2_session_content(
             return duplicate(pointer + "/part_id", "entity part");
         }
         entity_ids.insert(body.entity_id.value());
+        ++entity_body_counts[body.entity_id.value()];
         if (body.material_id.has_value() == body.surface_id.has_value()) {
             return error(ContentErrorCode::InvalidInvariant, pointer,
                 "body requires exactly one material or surface");
@@ -450,6 +452,42 @@ std::optional<ContentError> validate_product_v2_session_content(
         if (!entity_ids.contains(trigger.target_entity_id.value())) {
             return error(ContentErrorCode::MissingReference,
                 pointer + "/target_entity_id", "target entity reference not found");
+        }
+        if (entity_body_counts[trigger.target_entity_id.value()] != 1U) {
+            return error(ContentErrorCode::InvalidInvariant,
+                pointer + "/target_entity_id",
+                "trigger target must resolve to exactly one body");
+        }
+        if (!std::isfinite(trigger.damage_threshold)
+            || trigger.damage_threshold <= 0.0
+            || trigger.damage_threshold > 1.0e6) {
+            return error(ContentErrorCode::OutOfRange,
+                pointer + "/damage_threshold", "number out of range");
+        }
+        if (trigger.fuse_ticks > 36000U || trigger.cooldown_ticks > 36000U) {
+            return error(ContentErrorCode::OutOfRange, pointer,
+                "trigger tick count is out of range");
+        }
+        const auto& burst = trigger.pressure_burst;
+        const std::string burst_pointer = pointer + "/pressure_burst";
+        if (!std::isfinite(burst.radius_m) || burst.radius_m <= 0.0
+            || burst.radius_m > 1000.0) {
+            return error(ContentErrorCode::OutOfRange,
+                burst_pointer + "/radius_m", "number out of range");
+        }
+        if (!std::isfinite(burst.impulse_n_s) || burst.impulse_n_s <= 0.0
+            || burst.impulse_n_s > 1.0e9) {
+            return error(ContentErrorCode::OutOfRange,
+                burst_pointer + "/impulse_n_s", "number out of range");
+        }
+        if (!std::isfinite(burst.energy_j) || burst.energy_j <= 0.0
+            || burst.energy_j > 1.0e12) {
+            return error(ContentErrorCode::OutOfRange,
+                burst_pointer + "/energy_j", "number out of range");
+        }
+        if (burst.max_bodies < 1U || burst.max_bodies > 32U) {
+            return error(ContentErrorCode::OutOfRange,
+                burst_pointer + "/max_bodies", "integer out of range");
         }
     }
     return validate_level_semantics(archetypes, level);

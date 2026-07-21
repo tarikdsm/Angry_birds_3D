@@ -18,6 +18,9 @@ struct SessionTickSchedule {
     double discarded_seconds{};
 };
 
+[[nodiscard]] std::string_view domain_event_kind_name(
+    simulation::DomainEventKind) noexcept;
+
 class SessionFixedStepAccumulator {
 public:
     [[nodiscard]] SessionTickSchedule schedule(double delta) noexcept;

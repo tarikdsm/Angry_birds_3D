@@ -46,6 +46,58 @@ SessionStatus SimulationSession::tick()
         return *impl_->latched_fault;
     }
     try {
+        struct BurstRollback {
+            SessionState session_state;
+            std::optional<ShotState> shot;
+            std::deque<Impl::QueuedCommand> command_queue;
+            std::vector<detail::PressureBurstRequest> pending_burst_requests;
+            std::vector<detail::ExternalDamage> pending_external_damage;
+            std::vector<detail::EnvironmentalTriggerRuntime> trigger_runtimes;
+            std::vector<DomainEvent> domain_events;
+            std::uint64_t next_event_sequence{};
+            std::uint64_t last_processed_command_sequence{};
+        };
+        const bool burst_transaction_needed =
+            (impl_->shot
+                && std::holds_alternative<ExplosionAbilityRuntime>(
+                    impl_->shot->runtime))
+            || !impl_->environmental_trigger_runtimes.empty()
+            || !impl_->pending_burst_requests.empty();
+        std::optional<BurstRollback> burst_rollback;
+        if (burst_transaction_needed) {
+            burst_rollback.emplace(BurstRollback{
+                impl_->session_state,
+                impl_->shot,
+                impl_->command_queue,
+                impl_->pending_burst_requests,
+                impl_->pending_external_damage,
+                impl_->environmental_trigger_runtimes,
+                impl_->domain_events,
+                impl_->next_event_sequence,
+                impl_->last_processed_command_sequence,
+            });
+        }
+        const auto restore_burst_transaction = [&] {
+            if (!burst_rollback) {
+                return;
+            }
+            impl_->session_state = burst_rollback->session_state;
+            impl_->shot.reset();
+            if (burst_rollback->shot) {
+                impl_->shot.emplace(*burst_rollback->shot);
+            }
+            impl_->command_queue = std::move(burst_rollback->command_queue);
+            impl_->pending_burst_requests =
+                std::move(burst_rollback->pending_burst_requests);
+            impl_->pending_external_damage =
+                std::move(burst_rollback->pending_external_damage);
+            impl_->environmental_trigger_runtimes =
+                std::move(burst_rollback->trigger_runtimes);
+            impl_->domain_events = std::move(burst_rollback->domain_events);
+            impl_->next_event_sequence = burst_rollback->next_event_sequence;
+            impl_->last_processed_command_sequence =
+                burst_rollback->last_processed_command_sequence;
+        };
         impl_->domain_events.clear();
         impl_->session_state.tick = TickIndex{impl_->session_state.tick.value() + 1U};
         impl_->apply_pending_fractures_before_step();
@@ -64,6 +116,22 @@ SessionStatus SimulationSession::tick()
             impl_->latched_fault = ability_status;
             return ability_status;
         }
+        const SessionStatus trigger_status =
+            impl_->collect_environmental_bursts_before_step();
+        if (!trigger_status.ok()) {
+            impl_->session_state.phase = SessionPhase::Faulted;
+            impl_->latched_fault = trigger_status;
+            return trigger_status;
+        }
+        const SessionStatus burst_status =
+            impl_->process_pending_pressure_bursts_before_step();
+        if (!burst_status.ok()) {
+            restore_burst_transaction();
+            impl_->session_state.phase = SessionPhase::Faulted;
+            impl_->session_state.outcome = Outcome::None;
+            impl_->latched_fault = burst_status;
+            return burst_status;
+        }
         impl_->physics.step();
         const SessionStatus contact_status = impl_->process_ability_after_step();
         if (!contact_status.ok()) {
@@ -73,6 +141,13 @@ SessionStatus SimulationSession::tick()
             return contact_status;
         }
         impl_->process_damage_after_step();
+        const SessionStatus observed_trigger_status =
+            impl_->observe_environmental_triggers_after_damage();
+        if (!observed_trigger_status.ok()) {
+            impl_->session_state.phase = SessionPhase::Faulted;
+            impl_->latched_fault = observed_trigger_status;
+            return observed_trigger_status;
+        }
         impl_->evaluate_fractures_after_step();
         impl_->evaluate_objectives_after_step();
         const SessionStatus finish_status = impl_->finish_ability_after_step();
@@ -182,6 +257,20 @@ AbilityReadiness SimulationSession::ability_readiness() const noexcept
     if (!impl_->shot || impl_->shot->primary_projectile() == nullptr) {
         return AbilityReadiness::Unavailable;
     }
+    const AbilityArchetype* ability = impl_->ability_archetype(
+        impl_->shot->ability_id);
+    if (ability == nullptr) {
+        return AbilityReadiness::Unavailable;
+    }
+    if (const auto* explosion = std::get_if<ExplosionAbilityRuntime>(
+            &impl_->shot->runtime);
+        explosion != nullptr && explosion->fuse_armed && !explosion->detonated
+        && !impl_->shot->activation_consumed) {
+        const auto armed_tick = impl_->shot->launch_tick.value()
+            + detail::AbilitySystem::activation_arm_ticks(*ability);
+        return impl_->session_state.tick.value() >= armed_tick
+            ? AbilityReadiness::Armed : AbilityReadiness::Arming;
+    }
     if (ability_runtime_active(impl_->shot->runtime)) {
         return AbilityReadiness::Active;
     }
@@ -189,11 +278,6 @@ AbilityReadiness SimulationSession::ability_readiness() const noexcept
         || impl_->shot->primary_projectile()->finished
         || impl_->session_state.phase != SessionPhase::FlightAbility) {
         return AbilityReadiness::Spent;
-    }
-    const AbilityArchetype* ability = impl_->ability_archetype(
-        impl_->shot->ability_id);
-    if (ability == nullptr) {
-        return AbilityReadiness::Unavailable;
     }
     const auto armed_tick = impl_->shot->launch_tick.value()
         + static_cast<std::uint64_t>(
@@ -772,6 +856,176 @@ void detail::SessionTestFacade::set_shot_runtime_for_testing(
         runtime.end_tick = end_tick;
         runtime.active = active;
     }, session.impl_->shot->runtime);
+}
+
+void detail::SessionTestFacade::inject_explosion_contact(
+    SimulationSession& session, float approach_speed_m_s,
+    float total_normal_impulse_n_s)
+{
+    if (!session.impl_->shot
+        || session.impl_->shot->primary_projectile() == nullptr) {
+        return;
+    }
+    const auto handle =
+        session.impl_->shot->primary_projectile()->physics_handle;
+    session.impl_->explosion_contact_override_for_testing = {
+        .a = handle,
+        .b = ninho::physics::BodyHandle{handle.index + 1000U, 1U},
+        .approach_speed_m_s = approach_speed_m_s,
+        .total_normal_impulse_n_s = total_normal_impulse_n_s,
+    };
+}
+
+void detail::SessionTestFacade::fail_next_pressure_burst_after_plan(
+    SimulationSession& session)
+{
+    session.impl_->pressure_burst_failure_after_plan_for_testing = true;
+}
+
+std::size_t detail::SessionTestFacade::pending_pressure_burst_count(
+    const SimulationSession& session)
+{
+    return session.impl_->pending_burst_requests.size();
+}
+
+std::size_t detail::SessionTestFacade::pending_external_damage_count(
+    const SimulationSession& session)
+{
+    return session.impl_->pending_external_damage.size();
+}
+
+bool detail::SessionTestFacade::shift_explosion_fuse_due_tick(
+    SimulationSession& session)
+{
+    if (!session.impl_->shot) {
+        return false;
+    }
+    auto* runtime = std::get_if<ExplosionAbilityRuntime>(
+        &session.impl_->shot->runtime);
+    if (runtime == nullptr || !runtime->fuse_due_tick) {
+        return false;
+    }
+    runtime->fuse_due_tick = TickIndex{runtime->fuse_due_tick->value() + 1U};
+    return true;
+}
+
+bool detail::SessionTestFacade::shift_explosion_detonation_tick(
+    SimulationSession& session)
+{
+    if (!session.impl_->shot) {
+        return false;
+    }
+    auto* runtime = std::get_if<ExplosionAbilityRuntime>(
+        &session.impl_->shot->runtime);
+    if (runtime == nullptr || !runtime->detonation_tick) {
+        return false;
+    }
+    runtime->detonation_tick = TickIndex{runtime->detonation_tick->value() + 1U};
+    return true;
+}
+
+bool detail::SessionTestFacade::toggle_explosion_detonated(
+    SimulationSession& session)
+{
+    if (!session.impl_->shot) {
+        return false;
+    }
+    auto* runtime = std::get_if<ExplosionAbilityRuntime>(
+        &session.impl_->shot->runtime);
+    if (runtime == nullptr) {
+        return false;
+    }
+    runtime->detonated = !runtime->detonated;
+    return true;
+}
+
+bool detail::SessionTestFacade::bump_trigger_initiating_damage_event(
+    SimulationSession& session, std::uint32_t trigger_id)
+{
+    const auto runtime = std::ranges::find(
+        session.impl_->environmental_trigger_runtimes, trigger_id,
+        &detail::EnvironmentalTriggerRuntime::trigger_id);
+    if (runtime == session.impl_->environmental_trigger_runtimes.end()) {
+        return false;
+    }
+    runtime->initiating_damage_event_id = EventId{
+        runtime->initiating_damage_event_id.value() + 1U};
+    return true;
+}
+
+bool detail::SessionTestFacade::toggle_trigger_armed(
+    SimulationSession& session, std::uint32_t trigger_id)
+{
+    const auto runtime = std::ranges::find(
+        session.impl_->environmental_trigger_runtimes, trigger_id,
+        &detail::EnvironmentalTriggerRuntime::trigger_id);
+    if (runtime == session.impl_->environmental_trigger_runtimes.end()) {
+        return false;
+    }
+    runtime->armed = !runtime->armed;
+    return true;
+}
+
+bool detail::SessionTestFacade::shift_trigger_cooldown_until_tick(
+    SimulationSession& session, std::uint32_t trigger_id)
+{
+    const auto runtime = std::ranges::find(
+        session.impl_->environmental_trigger_runtimes, trigger_id,
+        &detail::EnvironmentalTriggerRuntime::trigger_id);
+    if (runtime == session.impl_->environmental_trigger_runtimes.end()
+        || !runtime->cooldown_until_tick) {
+        return false;
+    }
+    runtime->cooldown_until_tick = TickIndex{
+        runtime->cooldown_until_tick->value() + 1U};
+    return true;
+}
+
+bool detail::SessionTestFacade::bump_trigger_accumulated_damage(
+    SimulationSession& session, std::uint32_t trigger_id)
+{
+    const auto runtime = std::ranges::find(
+        session.impl_->environmental_trigger_runtimes, trigger_id,
+        &detail::EnvironmentalTriggerRuntime::trigger_id);
+    if (runtime == session.impl_->environmental_trigger_runtimes.end()) {
+        return false;
+    }
+    runtime->accumulated_damage += 1.0;
+    return true;
+}
+
+bool detail::SessionTestFacade::shift_trigger_captured_origin(
+    SimulationSession& session, std::uint32_t trigger_id)
+{
+    const auto runtime = std::ranges::find(
+        session.impl_->environmental_trigger_runtimes, trigger_id,
+        &detail::EnvironmentalTriggerRuntime::trigger_id);
+    if (runtime == session.impl_->environmental_trigger_runtimes.end()) {
+        return false;
+    }
+    runtime->captured_origin_m.x += 1.0F;
+    return true;
+}
+
+bool detail::SessionTestFacade::queue_external_damage(
+    SimulationSession& session, EntityId target, PartId target_part,
+    double energy_j, EventId cause_event_id)
+{
+    const auto record = std::ranges::find_if(session.impl_->body_records,
+        [&](const SimulationSession::Impl::BodyRecord& value) {
+            return value.entity_id == target && value.part_id == target_part;
+        });
+    if (record == session.impl_->body_records.end()) {
+        return false;
+    }
+    const auto state = session.impl_->physics.state(record->physics_handle);
+    if (!state) {
+        return false;
+    }
+    session.impl_->pending_external_damage.push_back({EntityId{999}, PartId{1},
+        target, target_part, state->world_center_of_mass, {1, 0, 0},
+        energy_j, cause_event_id});
+    return true;
 }
 
 std::int64_t detail::SessionTestFacade::quantize_canonical(double value)

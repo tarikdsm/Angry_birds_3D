@@ -92,6 +92,22 @@ public:
     static void set_shot_runtime_for_testing(SimulationSession&, bool consumed,
         bool active, std::optional<TickIndex> start_tick,
         std::optional<TickIndex> end_tick);
+    static void inject_explosion_contact(
+        SimulationSession&, float approach_speed_m_s,
+        float total_normal_impulse_n_s);
+    static void fail_next_pressure_burst_after_plan(SimulationSession&);
+    static std::size_t pending_pressure_burst_count(const SimulationSession&);
+    static std::size_t pending_external_damage_count(const SimulationSession&);
+    static bool shift_explosion_fuse_due_tick(SimulationSession&);
+    static bool shift_explosion_detonation_tick(SimulationSession&);
+    static bool toggle_explosion_detonated(SimulationSession&);
+    static bool bump_trigger_initiating_damage_event(SimulationSession&, std::uint32_t);
+    static bool toggle_trigger_armed(SimulationSession&, std::uint32_t);
+    static bool shift_trigger_cooldown_until_tick(SimulationSession&, std::uint32_t);
+    static bool bump_trigger_accumulated_damage(SimulationSession&, std::uint32_t);
+    static bool shift_trigger_captured_origin(SimulationSession&, std::uint32_t);
+    static bool queue_external_damage(SimulationSession&, EntityId target,
+        PartId target_part, double energy_j, EventId cause_event_id);
 };
 
 }

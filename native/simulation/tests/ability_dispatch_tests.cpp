@@ -316,27 +316,24 @@ NINHO_SIM_TEST("ability dispatch rejects unknown and incompatible definitions du
     NINHO_SIM_REQUIRE(wrong_kind.error.pointer == "/abilities/0/kind");
 }
 
-NINHO_SIM_TEST("ability dispatch rejects activation for abilities without a concrete system")
+NINHO_SIM_TEST("ability dispatch routes explosion to its concrete system")
 {
-    const std::array unsupported{AbilityKind::Explosion};
-    for (const AbilityKind kind : unsupported) {
-        RecordingHooks hooks;
-        AbilitySystem system{hooks};
-        const AbilityArchetype selected = ability(kind);
-        auto selected_shot = shot(kind);
-        set_ability_runtime_active(selected_shot->runtime, false);
-        const AbilityRuntime runtime_before = selected_shot->runtime;
+    RecordingHooks hooks;
+    AbilitySystem system{hooks};
+    const AbilityArchetype selected = ability(AbilityKind::Explosion);
+    auto selected_shot = shot(AbilityKind::Explosion);
+    set_ability_runtime_active(selected_shot->runtime, false);
 
-        const SessionStatus status = AbilitySystem::activate(
-            selected, *selected_shot, TickIndex{42});
-
-        NINHO_SIM_REQUIRE(!status.ok());
-        NINHO_SIM_REQUIRE(!selected_shot->activation_consumed);
-        NINHO_SIM_REQUIRE(selected_shot->runtime == runtime_before);
-        NINHO_SIM_REQUIRE(std::ranges::count(hooks.before, 0U) == 5U);
-        NINHO_SIM_REQUIRE(std::ranges::count(hooks.after, 0U) == 5U);
-        NINHO_SIM_REQUIRE(std::ranges::count(hooks.finish, 0U) == 5U);
-    }
+    NINHO_SIM_REQUIRE(AbilitySystem::activate(
+        selected, *selected_shot, TickIndex{42}).ok());
+    NINHO_SIM_REQUIRE(selected_shot->activation_consumed);
+    NINHO_SIM_REQUIRE(system.apply_before_step(selected, *selected_shot).ok());
+    NINHO_SIM_REQUIRE(system.process_after_step(selected, *selected_shot).ok());
+    NINHO_SIM_REQUIRE(system.finish_after_step(
+        selected, *selected_shot, TickIndex{42}).ok());
+    NINHO_SIM_REQUIRE(hooks.before[3] == 1U);
+    NINHO_SIM_REQUIRE(hooks.after[3] == 1U);
+    NINHO_SIM_REQUIRE(hooks.finish[3] == 1U);
 }
 
 NINHO_SIM_TEST("ability dispatch fixes mass speed and split arming at nine ticks")
@@ -351,9 +348,8 @@ NINHO_SIM_TEST("ability dispatch fixes mass speed and split arming at nine ticks
     }
 }
 
-NINHO_SIM_TEST("ability dispatch fails closed for unimplemented session abilities")
+NINHO_SIM_TEST("ability dispatch accepts explosion session content atomically")
 {
-    const std::array unsupported{AbilityKind::Explosion};
     auto session = create_session();
     launch(*session);
     advance_to_armed(*session);
@@ -364,22 +360,16 @@ NINHO_SIM_TEST("ability dispatch fails closed for unimplemented session abilitie
     const std::vector<DomainEvent> events_before{
         session->events().begin(), session->events().end()};
 
-    for (const AbilityKind kind : unsupported) {
-        const auto created = SimulationSession::create(
-            materials(), archetypes(ability(kind)), level());
-        NINHO_SIM_REQUIRE(!created.ok());
-        NINHO_SIM_REQUIRE(created.error.code == ContentErrorCode::InvalidInvariant);
-        NINHO_SIM_REQUIRE(created.error.pointer == "/abilities/0/kind");
+    const auto created = SimulationSession::create(
+        materials(), archetypes(ability(AbilityKind::Explosion)), level());
+    NINHO_SIM_REQUIRE(created.ok());
 
-        const SessionStatus status = session->reconfigure(
-            materials(), archetypes(ability(kind)), level());
-        NINHO_SIM_REQUIRE(!status.ok());
-        NINHO_SIM_REQUIRE(status.error.code == ContentErrorCode::InvalidInvariant);
-        NINHO_SIM_REQUIRE(status.error.pointer == "/abilities/0/kind");
-        NINHO_SIM_REQUIRE(session->canonical_state_v3() == canonical_before);
-        NINHO_SIM_REQUIRE(session->shot_state() == shot_before);
-        NINHO_SIM_REQUIRE(std::ranges::equal(session->events(), events_before));
-    }
+    const SessionStatus status = session->reconfigure(
+        materials(), archetypes(ability(AbilityKind::Explosion)), level());
+    NINHO_SIM_REQUIRE(status.ok());
+    NINHO_SIM_REQUIRE(session->canonical_state_v3() != canonical_before);
+    NINHO_SIM_REQUIRE(session->shot_state() != shot_before);
+    NINHO_SIM_REQUIRE(!std::ranges::equal(session->events(), events_before));
 }
 
 NINHO_SIM_TEST("ability dispatch consumes activation once and restart reconfigure stay atomic")

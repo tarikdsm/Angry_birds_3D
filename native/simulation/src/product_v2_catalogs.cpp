@@ -96,7 +96,7 @@ AbilityArchetype parse_ability(const json& item, const std::string& pointer)
             number(payload, "radius_m", payload_pointer, 0.0, 100.0, false),
             number(payload, "impulse_n_s", payload_pointer, 0.0, 1e9, false),
             number(payload, "energy_j", payload_pointer, 0.0, 1e12, false),
-            uint(payload, "max_bodies", payload_pointer, 1U, 500U)};
+            uint(payload, "max_bodies", payload_pointer, 1U, 32U)};
     }
     else if (result.kind == "split")
     {

@@ -501,7 +501,7 @@ ContentResult<LevelManifest> parse_level_manifest_v2(std::string_view input) noe
                     number(burst, "energy_j", burst_pointer, 0.0, 1e12, false);
                 value.pressure_burst.line_of_sight = boolean(burst, "line_of_sight", burst_pointer);
                 value.pressure_burst.max_bodies =
-                    uint(burst, "max_bodies", burst_pointer, 1U, 500U);
+                    uint(burst, "max_bodies", burst_pointer, 1U, 32U);
                 if (!entity_ids.contains(value.target_entity_id.value()))
                     fail(ContentErrorCode::MissingReference, child(pointer, "target_entity_id"),
                          "trigger target not found");

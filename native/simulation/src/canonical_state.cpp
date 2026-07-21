@@ -77,6 +77,10 @@ std::uint8_t canonical_tag_of(DomainEventKind value)
     case DomainEventKind::SpeedChanged: return 14U;
     case DomainEventKind::ProjectileSplit: return 15U;
     case DomainEventKind::ProjectileSpawned: return 16U;
+    case DomainEventKind::ExplosionFuseArmed: return 17U;
+    case DomainEventKind::PressureBurst: return 18U;
+    case DomainEventKind::EnvironmentalTriggerArmed: return 19U;
+    case DomainEventKind::EnvironmentalTriggerDetonated: return 20U;
     }
     throw std::invalid_argument("unknown canonical domain event");
 }
@@ -470,6 +474,16 @@ void write_ability_runtime(CanonicalWriter& writer, const AbilityRuntime& runtim
         if (speed->last_valid_flight_direction) {
             writer.vector(*speed->last_valid_flight_direction);
         }
+    } else if (const auto* explosion = std::get_if<ExplosionAbilityRuntime>(&runtime)) {
+        write_optional_tick(writer, explosion->fuse_armed_tick);
+        write_optional_tick(writer, explosion->fuse_due_tick);
+        write_optional_tick(writer, explosion->detonation_tick);
+        identifier(writer, explosion->activation_event_id);
+        identifier(writer, explosion->fuse_armed_event_id);
+        identifier(writer, explosion->pressure_burst_event_id);
+        writer.boolean(explosion->fuse_armed);
+        writer.boolean(explosion->burst_pending);
+        writer.boolean(explosion->detonated);
     } else if (const auto* split = std::get_if<SplitAbilityRuntime>(&runtime)) {
         identifier(writer, split->source_entity_id);
         for (const EntityId child : split->child_ids) {
@@ -1222,6 +1236,12 @@ std::vector<std::uint8_t> SimulationSession::Impl::serialize_canonical_state_v3(
         if (event.kind == DomainEventKind::SpeedChanged) {
             writer.vector(event.delta_velocity_m_s);
         }
+        if (event.kind == DomainEventKind::ExplosionFuseArmed
+            || event.kind == DomainEventKind::PressureBurst
+            || event.kind == DomainEventKind::EnvironmentalTriggerArmed
+            || event.kind == DomainEventKind::EnvironmentalTriggerDetonated) {
+            writer.integer(event.environmental_trigger_id);
+        }
     }
 
     std::vector<const detail::DamageState*> damage_states;
@@ -1308,6 +1328,28 @@ std::vector<std::uint8_t> SimulationSession::Impl::serialize_canonical_state_v3(
             writer.integer(projectile.rest_ticks);
             writer.boolean(projectile.finished);
             writer.boolean(projectile.pending_destroy);
+        }
+    }
+
+    if (!bundle.level.triggers.empty()) {
+        auto triggers = environmental_trigger_runtimes;
+        std::ranges::sort(triggers, {},
+            &detail::EnvironmentalTriggerRuntime::trigger_id);
+        writer.integer<std::uint32_t>(static_cast<std::uint32_t>(triggers.size()));
+        for (const auto& trigger : triggers) {
+            writer.integer(trigger.trigger_id);
+            writer.integer(trigger.cooldown_ticks);
+            writer.quantized(trigger.accumulated_damage);
+            write_optional_tick(writer, trigger.armed_tick);
+            write_optional_tick(writer, trigger.due_tick);
+            write_optional_tick(writer, trigger.cooldown_until_tick);
+            writer.vector(trigger.captured_origin_m);
+            identifier(writer, trigger.initiating_damage_event_id);
+            identifier(writer, trigger.armed_event_id);
+            identifier(writer, trigger.detonated_event_id);
+            identifier(writer, trigger.last_observed_damage_event_id);
+            writer.boolean(trigger.armed);
+            writer.boolean(trigger.detonated);
         }
     }
 

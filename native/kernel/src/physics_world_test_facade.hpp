@@ -37,6 +37,8 @@ public:
         shape_collision_bits(const PhysicsWorld&, BodyHandle);
     [[nodiscard]] static float base_mass(const PhysicsWorld&, BodyHandle);
     [[nodiscard]] static float mass_scale(const PhysicsWorld&, BodyHandle);
+    [[nodiscard]] static float raw_total_normal_impulse_once(
+        const PhysicsWorld&, BodyHandle, BodyHandle);
     static void set_base_density(
         PhysicsWorld&, BodyHandle, std::size_t shape_index, float density);
     static void fail_next_mass_scale_postcondition(PhysicsWorld&);

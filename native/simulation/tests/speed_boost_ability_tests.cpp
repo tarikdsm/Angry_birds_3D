@@ -800,15 +800,14 @@ NINHO_SIM_TEST("speed boost ability preserves event tag fourteen after split pro
 
     NINHO_SIM_REQUIRE(SimulationSession::create(
         materials(), archetypes(), level()).ok());
-    ArchetypeCatalog unsupported = archetypes();
-    AbilityArchetype& ability = unsupported.abilities.front();
+    ArchetypeCatalog explosion = archetypes();
+    AbilityArchetype& ability = explosion.abilities.front();
     ability.key = ability.kind = "explosion";
     ability.kind_v2 = AbilityKind::Explosion;
     ability.payload = ExplosionAbilityDefinition{4.0, 12.0, 90.0, 32U};
     const auto created = SimulationSession::create(
-        materials(), unsupported, level());
-    NINHO_SIM_REQUIRE(!created.ok());
-    NINHO_SIM_REQUIRE(created.error.pointer == "/abilities/0/kind");
+        materials(), explosion, level());
+    NINHO_SIM_REQUIRE(created.ok());
 }
 
 }

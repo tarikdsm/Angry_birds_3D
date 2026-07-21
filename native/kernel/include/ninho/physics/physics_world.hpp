@@ -129,12 +129,18 @@ struct LegacyRadialWorldConfig {
 struct BodyState {
     BodyHandle handle{};
     Transform transform{};
+    Vec3 world_center_of_mass{};
     Vec3 linear_velocity{};
     Vec3 angular_velocity{};
     float mass{};
     bool awake{};
     bool ejected{};
     bool exited_world{};
+};
+
+struct CentralImpulse {
+    BodyHandle body{};
+    Vec3 impulse{};
 };
 
 struct DistanceJointDesc {
@@ -178,6 +184,15 @@ struct ContactHit {
     float derived_energy{};
     std::uint64_t material_a{};
     std::uint64_t material_b{};
+};
+
+struct PhysicalContact {
+    BodyHandle a{};
+    BodyHandle b{};
+    Vec3 point{};
+    Vec3 normal{};
+    float approach_speed_m_s{};
+    float total_normal_impulse_n_s{};
 };
 
 [[nodiscard]] inline float derived_contact_energy(
@@ -233,11 +248,16 @@ public:
     Status destroy_joint(JointHandle joint);
     Status apply_force(BodyHandle body, Vec3 force, Vec3 point, bool wake = true);
     Status apply_impulse(BodyHandle body, Vec3 impulse, Vec3 point, bool wake = true);
+    Status apply_central_impulses(std::span<const CentralImpulse> impulses,
+        bool wake = true);
     Status set_body_mass_scale(BodyHandle body, float scale);
     Status set_body_collision_group(BodyHandle body, int collision_group);
     Status commit_pending_initial_state();
     void step();
     [[nodiscard]] std::optional<BodyState> state(BodyHandle body) const;
+    // Sum of authoritative Box3D shape masses at their authored densities.
+    // Unlike BodyState::mass, this remains positive for static bodies.
+    [[nodiscard]] std::optional<float> structural_mass(BodyHandle body) const;
     // Non-owning views of buffers published by this world. Any non-const
     // operation on the world, as well as moving or destroying it, may
     // invalidate a previously returned view. Copy elements that must outlive
@@ -250,9 +270,14 @@ public:
     [[nodiscard]] std::vector<QueryHit> overlap_sphere(Vec3 center, float radius) const;
     [[nodiscard]] std::optional<QueryHit> cast_sphere(
         Vec3 center, float radius, Vec3 translation) const;
+    [[nodiscard]] std::optional<QueryHit> cast_segment(Vec3 origin, Vec3 target,
+        std::span<const BodyHandle> ignored_handles = {}) const;
     [[nodiscard]] std::optional<Aabb> body_bounds(BodyHandle body) const;
     // Borrowed published view; it follows the invalidation rules above.
     [[nodiscard]] std::span<const ContactHit> contact_hits() const;
+    // A separate solver-manifold stream. Unlike contact_hits(), it also
+    // contains low-speed contacts that accumulated a significant impulse.
+    [[nodiscard]] std::span<const PhysicalContact> physical_contacts() const;
     // Borrowed published view; it follows the invalidation rules above.
     [[nodiscard]] std::span<const JointReaction> joint_reactions() const;
     [[nodiscard]] std::optional<JointReaction> joint_reaction(JointHandle joint) const;

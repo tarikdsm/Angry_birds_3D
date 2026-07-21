@@ -17,7 +17,7 @@ namespace {
 
 }
 
-void SimulationSession::Impl::publish_ability_event(DomainEventKind kind,
+EventId SimulationSession::Impl::publish_ability_event(DomainEventKind kind,
     const BodyRecord* affected, double weight, ninho::physics::Vec3 force,
     ninho::physics::Vec3 impulse, ninho::physics::Vec3 delta_velocity)
 {
@@ -41,6 +41,7 @@ void SimulationSession::Impl::publish_ability_event(DomainEventKind kind,
     event.impulse_n_s = impulse;
     event.delta_velocity_m_s = delta_velocity;
     domain_events.push_back(event);
+    return event.id;
 }
 
 SessionStatus SimulationSession::Impl::apply_before_step(ShotState& active_shot,

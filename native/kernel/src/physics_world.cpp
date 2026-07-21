@@ -409,6 +409,12 @@ struct PhysicsWorld::Impl {
         bool wake;
     };
 
+    struct CentralImpulseCommand {
+        BodyHandle handle;
+        Vec3 impulse;
+        bool wake;
+    };
+
     struct Reservation {
         BodyHandle handle;
         bool reused{};
@@ -430,7 +436,8 @@ struct PhysicsWorld::Impl {
         CreateJointCommand,
         DestroyJointCommand,
         ForceCommand,
-        ImpulseCommand>;
+        ImpulseCommand,
+        CentralImpulseCommand>;
 
     static_assert(std::is_nothrow_move_assignable_v<Command>);
     static_assert(std::is_nothrow_destructible_v<Command>);
@@ -457,6 +464,7 @@ struct PhysicsWorld::Impl {
         joint_slots.emplace_back();
         shape_bindings.reserve(initial_body_capacity);
         contact_storage.reserve(initial_body_capacity);
+        physical_contact_storage.reserve(initial_body_capacity);
         live_contact_id_scratch.reserve(initial_body_capacity);
         joint_reaction_storage.reserve(max_joints);
 
@@ -1041,6 +1049,11 @@ struct PhysicsWorld::Impl {
                             detail::to_box3d_vector(value.impulse),
                             detail::to_box3d_position(value.point),
                             value.wake);
+                    } else if constexpr (std::is_same_v<Value, CentralImpulseCommand>) {
+                        b3Body_ApplyLinearImpulseToCenter(
+                            slot->native,
+                            detail::to_box3d_vector(value.impulse),
+                            value.wake);
                     }
                 }
             },
@@ -1151,6 +1164,111 @@ struct PhysicsWorld::Impl {
         });
     }
 
+    void copy_physical_contacts()
+    {
+        physical_contact_storage.clear();
+        for (std::uint32_t index = 1; index < slots.size(); ++index) {
+            const Slot& slot = slots[index];
+            if (slot.state != SlotState::Live || B3_IS_NULL(slot.native)
+                || !b3Body_IsValid(slot.native)) {
+                continue;
+            }
+            const int capacity = b3Body_GetContactCapacity(slot.native);
+            if (capacity <= 0) {
+                continue;
+            }
+            if (physical_contact_data_scratch.size() < static_cast<std::size_t>(capacity)) {
+                physical_contact_data_scratch.resize(static_cast<std::size_t>(capacity));
+            }
+            const int count = b3Body_GetContactData(
+                slot.native, physical_contact_data_scratch.data(), capacity);
+            for (int contact_index = 0; contact_index < count; ++contact_index) {
+                const b3ContactData& contact = physical_contact_data_scratch[contact_index];
+                const ShapeBinding* binding_a = find_shape_binding(contact.shapeIdA);
+                const ShapeBinding* binding_b = find_shape_binding(contact.shapeIdB);
+                if (binding_a == nullptr || binding_b == nullptr
+                    || binding_a->body == binding_b->body) {
+                    continue;
+                }
+                const Slot* slot_a = matching_slot(binding_a->body);
+                const Slot* slot_b = matching_slot(binding_b->body);
+                if (slot_a == nullptr || slot_b == nullptr
+                    || slot_a->state != SlotState::Live || slot_b->state != SlotState::Live
+                    || B3_IS_NULL(slot_a->native) || !b3Body_IsValid(slot_a->native)) {
+                    continue;
+                }
+                // b3Body_GetContactData exposes the same contact from both
+                // bodies. Process it only while visiting the canonical public
+                // handle so compound/shape-pair impulses are summed once.
+                const BodyHandle visited{index, slot.generation};
+                if (visited != std::min(binding_a->body, binding_b->body)) {
+                    continue;
+                }
+                for (int manifold_index = 0; manifold_index < contact.manifoldCount;
+                    ++manifold_index) {
+                    const b3Manifold& manifold = contact.manifolds[manifold_index];
+                    float total_impulse = 0.0f;
+                    float approach_speed = 0.0f;
+                    Vec3 point{};
+                    int contributing_points = 0;
+                    const Vec3 center_a = detail::from_box3d_position(
+                        b3Body_GetWorldCenterOfMass(slot_a->native));
+                    for (int point_index = 0; point_index < manifold.pointCount; ++point_index) {
+                        const b3ManifoldPoint& manifold_point = manifold.points[point_index];
+                        if (!std::isfinite(manifold_point.totalNormalImpulse)
+                            || !std::isfinite(manifold_point.normalVelocity)) {
+                            continue;
+                        }
+                        total_impulse += std::max(0.0f, manifold_point.totalNormalImpulse);
+                        approach_speed = std::max(
+                            approach_speed, std::max(0.0f, -manifold_point.normalVelocity));
+                        point = point + center_a
+                            + detail::from_box3d_vector(manifold_point.anchorA);
+                        ++contributing_points;
+                    }
+                    if (contributing_points == 0 || total_impulse <= 0.0f) {
+                        continue;
+                    }
+                    PhysicalContact value{
+                        .a = binding_a->body,
+                        .b = binding_b->body,
+                        .point = point / static_cast<float>(contributing_points),
+                        .normal = detail::from_box3d_vector(manifold.normal),
+                        .approach_speed_m_s = approach_speed,
+                        .total_normal_impulse_n_s = total_impulse,
+                    };
+                    if (value.b < value.a) {
+                        std::swap(value.a, value.b);
+                        value.normal = -value.normal;
+                    }
+                    if (!is_finite(value.point) || !is_finite(value.normal)
+                        || !nonnegative_finite(value.approach_speed_m_s)
+                        || !positive_finite(value.total_normal_impulse_n_s)) {
+                        continue;
+                    }
+                    const auto existing = std::ranges::find_if(
+                        physical_contact_storage, [&](const PhysicalContact& current) {
+                            return current.a == value.a && current.b == value.b;
+                        });
+                    if (existing == physical_contact_storage.end()) {
+                        physical_contact_storage.push_back(value);
+                    } else {
+                        existing->total_normal_impulse_n_s +=
+                            value.total_normal_impulse_n_s;
+                        existing->approach_speed_m_s = std::max(
+                            existing->approach_speed_m_s,
+                            value.approach_speed_m_s);
+                    }
+                }
+            }
+        }
+        std::ranges::sort(
+            physical_contact_storage, [](const PhysicalContact& lhs,
+                                         const PhysicalContact& rhs) {
+                return lhs.a != rhs.a ? lhs.a < rhs.a : lhs.b < rhs.b;
+            });
+    }
+
     void copy_joint_reactions()
     {
         joint_reaction_storage.clear();
@@ -1245,6 +1363,7 @@ struct PhysicsWorld::Impl {
 
     struct CastContext {
         const Impl* impl{};
+        std::span<const BodyHandle> ignored_handles{};
         std::vector<QueryCandidate> candidates;
     };
 
@@ -1336,6 +1455,10 @@ struct PhysicsWorld::Impl {
         }
         const ShapeBinding* binding = context.impl->find_shape_binding(shape);
         if (binding == nullptr) {
+            return -1.0f;
+        }
+        if (std::ranges::find(context.ignored_handles, binding->body)
+            != context.ignored_handles.end()) {
             return -1.0f;
         }
         const Slot* slot = context.impl->matching_slot(binding->body);
@@ -1434,6 +1557,36 @@ struct PhysicsWorld::Impl {
             : std::optional<QueryHit>{context.candidates.front().hit};
     }
 
+    [[nodiscard]] std::optional<QueryHit> cast_segment(Vec3 origin, Vec3 target,
+        std::span<const BodyHandle> ignored_handles) const
+    {
+        CastContext context{.impl = this, .ignored_handles = ignored_handles};
+        context.candidates.reserve(shape_bindings.size());
+        b3World_CastRay(world, detail::to_box3d_position(origin),
+            detail::to_box3d_vector(target - origin), b3DefaultQueryFilter(),
+            cast_callback, &context);
+        std::ranges::sort(context.candidates, [](const QueryCandidate& lhs,
+                                               const QueryCandidate& rhs) {
+            const auto lhs_fraction = static_cast<std::int64_t>(std::llround(
+                static_cast<double>(lhs.hit.fraction) / cast_fraction_quantum));
+            const auto rhs_fraction = static_cast<std::int64_t>(std::llround(
+                static_cast<double>(rhs.hit.fraction) / cast_fraction_quantum));
+            if (lhs_fraction != rhs_fraction) {
+                return lhs_fraction < rhs_fraction;
+            }
+            if (lhs.hit.body != rhs.hit.body) {
+                return lhs.hit.body < rhs.hit.body;
+            }
+            if (lhs.hit.material_id != rhs.hit.material_id) {
+                return lhs.hit.material_id < rhs.hit.material_id;
+            }
+            return lhs.shape_key < rhs.shape_key;
+        });
+        return context.candidates.empty()
+            ? std::nullopt
+            : std::optional<QueryHit>{context.candidates.front().hit};
+    }
+
     void rebuild_snapshots()
     {
         snapshots.clear();
@@ -1447,6 +1600,8 @@ struct PhysicsWorld::Impl {
             snapshots.push_back({
                 .handle = handle,
                 .transform = detail::from_box3d_world(b3Body_GetTransform(slot.native)),
+                .world_center_of_mass = detail::from_box3d_position(
+                    b3Body_GetWorldCenterOfMass(slot.native)),
                 .linear_velocity = detail::from_box3d_vector(b3Body_GetLinearVelocity(slot.native)),
                 .angular_velocity = detail::from_box3d_vector(b3Body_GetAngularVelocity(slot.native)),
                 .mass = b3Body_GetMass(slot.native),
@@ -1499,6 +1654,8 @@ struct PhysicsWorld::Impl {
     std::vector<Command> commands;
     std::vector<BodyState> snapshots;
     std::vector<ContactHit> contact_storage;
+    std::vector<PhysicalContact> physical_contact_storage;
+    mutable std::vector<b3ContactData> physical_contact_data_scratch;
     mutable std::vector<b3ContactData> live_contact_data_scratch;
     mutable std::vector<std::array<std::uint32_t, 3>> live_contact_id_scratch;
     std::vector<JointReaction> joint_reaction_storage;
@@ -1640,6 +1797,37 @@ Status PhysicsWorld::apply_impulse(BodyHandle body, Vec3 impulse, Vec3 point, bo
         return invalid_argument_status("impulse and application point must be finite");
     }
     impl_->commands.push_back(Impl::ImpulseCommand{body, impulse, point, wake});
+    return {};
+}
+
+Status PhysicsWorld::apply_central_impulses(
+    std::span<const CentralImpulse> impulses, bool wake)
+{
+    for (std::size_t index = 0; index < impulses.size(); ++index) {
+        const CentralImpulse& value = impulses[index];
+        const Impl::Slot* slot = impl_->matching_slot(value.body);
+        if (slot == nullptr || slot->state != Impl::SlotState::Live) {
+            return invalid_handle_status();
+        }
+        if (slot->type != BodyType::Dynamic) {
+            return invalid_argument_status(
+                "central impulse batch accepts dynamic bodies only");
+        }
+        if (!is_finite(value.impulse)) {
+            return invalid_argument_status("central impulses must be finite");
+        }
+        for (std::size_t earlier = 0; earlier < index; ++earlier) {
+            if (impulses[earlier].body == value.body) {
+                return invalid_argument_status(
+                    "central impulse batch body handles must be unique");
+            }
+        }
+    }
+    impl_->commands.reserve(impl_->commands.size() + impulses.size());
+    for (const CentralImpulse& value : impulses) {
+        impl_->commands.emplace_back(
+            Impl::CentralImpulseCommand{value.body, value.impulse, wake});
+    }
     return {};
 }
 
@@ -1910,6 +2098,7 @@ void PhysicsWorld::step()
 
     b3World_Step(impl_->world, impl_->config.time_step, impl_->config.substeps);
     impl_->copy_contact_hits();
+    impl_->copy_physical_contacts();
     impl_->copy_joint_reactions();
     impl_->rebuild_snapshots();
     impl_->update_world_exit_and_queue_removal();
@@ -1929,6 +2118,31 @@ std::optional<BodyState> PhysicsWorld::state(BodyHandle body) const
         impl_->snapshots.end(),
         [body](const BodyState& value) { return value.handle == body; });
     return found == impl_->snapshots.end() ? std::nullopt : std::optional<BodyState>{*found};
+}
+
+std::optional<float> PhysicsWorld::structural_mass(BodyHandle body) const
+{
+    const Impl::Slot* slot = impl_->matching_slot(body);
+    if (slot == nullptr || slot->state == Impl::SlotState::Free
+        || slot->shapes.empty()) {
+        return std::nullopt;
+    }
+    double total_mass = 0.0;
+    for (const Impl::Slot::OwnedShape& shape : slot->shapes) {
+        if (B3_IS_NULL(shape.native) || !b3Shape_IsValid(shape.native)) {
+            return std::nullopt;
+        }
+        const b3MassData mass_data = b3Shape_ComputeMassData(shape.native);
+        if (!std::isfinite(mass_data.mass) || mass_data.mass < 0.0f) {
+            return std::nullopt;
+        }
+        total_mass += mass_data.mass;
+    }
+    const float narrowed = static_cast<float>(total_mass);
+    if (!std::isfinite(total_mass) || !std::isfinite(narrowed)) {
+        return std::nullopt;
+    }
+    return narrowed;
 }
 
 std::span<const BodyState> PhysicsWorld::states() const
@@ -1965,6 +2179,20 @@ std::optional<QueryHit> PhysicsWorld::cast_sphere(
     Vec3 center, float radius, Vec3 translation) const
 {
     return cast_shape(SphereShape{.radius = radius}, {center, {}}, translation);
+}
+
+std::optional<QueryHit> PhysicsWorld::cast_segment(Vec3 origin, Vec3 target,
+    std::span<const BodyHandle> ignored_handles) const
+{
+    if (!is_finite(origin) || !is_finite(target)
+        || !positive_finite(length(target - origin))) {
+        return std::nullopt;
+    }
+    if (std::ranges::any_of(ignored_handles,
+            [](BodyHandle handle) { return !handle.valid(); })) {
+        return std::nullopt;
+    }
+    return impl_->cast_segment(origin, target, ignored_handles);
 }
 
 std::optional<Aabb> PhysicsWorld::body_bounds(BodyHandle body) const
@@ -2008,6 +2236,11 @@ std::optional<Aabb> PhysicsWorld::body_bounds(BodyHandle body) const
 std::span<const ContactHit> PhysicsWorld::contact_hits() const
 {
     return impl_->contact_storage;
+}
+
+std::span<const PhysicalContact> PhysicsWorld::physical_contacts() const
+{
+    return impl_->physical_contact_storage;
 }
 
 std::span<const JointReaction> PhysicsWorld::joint_reactions() const
@@ -2235,6 +2468,40 @@ float detail::PhysicsWorldTestFacade::mass_scale(
     return slot != nullptr && slot->state == PhysicsWorld::Impl::SlotState::Live
             && slot->mass_scale_valid
         ? slot->mass_scale : 0.0f;
+}
+
+float detail::PhysicsWorldTestFacade::raw_total_normal_impulse_once(
+    const PhysicsWorld& world, BodyHandle a, BodyHandle b)
+{
+    const PhysicsWorld::Impl::Slot* slot = world.impl_->matching_slot(a);
+    if (slot == nullptr || slot->state != PhysicsWorld::Impl::SlotState::Live
+        || B3_IS_NULL(slot->native) || !b3Body_IsValid(slot->native)) {
+        return 0.0f;
+    }
+    const int capacity = b3Body_GetContactCapacity(slot->native);
+    std::vector<b3ContactData> contacts(static_cast<std::size_t>(std::max(0, capacity)));
+    const int count = capacity > 0
+        ? b3Body_GetContactData(slot->native, contacts.data(), capacity) : 0;
+    float total = 0.0f;
+    for (int index = 0; index < count; ++index) {
+        const b3ContactData& contact = contacts[index];
+        const auto* binding_a = world.impl_->find_shape_binding(contact.shapeIdA);
+        const auto* binding_b = world.impl_->find_shape_binding(contact.shapeIdB);
+        if (binding_a == nullptr || binding_b == nullptr
+            || !((binding_a->body == a && binding_b->body == b)
+                || (binding_a->body == b && binding_b->body == a))) {
+            continue;
+        }
+        for (int manifold_index = 0; manifold_index < contact.manifoldCount;
+            ++manifold_index) {
+            const b3Manifold& manifold = contact.manifolds[manifold_index];
+            for (int point_index = 0; point_index < manifold.pointCount; ++point_index) {
+                total += std::max(0.0f,
+                    manifold.points[point_index].totalNormalImpulse);
+            }
+        }
+    }
+    return total;
 }
 
 void detail::PhysicsWorldTestFacade::set_base_density(

@@ -508,27 +508,7 @@ namespace {
 
 [[nodiscard]] const char* event_kind_name(simulation::DomainEventKind kind) noexcept
 {
-    using enum simulation::DomainEventKind;
-    switch (kind) {
-    case BirdLaunched: return "bird_launched";
-    case AbilityActivationRequested: return "ability_activation_requested";
-    case CommandRejected: return "command_rejected";
-    case AbilityStarted: return "ability_started";
-    case AbilityAffectedBody: return "ability_affected_body";
-    case AbilityPulse: return "ability_pulse";
-    case AbilityEnded: return "ability_ended";
-    case DamageApplied: return "damage_applied";
-    case EntityNeutralized: return "entity_neutralized";
-    case JointOverloaded: return "joint_overloaded";
-    case PieceFractureTriggered: return "piece_fracture_triggered";
-    case JointBroken: return "joint_broken";
-    case PieceFractured: return "piece_fractured";
-    case MassChanged: return "mass_changed";
-    case SpeedChanged: return "speed_changed";
-    case ProjectileSplit: return "projectile_split";
-    case ProjectileSpawned: return "projectile_spawned";
-    }
-    return "unknown";
+    return detail::domain_event_kind_name(kind).data();
 }
 
 [[nodiscard]] const char* shape_type_name(simulation::ShapeType type) noexcept
@@ -621,6 +601,8 @@ namespace {
     result["material_id"] = static_cast<std::int64_t>(event.material_id.value());
     result["joint_load_ratio"] = event.joint_load_ratio;
     result["fracture_ratio"] = event.fracture_ratio;
+    result["environmental_trigger_id"] =
+        static_cast<std::int64_t>(event.environmental_trigger_id);
     if (event.kind == simulation::DomainEventKind::SpeedChanged) {
         result["delta_velocity"] = detail::to_godot(event.delta_velocity_m_s);
     }

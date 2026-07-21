@@ -799,7 +799,11 @@ SessionStatus SimulationSession::Impl::process_commands()
                 && session_state.tick.value()
                     >= shot->launch_tick.value()
                         + detail::AbilitySystem::activation_arm_ticks(*ability)
-                && !shot->activation_consumed && !projectile->finished) {
+                && !shot->activation_consumed
+                && (!projectile->finished
+                    || (ability->kind_v2 == AbilityKind::Explosion
+                        && std::get<ExplosionAbilityRuntime>(shot->runtime).fuse_armed
+                        && !projectile->pending_destroy))) {
                 if (ability->kind_v2 == AbilityKind::Split) {
                     const SessionStatus preflight = preflight_split_ability(
                         *shot, std::get<SplitAbilityDefinition>(ability->payload));
@@ -814,7 +818,12 @@ SessionStatus SimulationSession::Impl::process_commands()
                 if (!activation_status.ok()) {
                     return activation_status;
                 }
-                publish_ability_event(DomainEventKind::AbilityStarted);
+                const EventId activation_event =
+                    publish_ability_event(DomainEventKind::AbilityStarted);
+                if (auto* explosion = std::get_if<ExplosionAbilityRuntime>(
+                        &shot->runtime)) {
+                    explosion->activation_event_id = activation_event;
+                }
             } else {
                 const auto reason = session_state.phase != SessionPhase::FlightAbility
                     || !shot || !projectile
@@ -830,6 +839,9 @@ SessionStatus SimulationSession::Impl::process_commands()
 void SimulationSession::Impl::update_fsm_before_step()
 {
     if (session_state.phase == SessionPhase::Evaluation) {
+        if (has_pending_environmental_burst()) {
+            return;
+        }
         if (objective_complete) {
             session_state.phase = SessionPhase::Result;
             session_state.outcome = Outcome::Victory;
@@ -906,6 +918,9 @@ void SimulationSession::Impl::update_fsm_after_step()
     }
     std::vector<ProjectileState> updated{
         shot->projectiles().begin(), shot->projectiles().end()};
+    const AbilityArchetype* active_ability = ability_archetype(shot->ability_id);
+    const bool explosion_projectile = active_ability != nullptr
+        && active_ability->kind_v2 == AbilityKind::Explosion;
     for (ProjectileState& projectile : updated) {
         ++projectile.age_ticks;
         if (projectile.finished) {
@@ -928,14 +943,16 @@ void SimulationSession::Impl::update_fsm_after_step()
         } else {
             projectile.rest_ticks = 0U;
         }
-        const auto contact = std::ranges::find_if(
-            physics.contact_hits(), [&](const auto& value) {
-                return is_projectile_contact(value, projectile.physics_handle);
-            });
-        if (contact != physics.contact_hits().end()) {
-            projectile.finished = true;
-            if (!session_state.last_impact_m) {
-                session_state.last_impact_m = contact->point;
+        if (!explosion_projectile) {
+            const auto contact = std::ranges::find_if(
+                physics.contact_hits(), [&](const auto& value) {
+                    return is_projectile_contact(value, projectile.physics_handle);
+                });
+            if (contact != physics.contact_hits().end()) {
+                projectile.finished = true;
+                if (!session_state.last_impact_m) {
+                    session_state.last_impact_m = contact->point;
+                }
             }
         }
         if (projectile.age_ticks >= projectile_lifetime_ticks) {
@@ -946,7 +963,10 @@ void SimulationSession::Impl::update_fsm_after_step()
         static_cast<void>(shot->replace_projectile(std::move(projectile)));
     }
 
-    if (objective_complete && !ability_runtime_active(shot->runtime)) {
+    const bool pending_environmental_burst =
+        has_pending_environmental_burst();
+    if (objective_complete && !ability_runtime_active(shot->runtime)
+        && !pending_environmental_burst) {
         std::vector<ProjectileState> completed{
             shot->projectiles().begin(), shot->projectiles().end()};
         for (ProjectileState& projectile : completed) {
@@ -966,7 +986,7 @@ void SimulationSession::Impl::update_fsm_after_step()
     const bool bounded_active_ability = ability_runtime_active(shot->runtime)
         && ability_end_tick && session_state.tick <= *ability_end_tick;
     bool watchdog_expired = false;
-    if (!bounded_active_ability) {
+    if (!bounded_active_ability && !pending_environmental_burst) {
         std::vector<ProjectileState> watchdog_updates{
             shot->projectiles().begin(), shot->projectiles().end()};
         for (ProjectileState& projectile : watchdog_updates) {
@@ -1013,7 +1033,8 @@ void SimulationSession::Impl::update_fsm_after_step()
         }
 #endif
         resolution_rest_ticks = settled ? resolution_rest_ticks + 1U : 0U;
-        if (resolution_rest_ticks >= rest_required_ticks) {
+        if (resolution_rest_ticks >= rest_required_ticks
+            && !pending_environmental_burst) {
             session_state.phase = SessionPhase::Evaluation;
         }
     }

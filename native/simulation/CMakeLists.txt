@@ -16,6 +16,9 @@ add_library(ninho_simulation_kernel STATIC
   src/mass_boost_ability_system.cpp
   src/speed_boost_ability_system.cpp
   src/split_ability_system.cpp
+  src/pressure_burst_system.cpp
+  src/environmental_trigger_system.cpp
+  src/explosion_ability_system.cpp
   src/damage_system.cpp
   src/fracture_system.cpp
   src/objective_system.cpp
@@ -57,6 +60,9 @@ if(BUILD_TESTING)
     tests/mass_boost_ability_tests.cpp
     tests/speed_boost_ability_tests.cpp
     tests/split_ability_tests.cpp
+    tests/pressure_burst_tests.cpp
+    tests/environmental_trigger_tests.cpp
+    tests/explosion_ability_tests.cpp
     tests/damage_anchor_tests.cpp
     tests/fracture_objective_tests.cpp
     tests/playthrough_tests.cpp
@@ -119,6 +125,18 @@ if(BUILD_TESTING)
   add_test(
     NAME split_ability
     COMMAND ninho_simulation_tests --filter "split ability"
+  )
+  add_test(
+    NAME pressure_burst
+    COMMAND ninho_simulation_tests --filter "pressure burst"
+  )
+  add_test(
+    NAME environmental_trigger
+    COMMAND ninho_simulation_tests --filter "environmental trigger"
+  )
+  add_test(
+    NAME explosion_ability
+    COMMAND ninho_simulation_tests --filter "explosion ability"
   )
   add_test(
     NAME damage_anchor

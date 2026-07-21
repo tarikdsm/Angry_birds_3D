@@ -5,6 +5,8 @@
 #include <cmath>
 #include <numbers>
 #include <ranges>
+#include <stdexcept>
+#include <tuple>
 #include <utility>
 
 namespace ninho::simulation {
@@ -72,7 +74,8 @@ void ensure_enemy_states(std::vector<DamageState>& states,
 void apply_material_damage(std::vector<DamageState>& states,
     std::vector<DamageOutcome>& outcomes, const MaterialCatalog& materials,
     const DamageBody& target, EntityId cause_entity, PartId cause_part,
-    ninho::physics::Vec3 position, ninho::physics::Vec3 cause_to_target, double energy)
+    ninho::physics::Vec3 position, ninho::physics::Vec3 cause_to_target, double energy,
+    EventId cause_event_id = {})
 {
     if (!target.material_id || energy <= 0.0) {
         return;
@@ -95,7 +98,8 @@ void apply_material_damage(std::vector<DamageState>& states,
     if (applied > 0.0) {
         outcomes.push_back({DamageOutcomeKind::DamageApplied,
             cause_entity, cause_part, target.entity_id, target.part_id,
-            position, cause_to_target, energy, applied});
+            position, cause_to_target, energy, applied,
+            NeutralizationCause::None, DamageClassification::None, cause_event_id});
     }
 }
 
@@ -128,7 +132,8 @@ DirectionalDamageResponse directional_response(const WeakpointProfile& weakpoint
 void apply_enemy_damage(std::vector<DamageState>& states,
     std::vector<DamageOutcome>& outcomes, const ArchetypeCatalog& archetypes,
     const DamageBody& target, EntityId cause_entity, PartId cause_part,
-    ninho::physics::Vec3 position, ninho::physics::Vec3 cause_to_target, double energy)
+    ninho::physics::Vec3 position, ninho::physics::Vec3 cause_to_target, double energy,
+    EventId cause_event_id = {})
 {
     if (!target.enemy_archetype_id || energy <= 0.0) {
         return;
@@ -154,14 +159,15 @@ void apply_enemy_damage(std::vector<DamageState>& states,
     outcomes.push_back({DamageOutcomeKind::DamageApplied,
         cause_entity, cause_part, target.entity_id, target.part_id,
         position, cause_to_target, energy, applied,
-        NeutralizationCause::None, response.classification});
+        NeutralizationCause::None, response.classification, cause_event_id});
     if (state->remaining_integrity <= 0.0) {
         state->remaining_integrity = 0.0;
         state->neutralized = true;
         outcomes.push_back({DamageOutcomeKind::EntityNeutralized,
             cause_entity, cause_part, target.entity_id, target.part_id,
             position, cause_to_target, energy, applied,
-            NeutralizationCause::IntegrityDepleted, response.classification});
+            NeutralizationCause::IntegrityDepleted, response.classification,
+            cause_event_id});
     }
 }
 
@@ -222,8 +228,10 @@ void SimulationSession::Impl::process_damage_after_step()
     }
 
     const auto outcomes = damage_system.process(
-        bundle.materials, bundle.archetypes, bodies, contacts);
+        bundle.materials, bundle.archetypes, bodies, contacts,
+        pending_external_damage);
     publish_damage_outcomes(outcomes);
+    pending_external_damage.clear();
 }
 
 void SimulationSession::Impl::publish_damage_outcomes(
@@ -246,6 +254,7 @@ void SimulationSession::Impl::publish_damage_outcomes(
             .damage = outcome.damage,
             .damage_classification = outcome.damage_classification,
             .neutralization_cause = outcome.neutralization_cause,
+            .cause_event_id = outcome.cause_event_id,
         };
         domain_events.push_back(event);
         if (kind == DomainEventKind::EntityNeutralized) {
@@ -272,34 +281,78 @@ std::vector<DamageOutcome> DamageSystem::process(
     const MaterialCatalog& materials,
     const ArchetypeCatalog& archetypes,
     std::span<const DamageBody> bodies,
-    std::span<const DamageContact> contacts)
+    std::span<const DamageContact> contacts,
+    std::span<const ExternalDamage> external_damage)
 {
     std::vector<DamageOutcome> outcomes;
-    ensure_enemy_states(states_, archetypes, bodies);
+    std::vector<DamageState> next_states = states_;
+    ensure_enemy_states(next_states, archetypes, bodies);
 
+    std::vector<ExternalDamage> ordered_external{
+        external_damage.begin(), external_damage.end()};
+    std::ranges::sort(ordered_external, [](const auto& lhs, const auto& rhs) {
+        return std::tuple{lhs.cause_event_id, lhs.target_entity_id,
+                   lhs.target_part_id}
+            < std::tuple{rhs.cause_event_id, rhs.target_entity_id,
+                   rhs.target_part_id};
+    });
+    for (std::size_t index = 1; index < ordered_external.size(); ++index) {
+        const ExternalDamage& previous = ordered_external[index - 1U];
+        const ExternalDamage& current = ordered_external[index];
+        const bool same_key = previous.cause_event_id == current.cause_event_id
+            && previous.target_entity_id == current.target_entity_id
+            && previous.target_part_id == current.target_part_id;
+        if (same_key && previous != current) {
+            throw std::invalid_argument(
+                "conflicting external damage for one burst and target");
+        }
+    }
+    ordered_external.erase(std::unique(ordered_external.begin(), ordered_external.end()),
+        ordered_external.end());
+    for (const ExternalDamage& external : ordered_external) {
+        if (!std::isfinite(external.energy_j) || external.energy_j <= 0.0
+            || !ninho::physics::is_finite(external.position_m)
+            || !ninho::physics::is_finite(external.normal_cause_to_target)) {
+            throw std::invalid_argument("external damage must be positive and finite");
+        }
+        const DamageBody* target = find_body(
+            bodies, external.target_entity_id, external.target_part_id);
+        if (target == nullptr) {
+            continue;
+        }
+        apply_material_damage(next_states, outcomes, materials, *target,
+            external.cause_entity_id, external.cause_part_id,
+            external.position_m, external.normal_cause_to_target,
+            external.energy_j, external.cause_event_id);
+        apply_enemy_damage(next_states, outcomes, archetypes, *target,
+            external.cause_entity_id, external.cause_part_id,
+            external.position_m, external.normal_cause_to_target,
+            external.energy_j, external.cause_event_id);
+    }
     for (const DamageContact& contact : contacts) {
         const DamageBody* a = find_body(bodies, contact.a_entity_id, contact.a_part_id);
         const DamageBody* b = find_body(bodies, contact.b_entity_id, contact.b_part_id);
         if (a == nullptr || b == nullptr) {
             continue;
         }
-        apply_material_damage(states_, outcomes, materials,
+        apply_material_damage(next_states, outcomes, materials,
             *a, b->entity_id, b->part_id, contact.position_m,
             -contact.normal_a_to_b, contact.energy_j);
-        apply_enemy_damage(states_, outcomes, archetypes,
+        apply_enemy_damage(next_states, outcomes, archetypes,
             *a, b->entity_id, b->part_id, contact.position_m,
             -contact.normal_a_to_b, contact.energy_j);
-        apply_material_damage(states_, outcomes, materials,
+        apply_material_damage(next_states, outcomes, materials,
             *b, a->entity_id, a->part_id, contact.position_m,
             contact.normal_a_to_b, contact.energy_j);
-        apply_enemy_damage(states_, outcomes, archetypes,
+        apply_enemy_damage(next_states, outcomes, archetypes,
             *b, a->entity_id, a->part_id, contact.position_m,
             contact.normal_a_to_b, contact.energy_j);
     }
-    apply_ejection_transitions(states_, outcomes, bodies);
-    std::ranges::sort(states_, [](const DamageState& lhs, const DamageState& rhs) {
+    apply_ejection_transitions(next_states, outcomes, bodies);
+    std::ranges::sort(next_states, [](const DamageState& lhs, const DamageState& rhs) {
         return std::pair{lhs.entity_id, lhs.part_id} < std::pair{rhs.entity_id, rhs.part_id};
     });
+    states_.swap(next_states);
     return outcomes;
 }
 

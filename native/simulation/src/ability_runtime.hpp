@@ -51,6 +51,15 @@ struct SpeedBoostAbilityRuntime {
 struct ExplosionAbilityRuntime {
     std::optional<TickIndex> start_tick;
     std::optional<TickIndex> end_tick;
+    std::optional<TickIndex> fuse_armed_tick;
+    std::optional<TickIndex> fuse_due_tick;
+    std::optional<TickIndex> detonation_tick;
+    EventId activation_event_id{};
+    EventId fuse_armed_event_id{};
+    EventId pressure_burst_event_id{};
+    bool fuse_armed{};
+    bool burst_pending{};
+    bool detonated{};
     bool active{};
 
     bool operator==(const ExplosionAbilityRuntime&) const = default;

@@ -328,6 +328,10 @@ NINHO_SIM_TEST("product v2 content rejects ability shape scoring and gravity vio
     archetypes["abilities"][1]["payload"]["radius_m"] = 2.0;
     require_error(parse_archetype_catalog_v2(archetypes.dump()), ContentErrorCode::UnknownKey,
                   "/abilities/1/payload/radius_m");
+    archetypes = archetype_catalog();
+    archetypes["abilities"][3]["payload"]["max_bodies"] = 33;
+    require_error(parse_archetype_catalog_v2(archetypes.dump()), ContentErrorCode::OutOfRange,
+                  "/abilities/3/payload/max_bodies");
     auto level = level_manifest();
     level["bodies"][0]["shape"] = {
         {"type", "convex_hull"},
@@ -437,6 +441,10 @@ NINHO_SIM_TEST("product v2 content rejects trigger schema and resource violation
     level["triggers"][0]["pressure_burst"]["radius_m"] = 1e300;
     require_error(parse_level_manifest_v2(level.dump()), ContentErrorCode::OutOfRange,
                   "/triggers/0/pressure_burst/radius_m");
+    level = level_manifest();
+    level["triggers"][0]["pressure_burst"]["max_bodies"] = 33;
+    require_error(parse_level_manifest_v2(level.dump()), ContentErrorCode::OutOfRange,
+                  "/triggers/0/pressure_burst/max_bodies");
 }
 
 NINHO_SIM_TEST("product v2 content rejects enemy body and objective semantic contradictions")

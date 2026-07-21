@@ -518,6 +518,8 @@ SimulationSession::Impl::Impl(ContentBundle source)
 SessionStatus SimulationSession::Impl::build() noexcept
 {
     try {
+        environmental_trigger_runtimes =
+            detail::EnvironmentalTriggerSystem::initialize(bundle.level.triggers);
         remaining_birds = 0U;
         if (bundle.level.source_schema_version == 1U) {
             roster_remaining = bundle.level.bird_roster;

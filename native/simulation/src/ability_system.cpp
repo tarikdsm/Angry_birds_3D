@@ -32,9 +32,8 @@ namespace {
     case AbilityKind::MassBoost:
     case AbilityKind::SpeedBoost:
     case AbilityKind::Split:
-        return true;
     case AbilityKind::Explosion:
-        return false;
+        return true;
     }
     return false;
 }
@@ -247,6 +246,35 @@ std::optional<ContentError> AbilitySystem::validate_definition(
                 payload_pointer + "/impulse_m_s", "number out of range"};
         }
     }
+    if (ability.kind_v2 == AbilityKind::Explosion) {
+        const auto& definition = std::get<ExplosionAbilityDefinition>(ability.payload);
+        const std::string payload_pointer = std::string{pointer} + "/payload";
+        const std::array values{
+            std::pair{definition.radius_m, "radius_m"},
+            std::pair{definition.impulse_n_s, "impulse_n_s"},
+            std::pair{definition.energy_j, "energy_j"},
+        };
+        for (const auto& [value, field] : values) {
+            if (!std::isfinite(value)) {
+                return ContentError{ContentErrorCode::InvalidNumber,
+                    payload_pointer + '/' + field, "number must be finite"};
+            }
+            if (value <= 0.0) {
+                return ContentError{ContentErrorCode::OutOfRange,
+                    payload_pointer + '/' + field, "number out of range"};
+            }
+        }
+        if (definition.radius_m > 100.0
+            || definition.impulse_n_s > 1.0e9
+            || definition.energy_j > 1.0e12) {
+            return ContentError{ContentErrorCode::OutOfRange,
+                payload_pointer, "explosion payload is out of range"};
+        }
+        if (definition.max_bodies < 1U || definition.max_bodies > 32U) {
+            return ContentError{ContentErrorCode::OutOfRange,
+                payload_pointer + "/max_bodies", "integer out of range"};
+        }
+    }
     if (ability.kind_v2 == AbilityKind::Split) {
         const auto& definition =
             std::get<SplitAbilityDefinition>(ability.payload);
@@ -314,6 +342,7 @@ std::uint32_t AbilitySystem::activation_arm_ticks(
     return ability.kind_v2 == AbilityKind::MassBoost
             || ability.kind_v2 == AbilityKind::SpeedBoost
             || ability.kind_v2 == AbilityKind::Split
+            || ability.kind_v2 == AbilityKind::Explosion
         ? 9U : ability.arm_ticks;
 }
 
@@ -363,7 +392,8 @@ SessionStatus AbilitySystem::apply_before_step(
 SessionStatus AbilitySystem::process_after_step(
     const AbilityArchetype& ability, ShotState& shot)
 {
-    if (!ability_runtime_active(shot.runtime)) {
+    if (!ability_runtime_active(shot.runtime)
+        && ability.kind_v2 != AbilityKind::Explosion) {
         return {};
     }
     return dispatch(ability, shot, hooks_, [](auto& hooks, auto& selected_shot,
@@ -429,12 +459,16 @@ SessionStatus SimulationSession::Impl::apply_ability_before_step()
 
 SessionStatus SimulationSession::Impl::process_ability_after_step()
 {
-    if (!shot || !ability_runtime_active(shot->runtime)) {
+    if (!shot) {
         return {};
     }
     const AbilityArchetype* ability = ability_archetype(shot->ability_id);
     if (ability == nullptr) {
         return missing_active_ability();
+    }
+    if (!ability_runtime_active(shot->runtime)
+        && ability->kind_v2 != AbilityKind::Explosion) {
+        return {};
     }
     return ability_system.process_after_step(*ability, *shot);
 }

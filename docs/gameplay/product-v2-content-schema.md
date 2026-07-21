@@ -84,7 +84,7 @@ e único entre abilities. O payload é fechado pelo `kind`:
 | `explosion` | `radius_m` | `(0,100]` m |
 |  | `impulse_n_s` | `(0,10^9]` N·s |
 |  | `energy_j` | `(0,10^12]` J |
-|  | `max_bodies` | `[1,500]` |
+|  | `max_bodies` | `[1,32]` |
 | `split` | `child_count` | `[2,16]` |
 |  | `spread_angle_deg` | `(0,180]` graus |
 |  | `child_speed_multiplier` | `(0,2]` |
@@ -339,7 +339,7 @@ Pressure burst contém exatamente:
 - `impulse_n_s`: `(0,10^9]` N·s;
 - `energy_j`: `(0,10^12]` J;
 - `line_of_sight`: bool;
-- `max_bodies`: `[1,500]`.
+- `max_bodies`: `[1,32]`, limitado por identidade de domÃ­nio.
 
 ### Settle e watchdog
 

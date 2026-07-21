@@ -57,6 +57,34 @@ NINHO_TEST("capability compound body has expected mass and can be queried")
     NINHO_REQUIRE(world.state(handle)->mass > 0.0f);
 }
 
+NINHO_TEST("capability static hull structural mass includes hull compounds")
+{
+    PhysicsWorld world(make_legacy_radial_world_config({.surface_gravity = 0}));
+    const HullShape tetrahedron{
+        .vertices = {{0, 0, 0}, {1, 0, 0}, {0, 1, 0}, {0, 0, 1}}};
+
+    BodyDesc single{.type = BodyType::Static, .transform = {{0, 5, 0}, {}}};
+    single.shapes = {{.geometry = tetrahedron, .density = 600.0f}};
+    const BodyHandle single_handle = world.create_body(single).value;
+
+    HullShape translated = tetrahedron;
+    translated.local.position = {2, 0, 0};
+    BodyDesc compound{.type = BodyType::Static, .transform = {{3, 5, 0}, {}}};
+    compound.shapes = {{
+        .geometry = CompoundShape{.children = {tetrahedron, translated}},
+        .density = 600.0f,
+    }};
+    const BodyHandle compound_handle = world.create_body(compound).value;
+    world.step();
+
+    const auto single_mass = world.structural_mass(single_handle);
+    const auto compound_mass = world.structural_mass(compound_handle);
+    NINHO_REQUIRE(single_mass.has_value());
+    NINHO_REQUIRE(compound_mass.has_value());
+    NINHO_REQUIRE_NEAR(*single_mass, 100.0f, 1.0e-3f);
+    NINHO_REQUIRE_NEAR(*compound_mass, 200.0f, 2.0e-3f);
+}
+
 NINHO_TEST("capability sphere cast returns first hit")
 {
     PhysicsWorld world(make_legacy_radial_world_config({.surface_gravity = 0}));
@@ -712,4 +740,116 @@ NINHO_TEST("capability collision group update covers compounds and rejects inval
 
     NINHO_REQUIRE(world.destroy_body(body).ok());
     NINHO_REQUIRE(world.set_body_collision_group(body, 0).code == StatusCode::InvalidHandle);
+}
+
+NINHO_TEST("capability exposes compound world center of mass and deterministic segment visibility")
+{
+    PhysicsWorld world(make_legacy_radial_world_config({.surface_gravity = 0}));
+    constexpr float half_sqrt_two = 0.70710678118f;
+    BodyDesc compound{.type = BodyType::Dynamic,
+        .transform = {{3, 4, 0}, {0, 0, half_sqrt_two, half_sqrt_two}}};
+    compound.shapes.push_back(ShapeDesc{
+        .geometry = SphereShape{.radius = 0.5f, .local = {{2, 0, 0}, {}}},
+        .density = 100});
+    const BodyHandle source = world.create_body(compound).value;
+    BodyDesc wall = BodyDesc::static_box({0.25f, 2, 2}, {{6, 6, 0}, {}});
+    wall.shapes.front().material_id = 77;
+    const BodyHandle blocker = world.create_body(wall).value;
+    world.step();
+
+    const auto state = world.state(source);
+    NINHO_REQUIRE(state.has_value());
+    NINHO_REQUIRE_NEAR(state->world_center_of_mass.x, 3.0f, 1.0e-4f);
+    NINHO_REQUIRE_NEAR(state->world_center_of_mass.y, 6.0f, 1.0e-4f);
+    const std::array ignored_source{source};
+    const auto hit = world.cast_segment({0, 6, 0}, {10, 6, 0}, ignored_source);
+    NINHO_REQUIRE(hit.has_value());
+    NINHO_REQUIRE(hit->body == blocker);
+    const std::array ignored_both{source, blocker};
+    NINHO_REQUIRE(!world.cast_segment({0, 6, 0}, {10, 6, 0}, ignored_both));
+    NINHO_REQUIRE(!world.cast_segment({0, 0, 0}, {0, 0, 0}, {}));
+}
+
+NINHO_TEST("capability central impulse batch is atomic and creates no spin")
+{
+    PhysicsWorld world(make_legacy_radial_world_config({.surface_gravity = 0}));
+    const BodyHandle first = world.create_body(
+        BodyDesc::dynamic_sphere(0.5f, {{0, 4, 0}, {}}, 100)).value;
+    const BodyHandle second = world.create_body(
+        BodyDesc::dynamic_sphere(0.5f, {{3, 4, 0}, {}}, 100)).value;
+    world.step();
+    const auto before_first = *world.state(first);
+    const auto before_second = *world.state(second);
+    const std::array invalid{
+        CentralImpulse{first, {10, 0, 0}}, CentralImpulse{{}, {20, 0, 0}}};
+    NINHO_REQUIRE(world.apply_central_impulses(invalid).code == StatusCode::InvalidHandle);
+    world.step();
+    NINHO_REQUIRE_NEAR(world.state(first)->linear_velocity.x,
+        before_first.linear_velocity.x, 1.0e-6f);
+
+    const std::array valid{
+        CentralImpulse{first, {10, 0, 0}}, CentralImpulse{second, {20, 0, 0}}};
+    NINHO_REQUIRE(world.apply_central_impulses(valid).ok());
+    world.step();
+    NINHO_REQUIRE_NEAR(world.state(first)->linear_velocity.x,
+        before_first.linear_velocity.x + 10.0f / before_first.mass, 1.0e-5f);
+    NINHO_REQUIRE_NEAR(world.state(second)->linear_velocity.x,
+        before_second.linear_velocity.x + 20.0f / before_second.mass, 1.0e-5f);
+    NINHO_REQUIRE(length(world.state(first)->angular_velocity) < 1.0e-6f);
+    NINHO_REQUIRE(length(world.state(second)->angular_velocity) < 1.0e-6f);
+}
+
+NINHO_TEST("capability physical contact stream retains manifold impulse below legacy hit speed")
+{
+    PhysicsWorld world(make_legacy_radial_world_config({.substeps = 4, .surface_gravity = 0}));
+    const BodyHandle wall = world.create_body(
+        BodyDesc::static_box({0.25f, 2, 2}, {{0, 5, 0}, {}})).value;
+    BodyDesc heavy = BodyDesc::dynamic_sphere(0.5f, {{1.0f, 5, 0}, {}}, 500000.0f);
+    heavy.linear_velocity = {-2.5f, 0, 0};
+    heavy.enable_sleep = false;
+    const BodyHandle bird = world.create_body(heavy).value;
+    for (int tick = 0; tick < 10 && world.physical_contacts().empty(); ++tick) {
+        world.step();
+    }
+    NINHO_REQUIRE(!world.physical_contacts().empty());
+    const auto& contact = world.physical_contacts().front();
+    NINHO_REQUIRE(contact.a == std::min(wall, bird));
+    NINHO_REQUIRE(contact.b == std::max(wall, bird));
+    NINHO_REQUIRE(contact.total_normal_impulse_n_s > 250.0f);
+    NINHO_REQUIRE(contact.approach_speed_m_s < 3.0f);
+}
+
+NINHO_TEST("capability physical contacts aggregate compound shape manifolds once per body pair")
+{
+    PhysicsWorld world(make_legacy_radial_world_config({.substeps = 4, .surface_gravity = 0}));
+    const BodyHandle wall = world.create_body(
+        BodyDesc::static_box({0.25f, 3, 3}, {{0, 5, 0}, {}})).value;
+    BodyDesc compound{.type = BodyType::Dynamic,
+        .transform = {{1.5f, 5, 0}, {}},
+        .linear_velocity = {-8, 0, 0}, .enable_sleep = false};
+    compound.shapes = {
+        ShapeDesc{.geometry = SphereShape{.radius = 0.4f,
+                      .local = {{0, -0.65f, 0}, {}}}, .density = 5000},
+        ShapeDesc{.geometry = SphereShape{.radius = 0.4f,
+                      .local = {{0, 0.65f, 0}, {}}}, .density = 5000},
+    };
+    const BodyHandle body = world.create_body(compound).value;
+    world.step();
+    const float body_mass = world.state(body)->mass;
+    for (int tick = 0; tick < 20 && world.physical_contacts().empty(); ++tick) {
+        world.step();
+    }
+    NINHO_REQUIRE(world.physical_contacts().size() == 1U);
+    const auto& contact = world.physical_contacts().front();
+    NINHO_REQUIRE(contact.a == std::min(wall, body));
+    NINHO_REQUIRE(contact.b == std::max(wall, body));
+    NINHO_REQUIRE(contact.total_normal_impulse_n_s > 0.0f);
+    NINHO_REQUIRE(contact.approach_speed_m_s > 0.0f);
+    // One inelastic stop is about m*v. Visiting both bodies would double it.
+    NINHO_REQUIRE(contact.total_normal_impulse_n_s > body_mass * 4.0f);
+    const float raw_once =
+        ninho::physics::detail::PhysicsWorldTestFacade::raw_total_normal_impulse_once(
+            world, std::min(wall, body), std::max(wall, body));
+    NINHO_REQUIRE_NEAR(contact.total_normal_impulse_n_s, raw_once,
+        std::max(1.0e-4f, raw_once * 1.0e-6f));
 }

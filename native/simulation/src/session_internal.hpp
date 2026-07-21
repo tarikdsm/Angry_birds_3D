@@ -4,6 +4,8 @@
 #include "ability_system.hpp"
 #include "damage_system.hpp"
 #include "launcher_system.hpp"
+#include "pressure_burst_system.hpp"
+#include "environmental_trigger_system.hpp"
 
 #include <ninho/physics/physics_world.hpp>
 
@@ -109,6 +111,12 @@ struct SimulationSession::Impl : detail::AbilityLifecycleHooks {
         const SpeedBoostAbilityDefinition&, SpeedBoostAbilityRuntime&) override;
     [[nodiscard]] SessionStatus finish_after_step(ShotState&,
         const SpeedBoostAbilityDefinition&, SpeedBoostAbilityRuntime&) override;
+    [[nodiscard]] SessionStatus apply_before_step(ShotState&,
+        const ExplosionAbilityDefinition&, ExplosionAbilityRuntime&) override;
+    [[nodiscard]] SessionStatus process_after_step(ShotState&,
+        const ExplosionAbilityDefinition&, ExplosionAbilityRuntime&) override;
+    [[nodiscard]] SessionStatus finish_after_step(ShotState&,
+        const ExplosionAbilityDefinition&, ExplosionAbilityRuntime&) override;
     [[nodiscard]] SessionStatus preflight_split_ability(
         ShotState&, const SplitAbilityDefinition&);
     [[nodiscard]] SessionStatus apply_before_step(ShotState&,
@@ -117,6 +125,10 @@ struct SimulationSession::Impl : detail::AbilityLifecycleHooks {
         const SplitAbilityDefinition&, SplitAbilityRuntime&) override;
     void retire_finished_projectiles();
     void process_damage_after_step();
+    [[nodiscard]] SessionStatus collect_environmental_bursts_before_step();
+    [[nodiscard]] SessionStatus process_pending_pressure_bursts_before_step();
+    [[nodiscard]] SessionStatus observe_environmental_triggers_after_damage();
+    [[nodiscard]] bool has_pending_environmental_burst() const noexcept;
     void publish_damage_outcomes(std::span<const detail::DamageOutcome>);
     void apply_pending_fractures_before_step();
     void evaluate_fractures_after_step();
@@ -124,7 +136,7 @@ struct SimulationSession::Impl : detail::AbilityLifecycleHooks {
     void remove_confirmed_runtime_body_records();
     void publish_event(DomainEventKind, EntityId = {}, BirdArchetypeId = {},
         CommandRejectionReason = CommandRejectionReason::None);
-    void publish_ability_event(DomainEventKind, const BodyRecord* = nullptr,
+    EventId publish_ability_event(DomainEventKind, const BodyRecord* = nullptr,
         double weight = 0.0, ninho::physics::Vec3 force = {},
         ninho::physics::Vec3 impulse = {},
         ninho::physics::Vec3 delta_velocity = {});
@@ -157,6 +169,9 @@ struct SimulationSession::Impl : detail::AbilityLifecycleHooks {
     std::optional<std::string> canonical_refresh_failure_for_testing;
     std::optional<double> snapshot_mass_override_for_testing;
     bool force_settled_for_testing{};
+    std::optional<ninho::physics::PhysicalContact>
+        explosion_contact_override_for_testing;
+    bool pressure_burst_failure_after_plan_for_testing{};
 #endif
     std::uint32_t remaining_birds{};
     std::uint64_t next_command_sequence{1};
@@ -172,6 +187,9 @@ struct SimulationSession::Impl : detail::AbilityLifecycleHooks {
     std::vector<JointRecord> joint_records;
     std::vector<PendingJointBreak> pending_joint_breaks;
     std::vector<PendingPieceFracture> pending_piece_fractures;
+    std::vector<detail::PressureBurstRequest> pending_burst_requests;
+    std::vector<detail::ExternalDamage> pending_external_damage;
+    std::vector<detail::EnvironmentalTriggerRuntime> environmental_trigger_runtimes;
     std::vector<std::pair<EntityId, PartId>> fractured_pieces;
 #if defined(NINHO_ENABLE_TEST_FACADES)
     struct JointRatioOverride {
