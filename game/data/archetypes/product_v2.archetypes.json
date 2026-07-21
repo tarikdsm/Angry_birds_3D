@@ -1,0 +1,31 @@
+{
+  "schema_version": 2,
+  "presentation_ids": [
+    "CHR_Virela", "CHR_Red", "CHR_Yellow", "CHR_Blue", "CHR_Black", "CHR_BlueChild",
+    "ICO_Virela", "ICO_Red", "ICO_Yellow", "ICO_Blue", "ICO_Black",
+    "ANM_Virela", "ANM_Red", "ANM_Yellow", "ANM_Blue", "ANM_Black"
+  ],
+  "score_ids": ["unused_virela", "unused_red", "unused_yellow", "unused_blue", "unused_black"],
+  "abilities": [
+    {"id": 1, "key": "virela_gravity_field", "kind": "gravity_field", "payload": {"arm_ticks": 9, "duration_ticks": 75, "radius_m": 4.0, "max_body_mass_kg": 150.0, "max_bodies": 20, "max_acceleration_m_s2": 12.0, "pulse_speed_m_s": 4.0}},
+    {"id": 2, "key": "red_mass_boost", "kind": "mass_boost", "payload": {"duration_ticks": 3600, "mass_multiplier": 2.25}},
+    {"id": 3, "key": "yellow_speed_boost", "kind": "speed_boost", "payload": {"impulse_m_s": 1.55}},
+    {"id": 4, "key": "blue_split", "kind": "split", "payload": {"child_count": 3, "spread_angle_deg": 11.0, "child_speed_multiplier": 1.012400431604922}},
+    {"id": 5, "key": "black_explosion", "kind": "explosion", "payload": {"radius_m": 4.0, "impulse_n_s": 2160.0, "energy_j": 16200.0, "max_bodies": 32}}
+  ],
+  "birds": [
+    {"id": 1, "key": "virela", "projectile_visual_id": "CHR_Virela", "ability_id": 1, "surface_id": 1003, "mass_kg": 140.0, "radius_m": 0.45, "friction": 0.35, "restitution": 0.25, "bullet": true, "launch_speed_cap_m_s": 16.0, "score_id": "unused_virela", "icon_id": "ICO_Virela", "animation_id": "ANM_Virela"},
+    {"id": 2, "key": "red", "projectile_visual_id": "CHR_Red", "ability_id": 2, "surface_id": 1101, "mass_kg": 120.0, "radius_m": 0.45, "friction": 0.45, "restitution": 0.18, "bullet": true, "launch_speed_cap_m_s": 28.0, "score_id": "unused_red", "icon_id": "ICO_Red", "animation_id": "ANM_Red"},
+    {"id": 3, "key": "yellow", "projectile_visual_id": "CHR_Yellow", "ability_id": 3, "surface_id": 1102, "mass_kg": 85.0, "radius_m": 0.38, "friction": 0.38, "restitution": 0.20, "bullet": true, "launch_speed_cap_m_s": 34.0, "score_id": "unused_yellow", "icon_id": "ICO_Yellow", "animation_id": "ANM_Yellow"},
+    {"id": 4, "key": "blue", "projectile_visual_id": "CHR_Blue", "ability_id": 4, "surface_id": 1103, "mass_kg": 60.0, "radius_m": 0.32, "friction": 0.32, "restitution": 0.24, "bullet": true, "launch_speed_cap_m_s": 34.0, "score_id": "unused_blue", "icon_id": "ICO_Blue", "animation_id": "ANM_Blue"},
+    {"id": 5, "key": "black", "projectile_visual_id": "CHR_Black", "ability_id": 5, "surface_id": 1104, "mass_kg": 180.0, "radius_m": 0.50, "friction": 0.50, "restitution": 0.12, "bullet": true, "launch_speed_cap_m_s": 24.0, "score_id": "unused_black", "icon_id": "ICO_Black", "animation_id": "ANM_Black"}
+  ],
+  "weakpoints": [
+    {"id": 1, "key": "anchor_directional_armor", "protected_direction": [0.0, 0.0, -1.0], "protected_cone_deg": 45.0, "protected_multiplier": 0.25, "exposed_multiplier": 1.0},
+    {"id": 2, "key": "farm_pig_uniform", "protected_direction": [0.0, 1.0, 0.0], "protected_cone_deg": 180.0, "protected_multiplier": 1.0, "exposed_multiplier": 1.0}
+  ],
+  "enemies": [
+    {"id": 1, "key": "anchor", "weakpoint_id": 1, "surface_id": 1004, "mass_kg": 480.0, "integrity": 100.0, "damage_energy_j_per_kg": 2.5, "max_damage": 55.0},
+    {"id": 2, "key": "farm_pig", "weakpoint_id": 2, "surface_id": 1005, "mass_kg": 65.0, "integrity": 100.0, "damage_energy_j_per_kg": 18.0, "max_damage": 70.0, "damage_model": "terrestrial_pig"}
+  ]
+}

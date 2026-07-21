@@ -1,0 +1,30 @@
+{
+  "schema_version": 2,
+  "default_world_id": "earth",
+  "world_order": ["earth", "orbital"],
+  "scene_ids": ["SCN_FarmReaction", "SCN_FirstOrbitV2"],
+  "diorama_ids": ["WRD_EarthFarm_Diorama", "WRD_Orbital_Diorama"],
+  "text_ids": ["TXT_WORLD_EARTH", "TXT_WORLD_ORBITAL"],
+  "worlds": [
+    {
+      "id": "earth",
+      "diorama_id": "WRD_EarthFarm_Diorama",
+      "text_id": "TXT_WORLD_EARTH",
+      "default_level_id": "farm_reaction",
+      "level_order": ["farm_reaction"],
+      "levels": [
+        {"id": "farm_reaction", "region_id": "farm", "camera_profile_id": "CAM_Farm", "presentation_profile_id": "PRS_Farm", "scene_id": "SCN_FarmReaction", "unlock_after_level_id": null}
+      ]
+    },
+    {
+      "id": "orbital",
+      "diorama_id": "WRD_Orbital_Diorama",
+      "text_id": "TXT_WORLD_ORBITAL",
+      "default_level_id": "first_orbit_v2",
+      "level_order": ["first_orbit_v2"],
+      "levels": [
+        {"id": "first_orbit_v2", "region_id": "aster", "camera_profile_id": "CAM_Orbital", "presentation_profile_id": "PRS_Orbital", "scene_id": "SCN_FirstOrbitV2", "unlock_after_level_id": null}
+      ]
+    }
+  ]
+}

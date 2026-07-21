@@ -1,0 +1,22 @@
+{
+  "schema_version": 2,
+  "materials": [
+    {"id": 1, "key": "pine", "response": "fibrous", "density_kg_m3": 520.0, "friction": 0.55, "restitution": 0.15, "toughness": 0.26},
+    {"id": 5, "key": "brick", "response": "masonry", "density_kg_m3": 1800.0, "friction": 0.72, "restitution": 0.05, "toughness": 0.52},
+    {"id": 9, "key": "glass", "response": "brittle", "density_kg_m3": 2450.0, "friction": 0.38, "restitution": 0.08, "toughness": 0.072},
+    {"id": 13, "key": "pressed_straw", "response": "compressible", "density_kg_m3": 110.0, "friction": 0.82, "restitution": 0.12, "toughness": 0.088},
+    {"id": 17, "key": "sheet_steel", "response": "ductile", "density_kg_m3": 7800.0, "friction": 0.48, "restitution": 0.10, "toughness": 1.0}
+  ],
+  "surfaces": [
+    {"id": 1001, "key": "planet_soil", "density_kg_m3": 1250.0, "friction": 0.82, "restitution": 0.05},
+    {"id": 1002, "key": "platform_mineral", "density_kg_m3": 2700.0, "friction": 0.78, "restitution": 0.06},
+    {"id": 1003, "key": "virela_body", "density_kg_m3": 366.76, "friction": 0.35, "restitution": 0.25},
+    {"id": 1004, "key": "anchor_armor", "density_kg_m3": 434.39, "friction": 0.68, "restitution": 0.08},
+    {"id": 1005, "key": "farm_pig", "density_kg_m3": 170.28923952219253, "friction": 0.65, "restitution": 0.05},
+    {"id": 1101, "key": "red_body", "density_kg_m3": 314.38, "friction": 0.45, "restitution": 0.18},
+    {"id": 1102, "key": "yellow_body", "density_kg_m3": 367.24, "friction": 0.38, "restitution": 0.20},
+    {"id": 1103, "key": "blue_body", "density_kg_m3": 437.14, "friction": 0.32, "restitution": 0.24},
+    {"id": 1104, "key": "black_body", "density_kg_m3": 343.77, "friction": 0.50, "restitution": 0.12},
+    {"id": 1105, "key": "farm_ground", "density_kg_m3": 1500.0, "friction": 0.90, "restitution": 0.04}
+  ]
+}

@@ -52,6 +52,7 @@ if(BUILD_TESTING)
     tests/kernel_contract_tests.cpp
     tests/content_tests.cpp
     tests/product_v2_content_tests.cpp
+    tests/product_v2_level_tests.cpp
     tests/world_mode_tests.cpp
     tests/compound_shape_tests.cpp
     tests/launcher_system_tests.cpp
@@ -187,6 +188,10 @@ if(BUILD_TESTING)
   add_test(
     NAME product_v2_content
     COMMAND ninho_simulation_tests --filter "product v2 content"
+  )
+  add_test(
+    NAME product_v2_levels
+    COMMAND ninho_simulation_tests --filter "product v2 levels"
   )
   add_test(
     NAME world_mode

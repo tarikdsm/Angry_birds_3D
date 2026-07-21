@@ -459,7 +459,7 @@ Nenhuma tag depende da posição de `std::variant`. As tags são append-only:
 | joint | `pine_fit=0`, `glass_clamp=1`, `mortar=2`, `straw_bind=3`, `steel_ductile=4` |
 | objective | `neutralize_entity=0` |
 | environmental trigger | `damage_threshold=0` |
-| event | `bird_launched=0`, `ability_activation_requested=1`, `command_rejected=2`, `ability_started=3`, `ability_affected_body=4`, `ability_pulse=5`, `ability_ended=6`, `damage_applied=7`, `entity_neutralized=8`, `joint_overloaded=9`, `piece_fracture_triggered=10`, `joint_broken=11`, `piece_fractured=12`, `mass_changed=13`, `speed_changed=14`, `projectile_split=15`, `projectile_spawned=16`, `explosion_fuse_armed=17`, `pressure_burst=18`, `environmental_trigger_armed=19`, `environmental_trigger_detonated=20`, `material_yielded=21`, `crush_damage_applied=22` |
+| event | `bird_launched=0`, `ability_activation_requested=1`, `command_rejected=2`, `ability_started=3`, `ability_affected_body=4`, `ability_pulse=5`, `ability_ended=6`, `damage_applied=7`, `entity_neutralized=8`, `joint_overloaded=9`, `piece_fracture_triggered=10`, `joint_broken=11`, `piece_fractured=12`, `mass_changed=13`, `speed_changed=14`, `projectile_split=15`, `projectile_spawned=16`, `explosion_fuse_armed=17`, `pressure_burst=18`, `environmental_trigger_armed=19`, `environmental_trigger_detonated=20`, `material_yielded=21`, `crush_damage_applied=22`, `score_awarded=23`, `chain_changed=24`, `stars_awarded=25` |
 
 ### Ordem do stream v3
 
@@ -543,3 +543,33 @@ endereços e estado de apresentação/save ficam fora do stream.
 `canonical_hash_v3` é FNV-1a 64 sobre os bytes acima. O fixture mínimo fica
 congelado independentemente dos goldens v2; 50 serializações sem mutação devem
 ser byte-idênticas.
+
+## Documentos auxiliares de produto
+
+`game/data/assets/product_v2.assets.json` possui raiz fechada
+`schema_version,assets`. Cada entrada contém exatamente `id`, `kind`, `status`,
+`resource_path`, `node_path` e `presentation_only`. IDs são únicos e
+case-sensitive. `status` é `required` quando o recurso já integra o produto e
+`planned` quando o ID final está reservado para as Tasks 25–27. Um recurso
+planned nunca autoriza fallback, primitiva final ou collider automático.
+
+`resource_path` fica sob `res://assets/product_v2/` ou, somente para a fase
+legada preservada, `res://assets/vertical_slice/`; `..` é inválido.
+`node_path` é obrigatório e estável para subassets, inclusive todos os
+`FRAG_*`, `CHR_BlueChild` e `KIT_Farm_Metal`. Assets presentation-only não
+podem ser referenciados por body, shape ou fragmento físico.
+
+`game/data/feedback/product_v2.feedback.json` possui raiz fechada
+`schema_version,budgets,material_profiles,event_profiles,outcome_profiles,profiles`.
+Ele registra os cinco material IDs e todos os eventos append-only até
+`StarsAwarded=25`; não altera física, causalidade ou score.
+
+## Fixture físico da Fazenda
+
+O fixture `farm_reaction_layout_v1.json` contém apenas
+`schema_version,level_id,layout_hash,counts,projection`. A projeção e o FNV-1a
+64 estão definidos em `docs/gameplay/farm-reaction-layout-v1.md`. O hash é uma
+evidência de autoria e não é campo de LevelManifest nem parte do canonical da
+sessão. A tabela normativa tipada mantém `brick/masonry=5` e
+`glass/brittle=9`; qualquer resumo posterior que inverta 5/9 é stale e não
+renumera o contrato.
