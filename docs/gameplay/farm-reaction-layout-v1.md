@@ -6,6 +6,22 @@ fixture `native/simulation/tests/fixtures/product_v2/farm_reaction_layout_v1.jso
 é sua projeção tipada e auditável. Meshes e nodes de apresentação não criam
 bodies, shapes, juntas, triggers ou objetivos.
 
+## Nota de viabilidade descoberta na Task 18
+
+Este layout v1 continua sendo o baseline físico aprovado da Task 17, mas ainda
+não é um playthrough de cadeia certificado. A calibração de 21 de julho de 2026
+demonstrou que os três `straw_bind` prendem cada fardo ao body 20, enquanto a
+rampa de `-12°` fica abaixo do ângulo crítico de `33,88394°` para a mistura de
+atrito pinho/palha (`sqrt(0,55 × 0,82)`). Assim, a sequência vidro → feno →
+rampa → silo não emerge de forma robusta deste baseline sem uma alteração
+física autorada.
+
+Nenhuma tentativa experimental foi mantida neste arquivo: contagens, roots,
+thresholds, fixture e `layout_hash` abaixo continuam válidos. A melhor direção
+investigada separa plataforma e lingueta, usa apoio por contato e uma calha de
+40°, mas ainda não possui rota causal aprovada. O diagnóstico completo e o
+tuple J-v3 estão em `product-v2-task-18-checkpoint.md`.
+
 ## Identidade congelada
 
 - `layout_hash`: `fnv1a64:8324ce8a44754dad`.

@@ -5,6 +5,8 @@
 **Plataforma inicial:** Windows desktop x86_64, mouse e teclado  
 **Base técnica:** Godot 4.5.1, C++20, GDExtension, Box3D v0.1.0 e Blender 5.1.2
 
+> **Estado informativo da execução (2026-07-21):** Tasks 1–17 concluídas; Task 18 pausada durante o balanceamento da Fazenda. A especificação permanece normativa e não foi relaxada. Consulte `docs/gameplay/product-v2-task-18-checkpoint.md` para o diagnóstico e a retomada.
+
 ## 1. Visão
 
 A versão 2.0 transforma o vertical slice atual em um jogo com dois mundos:
