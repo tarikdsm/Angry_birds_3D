@@ -1,9 +1,11 @@
 #include "ductile_joint_system.hpp"
+#include "content_semantic_validation.hpp"
 #include "session_internal.hpp"
 
 #include <algorithm>
 #include <cmath>
 #include <ranges>
+#include <stdexcept>
 
 namespace ninho::simulation::detail {
 
@@ -230,23 +232,38 @@ void SimulationSession::Impl::evaluate_ductile_joints_after_step()
                 joint->snapshot.frame_a = runtime->frame_a;
                 joint->snapshot.frame_b = runtime->frame_b;
             }
+            const auto endpoint_body = [&](JointEndpoint endpoint) {
+                return std::ranges::find_if(body_records,
+                    [&](const BodyRecord& body) {
+                        return body.entity_id == endpoint.entity_id
+                            && body.part_id == endpoint.part_id;
+                    });
+            };
+            const auto body_a = endpoint_body(joint->snapshot.a);
+            const auto body_b = endpoint_body(joint->snapshot.b);
+            const detail::DuctileEndpointOwner owner =
+                detail::resolve_ductile_endpoint_owner(bundle.materials,
+                    body_a != body_records.end() ? body_a->material_id : std::nullopt,
+                    body_b != body_records.end() ? body_b->material_id : std::nullopt);
+            if (owner != detail::DuctileEndpointOwner::A
+                && owner != detail::DuctileEndpointOwner::B) {
+                throw std::runtime_error(
+                    "steel ductile joint has no unique material owner");
+            }
+            const auto yielded_body = owner == detail::DuctileEndpointOwner::A
+                ? body_a : body_b;
             domain_events.push_back({
                 .id = event_id,
                 .tick = session_state.tick,
                 .kind = DomainEventKind::MaterialYielded,
-                .affected_entity_id = joint->snapshot.a.entity_id,
-                .affected_part_id = joint->snapshot.a.part_id,
+                .affected_entity_id = yielded_body->entity_id,
+                .affected_part_id = yielded_body->part_id,
                 .cause_event_id = transition.cause_event_id,
                 .joint_id = transition.joint_id,
                 .joint_load_ratio = std::max(
                     transition.force_n / 3200.0,
                     transition.torque_nm / 450.0),
             });
-            const auto yielded_body = std::ranges::find_if(body_records,
-                [&](const BodyRecord& body) {
-                    return body.entity_id == joint->snapshot.a.entity_id
-                        && body.part_id == joint->snapshot.a.part_id;
-                });
             if (yielded_body != body_records.end() && yielded_body->material_id) {
                 domain_events.back().material_id = *yielded_body->material_id;
             }

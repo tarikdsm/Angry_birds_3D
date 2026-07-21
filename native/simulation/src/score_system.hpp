@@ -93,11 +93,15 @@ public:
         EventId event_id{};
         EventId root_event_id{};
         std::uint64_t shot_id{};
+
+        bool operator==(const CausalRecord&) const = default;
     };
     struct EntityRoot {
         EntityId entity_id{};
         EventId root_event_id{};
         std::uint64_t shot_id{};
+
+        bool operator==(const EntityRoot&) const = default;
     };
 
     ScoreSystem() = default;
@@ -140,7 +144,11 @@ public:
 private:
     [[nodiscard]] CausalRecord causal_record(EventId) const noexcept;
     [[nodiscard]] EntityRoot entity_root(EntityId) const noexcept;
-    void observe_event(const DomainEvent&);
+    void upsert_causal_record(CausalRecord);
+    void upsert_entity_root(EntityRoot);
+    [[nodiscard]] CausalRecord resolve_event(const DomainEvent&) const noexcept;
+    [[nodiscard]] std::vector<const DomainEvent*> resolve_tick_provenance(
+        std::span<const DomainEvent>);
     void reset_chain(std::vector<ScoreTransition>&);
     void award(const ScoringCandidate&, const DomainEvent&,
         std::vector<ScoreTransition>&);

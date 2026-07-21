@@ -831,16 +831,23 @@ NINHO_SIM_TEST("product v2 content conserves authored convex hull mass by hull v
 
 NINHO_SIM_TEST("product v2 content integrates ductile yield recreation and later break without duplicate overload")
 {
+    auto materials_json = material_catalog();
+    materials_json["materials"].push_back({
+        {"id", 3}, {"key", "wood"}, {"response", "fibrous"},
+        {"density_kg_m3", 520.0}, {"friction", 0.6},
+        {"restitution", 0.1}, {"toughness", 0.5}});
     auto level_json = level_manifest();
     auto first = static_body(2, 200);
     auto second = static_body(3, 300);
     for (auto* body : {&first, &second}) {
         (*body)["body_type"] = "dynamic";
         (*body)["affected_by_world_gravity"] = true;
-        (*body)["material_id"] = 2;
-        (*body)["density_kg_m3"] = 7800.0;
         (*body)["shape"] = box_shape();
     }
+    first["material_id"] = 3;
+    first["density_kg_m3"] = 520.0;
+    second["material_id"] = 2;
+    second["density_kg_m3"] = 7800.0;
     first["transform"]["position_m"] = json::array({0.0, 3.0, 0.0});
     second["transform"]["position_m"] = json::array({0.0, 4.0, 0.0});
     level_json["bodies"].push_back(first);
@@ -851,7 +858,7 @@ NINHO_SIM_TEST("product v2 content integrates ductile yield recreation and later
     level_json["assemblies"] = json::array({{{"id", 1}, {"key", "steel_pair"},
         {"body_ids", json::array({2, 3})}, {"joint_ids", json::array({1})}}});
     level_json["triggers"] = json::array();
-    const auto materials = parse_material_catalog_v2(material_catalog().dump());
+    const auto materials = parse_material_catalog_v2(materials_json.dump());
     auto archetypes_source = archetype_catalog();
     archetypes_source["abilities"] = json::array({archetypes_source["abilities"][0]});
     const auto archetypes = parse_archetype_catalog_v2(archetypes_source.dump());
@@ -885,6 +892,18 @@ NINHO_SIM_TEST("product v2 content integrates ductile yield recreation and later
         session->events(), DomainEventKind::MaterialYielded, &DomainEvent::kind);
     NINHO_SIM_REQUIRE(yielded_event != session->events().end());
     NINHO_SIM_REQUIRE(yielded_event->cause_event_id == EventId{});
+    NINHO_SIM_REQUIRE(yielded_event->affected_entity_id == EntityId{300});
+    NINHO_SIM_REQUIRE(yielded_event->affected_part_id == PartId{1});
+    NINHO_SIM_REQUIRE(yielded_event->material_id == MaterialId{2});
+    const auto score_event = std::ranges::find(
+        session->events(), DomainEventKind::ScoreAwarded, &DomainEvent::kind);
+    NINHO_SIM_REQUIRE(score_event != session->events().end());
+    NINHO_SIM_REQUIRE(score_event->scoring_identity_kind
+        == ScoringIdentityKind::MaterialPiece);
+    NINHO_SIM_REQUIRE(score_event->affected_entity_id == EntityId{300});
+    NINHO_SIM_REQUIRE(score_event->affected_part_id == PartId{1});
+    NINHO_SIM_REQUIRE(score_event->base_points == 220U);
+    NINHO_SIM_REQUIRE(score_event->awarded_points == 220U);
     NINHO_SIM_REQUIRE(session->structural_joints().front().active);
     const auto yielded_hash = session->canonical_hash_v3();
     NINHO_SIM_REQUIRE(yielded_hash != initial_hash);
@@ -907,6 +926,116 @@ NINHO_SIM_TEST("product v2 content integrates ductile yield recreation and later
         DomainEventKind::JointBroken, &DomainEvent::kind) == 1);
     NINHO_SIM_REQUIRE(!session->structural_joints().front().active);
     NINHO_SIM_REQUIRE(session->canonical_hash_v3() != recreated_hash);
+}
+
+NINHO_SIM_TEST("product v2 content scores the ductile owner when sheet is endpoint a")
+{
+    auto materials_json = material_catalog();
+    materials_json["materials"].push_back({
+        {"id", 3}, {"key", "wood"}, {"response", "fibrous"},
+        {"density_kg_m3", 520.0}, {"friction", 0.6},
+        {"restitution", 0.1}, {"toughness", 0.5}});
+    auto level_json = level_manifest();
+    auto sheet = static_body(2, 200);
+    auto wood = static_body(3, 300);
+    for (auto* body : {&sheet, &wood}) {
+        (*body)["body_type"] = "dynamic";
+        (*body)["affected_by_world_gravity"] = true;
+        (*body)["shape"] = box_shape();
+    }
+    sheet["material_id"] = 2;
+    sheet["density_kg_m3"] = 7800.0;
+    wood["material_id"] = 3;
+    wood["density_kg_m3"] = 520.0;
+    level_json["bodies"].push_back(sheet);
+    level_json["bodies"].push_back(wood);
+    level_json["joints"] = json::array({{{"id", 1}, {"assembly_id", 1},
+        {"kind", "steel_ductile"}, {"body_a_id", 2}, {"body_b_id", 3},
+        {"force_limit_n", 7500.0}, {"torque_limit_nm", 900.0}}});
+    level_json["assemblies"] = json::array({{{"id", 1}, {"key", "sheet_a"},
+        {"body_ids", json::array({2, 3})}, {"joint_ids", json::array({1})}}});
+    level_json["triggers"] = json::array();
+
+    const auto materials = parse_material_catalog_v2(materials_json.dump());
+    auto archetypes_json = archetype_catalog();
+    archetypes_json["abilities"] = json::array({archetypes_json["abilities"][0]});
+    const auto archetypes = parse_archetype_catalog_v2(archetypes_json.dump());
+    const auto level = parse_level_manifest_v2(level_json.dump());
+    NINHO_SIM_REQUIRE(materials.ok() && archetypes.ok() && level.ok());
+    auto created = SimulationSession::create(
+        materials.value, archetypes.value, level.value);
+    NINHO_SIM_REQUIRE(created.ok());
+    detail::SessionTestFacade::override_joint_ratio_after_solver(
+        *created.value, JointId{1}, 1.0);
+    NINHO_SIM_REQUIRE(created.value->tick().ok());
+    const auto yielded = std::ranges::find(created.value->events(),
+        DomainEventKind::MaterialYielded, &DomainEvent::kind);
+    const auto awarded = std::ranges::find(created.value->events(),
+        DomainEventKind::ScoreAwarded, &DomainEvent::kind);
+    NINHO_SIM_REQUIRE(yielded != created.value->events().end());
+    NINHO_SIM_REQUIRE(awarded != created.value->events().end());
+    NINHO_SIM_REQUIRE(yielded->affected_entity_id == EntityId{200});
+    NINHO_SIM_REQUIRE(yielded->material_id == MaterialId{2});
+    NINHO_SIM_REQUIRE(awarded->affected_entity_id == EntityId{200});
+    NINHO_SIM_REQUIRE(awarded->base_points == 220U);
+}
+
+NINHO_SIM_TEST("product v2 content rejects ambiguous ductile joint ownership atomically")
+{
+    auto materials_json = material_catalog();
+    materials_json["materials"].push_back({
+        {"id", 3}, {"key", "wood"}, {"response", "fibrous"},
+        {"density_kg_m3", 520.0}, {"friction", 0.6},
+        {"restitution", 0.1}, {"toughness", 0.5}});
+    const auto materials = parse_material_catalog_v2(materials_json.dump());
+    auto archetypes_json = archetype_catalog();
+    archetypes_json["abilities"] = json::array({archetypes_json["abilities"][0]});
+    const auto archetypes = parse_archetype_catalog_v2(archetypes_json.dump());
+    NINHO_SIM_REQUIRE(materials.ok() && archetypes.ok());
+
+    const auto manifest = [](std::uint32_t material_a,
+                              std::uint32_t material_b) {
+        auto level_json = level_manifest();
+        auto first = static_body(2, 200);
+        auto second = static_body(3, 300);
+        for (auto* body : {&first, &second}) {
+            (*body)["body_type"] = "dynamic";
+            (*body)["affected_by_world_gravity"] = true;
+            (*body)["shape"] = box_shape();
+        }
+        first["material_id"] = material_a;
+        first["density_kg_m3"] = material_a == 2U ? 7800.0 : 520.0;
+        second["material_id"] = material_b;
+        second["density_kg_m3"] = material_b == 2U ? 7800.0 : 520.0;
+        level_json["bodies"].push_back(first);
+        level_json["bodies"].push_back(second);
+        level_json["joints"] = json::array({{{"id", 1}, {"assembly_id", 1},
+            {"kind", "steel_ductile"}, {"body_a_id", 2}, {"body_b_id", 3},
+            {"force_limit_n", 7500.0}, {"torque_limit_nm", 900.0}}});
+        level_json["assemblies"] = json::array({{{"id", 1}, {"key", "ownership"},
+            {"body_ids", json::array({2, 3})}, {"joint_ids", json::array({1})}}});
+        level_json["triggers"] = json::array();
+        const auto parsed = parse_level_manifest_v2(level_json.dump());
+        NINHO_SIM_REQUIRE(parsed.ok());
+        return parsed.value;
+    };
+
+    const LevelManifest valid = manifest(2U, 3U);
+    auto session = SimulationSession::create(
+        materials.value, archetypes.value, valid);
+    NINHO_SIM_REQUIRE(session.ok());
+    const auto canonical = session.value->canonical_state_v3();
+    for (const LevelManifest invalid : {manifest(3U, 3U), manifest(2U, 2U)}) {
+        const auto rejected = SimulationSession::create(
+            materials.value, archetypes.value, invalid);
+        require_error(rejected, ContentErrorCode::InvalidInvariant,
+            "/joints/0/kind");
+        const SessionStatus status = session.value->reconfigure(
+            materials.value, archetypes.value, invalid);
+        NINHO_SIM_REQUIRE(!status.ok());
+        NINHO_SIM_REQUIRE(status.error.pointer == "/joints/0/kind");
+        NINHO_SIM_REQUIRE(session.value->canonical_state_v3() == canonical);
+    }
 }
 
 NINHO_SIM_TEST("product v2 content integrates compound pig mass crush causality and reset")

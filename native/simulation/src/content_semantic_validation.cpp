@@ -64,6 +64,33 @@ bool box3d_sphere_mass_is_safe(double mass_kg, double radius_m) noexcept
         && positive_finite(runtime_inverse_mass_kg);
 }
 
+DuctileEndpointOwner resolve_ductile_endpoint_owner(
+    const MaterialCatalog& materials, std::optional<MaterialId> material_a,
+    std::optional<MaterialId> material_b) noexcept
+{
+    const auto is_ductile = [&](std::optional<MaterialId> id) {
+        if (!id) {
+            return false;
+        }
+        const auto found = std::ranges::find(
+            materials.materials, *id, &MaterialDefinition::id);
+        return found != materials.materials.end()
+            && found->response == MaterialResponse::Ductile;
+    };
+    const bool ductile_a = is_ductile(material_a);
+    const bool ductile_b = is_ductile(material_b);
+    if (ductile_a && ductile_b) {
+        return DuctileEndpointOwner::Ambiguous;
+    }
+    if (ductile_a) {
+        return DuctileEndpointOwner::A;
+    }
+    if (ductile_b) {
+        return DuctileEndpointOwner::B;
+    }
+    return DuctileEndpointOwner::None;
+}
+
 std::optional<ContentError> validate_bird_runtime_physics(
     const BirdArchetype& bird, std::string_view pointer)
 {
@@ -456,6 +483,7 @@ std::optional<ContentError> validate_product_v2_session_content(
         }
     }
     std::unordered_set<std::uint32_t> body_ids;
+    std::unordered_map<std::uint32_t, const BodyDefinition*> bodies_by_id;
     std::unordered_set<std::uint64_t> entity_parts;
     std::unordered_set<std::uint32_t> entity_ids;
     std::unordered_map<std::uint32_t, std::size_t> entity_body_counts;
@@ -465,6 +493,7 @@ std::optional<ContentError> validate_product_v2_session_content(
         if (!body_ids.insert(body.body_id).second) {
             return duplicate(pointer + "/body_id", "body");
         }
+        bodies_by_id.emplace(body.body_id, &body);
         const std::uint64_t identity =
             (static_cast<std::uint64_t>(body.entity_id.value()) << 32U)
             | body.part_id.value();
@@ -544,6 +573,25 @@ std::optional<ContentError> validate_product_v2_session_content(
                         "physical fragments must preserve the parent center of mass");
                 }
             }
+        }
+    }
+    for (std::size_t index = 0; index < level.joints.size(); ++index) {
+        const JointDefinition& joint = level.joints[index];
+        if (joint.kind != JointKind::SteelDuctile) {
+            continue;
+        }
+        const auto body_a = bodies_by_id.find(joint.body_a_id);
+        const auto body_b = bodies_by_id.find(joint.body_b_id);
+        if (body_a == bodies_by_id.end() || body_b == bodies_by_id.end()) {
+            continue;
+        }
+        const DuctileEndpointOwner owner = resolve_ductile_endpoint_owner(
+            materials, body_a->second->material_id, body_b->second->material_id);
+        if (owner != DuctileEndpointOwner::A
+            && owner != DuctileEndpointOwner::B) {
+            return error(ContentErrorCode::InvalidInvariant,
+                indexed("/joints", index) + "/kind",
+                "steel ductile joint requires exactly one ductile material endpoint");
         }
     }
     std::unordered_set<std::uint32_t> trigger_ids;

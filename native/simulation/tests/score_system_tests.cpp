@@ -333,6 +333,147 @@ NINHO_SIM_TEST("score system carries provenance from damaged material into later
     NINHO_SIM_REQUIRE(award->shot_id == 3U);
 }
 
+NINHO_SIM_TEST("score system resolves same tick provenance before awards for every permutation")
+{
+    struct Outcome {
+        detail::ScoreState state;
+        std::uint64_t observed_launches{};
+        std::vector<std::array<std::uint64_t, 3>> causal_records;
+        std::vector<std::array<std::uint64_t, 3>> entity_roots;
+    };
+    const auto execute = [](const std::array<std::size_t, 3>& order) {
+        detail::ScoreSystem system{scoring(), 4U};
+        const std::array seed{
+            DomainEvent{.id = EventId{1}, .tick = TickIndex{1},
+                .kind = DomainEventKind::BirdLaunched,
+                .entity_id = EntityId{1000}, .shot_id = 1U},
+            DomainEvent{.id = EventId{2}, .tick = TickIndex{2},
+                .kind = DomainEventKind::DamageApplied,
+                .entity_id = EntityId{1000},
+                .affected_entity_id = EntityId{200}},
+        };
+        consume(system, TickIndex{2}, seed);
+
+        const std::array authored{
+            DomainEvent{.id = EventId{3}, .tick = TickIndex{3},
+                .kind = DomainEventKind::BirdLaunched,
+                .entity_id = EntityId{1001}, .shot_id = 2U},
+            DomainEvent{.id = EventId{4}, .tick = TickIndex{3},
+                .kind = DomainEventKind::EntityNeutralized,
+                .affected_entity_id = EntityId{200}},
+            DomainEvent{.id = EventId{5}, .tick = TickIndex{3},
+                .kind = DomainEventKind::DamageApplied,
+                .entity_id = EntityId{1001},
+                .affected_entity_id = EntityId{200}},
+        };
+        std::array<DomainEvent, 3> events{
+            authored[order[0]], authored[order[1]], authored[order[2]]};
+        const detail::ScoringCandidate candidate{
+            detail::ScoringIdentity::enemy(EntityId{200}), EventId{4}, 5000U};
+        const auto transitions = consume(system, TickIndex{3}, events,
+            std::span{&candidate, 1U});
+        const auto award = std::ranges::find(transitions,
+            detail::ScoreTransitionKind::Awarded, &detail::ScoreTransition::kind);
+        NINHO_SIM_REQUIRE(award != transitions.end());
+        NINHO_SIM_REQUIRE(award->root_cause_event_id == EventId{3});
+        NINHO_SIM_REQUIRE(award->shot_id == 2U);
+
+        Outcome result{.state = system.state(),
+            .observed_launches = system.observed_launches()};
+        for (const auto& record : system.causal_records()) {
+            result.causal_records.push_back({record.event_id.value(),
+                record.root_event_id.value(), record.shot_id});
+        }
+        for (const auto& root : system.entity_roots()) {
+            result.entity_roots.push_back({root.entity_id.value(),
+                root.root_event_id.value(), root.shot_id});
+        }
+        return result;
+    };
+
+    std::array<std::size_t, 3> order{0U, 1U, 2U};
+    const Outcome baseline = execute(order);
+    while (std::ranges::next_permutation(order).found) {
+        const Outcome permuted = execute(order);
+        NINHO_SIM_REQUIRE(permuted.state == baseline.state);
+        NINHO_SIM_REQUIRE(permuted.observed_launches == baseline.observed_launches);
+        NINHO_SIM_REQUIRE(permuted.causal_records == baseline.causal_records);
+        NINHO_SIM_REQUIRE(permuted.entity_roots == baseline.entity_roots);
+    }
+}
+
+NINHO_SIM_TEST("score system preserves target provenance for bounds exit and ejection")
+{
+    for (const NeutralizationCause neutralization : {
+            NeutralizationCause::BoundsExit, NeutralizationCause::Ejection}) {
+        detail::ScoreSystem system{scoring(), 4U};
+        const std::array seed{
+            DomainEvent{.id = EventId{1}, .tick = TickIndex{1},
+                .kind = DomainEventKind::BirdLaunched,
+                .entity_id = EntityId{1000}, .shot_id = 7U},
+            DomainEvent{.id = EventId{2}, .tick = TickIndex{2},
+                .kind = DomainEventKind::DamageApplied,
+                .entity_id = EntityId{1000},
+                .affected_entity_id = EntityId{200}},
+        };
+        consume(system, TickIndex{2}, seed);
+        const DomainEvent exited{.id = EventId{3}, .tick = TickIndex{20},
+            .kind = DomainEventKind::EntityNeutralized,
+            .affected_entity_id = EntityId{200},
+            .neutralization_cause = neutralization};
+        const detail::ScoringCandidate candidate{
+            detail::ScoringIdentity::enemy(EntityId{200}), exited.id, 5000U};
+        const auto transitions = consume(system, TickIndex{20},
+            std::span{&exited, 1U}, std::span{&candidate, 1U});
+        const auto award = std::ranges::find(transitions,
+            detail::ScoreTransitionKind::Awarded, &detail::ScoreTransition::kind);
+        NINHO_SIM_REQUIRE(award != transitions.end());
+        NINHO_SIM_REQUIRE(award->root_cause_event_id == EventId{1});
+        NINHO_SIM_REQUIRE(award->shot_id == 7U);
+    }
+}
+
+NINHO_SIM_TEST("score system foreign cause cannot mask valid target provenance")
+{
+    detail::ScoreSystem system{scoring(), 4U};
+    const std::array seed{
+        DomainEvent{.id = EventId{1}, .tick = TickIndex{1},
+            .kind = DomainEventKind::BirdLaunched,
+            .entity_id = EntityId{1000}, .shot_id = 5U},
+        DomainEvent{.id = EventId{2}, .tick = TickIndex{2},
+            .kind = DomainEventKind::DamageApplied,
+            .entity_id = EntityId{1000},
+            .affected_entity_id = EntityId{200}},
+    };
+    consume(system, TickIndex{2}, seed);
+    const std::array events{
+        DomainEvent{.id = EventId{3}, .tick = TickIndex{3},
+            .kind = DomainEventKind::PieceFractured,
+            .entity_id = EntityId{1000},
+            .affected_entity_id = EntityId{200},
+            .affected_part_id = PartId{2}, .cause_event_id = EventId{999}},
+        DomainEvent{.id = EventId{4}, .tick = TickIndex{3},
+            .kind = DomainEventKind::EntityNeutralized,
+            .affected_entity_id = EntityId{200},
+            .neutralization_cause = NeutralizationCause::BoundsExit},
+    };
+    const std::array candidates{
+        detail::ScoringCandidate{detail::ScoringIdentity::material(
+            EntityId{200}, PartId{2}), EventId{3}, 120U},
+        detail::ScoringCandidate{detail::ScoringIdentity::enemy(
+            EntityId{200}), EventId{4}, 5000U},
+    };
+    const auto transitions = consume(system, TickIndex{3}, events, candidates);
+    std::vector<detail::ScoreTransition> awards;
+    std::ranges::copy_if(transitions, std::back_inserter(awards), [](const auto& value) {
+        return value.kind == detail::ScoreTransitionKind::Awarded;
+    });
+    NINHO_SIM_REQUIRE(awards.size() == 2U);
+    NINHO_SIM_REQUIRE(awards[0].root_cause_event_id == EventId{});
+    NINHO_SIM_REQUIRE(awards[1].root_cause_event_id == EventId{1});
+    NINHO_SIM_REQUIRE(awards[1].shot_id == 5U);
+}
+
 NINHO_SIM_TEST("score system uses integer multiplier awards from 100 through capped 200 percent")
 {
     detail::ScoreSystem system{scoring(), 4U};

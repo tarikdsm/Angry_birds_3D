@@ -44,57 +44,121 @@ ScoreSystem::EntityRoot ScoreSystem::entity_root(EntityId id) const noexcept
         ? *found : EntityRoot{};
 }
 
-void ScoreSystem::observe_event(const DomainEvent& event)
+void ScoreSystem::upsert_causal_record(CausalRecord record)
+{
+    const auto position = std::lower_bound(causal_records_.begin(),
+        causal_records_.end(), record.event_id,
+        [](const CausalRecord& current, EventId value) {
+            return current.event_id < value;
+        });
+    if (position != causal_records_.end()
+        && position->event_id == record.event_id) {
+        *position = record;
+    } else {
+        causal_records_.insert(position, record);
+    }
+}
+
+void ScoreSystem::upsert_entity_root(EntityRoot root)
+{
+    if (root.entity_id == EntityId{} || root.root_event_id == EventId{}) {
+        return;
+    }
+    const auto position = std::lower_bound(entity_roots_.begin(),
+        entity_roots_.end(), root.entity_id,
+        [](const EntityRoot& current, EntityId value) {
+            return current.entity_id < value;
+        });
+    if (position != entity_roots_.end()
+        && position->entity_id == root.entity_id) {
+        *position = root;
+    } else {
+        entity_roots_.insert(position, root);
+    }
+}
+
+ScoreSystem::CausalRecord ScoreSystem::resolve_event(
+    const DomainEvent& event) const noexcept
 {
     CausalRecord record{.event_id = event.id};
     if (event.kind == DomainEventKind::BirdLaunched) {
-        ++observed_launches_;
-        record.root_event_id = event.id;
-        record.shot_id = event.shot_id != 0U ? event.shot_id : observed_launches_;
-        const EntityRoot root{event.entity_id, record.root_event_id, record.shot_id};
-        const auto position = std::lower_bound(entity_roots_.begin(), entity_roots_.end(),
-            event.entity_id, [](const EntityRoot& current, EntityId value) {
-                return current.entity_id < value;
-            });
-        if (position != entity_roots_.end() && position->entity_id == event.entity_id) {
-            *position = root;
-        } else {
-            entity_roots_.insert(position, root);
-        }
-    } else if (event.cause_event_id != EventId{}) {
+        return causal_record(event.id);
+    }
+    if (event.cause_event_id != EventId{}) {
         const CausalRecord parent = causal_record(event.cause_event_id);
         record.root_event_id = parent.root_event_id;
         record.shot_id = parent.shot_id;
-    } else if (event.entity_id != EntityId{}) {
-        const EntityRoot root = entity_root(event.entity_id);
-        record.root_event_id = root.root_event_id;
-        record.shot_id = root.shot_id;
+        return record;
     }
-    if (event.affected_entity_id != EntityId{}
-        && record.root_event_id != EventId{}) {
-        const EntityRoot child{event.affected_entity_id,
-            record.root_event_id, record.shot_id};
-        const auto position = std::lower_bound(entity_roots_.begin(),
-            entity_roots_.end(), child.entity_id,
-            [](const EntityRoot& current, EntityId value) {
-                return current.entity_id < value;
-            });
-        if (position != entity_roots_.end()
-            && position->entity_id == child.entity_id) {
-            *position = child;
-        } else {
-            entity_roots_.insert(position, child);
+    const EntityRoot source = entity_root(event.entity_id);
+    if (source.root_event_id != EventId{}) {
+        record.root_event_id = source.root_event_id;
+        record.shot_id = source.shot_id;
+        return record;
+    }
+    const EntityRoot target = entity_root(event.affected_entity_id);
+    record.root_event_id = target.root_event_id;
+    record.shot_id = target.shot_id;
+    return record;
+}
+
+std::vector<const DomainEvent*> ScoreSystem::resolve_tick_provenance(
+    std::span<const DomainEvent> events)
+{
+    std::vector<const DomainEvent*> ordered;
+    ordered.reserve(events.size());
+    for (const DomainEvent& event : events) {
+        ordered.push_back(&event);
+    }
+    std::ranges::sort(ordered, [](const DomainEvent* lhs, const DomainEvent* rhs) {
+        return lhs->id < rhs->id;
+    });
+
+    // Launch roots are immutable anchors. Register them once in canonical event
+    // order before resolving any descendant or physical target provenance.
+    for (const DomainEvent* event : ordered) {
+        if (event->kind != DomainEventKind::BirdLaunched
+            || event->id == EventId{}) {
+            continue;
+        }
+        CausalRecord root = causal_record(event->id);
+        if (root.event_id == EventId{}) {
+            ++observed_launches_;
+            root = {.event_id = event->id,
+                .root_event_id = event->id,
+                .shot_id = event->shot_id != 0U
+                    ? event->shot_id : observed_launches_};
+            upsert_causal_record(root);
+        }
+        upsert_entity_root({event->entity_id, root.root_event_id, root.shot_id});
+    }
+
+    // Events can be emitted before another same-tick event that establishes a
+    // newer physical provenance for their target. Iterate the canonically
+    // ordered batch to a fixpoint before any award is evaluated. Explicit
+    // foreign causes remain rootless and therefore never erase a valid target
+    // root.
+    const std::size_t maximum_passes = ordered.size() + 1U;
+    for (std::size_t pass = 0; pass < maximum_passes; ++pass) {
+        const auto records_before = causal_records_;
+        const auto roots_before = entity_roots_;
+        for (const DomainEvent* event : ordered) {
+            if (event->kind == DomainEventKind::BirdLaunched
+                || event->id == EventId{}) {
+                continue;
+            }
+            const CausalRecord record = resolve_event(*event);
+            upsert_causal_record(record);
+            if (record.root_event_id != EventId{}) {
+                upsert_entity_root({event->affected_entity_id,
+                    record.root_event_id, record.shot_id});
+            }
+        }
+        if (causal_records_ == records_before && entity_roots_ == roots_before) {
+            return ordered;
         }
     }
-    if (event.id != EventId{}) {
-        const auto position = std::lower_bound(causal_records_.begin(), causal_records_.end(),
-            event.id, [](const CausalRecord& current, EventId value) {
-                return current.event_id < value;
-            });
-        if (position == causal_records_.end() || position->event_id != event.id) {
-            causal_records_.insert(position, record);
-        }
-    }
+    throw std::runtime_error("score causal provenance did not converge");
 }
 
 void ScoreSystem::reset_chain(std::vector<ScoreTransition>& transitions)
@@ -240,6 +304,7 @@ std::vector<ScoreTransition> ScoreSystem::consume(const ScoreTickInput& input)
             > definition_.chain_window_ticks) {
         reset_chain(transitions);
     }
+    const auto ordered_events = resolve_tick_provenance(input.events);
     std::vector<ScoringCandidate> candidates{
         input.candidates.begin(), input.candidates.end()};
     std::ranges::sort(candidates, [](const auto& lhs, const auto& rhs) {
@@ -247,18 +312,17 @@ std::vector<ScoreTransition> ScoreSystem::consume(const ScoreTickInput& input)
             < std::tie(rhs.source_event_id, rhs.identity);
     });
     std::size_t candidate_index{};
-    for (const DomainEvent& event : input.events) {
-        if (event.kind == DomainEventKind::BirdLaunched) {
+    for (const DomainEvent* event : ordered_events) {
+        if (event->kind == DomainEventKind::BirdLaunched) {
             reset_chain(transitions);
         }
-        observe_event(event);
         while (candidate_index < candidates.size()
-            && candidates[candidate_index].source_event_id < event.id) {
+            && candidates[candidate_index].source_event_id < event->id) {
             ++candidate_index;
         }
         while (candidate_index < candidates.size()
-            && candidates[candidate_index].source_event_id == event.id) {
-            award(candidates[candidate_index], event, transitions);
+            && candidates[candidate_index].source_event_id == event->id) {
+            award(candidates[candidate_index], *event, transitions);
             ++candidate_index;
         }
     }
