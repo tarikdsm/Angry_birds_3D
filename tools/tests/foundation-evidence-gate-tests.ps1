@@ -511,7 +511,11 @@ Assert-SemanticMutation -ExpectedMessage 'derived summary mismatch' -Mutation {
 Assert-SemanticMutation -ExpectedMessage 'derived summary mismatch' -Mutation {
     param($document)
     $memory = ($document.scenarios | Where-Object name -CEQ 'stress').repeat_observations[0].memory
-    $memory.assessment_status = 'pass'
+    $memory.assessment_status = if ($memory.assessment_status -ceq 'pass') {
+        'growth'
+    } else {
+        'pass'
+    }
 }
 Assert-SemanticMutation -ExpectedMessage 'derived summary mismatch' -Mutation {
     param($document)

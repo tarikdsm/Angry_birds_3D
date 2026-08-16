@@ -1,4 +1,6 @@
-[gd_scene format=3]
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/app/scrollable_frontend_screen.gd" id="1_scroll"]
 
 [node name="OptionsMenu" type="Control"]
 layout_mode = 3
@@ -7,6 +9,7 @@ anchor_right = 1.0
 anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
+script = ExtResource("1_scroll")
 
 [node name="Title" type="Label" parent="."]
 layout_mode = 0
@@ -17,10 +20,246 @@ offset_bottom = 120.0
 metadata/message_id = "app.options.title"
 theme_override_font_sizes/font_size = 32
 
-[node name="BackButton" type="Button" parent="."]
+[node name="ReducedMotionButton" type="Button" parent="."]
 layout_mode = 0
 offset_left = 80.0
 offset_top = 160.0
-offset_right = 420.0
+offset_right = 580.0
 offset_bottom = 210.0
+metadata/message_id = "app.options.reduced_motion"
+
+[node name="ShakeButton" type="Button" parent="."]
+layout_mode = 0
+offset_left = 80.0
+offset_top = 220.0
+offset_right = 580.0
+offset_bottom = 270.0
+metadata/message_id = "app.options.shake"
+
+[node name="TrajectoryAssistButton" type="Button" parent="."]
+layout_mode = 0
+offset_left = 80.0
+offset_top = 280.0
+offset_right = 580.0
+offset_bottom = 330.0
+metadata/message_id = "app.options.trajectory_assist"
+
+[node name="UIScaleButton" type="Button" parent="."]
+layout_mode = 0
+offset_left = 80.0
+offset_top = 340.0
+offset_right = 580.0
+offset_bottom = 390.0
+metadata/message_id = "app.options.ui_scale"
+
+[node name="SensitivityDownButton" type="Button" parent="."]
+layout_mode = 0
+offset_left = 80.0
+offset_top = 400.0
+offset_right = 580.0
+offset_bottom = 450.0
+metadata/message_id = "app.options.camera_sensitivity_down"
+
+[node name="SensitivityUpButton" type="Button" parent="."]
+layout_mode = 0
+offset_left = 80.0
+offset_top = 460.0
+offset_right = 580.0
+offset_bottom = 510.0
+metadata/message_id = "app.options.camera_sensitivity_up"
+
+[node name="MasterVolumeButton" type="Button" parent="."]
+layout_mode = 0
+offset_left = 650.0
+offset_top = 60.0
+offset_right = 1210.0
+offset_bottom = 100.0
+metadata/message_id = "app.options.volume.master"
+metadata/volume_bus = "master"
+
+[node name="MusicVolumeButton" type="Button" parent="."]
+layout_mode = 0
+offset_left = 650.0
+offset_top = 105.0
+offset_right = 1210.0
+offset_bottom = 145.0
+metadata/message_id = "app.options.volume.music"
+metadata/volume_bus = "music"
+
+[node name="AmbienceVolumeButton" type="Button" parent="."]
+layout_mode = 0
+offset_left = 650.0
+offset_top = 150.0
+offset_right = 1210.0
+offset_bottom = 190.0
+metadata/message_id = "app.options.volume.ambience"
+metadata/volume_bus = "ambience"
+
+[node name="SFXVolumeButton" type="Button" parent="."]
+layout_mode = 0
+offset_left = 650.0
+offset_top = 195.0
+offset_right = 1210.0
+offset_bottom = 235.0
+metadata/message_id = "app.options.volume.sfx"
+metadata/volume_bus = "sfx"
+
+[node name="UIVolumeButton" type="Button" parent="."]
+layout_mode = 0
+offset_left = 650.0
+offset_top = 240.0
+offset_right = 1210.0
+offset_bottom = 280.0
+metadata/message_id = "app.options.volume.ui"
+metadata/volume_bus = "ui"
+
+[node name="BindingSemanticNavigateUpButton" type="Button" parent="."]
+layout_mode = 0
+offset_left = 650.0
+offset_top = 290.0
+offset_right = 925.0
+offset_bottom = 330.0
+metadata/message_id = "app.options.binding.semantic_navigate_up"
+metadata/binding_action = "semantic_navigate_up"
+
+[node name="BindingSemanticNavigateDownButton" type="Button" parent="."]
+layout_mode = 0
+offset_left = 935.0
+offset_top = 290.0
+offset_right = 1210.0
+offset_bottom = 330.0
+metadata/message_id = "app.options.binding.semantic_navigate_down"
+metadata/binding_action = "semantic_navigate_down"
+
+[node name="BindingSemanticNavigateLeftButton" type="Button" parent="."]
+layout_mode = 0
+offset_left = 650.0
+offset_top = 335.0
+offset_right = 925.0
+offset_bottom = 375.0
+metadata/message_id = "app.options.binding.semantic_navigate_left"
+metadata/binding_action = "semantic_navigate_left"
+
+[node name="BindingSemanticNavigateRightButton" type="Button" parent="."]
+layout_mode = 0
+offset_left = 935.0
+offset_top = 335.0
+offset_right = 1210.0
+offset_bottom = 375.0
+metadata/message_id = "app.options.binding.semantic_navigate_right"
+metadata/binding_action = "semantic_navigate_right"
+
+[node name="BindingSemanticAcceptButton" type="Button" parent="."]
+layout_mode = 0
+offset_left = 650.0
+offset_top = 380.0
+offset_right = 925.0
+offset_bottom = 420.0
+metadata/message_id = "app.options.binding.semantic_accept"
+metadata/binding_action = "semantic_accept"
+
+[node name="BindingSemanticBackButton" type="Button" parent="."]
+layout_mode = 0
+offset_left = 935.0
+offset_top = 380.0
+offset_right = 1210.0
+offset_bottom = 420.0
+metadata/message_id = "app.options.binding.semantic_back"
+metadata/binding_action = "semantic_back"
+
+[node name="BindingSemanticActivateAbilityButton" type="Button" parent="."]
+layout_mode = 0
+offset_left = 650.0
+offset_top = 425.0
+offset_right = 925.0
+offset_bottom = 465.0
+metadata/message_id = "app.options.binding.semantic_activate_ability"
+metadata/binding_action = "semantic_activate_ability"
+
+[node name="BindingSemanticRecenterButton" type="Button" parent="."]
+layout_mode = 0
+offset_left = 935.0
+offset_top = 425.0
+offset_right = 1210.0
+offset_bottom = 465.0
+metadata/message_id = "app.options.binding.semantic_recenter"
+metadata/binding_action = "semantic_recenter"
+
+[node name="BindingSemanticPauseButton" type="Button" parent="."]
+layout_mode = 0
+offset_left = 650.0
+offset_top = 470.0
+offset_right = 925.0
+offset_bottom = 510.0
+metadata/message_id = "app.options.binding.semantic_pause"
+metadata/binding_action = "semantic_pause"
+
+[node name="BindingSemanticRestartButton" type="Button" parent="."]
+layout_mode = 0
+offset_left = 935.0
+offset_top = 470.0
+offset_right = 1210.0
+offset_bottom = 510.0
+metadata/message_id = "app.options.binding.semantic_restart"
+metadata/binding_action = "semantic_restart"
+
+[node name="BindingSemanticZoomInButton" type="Button" parent="."]
+layout_mode = 0
+offset_left = 650.0
+offset_top = 515.0
+offset_right = 925.0
+offset_bottom = 555.0
+metadata/message_id = "app.options.binding.semantic_zoom_in"
+metadata/binding_action = "semantic_zoom_in"
+
+[node name="BindingSemanticZoomOutButton" type="Button" parent="."]
+layout_mode = 0
+offset_left = 935.0
+offset_top = 515.0
+offset_right = 1210.0
+offset_bottom = 555.0
+metadata/message_id = "app.options.binding.semantic_zoom_out"
+metadata/binding_action = "semantic_zoom_out"
+
+[node name="BindingConflictLabel" type="Label" parent="."]
+visible = false
+layout_mode = 0
+offset_left = 650.0
+offset_top = 560.0
+offset_right = 1210.0
+offset_bottom = 595.0
+metadata/message_id = "app.options.binding_conflict"
+
+[node name="BindingConfirmButton" type="Button" parent="."]
+visible = false
+layout_mode = 0
+offset_left = 650.0
+offset_top = 600.0
+offset_right = 925.0
+offset_bottom = 640.0
+metadata/message_id = "app.options.confirm"
+
+[node name="BindingCancelButton" type="Button" parent="."]
+visible = false
+layout_mode = 0
+offset_left = 935.0
+offset_top = 600.0
+offset_right = 1210.0
+offset_bottom = 640.0
+metadata/message_id = "app.options.cancel"
+
+[node name="RestoreDefaultsButton" type="Button" parent="."]
+layout_mode = 0
+offset_left = 80.0
+offset_top = 520.0
+offset_right = 580.0
+offset_bottom = 570.0
+metadata/message_id = "app.options.restore_defaults"
+
+[node name="BackButton" type="Button" parent="."]
+layout_mode = 0
+offset_left = 80.0
+offset_top = 580.0
+offset_right = 580.0
+offset_bottom = 630.0
 metadata/message_id = "app.options.back"

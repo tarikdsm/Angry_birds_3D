@@ -35,7 +35,10 @@ $expectedNames = @(
     'feedback-config-validation',
     'forbid-godot-physics',
     'input-router-smoke',
-    'app-shell-smoke'
+    'app-shell-smoke',
+    'save-recovery-smoke',
+    'settings-model-smoke',
+    'input-remapping-smoke'
 )
 Assert-True ($registry.Count -eq $expectedNames.Count) `
     'Registry must contain every shipped game/tests entrypoint'
@@ -59,6 +62,9 @@ $expectedMarkers = @{
     'forbid-godot-physics' = 'FORBID_GODOT_PHYSICS_OK'
     'input-router-smoke' = 'INPUT_ROUTER_SMOKE_OK'
     'app-shell-smoke' = 'APP_SHELL_SMOKE_OK'
+    'save-recovery-smoke' = 'SAVE_RECOVERY_SMOKE_OK'
+    'settings-model-smoke' = 'SETTINGS_MODEL_SMOKE_OK'
+    'input-remapping-smoke' = 'INPUT_REMAPPING_SMOKE_OK'
 }
 foreach ($spec in $registry) {
     if ($expectedMarkers.ContainsKey([string]$spec.Name)) {

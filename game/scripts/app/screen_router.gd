@@ -24,6 +24,10 @@ func show_options_menu() -> void:
 	_show_screen(OPTIONS_MENU, &"options")
 
 
+func current_screen() -> Control:
+	return _current_screen
+
+
 func handle_intent(intent: RefCounted) -> void:
 	if intent == null or not intent is INPUT_INTENT:
 		return
@@ -49,7 +53,7 @@ func _show_screen(scene: PackedScene, route: StringName) -> void:
 
 
 func _apply_messages() -> void:
-	for control: Node in _current_screen.get_children():
+	for control: Node in _current_screen.find_children("*", "Control", true, false):
 		if control is Label or control is Button:
 			var message_id := str(control.get_meta("message_id", ""))
 			if not message_id.is_empty() and _messages.has(message_id):
@@ -60,18 +64,21 @@ func _connect_actions(route: StringName) -> void:
 	for button: Button in _action_buttons():
 		button.mouse_entered.connect(button.grab_focus)
 	if route == &"main":
-		(_current_screen.get_node("OptionsButton") as Button).pressed.connect(show_options_menu)
-		(_current_screen.get_node("ExitButton") as Button).pressed.connect(exit_requested.emit)
+		(_current_screen.find_child("OptionsButton", true, false) as Button).pressed.connect(
+			show_options_menu)
+		(_current_screen.find_child("ExitButton", true, false) as Button).pressed.connect(
+			exit_requested.emit)
 	elif route == &"options":
-		(_current_screen.get_node("BackButton") as Button).pressed.connect(show_main_menu)
+		(_current_screen.find_child("BackButton", true, false) as Button).pressed.connect(
+			show_main_menu)
 
 
 func _action_buttons() -> Array[Button]:
 	var buttons: Array[Button] = []
 	if _current_screen == null:
 		return buttons
-	for control: Node in _current_screen.get_children():
-		if control is Button:
+	for control: Node in _current_screen.find_children("*", "Button", true, false):
+		if control is Button and (control as Button).visible:
 			buttons.append(control as Button)
 	return buttons
 

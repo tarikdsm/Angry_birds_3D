@@ -76,6 +76,30 @@ function Get-NinhoGodotSmokeRegistry {
             FixedFps = 0
             RequiredCompletionMarker = 'APP_SHELL_SMOKE_OK'
             RequiredLogText = ''
+        },
+        [pscustomobject]@{
+            Name = 'save-recovery-smoke'
+            RelativePath = 'game/tests/save_recovery_smoke.gd'
+            ResourcePath = 'res://tests/save_recovery_smoke.gd'
+            FixedFps = 0
+            RequiredCompletionMarker = 'SAVE_RECOVERY_SMOKE_OK'
+            RequiredLogText = ''
+        },
+        [pscustomobject]@{
+            Name = 'settings-model-smoke'
+            RelativePath = 'game/tests/settings_model_smoke.gd'
+            ResourcePath = 'res://tests/settings_model_smoke.gd'
+            FixedFps = 0
+            RequiredCompletionMarker = 'SETTINGS_MODEL_SMOKE_OK'
+            RequiredLogText = ''
+        },
+        [pscustomobject]@{
+            Name = 'input-remapping-smoke'
+            RelativePath = 'game/tests/input_remapping_smoke.gd'
+            ResourcePath = 'res://tests/input_remapping_smoke.gd'
+            FixedFps = 0
+            RequiredCompletionMarker = 'INPUT_REMAPPING_SMOKE_OK'
+            RequiredLogText = ''
         }
     )
 }

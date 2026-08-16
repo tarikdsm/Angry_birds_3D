@@ -2,6 +2,13 @@ extends RefCounted
 
 const CONTENT_FILE_LOADER := preload("res://scripts/data/content_file_loader.gd")
 const ROOT_KEYS := ["schema_version", "locale", "messages"]
+const FORMAT_TOKENS := {
+	"app.options.toggle_format": ["%s", "%s"],
+	"app.options.value_format": ["%s", "%s"],
+	"app.options.binding_waiting": ["%s"],
+	"app.options.camera_sensitivity_down": ["%s"],
+	"app.options.camera_sensitivity_up": ["%s"],
+}
 const REQUIRED_MESSAGE_IDS := [
 	"app.main_menu.title",
 	"app.main_menu.continue",
@@ -10,6 +17,39 @@ const REQUIRED_MESSAGE_IDS := [
 	"app.main_menu.exit",
 	"app.options.title",
 	"app.options.back",
+	"app.options.reduced_motion",
+	"app.options.shake",
+	"app.options.trajectory_assist",
+	"app.options.ui_scale",
+	"app.options.camera_sensitivity_down",
+	"app.options.camera_sensitivity_up",
+	"app.options.restore_defaults",
+	"app.options.enabled",
+	"app.options.disabled",
+	"app.options.toggle_format",
+	"app.options.value_format",
+	"app.options.volume.master",
+	"app.options.volume.music",
+	"app.options.volume.ambience",
+	"app.options.volume.sfx",
+	"app.options.volume.ui",
+	"app.options.binding.semantic_navigate_up",
+	"app.options.binding.semantic_navigate_down",
+	"app.options.binding.semantic_navigate_left",
+	"app.options.binding.semantic_navigate_right",
+	"app.options.binding.semantic_accept",
+	"app.options.binding.semantic_back",
+	"app.options.binding.semantic_activate_ability",
+	"app.options.binding.semantic_recenter",
+	"app.options.binding.semantic_pause",
+	"app.options.binding.semantic_restart",
+	"app.options.binding.semantic_zoom_in",
+	"app.options.binding.semantic_zoom_out",
+	"app.options.binding_waiting",
+	"app.options.binding_conflict",
+	"app.options.confirm",
+	"app.options.cancel",
+	"app.recovery.total",
 	"input.prompt.accept.keyboard",
 	"input.prompt.accept.gamepad",
 	"input.prompt.accept.generic",
@@ -62,7 +102,30 @@ static func validate_catalog_document(document: Variant) -> String:
 	for message_id: String in REQUIRED_MESSAGE_IDS:
 		if typeof(messages[message_id]) != TYPE_STRING or str(messages[message_id]).is_empty():
 			return "$.messages.%s must be a non-empty string" % message_id
+		if FORMAT_TOKENS.has(message_id) \
+				and _format_tokens(str(messages[message_id])) != FORMAT_TOKENS[message_id]:
+			return "$.messages.%s has invalid format placeholders" % message_id
 	return ""
+
+
+static func _format_tokens(value: String) -> Array[String]:
+	var tokens: Array[String] = []
+	var index := 0
+	while index < value.length():
+		var marker_index := value.find("%", index)
+		if marker_index < 0:
+			break
+		if marker_index + 1 >= value.length():
+			return ["invalid"]
+		var token := value.substr(marker_index, 2)
+		if token == "%%":
+			index = marker_index + 2
+			continue
+		if token not in ["%s", "%d"]:
+			return ["invalid"]
+		tokens.append(token)
+		index = marker_index + 2
+	return tokens
 
 
 static func _exact_keys_error(value: Dictionary, expected: Array, path: String) -> String:
