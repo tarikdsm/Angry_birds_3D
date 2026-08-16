@@ -309,6 +309,85 @@ void SimulationSession::Impl::evaluate_score_after_step()
     }
     std::vector<detail::ScoringCandidate> candidates;
     candidates.reserve(domain_events.size());
+    std::vector<EntityId> dynamic_entities;
+    dynamic_entities.reserve(body_records.size() + bundle.level.bodies.size());
+    for (const BodyDefinition& body : bundle.level.bodies) {
+        if (body.body_type == BodyType::Dynamic) {
+            dynamic_entities.push_back(body.entity_id);
+        }
+    }
+    for (const BodyRecord& body : body_records) {
+        if (body.body_type == BodyType::Dynamic) {
+            dynamic_entities.push_back(body.entity_id);
+        }
+    }
+    std::ranges::sort(dynamic_entities);
+    dynamic_entities.erase(std::unique(dynamic_entities.begin(),
+        dynamic_entities.end()), dynamic_entities.end());
+    std::vector<std::pair<EntityId, EntityId>> dynamic_physical_edges;
+    dynamic_physical_edges.reserve(
+        physics.contact_hits().size() + joint_records.size());
+    const auto add_dynamic_physical_edge = [&](const BodyRecord* first,
+                                               const BodyRecord* second) {
+        if (first == nullptr || second == nullptr
+            || first->body_type != BodyType::Dynamic
+            || second->body_type != BodyType::Dynamic
+            || first->entity_id == EntityId{}
+            || second->entity_id == EntityId{}
+            || first->entity_id == second->entity_id) {
+            return;
+        }
+        const auto ordered = std::minmax(first->entity_id, second->entity_id);
+        dynamic_physical_edges.emplace_back(ordered.first, ordered.second);
+    };
+    for (const JointRecord& joint : joint_records) {
+        if (!joint.snapshot.active) continue;
+        const auto first = std::ranges::find_if(body_records,
+            [&](const BodyRecord& body) {
+                return body.entity_id == joint.snapshot.a.entity_id
+                    && body.part_id == joint.snapshot.a.part_id;
+            });
+        const auto second = std::ranges::find_if(body_records,
+            [&](const BodyRecord& body) {
+                return body.entity_id == joint.snapshot.b.entity_id
+                    && body.part_id == joint.snapshot.b.part_id;
+            });
+        add_dynamic_physical_edge(
+            first == body_records.end() ? nullptr : &*first,
+            second == body_records.end() ? nullptr : &*second);
+    }
+    for (const ninho::physics::ContactHit& hit : physics.contact_hits()) {
+        const auto first = std::ranges::find(
+            body_records, hit.a, &BodyRecord::physics_handle);
+        const auto second = std::ranges::find(
+            body_records, hit.b, &BodyRecord::physics_handle);
+        add_dynamic_physical_edge(
+            first == body_records.end() ? nullptr : &*first,
+            second == body_records.end() ? nullptr : &*second);
+    }
+    std::ranges::sort(dynamic_physical_edges);
+    dynamic_physical_edges.erase(std::unique(dynamic_physical_edges.begin(),
+        dynamic_physical_edges.end()), dynamic_physical_edges.end());
+    std::vector<detail::JointEntityEndpoints> joint_entity_endpoints;
+    joint_entity_endpoints.reserve(joint_records.size());
+    const auto dynamic_joint_endpoint = [&](const JointEndpoint& endpoint) {
+        const auto body = std::ranges::find_if(bundle.level.bodies,
+            [&](const BodyDefinition& authored) {
+                return authored.entity_id == endpoint.entity_id
+                    && authored.part_id == endpoint.part_id;
+            });
+        return body != bundle.level.bodies.end()
+                && body->body_type == BodyType::Dynamic
+            ? endpoint.entity_id : EntityId{};
+    };
+    for (const JointRecord& joint : joint_records) {
+        joint_entity_endpoints.push_back({joint.snapshot.id,
+            dynamic_joint_endpoint(joint.snapshot.a),
+            dynamic_joint_endpoint(joint.snapshot.b)});
+    }
+    std::ranges::sort(joint_entity_endpoints);
+    joint_entity_endpoints.erase(std::unique(joint_entity_endpoints.begin(),
+        joint_entity_endpoints.end()), joint_entity_endpoints.end());
     const auto material_points = [&](MaterialId material_id) {
         const auto found = std::ranges::find(
             bundle.materials.materials, material_id, &MaterialDefinition::id);
@@ -356,8 +435,16 @@ void SimulationSession::Impl::evaluate_score_after_step()
                 ? detail::ScoreTerminalState::Defeat
                 : detail::ScoreTerminalState::None;
     }
-    const auto transitions = score_system.consume({session_state.tick,
-        domain_events, candidates, terminal, remaining_birds});
+    const auto transitions = score_system.consume({
+        .tick = session_state.tick,
+        .events = domain_events,
+        .candidates = candidates,
+        .terminal = terminal,
+        .remaining_birds = remaining_birds,
+        .dynamic_entities = dynamic_entities,
+        .dynamic_physical_edges = dynamic_physical_edges,
+        .joint_entity_endpoints = joint_entity_endpoints,
+    });
     for (const detail::ScoreTransition& transition : transitions) {
         DomainEvent event;
         event.id = EventId{next_event_sequence++};
@@ -845,6 +932,28 @@ std::optional<ninho::physics::Vec3> detail::SessionTestFacade::body_center_of_ma
     return state ? std::optional{state->world_center_of_mass} : std::nullopt;
 }
 
+std::optional<ninho::physics::PhysicalContact>
+detail::SessionTestFacade::physical_contact(const SimulationSession& session,
+    EntityId first, EntityId second)
+{
+    const auto find_handle = [&](EntityId entity) {
+        const auto record = std::ranges::find(
+            session.impl_->body_records, entity, &SimulationSession::Impl::BodyRecord::entity_id);
+        return record == session.impl_->body_records.end()
+            ? std::optional<ninho::physics::BodyHandle>{}
+            : std::optional{record->physics_handle};
+    };
+    const auto a = find_handle(first);
+    const auto b = find_handle(second);
+    if (!a || !b) return std::nullopt;
+    const auto contacts = session.impl_->physics.physical_contacts();
+    const auto found = std::ranges::find_if(contacts, [&](const auto& contact) {
+        return (contact.a == *a && contact.b == *b)
+            || (contact.a == *b && contact.b == *a);
+    });
+    return found == contacts.end() ? std::nullopt : std::optional{*found};
+}
+
 bool detail::SessionTestFacade::set_body_neutralized(SimulationSession& session,
     EntityId entity, PartId part, bool neutralized)
 {
@@ -856,6 +965,21 @@ bool detail::SessionTestFacade::set_body_neutralized(SimulationSession& session,
         return false;
     }
     record->neutralized = neutralized;
+    return true;
+}
+
+bool detail::SessionTestFacade::remove_body_for_testing(
+    SimulationSession& session, EntityId entity, PartId part)
+{
+    const auto record = std::ranges::find_if(session.impl_->body_records,
+        [&](const auto& value) {
+            return value.entity_id == entity && value.part_id == part;
+        });
+    if (record == session.impl_->body_records.end()
+        || !session.impl_->physics.destroy_body(record->physics_handle).ok()) {
+        return false;
+    }
+    session.impl_->body_records.erase(record);
     return true;
 }
 
@@ -1214,6 +1338,19 @@ bool detail::SessionTestFacade::queue_external_damage(
         target, target_part, state->world_center_of_mass, {1, 0, 0},
         energy_j, cause_event_id});
     return true;
+}
+
+void detail::SessionTestFacade::publish_damage_outcomes_for_testing(
+    SimulationSession& session, std::span<const DamageOutcome> outcomes)
+{
+    session.impl_->publish_damage_outcomes(outcomes);
+}
+
+bool detail::SessionTestFacade::record_causal_damage_event_for_testing(
+    SimulationSession& session, EntityId entity, PartId part, EventId event_id)
+{
+    return session.impl_->damage_system.record_causal_damage_event(
+        entity, part, event_id);
 }
 
 void detail::SessionTestFacade::inject_crush_load(SimulationSession& session,

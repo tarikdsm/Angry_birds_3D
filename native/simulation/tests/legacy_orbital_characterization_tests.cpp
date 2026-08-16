@@ -1,4 +1,5 @@
 #include "test_framework.hpp"
+#include "product_v2_playthrough_fixture.hpp"
 
 #include "session_test_facade.hpp"
 #include "session_internal.hpp"
@@ -11,7 +12,6 @@
 #include <cstdint>
 #include <filesystem>
 #include <fstream>
-#include <numbers>
 #include <ranges>
 #include <sstream>
 #include <string_view>
@@ -64,15 +64,12 @@ void tick(SimulationSession& session, Trace& trace)
 
 AimState ring_aim(double theta_deg, double speed)
 {
-    const double theta = theta_deg * std::numbers::pi / 180.0;
-    return {{static_cast<float>(-13.0 * std::cos(theta)), 0.0F,
-                static_cast<float>(13.0 * std::sin(theta))},
-        {0.0F, 1.0F, 0.0F}, speed};
+    return test::legacy_ring_aim({theta_deg, 0.0, speed});
 }
 
 AimState miss_aim()
 {
-    return {{-13.0F, 0.0F, 0.0F}, {0.0F, 0.0F, 1.0F}, 8.0};
+    return test::legacy_ring_aim({0.0, 90.0, 8.0});
 }
 
 void launch(SimulationSession& session, Trace& trace, const AimState& aim)

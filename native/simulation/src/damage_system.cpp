@@ -210,7 +210,9 @@ void apply_ejection_transitions(std::vector<DamageState>& states,
             state->neutralized = true;
             outcomes.push_back({DamageOutcomeKind::EntityNeutralized,
                 {}, {}, body.entity_id, body.part_id, body.transform.position,
-                outward, kinetic_energy, 0.0, NeutralizationCause::BoundsExit});
+                outward, kinetic_energy, 0.0, NeutralizationCause::BoundsExit,
+                DamageClassification::None,
+                state->last_causal_damage_event_id});
         } else if (body.ejected && !state->was_ejected && !state->neutralized) {
             const auto outward = ninho::physics::normalized_or_zero(
                 body.transform.position);
@@ -222,7 +224,9 @@ void apply_ejection_transitions(std::vector<DamageState>& states,
             state->neutralized = true;
             outcomes.push_back({DamageOutcomeKind::EntityNeutralized,
                 {}, {}, body.entity_id, body.part_id, body.transform.position,
-                outward, radial_energy, 0.0, NeutralizationCause::Ejection});
+                outward, radial_energy, 0.0, NeutralizationCause::Ejection,
+                DamageClassification::None,
+                state->last_causal_damage_event_id});
         }
         state->was_ejected = body.ejected;
         state->was_bounds_exit = body.bounds_exit;
@@ -415,9 +419,37 @@ void SimulationSession::Impl::process_damage_after_step()
 void SimulationSession::Impl::publish_damage_outcomes(
     std::span<const detail::DamageOutcome> outcomes)
 {
+    struct PublishedDamageEvent {
+        EntityId entity_id{};
+        PartId part_id{};
+        EventId event_id{};
+        bool entity_wide{};
+    };
+    std::vector<PublishedDamageEvent> published_damage_events;
+    published_damage_events.reserve(outcomes.size());
     for (const detail::DamageOutcome& outcome : outcomes) {
         const DomainEventKind kind = outcome.kind == detail::DamageOutcomeKind::DamageApplied
             ? DomainEventKind::DamageApplied : DomainEventKind::EntityNeutralized;
+        const bool enemy_target = std::ranges::any_of(
+            damage_system.states(), [&](const detail::DamageState& state) {
+                return state.entity_id == outcome.target_entity_id
+                    && state.enemy_archetype_id.has_value();
+            });
+        EventId cause_event_id = outcome.cause_event_id;
+        if (kind == DomainEventKind::EntityNeutralized
+            && (outcome.neutralization_cause == NeutralizationCause::BoundsExit
+                || outcome.neutralization_cause == NeutralizationCause::Ejection)) {
+            const auto published = std::ranges::find_if(
+                published_damage_events.rbegin(), published_damage_events.rend(),
+                [&](const auto& candidate) {
+                    return candidate.entity_id == outcome.target_entity_id
+                        && ((enemy_target && candidate.entity_wide)
+                            || candidate.part_id == outcome.target_part_id);
+                });
+            if (published != published_damage_events.rend()) {
+                cause_event_id = published->event_id;
+            }
+        }
         DomainEvent event{
             .id = EventId{next_event_sequence++},
             .tick = session_state.tick,
@@ -432,9 +464,15 @@ void SimulationSession::Impl::publish_damage_outcomes(
             .damage = outcome.damage,
             .damage_classification = outcome.damage_classification,
             .neutralization_cause = outcome.neutralization_cause,
-            .cause_event_id = outcome.cause_event_id,
+            .cause_event_id = cause_event_id,
         };
         domain_events.push_back(event);
+        if (kind == DomainEventKind::DamageApplied) {
+            static_cast<void>(damage_system.record_causal_damage_event(
+                outcome.target_entity_id, outcome.target_part_id, event.id));
+            published_damage_events.push_back({outcome.target_entity_id,
+                outcome.target_part_id, event.id, enemy_target});
+        }
         if (kind == DomainEventKind::EntityNeutralized) {
             for (BodyRecord& record : body_records) {
                 if (record.entity_id == outcome.target_entity_id) {
@@ -446,6 +484,31 @@ void SimulationSession::Impl::publish_damage_outcomes(
 }
 
 namespace detail {
+
+bool DamageSystem::record_causal_damage_event(
+    EntityId entity, PartId part, EventId event_id) noexcept
+{
+    if (event_id == EventId{}) {
+        return false;
+    }
+    auto found = std::ranges::find_if(states_, [&](const DamageState& current) {
+        return current.entity_id == entity && current.part_id == part;
+    });
+    if (found == states_.end()) {
+        DamageState* enemy = find_enemy_state(states_, entity);
+        if (enemy == nullptr) {
+            return false;
+        }
+        found = std::ranges::find_if(states_, [&](const DamageState& current) {
+            return &current == enemy;
+        });
+    }
+    if (event_id <= found->last_causal_damage_event_id) {
+        return false;
+    }
+    found->last_causal_damage_event_id = event_id;
+    return true;
+}
 
 std::optional<DamageState> DamageSystem::state(EntityId entity, PartId part) const
 {

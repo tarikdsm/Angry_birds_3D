@@ -482,17 +482,28 @@ O stream possui exatamente esta ordem de blocos:
 3. `tick`, phase, outcome, birds_remaining, sequências do próximo comando e
    evento, último comando processado, launch_count, resolution_rest_ticks e
    objective_complete;
-4. `current_score u64` e `stars u8`, ambos reservados como zero até a Task 16;
+4. `current_score u64` e `stars u8`; quando scoring está configurado, seguem
+   chain atual (índice, multiplicador, tick, root/shot e bônus terminal),
+   identidades já pontuadas, launches observados, registros causais e roots por
+   entidade;
 5. aim opcional, launcher/plano/pull opcional e last_impact opcional;
 6. snapshots, joints publicados, eventos e estados de dano;
 7. peças fraturadas, quebras/fraturas pendentes e fila de comandos;
 8. ShotState opcional e contadores runtime de joints.
 
-Conteúdo sem os novos contratos preserva os bytes anteriores. Quando existe
-um `terrestrial_pig`, o bloco condicional acrescenta estados Crush ordenados por
-`(EntityId,PartId)` (`streak`, excesso e causa) e `was_bounds_exit`. Quando
-existem juntas `steel_ductile`, outro bloco condicional acrescenta JointId,
-estado, pending, frames capturados, causa, tick de yield e confirmação de solver.
+Cada estado de dano v3 termina com `last_causal_damage_event_id`, inclusive
+quando o valor é zero. O watermark de deduplicação externa permanece separado:
+um bloco condicional ordenado por `(EntityId,PartId)` escreve apenas os
+`last_external_damage_event_id` não zero. Cada fratura pendente termina com
+`requires_physical_replacement`, também serializado quando falso. Esses dois
+novos campos mudaram intencionalmente os bytes v3 e exigiram recaptura dos sete
+fixtures; o stream `canonical_state_v2` congelado permanece byte-idêntico.
+
+Quando existe um `terrestrial_pig`, o bloco condicional acrescenta estados
+Crush ordenados por `(EntityId,PartId)` (`streak`, excesso e causa) e
+`was_bounds_exit`. Quando existem juntas `steel_ductile`, outro bloco
+condicional acrescenta JointId, estado, pending, frames capturados, causa, tick
+de yield e confirmação de solver.
 
 O bloco imutável escreve catálogos por ID crescente; registries de strings por
 ordem lexicográfica; e bodies, joints, assemblies, objectives e triggers por ID.
@@ -576,6 +587,50 @@ podem ser referenciados por body, shape ou fragmento físico.
 Ele registra os cinco material IDs e todos os eventos append-only até
 `StarsAwarded=25`; não altera física, causalidade ou score.
 
+## Compatibilidade de mira Orbital v1/v2
+
+Os schemas preservam superfícies públicas diferentes. Uma sessão v1 aceita
+`BeginAim`/`SetAim`/`Launch`; uma sessão v2 aceita
+`BeginGrab`/`SetPull`/`ReleaseBird`. Não há `SetAim` ou `Launch` público no
+catálogo v2, nem seam que finja essa rota de comandos.
+
+A equivalência congelada é de **AimState canônico e semântica**, não de stream
+de comandos nem de todas as rotas históricas. `LegacyAimSeed` usa
+`{theta_deg = 0, phase_deg, speed_m_s}` e `legacy_ring_aim` reproduz a matemática
+e os casts float da API v1. Uma sessão v1 real aplica `quantize_aim` tanto ao
+seed legado quanto ao `AimState` formado pelo `LauncherState` resolvido pelo
+gesto v2; origem, direção e velocidade quantizadas precisam ser idênticas, bem
+como as unidades congeladas de 1 mm, direção 1e-4 e 0,01 m/s. A execução v2
+continua ocorrendo exclusivamente por gesto e o replay compara seus eventos,
+resultado e bytes.
+
+Os seeds canônicos são: Virela `-0,1° @ 8 m/s` e `+8° @ 8,18 m/s`;
+estrutural `+5° @ 8 m/s` e `+1° @ 8 m/s`; derrota `+90° @ 8 m/s` três vezes.
+Isso **não** afirma identidade cross-catalog com a sequência v1 original da
+Virela (`theta=-2°` no primeiro de três disparos) nem com os tuples originais
+da rota estrutural. Essas rotas v1 continuam separadas, executam
+`SetAim`/`Launch` no schema v1 e preservam seus goldens byte a byte. O ponto
+comum comprovado é a função legada de construção/quantização de AimState e a
+semântica terminal correspondente das rotas viáveis do produto v2.
+
+## Fixtures de playthrough do produto
+
+`parse_frozen_playthrough_fixture_envelope` valida o documento JSON fechado,
+tipos, limites, headers versionados, framing fixo de eventos, hashes e o binding
+entre rota e blobs. O parser aceita um `canonical_state_v3` sintaticamente
+íntegro contendo somente o header; ele deliberadamente não é um decoder parcial
+do estado da sessão. A autoridade semântica é
+`replay_frozen_playthrough`, que executa a rota pública numa sessão real e
+rejeita esse envelope header-only como golden impossível. Whitespace após o
+valor JSON é aceito; qualquer token trailing é `InvalidJson`.
+
+O emitter captura todos os sete playthroughs em memória antes de qualquer
+write. A publicação cria arquivos temporários siblings, faz flush e close,
+move destinos antigos para backups siblings quando `--force` é explícito e só
+então promove por rename. Uma falha restaura o lote anterior. Destino existente
+ou diretório não vazio é recusado sem `--force`; `--layout-only` passa pela
+mesma política, portanto não existe caminho de truncamento direto dos goldens.
+
 ## Fixture físico da Fazenda
 
 O fixture `farm_reaction_layout_v1.json` contém apenas
@@ -595,15 +650,18 @@ bundle fechado antes de poderem demonstrar mudança de hash. O gate físico da
 Fazenda ainda executa 120 ticks ociosos e exige zero dano, yield, ruptura,
 fratura, trigger ou neutralização, com todas as juntas ativas ao final.
 
-O fixture vigente da Fazenda usa `fnv1a64:8324ce8a44754dad`. Além da projeção
-integral, testes nomeados congelam os landmarks normativos de porcos, portão,
-rampa/fardos e dispositivos, bem como a tabela completa de limites por kind:
-`pine_fit=5500/900`, `glass_clamp=2200/350`, `mortar=1400/160`,
+O fixture vigente da Fazenda usa `fnv1a64:ee2ad0b8c2912aa`: 106 bodies (86
+`dynamic`, 20 `static`), 49 joints, oito assemblies, 49 free bodies, 256
+primitivas autoradas expandidas e 68 fragmentos físicos autorados. A
+`ASM_HayRamp` congela bodies `[20,24,25,73]` e joints `[16,17,18]`. Além da
+projeção integral, testes nomeados congelam os landmarks normativos de porcos,
+portão, rampa/fardos e dispositivos, bem como a tabela completa de limites por
+kind: `pine_fit=5500/900`, `glass_clamp=2200/350`, `mortar=1400/160`,
 `straw_bind=800/90` e `steel_ductile=7500/900` em N/N·m. O inventário também
 exige massa de 65 kg e inércia positiva para cada porco, half-extent mínimo de
 0,01 m, grafo conectado, igualdade entre bounds visuais e AABB recursivo e
 ausência de overlap externo não autorizado entre qualquer par, inclusive dois
-bodies `static`. A allowlist aceita somente os seis encaixes estruturais com ao
-menos um body dinâmico e prova cada contato por SAT ou esfera/OBB. Apoios,
-aberturas e folgas são expressos em shapes/local transforms; transforms de body
-não são usados para mascarar instabilidade.
+bodies `static`. A allowlist aceita somente `15–16`, `48–49`, `48–50` e
+`48–51`, e prova cada contato por SAT ou esfera/OBB. Apoios, aberturas e folgas
+são expressos em shapes/local transforms; transforms de body não são usados para
+mascarar instabilidade.

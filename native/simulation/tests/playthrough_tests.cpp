@@ -1,4 +1,5 @@
 #include "test_framework.hpp"
+#include "product_v2_playthrough_fixture.hpp"
 
 #include "ninho/simulation/session.hpp"
 
@@ -10,7 +11,6 @@
 #include <iomanip>
 #include <iostream>
 #include <limits>
-#include <numbers>
 #include <ranges>
 #include <sstream>
 #include <stdexcept>
@@ -65,23 +65,12 @@ void tick(SimulationSession& session, Trace& trace)
 
 AimState miss_aim()
 {
-    return {{-13.0f, 0.0f, 0.0f}, {0.0f, 0.0f, 1.0f}, 8.0};
+    return test::legacy_ring_aim({0.0, 90.0, 8.0});
 }
 
 AimState ring_aim(double theta_deg, double phase_deg, double speed)
 {
-    const double theta = theta_deg * std::numbers::pi / 180.0;
-    const double phase = phase_deg * std::numbers::pi / 180.0;
-    const ninho::physics::Vec3 origin{
-        static_cast<float>(-13.0 * std::cos(theta)), 0.0f,
-        static_cast<float>(13.0 * std::sin(theta))};
-    const ninho::physics::Vec3 azimuth{
-        static_cast<float>(std::sin(theta)), 0.0f,
-        static_cast<float>(std::cos(theta))};
-    const ninho::physics::Vec3 tangent = ninho::physics::normalized_or_zero(
-        ninho::physics::Vec3{0.0f, static_cast<float>(std::cos(phase)), 0.0f}
-        + azimuth * static_cast<float>(std::sin(phase)));
-    return {origin, tangent, speed};
+    return test::legacy_ring_aim({theta_deg, phase_deg, speed});
 }
 
 void launch(SimulationSession& session, Trace& trace, const AimState& value)

@@ -55,6 +55,34 @@ std::unique_ptr<ninho::simulation::SimulationSession> create_real_session()
     return std::move(session.value);
 }
 
+std::unique_ptr<ninho::simulation::SimulationSession> create_product_v2_session()
+{
+    using namespace ninho::simulation;
+    const auto materials = parse_material_catalog(read_text(
+        "/game/data/materials/product_v2.materials.json"));
+    const auto archetypes = parse_archetype_catalog(read_text(
+        "/game/data/archetypes/product_v2.archetypes.json"));
+    const auto level = parse_level_manifest(read_text(
+        "/game/data/levels/earth/farm_reaction.level.json"));
+    NINHO_SIM_REQUIRE(materials.ok() && archetypes.ok() && level.ok());
+    auto session = SimulationSession::create(
+        materials.value, archetypes.value, level.value);
+    NINHO_SIM_REQUIRE(session.ok());
+    return std::move(session.value);
+}
+
+std::pair<ninho::simulation::EntityId, ninho::simulation::PartId>
+first_enemy_identity(const ninho::simulation::SimulationSession& session)
+{
+    using namespace ninho::simulation;
+    const auto target = std::ranges::find_if(
+        session.snapshots(), [](const EntitySnapshot& snapshot) {
+            return snapshot.enemy_archetype_id.has_value();
+        });
+    NINHO_SIM_REQUIRE(target != session.snapshots().end());
+    return {target->entity_id, target->part_id};
+}
+
 NINHO_SIM_TEST("damage anchor contact normal is fixed from a to b")
 {
     static_assert(contact_normal_convention == ContactNormalConvention::AToB);
@@ -415,6 +443,188 @@ NINHO_SIM_TEST("damage anchor session processes post step contacts into canonica
     NINHO_SIM_REQUIRE(ninho::physics::is_finite(applied->position_m));
     NINHO_SIM_REQUIRE(ninho::physics::is_finite(applied->normal));
     NINHO_SIM_REQUIRE(session->canonical_hash_v2() != 0U);
+}
+
+NINHO_SIM_TEST("damage anchor session links same batch exits to the damage event it just published")
+{
+    using namespace ninho::simulation;
+    auto session = create_real_session();
+    NINHO_SIM_REQUIRE(session->tick().ok());
+    const auto target = std::ranges::find_if(
+        session->snapshots(), [](const EntitySnapshot& snapshot) {
+            return snapshot.enemy_archetype_id == EnemyArchetypeId{1};
+        });
+    NINHO_SIM_REQUIRE(target != session->snapshots().end());
+
+    const std::array outcomes{
+        detail::DamageOutcome{
+            .kind = detail::DamageOutcomeKind::DamageApplied,
+            .cause_entity_id = EntityId{99U},
+            .cause_part_id = PartId{1U},
+            .target_entity_id = target->entity_id,
+            .target_part_id = target->part_id,
+            .damage = 1.0,
+        },
+        detail::DamageOutcome{
+            .kind = detail::DamageOutcomeKind::EntityNeutralized,
+            .target_entity_id = target->entity_id,
+            .target_part_id = target->part_id,
+            .neutralization_cause = NeutralizationCause::BoundsExit,
+        },
+    };
+    const std::size_t events_before = session->events().size();
+    detail::SessionTestFacade::publish_damage_outcomes_for_testing(
+        *session, outcomes);
+    NINHO_SIM_REQUIRE(session->events().size() == events_before + 2U);
+    const DomainEvent& damage = session->events()[events_before];
+    const DomainEvent& exited = session->events()[events_before + 1U];
+    NINHO_SIM_REQUIRE(damage.kind == DomainEventKind::DamageApplied);
+    NINHO_SIM_REQUIRE(exited.kind == DomainEventKind::EntityNeutralized);
+    NINHO_SIM_REQUIRE(exited.neutralization_cause
+        == NeutralizationCause::BoundsExit);
+    NINHO_SIM_REQUIRE(exited.cause_event_id == damage.id);
+}
+
+NINHO_SIM_TEST("damage anchor session links enemy multipart exits by entity in the same batch")
+{
+    using namespace ninho::simulation;
+    auto session = create_real_session();
+    NINHO_SIM_REQUIRE(session->tick().ok());
+    const auto target = std::ranges::find_if(
+        session->snapshots(), [](const EntitySnapshot& snapshot) {
+            return snapshot.enemy_archetype_id == EnemyArchetypeId{1};
+        });
+    NINHO_SIM_REQUIRE(target != session->snapshots().end());
+    const PartId exited_part{target->part_id.value() + 1U};
+
+    const std::array outcomes{
+        detail::DamageOutcome{
+            .kind = detail::DamageOutcomeKind::DamageApplied,
+            .cause_entity_id = EntityId{99U},
+            .cause_part_id = PartId{1U},
+            .target_entity_id = target->entity_id,
+            .target_part_id = target->part_id,
+            .damage = 1.0,
+        },
+        detail::DamageOutcome{
+            .kind = detail::DamageOutcomeKind::EntityNeutralized,
+            .target_entity_id = target->entity_id,
+            .target_part_id = exited_part,
+            .neutralization_cause = NeutralizationCause::BoundsExit,
+        },
+    };
+    const std::size_t events_before = session->events().size();
+    detail::SessionTestFacade::publish_damage_outcomes_for_testing(
+        *session, outcomes);
+    NINHO_SIM_REQUIRE(session->events().size() == events_before + 2U);
+    const DomainEvent& damage = session->events()[events_before];
+    const DomainEvent& exited = session->events()[events_before + 1U];
+    NINHO_SIM_REQUIRE(damage.kind == DomainEventKind::DamageApplied);
+    NINHO_SIM_REQUIRE(exited.kind == DomainEventKind::EntityNeutralized);
+    NINHO_SIM_REQUIRE(exited.affected_part_id == exited_part);
+    NINHO_SIM_REQUIRE(exited.neutralization_cause
+        == NeutralizationCause::BoundsExit);
+    NINHO_SIM_REQUIRE(exited.cause_event_id == damage.id);
+}
+
+NINHO_SIM_TEST("damage anchor session keeps same batch material anchors part local")
+{
+    using namespace ninho::simulation;
+    auto session = create_real_session();
+    NINHO_SIM_REQUIRE(session->tick().ok());
+    const auto target = std::ranges::find_if(
+        session->snapshots(), [](const EntitySnapshot& snapshot) {
+            return snapshot.material_id.has_value()
+                && !snapshot.enemy_archetype_id.has_value();
+        });
+    NINHO_SIM_REQUIRE(target != session->snapshots().end());
+    const PartId exited_part{target->part_id.value() + 1U};
+
+    const std::array outcomes{
+        detail::DamageOutcome{
+            .kind = detail::DamageOutcomeKind::DamageApplied,
+            .cause_entity_id = EntityId{99U},
+            .cause_part_id = PartId{1U},
+            .target_entity_id = target->entity_id,
+            .target_part_id = target->part_id,
+            .damage = 1.0,
+        },
+        detail::DamageOutcome{
+            .kind = detail::DamageOutcomeKind::EntityNeutralized,
+            .target_entity_id = target->entity_id,
+            .target_part_id = exited_part,
+            .neutralization_cause = NeutralizationCause::Ejection,
+        },
+    };
+    const std::size_t events_before = session->events().size();
+    detail::SessionTestFacade::publish_damage_outcomes_for_testing(
+        *session, outcomes);
+    NINHO_SIM_REQUIRE(session->events().size() == events_before + 2U);
+    const DomainEvent& damage = session->events()[events_before];
+    const DomainEvent& exited = session->events()[events_before + 1U];
+    NINHO_SIM_REQUIRE(damage.kind == DomainEventKind::DamageApplied);
+    NINHO_SIM_REQUIRE(exited.kind == DomainEventKind::EntityNeutralized);
+    NINHO_SIM_REQUIRE(exited.affected_part_id == exited_part);
+    NINHO_SIM_REQUIRE(exited.neutralization_cause
+        == NeutralizationCause::Ejection);
+    NINHO_SIM_REQUIRE(exited.cause_event_id == EventId{});
+}
+
+NINHO_SIM_TEST("damage anchor causal state is deterministic in v3 and absent from frozen v2 bytes")
+{
+    using namespace ninho::simulation;
+
+    auto legacy = create_real_session();
+    NINHO_SIM_REQUIRE(legacy->tick().ok());
+    const auto [legacy_entity, legacy_part] = first_enemy_identity(*legacy);
+    const auto legacy_before = legacy->canonical_state_v2();
+    NINHO_SIM_REQUIRE(detail::SessionTestFacade::record_causal_damage_event_for_testing(
+        *legacy, legacy_entity, legacy_part, EventId{700U}));
+    detail::SessionTestFacade::refresh_canonical_state(*legacy);
+    NINHO_SIM_REQUIRE(legacy->canonical_state_v2() == legacy_before);
+    NINHO_SIM_REQUIRE(legacy->canonical_state_v3().empty());
+
+    const auto anchored_v3 = [] {
+        auto session = create_product_v2_session();
+        NINHO_SIM_REQUIRE(session->tick().ok());
+        const auto [entity, part] = first_enemy_identity(*session);
+        const auto before = session->canonical_state_v3();
+        NINHO_SIM_REQUIRE(
+            detail::SessionTestFacade::record_causal_damage_event_for_testing(
+                *session, entity, part, EventId{700U}));
+        detail::SessionTestFacade::refresh_canonical_state(*session);
+        const auto after = session->canonical_state_v3();
+        NINHO_SIM_REQUIRE(after != before);
+        NINHO_SIM_REQUIRE(
+            !detail::SessionTestFacade::record_causal_damage_event_for_testing(
+                *session, entity, part, EventId{699U}));
+        detail::SessionTestFacade::refresh_canonical_state(*session);
+        NINHO_SIM_REQUIRE(session->canonical_state_v3() == after);
+        return after;
+    };
+    NINHO_SIM_REQUIRE(anchored_v3() == anchored_v3());
+}
+
+NINHO_SIM_TEST("damage anchor v3 serializes the external watermark separately from the causal anchor")
+{
+    using namespace ninho::simulation;
+    const auto with_external_watermark = [](EventId receipt) {
+        auto session = create_product_v2_session();
+        const auto [entity, part] = first_enemy_identity(*session);
+        NINHO_SIM_REQUIRE(detail::SessionTestFacade::queue_external_damage(
+            *session, entity, part, 1.0, receipt));
+        NINHO_SIM_REQUIRE(session->tick().ok());
+        // Clear the transient event batch so only persistent damage state can
+        // distinguish these otherwise identical sessions.
+        NINHO_SIM_REQUIRE(session->tick().ok());
+        return session->canonical_state_v3();
+    };
+
+    const auto first = with_external_watermark(EventId{51U});
+    const auto repeated = with_external_watermark(EventId{51U});
+    const auto different_receipt = with_external_watermark(EventId{52U});
+    NINHO_SIM_REQUIRE(first == repeated);
+    NINHO_SIM_REQUIRE(first != different_receipt);
 }
 
 }

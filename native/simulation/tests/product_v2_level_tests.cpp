@@ -3,6 +3,7 @@
 #include "ninho/simulation/content.hpp"
 #include "ninho/simulation/session.hpp"
 #include "physics_world_test_facade.hpp"
+#include "product_v2_layout_fixture.hpp"
 #include "product_v2_reader.hpp"
 #include "shape_volume.hpp"
 
@@ -212,101 +213,6 @@ void require_exact_keys(const json& value,
     }
 }
 
-json sorted_by(json values, std::string_view key)
-{
-    std::sort(values.begin(), values.end(), [&](const json& lhs, const json& rhs) {
-        return lhs.at(key) < rhs.at(key);
-    });
-    return values;
-}
-
-void normalize_reals(json& value)
-{
-    if (value.is_number_float()) {
-        const double source = value.get<double>();
-        NINHO_SIM_REQUIRE(std::isfinite(source));
-        value = static_cast<std::int64_t>(std::llround(source * 100000.0));
-        return;
-    }
-    if (value.is_array()) {
-        for (auto& child : value) normalize_reals(child);
-        return;
-    }
-    if (value.is_object()) {
-        for (auto& [key, child] : value.items()) {
-            static_cast<void>(key);
-            normalize_reals(child);
-        }
-    }
-}
-
-json layout_projection_untyped(json level)
-{
-    const json bodies = sorted_by(level.at("bodies"), "body_id");
-    json projected_bodies = json::array();
-    for (const auto& body : bodies) {
-        projected_bodies.push_back(json::array({
-            body.at("body_id"), body.at("entity_id"), body.at("part_id"),
-            body.at("body_type"), body.at("affected_by_world_gravity"),
-            body.at("material_id"), body.at("surface_id"),
-            body.at("enemy_archetype_id"), body.at("density_kg_m3"),
-            body.at("transform"), body.at("shape"), body.at("visual"),
-            body.contains("fracture_pattern") ? body.at("fracture_pattern") : json(nullptr),
-        }));
-    }
-    const json joints = sorted_by(level.at("joints"), "id");
-    json projected_joints = json::array();
-    for (const auto& joint : joints) {
-        projected_joints.push_back(json::array({joint.at("id"),
-            joint.at("assembly_id"), joint.at("kind"), joint.at("body_a_id"),
-            joint.at("body_b_id"), joint.at("force_limit_n"),
-            joint.at("torque_limit_nm")}));
-    }
-    const json assemblies = sorted_by(level.at("assemblies"), "id");
-    json projected_assemblies = json::array();
-    for (const auto& assembly : assemblies) {
-        json body_ids = assembly.at("body_ids");
-        json joint_ids = assembly.at("joint_ids");
-        std::sort(body_ids.begin(), body_ids.end());
-        std::sort(joint_ids.begin(), joint_ids.end());
-        projected_assemblies.push_back(json::array({assembly.at("id"),
-            assembly.at("key"), std::move(body_ids), std::move(joint_ids)}));
-    }
-    const json triggers = sorted_by(level.at("triggers"), "id");
-    json projected_triggers = json::array();
-    for (const auto& trigger : triggers) {
-        projected_triggers.push_back(json::array({trigger.at("id"),
-            trigger.at("target_entity_id"), trigger.at("kind"),
-            trigger.at("damage_threshold"), trigger.at("fuse_ticks"),
-            trigger.at("cooldown_ticks"), trigger.at("pressure_burst")}));
-    }
-    const json objectives = sorted_by(level.at("objectives"), "id");
-    json projected_objectives = json::array();
-    for (const auto& objective : objectives) {
-        projected_objectives.push_back(json::array({objective.at("id"),
-            objective.at("kind"), objective.at("target_entity_id")}));
-    }
-    json result{
-        {"level_id", level.at("id")},
-        {"world", level.at("world")},
-        {"slingshot", level.at("slingshot")},
-        {"free_body_ids", level.at("free_body_ids")},
-        {"bodies", std::move(projected_bodies)},
-        {"joints", std::move(projected_joints)},
-        {"assemblies", std::move(projected_assemblies)},
-        {"triggers", std::move(projected_triggers)},
-        {"objectives", std::move(projected_objectives)},
-    };
-    std::sort(result["free_body_ids"].begin(), result["free_body_ids"].end());
-    normalize_reals(result);
-    return result;
-}
-
-json layout_projection(const LevelManifest& level)
-{
-    return layout_projection_untyped(json::parse(to_canonical_json(level)));
-}
-
 json layout_projection(const json& source)
 {
     const auto typed = parse_level_manifest_v2(source.dump());
@@ -314,15 +220,17 @@ json layout_projection(const json& source)
         throw std::runtime_error("invalid layout probe at " + typed.error.pointer
             + ": " + typed.error.message);
     }
-    return layout_projection(typed.value);
+    return test::product_v2_layout_projection(typed.value);
 }
 
 std::string layout_hash(const json& level)
 {
-    const std::uint64_t hash = fnv1a64(layout_projection(level).dump());
-    std::ostringstream rendered;
-    rendered << "fnv1a64:" << std::hex << hash;
-    return rendered.str();
+    const auto typed = parse_level_manifest_v2(level.dump());
+    if (!typed.ok()) {
+        throw std::runtime_error("invalid layout probe at " + typed.error.pointer
+            + ": " + typed.error.message);
+    }
+    return test::product_v2_layout_hash(typed.value);
 }
 
 struct LoadedProduct
@@ -700,10 +608,10 @@ NINHO_SIM_TEST("product v2 levels freeze the complete farm inventory and physics
 {
     const LoadedProduct product = load_product();
     const LevelManifest& farm = product.farm;
-    NINHO_SIM_REQUIRE(farm.bodies.size() == 72U);
+    NINHO_SIM_REQUIRE(farm.bodies.size() == 106U);
     NINHO_SIM_REQUIRE(std::ranges::count(farm.bodies, BodyType::Dynamic,
-        &BodyDefinition::body_type) == 54);
-    NINHO_SIM_REQUIRE(farm.joints.size() == 52U);
+        &BodyDefinition::body_type) == 86);
+    NINHO_SIM_REQUIRE(farm.joints.size() == 49U);
     NINHO_SIM_REQUIRE(farm.assemblies.size() == 8U);
     NINHO_SIM_REQUIRE(farm.triggers.size() == 2U);
     NINHO_SIM_REQUIRE(farm.objectives.size() == 4U);
@@ -717,6 +625,122 @@ NINHO_SIM_TEST("product v2 levels freeze the complete farm inventory and physics
     NINHO_SIM_REQUIRE(farm.slingshot.minimum_extension_m == 0.20);
     NINHO_SIM_REQUIRE((farm.scoring.star_thresholds
         == std::array<std::uint32_t, 3>{1U, 38000U, 50000U}));
+    const BodyDefinition& side_bale = body(farm, 23U);
+    NINHO_SIM_REQUIRE(side_bale.shape.type == ShapeType::Compound);
+    NINHO_SIM_REQUIRE(side_bale.shape.children.size() == 2U);
+    NINHO_SIM_REQUIRE(side_bale.density_kg_m3 == 109.77468250716919);
+    const auto side_bale_properties = detail::shape_mass_properties(side_bale.shape);
+    NINHO_SIM_REQUIRE(std::abs(side_bale_properties.volume_m3 - 0.644424)
+        < 1.0e-12);
+    NINHO_SIM_REQUIRE(std::abs(side_bale_properties.volume_m3
+        * side_bale.density_kg_m3 - 70.74144) < 1.0e-9);
+    for (const double component : side_bale_properties.center_of_mass_m) {
+        NINHO_SIM_REQUIRE(std::abs(component) < 1.0e-12);
+    }
+    NINHO_SIM_REQUIRE((side_bale.visual.bounds_m
+        == std::array{1.16, 0.84, 0.7707902298850575}));
+    const BodyDefinition& silo_output = body(farm, 45U);
+    const auto silo_output_properties = detail::shape_mass_properties(silo_output.shape);
+    NINHO_SIM_REQUIRE(std::abs(silo_output_properties.volume_m3 - 0.12)
+        < 1.0e-12);
+    NINHO_SIM_REQUIRE(std::abs(silo_output_properties.volume_m3
+        * silo_output.density_kg_m3 - 62.4) < 1.0e-9);
+    NINHO_SIM_REQUIRE(std::abs(silo_output_properties.center_of_mass_m[0]
+        - 0.885588235294118) < 1.0e-12);
+    NINHO_SIM_REQUIRE(std::abs(silo_output_properties.center_of_mass_m[1]
+        + 1.285) < 1.0e-12);
+    NINHO_SIM_REQUIRE(std::abs(silo_output_properties.center_of_mass_m[2]
+        - 0.0) < 1.0e-12);
+    NINHO_SIM_REQUIRE((silo_output.shape.children[2].local_rotation_xyzw
+        == std::array{0.008726535498373935, 0.0, 0.0,
+            0.9999619230641713}));
+    NINHO_SIM_REQUIRE((silo_output.visual.bounds_m
+        == std::array{3.5, 4.4125, 3.000098371642568}));
+    const BodyDefinition& silo_base = body(farm, 36U);
+    NINHO_SIM_REQUIRE(silo_base.shape.type == ShapeType::Compound);
+    NINHO_SIM_REQUIRE(silo_base.shape.children.size() == 5U);
+    const ShapeDefinition& pig_catch = silo_base.shape.children[4];
+    NINHO_SIM_REQUIRE(pig_catch.type == ShapeType::Box);
+    NINHO_SIM_REQUIRE((pig_catch.half_extents_m
+        == std::array{0.05, 0.31, 0.20}));
+    NINHO_SIM_REQUIRE((pig_catch.local_position_m
+        == std::array{-0.53, 1.14, -0.52}));
+    NINHO_SIM_REQUIRE((pig_catch.local_rotation_xyzw
+        == std::array{0.0, 0.0, 0.0, 1.0}));
+    NINHO_SIM_REQUIRE((silo_base.visual.bounds_m
+        == std::array{4.2, 1.6, 4.2}));
+    const BodyDefinition& fuel_tank = body(farm, 58U);
+    NINHO_SIM_REQUIRE(fuel_tank.shape.type == ShapeType::Compound);
+    NINHO_SIM_REQUIRE(fuel_tank.shape.children.size() == 12U);
+    for (const std::size_t index : {4U, 5U, 8U, 10U}) {
+        NINHO_SIM_REQUIRE(
+            fuel_tank.shape.children[index].local_position_m[1] == -0.785);
+    }
+    for (const std::size_t index : {6U, 7U, 9U, 11U}) {
+        NINHO_SIM_REQUIRE(
+            fuel_tank.shape.children[index].local_position_m[1] == 1.085);
+    }
+    const auto fuel_tank_properties = detail::shape_mass_properties(fuel_tank.shape);
+    NINHO_SIM_REQUIRE(std::abs(fuel_tank_properties.volume_m3 - 0.006144)
+        < 1.0e-12);
+    NINHO_SIM_REQUIRE(std::abs(fuel_tank_properties.volume_m3
+        * fuel_tank.density_kg_m3 - 47.9232) < 1.0e-9);
+    NINHO_SIM_REQUIRE(std::abs(fuel_tank_properties.center_of_mass_m[0])
+        < 1.0e-12);
+    NINHO_SIM_REQUIRE(std::abs(fuel_tank_properties.center_of_mass_m[1] - 0.15)
+        < 1.0e-12);
+    NINHO_SIM_REQUIRE(std::abs(fuel_tank_properties.center_of_mass_m[2])
+        < 1.0e-12);
+    const BodyDefinition& pressure_tank = body(farm, 59U);
+    NINHO_SIM_REQUIRE(pressure_tank.shape.type == ShapeType::Compound);
+    NINHO_SIM_REQUIRE(pressure_tank.shape.children.size() == 13U);
+    constexpr std::array<std::array<double, 3>, 12> pressure_authored_centers{{
+        {-0.465, 0.0, -0.465}, {-0.465, 0.0, 0.465},
+        {0.465, 0.0, -0.465}, {0.465, 0.0, 0.465},
+        {0.0, -0.465, -0.465}, {0.0, -0.465, 0.465},
+        {0.0, 0.465, -0.465}, {0.0, 0.465, 0.465},
+        {-0.465, -0.465, 0.0}, {-0.465, 0.465, 0.0},
+        {0.465, -0.465, 0.0}, {0.465, 0.465, 0.0},
+    }};
+    for (std::size_t child = 0U; child < pressure_authored_centers.size(); ++child) {
+        for (std::size_t axis = 0U; axis < 3U; ++axis) {
+            NINHO_SIM_REQUIRE(std::abs(pressure_tank.shape.children[child]
+                    .local_position_m[axis]
+                - pressure_authored_centers[child][axis]) < 1.0e-12);
+        }
+    }
+    for (const std::size_t child : {4U, 5U, 6U, 7U}) {
+        NINHO_SIM_REQUIRE((pressure_tank.shape.children[child].half_extents_m
+            == std::array{0.2025, 0.01, 0.01}));
+    }
+    const ShapeDefinition& pressure_ballast = pressure_tank.shape.children[12];
+    NINHO_SIM_REQUIRE(pressure_ballast.type == ShapeType::Box);
+    NINHO_SIM_REQUIRE((pressure_ballast.half_extents_m
+        == std::array{0.05, 0.05, 0.042}));
+    NINHO_SIM_REQUIRE((pressure_ballast.local_position_m
+        == std::array{-0.25, 0.0, 0.34}));
+    NINHO_SIM_REQUIRE((pressure_ballast.local_rotation_xyzw
+        == std::array{0.0, 0.0, 0.0, 1.0}));
+    const auto pressure_tank_properties =
+        detail::shape_mass_properties(pressure_tank.shape);
+    NINHO_SIM_REQUIRE(std::abs(pressure_tank_properties.volume_m3 - 0.004512)
+        < 1.0e-12);
+    NINHO_SIM_REQUIRE(std::abs(pressure_tank_properties.volume_m3
+        * pressure_tank.density_kg_m3 - 35.1936) < 1.0e-9);
+    NINHO_SIM_REQUIRE(std::abs(pressure_tank_properties.center_of_mass_m[0]
+        + 0.04654255319148936) < 1.0e-12);
+    NINHO_SIM_REQUIRE(std::abs(pressure_tank_properties.center_of_mass_m[1])
+        < 1.0e-12);
+    NINHO_SIM_REQUIRE(std::abs(pressure_tank_properties.center_of_mass_m[2]
+        - 0.06329787234042553) < 1.0e-12);
+    NINHO_SIM_REQUIRE((pressure_tank.visual.bounds_m
+        == std::array{0.95, 0.96, 0.95}));
+    std::size_t authored_primitive_count = 0U;
+    for (const BodyDefinition& definition : farm.bodies) {
+        authored_primitive_count += body_local_leaf_bounds(definition).size();
+    }
+    NINHO_SIM_REQUIRE(authored_primitive_count == 256U);
+    NINHO_SIM_REQUIRE(authored_primitive_count <= 256U);
     for (const auto& definition : farm.bodies) {
         if (definition.body_type == BodyType::Dynamic) {
             NINHO_SIM_REQUIRE(definition.affected_by_world_gravity);
@@ -724,7 +748,10 @@ NINHO_SIM_TEST("product v2 levels freeze the complete farm inventory and physics
                 const auto material = std::ranges::find(product.materials.materials,
                     *definition.material_id, &MaterialDefinition::id);
                 NINHO_SIM_REQUIRE(material != product.materials.materials.end());
-                NINHO_SIM_REQUIRE(definition.density_kg_m3 == material->density_kg_m3);
+                if (definition.body_id != 23U && definition.body_id != 74U) {
+                    NINHO_SIM_REQUIRE(
+                        definition.density_kg_m3 == material->density_kg_m3);
+                }
             }
         }
     }
@@ -762,7 +789,6 @@ NINHO_SIM_TEST("product v2 levels freeze the complete farm inventory and physics
     const std::unordered_set<std::uint64_t> deliberate_interlocks{
         // Encaixe estrutural medido por SAT: travessa/gaiola e rampa/suportes.
         pair_key(15U, 16U),
-        pair_key(20U, 24U), pair_key(20U, 25U),
         // As três pás penetram 0,05 m no hub esférico, sem se tocarem entre si.
         pair_key(48U, 49U), pair_key(48U, 50U), pair_key(48U, 51U)};
     const auto bodies_strictly_overlap = [&](std::uint32_t a_id,
@@ -1020,7 +1046,7 @@ NINHO_SIM_TEST("product v2 levels freeze farm layout hash and semantic reorder")
     NINHO_SIM_REQUIRE(fixture.at("projection") == layout_projection(farm));
     NINHO_SIM_REQUIRE(fixture.at("layout_hash") == layout_hash(farm));
     const json expected_counts{
-        {"bodies", 72}, {"dynamic_bodies", 54}, {"joints", 52},
+        {"bodies", 106}, {"dynamic_bodies", 86}, {"joints", 49},
         {"assemblies", 8}, {"triggers", 2}, {"objectives", 4}};
     NINHO_SIM_REQUIRE(fixture.at("counts") == expected_counts);
 
@@ -1079,6 +1105,162 @@ NINHO_SIM_TEST("product v2 levels freeze farm layout hash and semantic reorder")
         std::reverse(assembly["joint_ids"].begin(), assembly["joint_ids"].end());
     }
     NINHO_SIM_REQUIRE(layout_hash(reordered) == layout_hash(farm));
+}
+
+NINHO_SIM_TEST("product v2 levels isolate the spherical pressure hammer probe")
+{
+    const LevelManifest& farm = load_product().farm;
+    const auto hammer = std::ranges::find(
+        farm.bodies, 74U, &BodyDefinition::body_id);
+    NINHO_SIM_REQUIRE(hammer != farm.bodies.end());
+    NINHO_SIM_REQUIRE(hammer->entity_id == EntityId{3074U});
+    NINHO_SIM_REQUIRE(hammer->part_id == PartId{1U});
+    NINHO_SIM_REQUIRE(hammer->body_type == BodyType::Dynamic);
+    NINHO_SIM_REQUIRE(hammer->affected_by_world_gravity);
+    NINHO_SIM_REQUIRE(hammer->material_id == MaterialId{17U});
+    NINHO_SIM_REQUIRE(hammer->density_kg_m3 == 520.0);
+    NINHO_SIM_REQUIRE(!hammer->assembly_id.has_value());
+    NINHO_SIM_REQUIRE(!hammer->fracture_pattern.has_value());
+    NINHO_SIM_REQUIRE((hammer->transform.position_m
+        == std::array{18.55, 1.5, -3.55}));
+    NINHO_SIM_REQUIRE((hammer->transform.rotation_xyzw
+        == std::array{0.0, 0.0, 0.0, 1.0}));
+    NINHO_SIM_REQUIRE(hammer->shape.type == ShapeType::Sphere);
+    NINHO_SIM_REQUIRE(hammer->shape.radius_m == 0.42);
+    const auto hammer_properties = detail::shape_mass_properties(hammer->shape);
+    NINHO_SIM_REQUIRE(std::abs(hammer_properties.volume_m3
+        * hammer->density_kg_m3 - 161.3763261199513) < 1.0e-9);
+    NINHO_SIM_REQUIRE(hammer->visual.asset_id == "KIT_Farm_Metal");
+    NINHO_SIM_REQUIRE((hammer->visual.bounds_m
+        == std::array{0.84, 0.84, 0.84}));
+
+    const auto pedestal = std::ranges::find(
+        farm.bodies, 75U, &BodyDefinition::body_id);
+    NINHO_SIM_REQUIRE(pedestal != farm.bodies.end());
+    NINHO_SIM_REQUIRE(pedestal->entity_id == EntityId{3075U});
+    NINHO_SIM_REQUIRE(pedestal->body_type == BodyType::Static);
+    NINHO_SIM_REQUIRE(!pedestal->affected_by_world_gravity);
+    NINHO_SIM_REQUIRE(pedestal->material_id == MaterialId{17U});
+    NINHO_SIM_REQUIRE(pedestal->density_kg_m3 == 0.0);
+    NINHO_SIM_REQUIRE(!pedestal->assembly_id.has_value());
+    NINHO_SIM_REQUIRE((pedestal->transform.position_m
+        == std::array{18.55, 1.03, -3.55}));
+    NINHO_SIM_REQUIRE(pedestal->shape.type == ShapeType::Box);
+    NINHO_SIM_REQUIRE((pedestal->shape.half_extents_m
+        == std::array{0.20, 0.05, 0.20}));
+    NINHO_SIM_REQUIRE((pedestal->visual.bounds_m
+        == std::array{0.40, 0.10, 0.40}));
+    NINHO_SIM_REQUIRE(std::ranges::find(farm.free_body_ids, 74U)
+        != farm.free_body_ids.end());
+    NINHO_SIM_REQUIRE(std::ranges::find(farm.free_body_ids, 75U)
+        != farm.free_body_ids.end());
+    NINHO_SIM_REQUIRE(std::abs((hammer->transform.position_m[1]
+            - hammer->shape.radius_m)
+        - (pedestal->transform.position_m[1]
+            + pedestal->shape.half_extents_m[1])) < 1.0e-12);
+}
+
+NINHO_SIM_TEST("product v2 levels isolate the thirty panel ballistic rack")
+{
+    const LoadedProduct product = load_product();
+    const LevelManifest& farm = product.farm;
+    const BodyDefinition& frame = body(farm, 76U);
+    NINHO_SIM_REQUIRE(frame.entity_id == EntityId{3076U});
+    NINHO_SIM_REQUIRE(frame.body_type == BodyType::Static);
+    NINHO_SIM_REQUIRE(!frame.affected_by_world_gravity);
+    NINHO_SIM_REQUIRE(frame.material_id == MaterialId{17U});
+    NINHO_SIM_REQUIRE(frame.density_kg_m3 == 0.0);
+    NINHO_SIM_REQUIRE((frame.transform.position_m == std::array{
+        21.2484082701803, 2.31216908527308, -4.33094896033987}));
+    NINHO_SIM_REQUIRE((frame.transform.rotation_xyzw == std::array{
+        0.0, 0.140389383769565, 0.0, 0.990096369513999}));
+    NINHO_SIM_REQUIRE(frame.shape.type == ShapeType::Compound);
+    NINHO_SIM_REQUIRE(frame.shape.children.size() == 4U);
+    NINHO_SIM_REQUIRE((frame.shape.children[0].half_extents_m
+        == std::array{0.01, 0.23, 0.42}));
+    NINHO_SIM_REQUIRE((frame.shape.children[0].local_position_m
+        == std::array{0.22, 0.0, 0.0}));
+    NINHO_SIM_REQUIRE((frame.shape.children[1].half_extents_m
+        == std::array{0.12, 0.01, 0.42}));
+    NINHO_SIM_REQUIRE((frame.shape.children[1].local_position_m
+        == std::array{0.11, -0.19, 0.0}));
+    NINHO_SIM_REQUIRE((frame.shape.children[2].half_extents_m
+        == std::array{0.12, 0.23, 0.01}));
+    NINHO_SIM_REQUIRE((frame.shape.children[2].local_position_m
+        == std::array{0.11, 0.0, -0.36}));
+    NINHO_SIM_REQUIRE((frame.shape.children[3].half_extents_m
+        == std::array{0.12, 0.23, 0.01}));
+    NINHO_SIM_REQUIRE((frame.shape.children[3].local_position_m
+        == std::array{0.11, 0.0, 0.36}));
+    NINHO_SIM_REQUIRE((frame.visual.bounds_m
+        == std::array{0.24, 0.46, 0.84}));
+    NINHO_SIM_REQUIRE(std::ranges::find(farm.free_body_ids, 76U)
+        != farm.free_body_ids.end());
+
+    constexpr std::array center{
+        21.2484082701803, 2.31216908527308, -4.33094896033987};
+    constexpr std::array local_z{0.277998038377107, 0.0, 0.960581641849604};
+    for (std::uint32_t index = 0U; index < 30U; ++index) {
+        const BodyDefinition& panel = body(farm, 77U + index);
+        const double row_offset = (static_cast<double>(index / 5U) - 2.5) * 0.06;
+        const double column_offset =
+            (static_cast<double>(index % 5U) - 2.0) * 0.15;
+        const std::array expected_position{
+            center[0] + local_z[0] * column_offset,
+            center[1] + row_offset,
+            center[2] + local_z[2] * column_offset};
+        NINHO_SIM_REQUIRE(panel.entity_id == EntityId{3077U + index});
+        NINHO_SIM_REQUIRE(panel.body_type == BodyType::Dynamic);
+        NINHO_SIM_REQUIRE(panel.affected_by_world_gravity);
+        NINHO_SIM_REQUIRE(panel.material_id == MaterialId{9U});
+        NINHO_SIM_REQUIRE(panel.density_kg_m3 == 2450.0);
+        for (std::size_t axis = 0U; axis < 3U; ++axis) {
+            NINHO_SIM_REQUIRE(std::abs(panel.transform.position_m[axis]
+                - expected_position[axis]) < 1.0e-12);
+        }
+        NINHO_SIM_REQUIRE((panel.transform.rotation_xyzw == std::array{
+            0.0, 0.140389383769565, 0.0, 0.990096369513999}));
+        NINHO_SIM_REQUIRE(panel.shape.type == ShapeType::Box);
+        NINHO_SIM_REQUIRE((panel.shape.half_extents_m
+            == std::array{0.01, 0.03, 0.05}));
+        NINHO_SIM_REQUIRE((panel.visual.bounds_m
+            == std::array{0.02, 0.06, 0.10}));
+        NINHO_SIM_REQUIRE(panel.fracture_pattern.has_value());
+        NINHO_SIM_REQUIRE(
+            panel.fracture_pattern->physical_fragments.size() == 2U);
+        for (std::size_t fragment = 0U; fragment < 2U; ++fragment) {
+            const auto& piece = panel.fracture_pattern->physical_fragments[fragment];
+            NINHO_SIM_REQUIRE(piece.shape.type == ShapeType::Box);
+            NINHO_SIM_REQUIRE((piece.shape.half_extents_m
+                == std::array{0.01, 0.03, 0.025}));
+            NINHO_SIM_REQUIRE(piece.density_kg_m3 == 2450.0);
+            NINHO_SIM_REQUIRE(std::abs(piece.local_transform.position_m[2]
+                - (fragment == 0U ? -0.025 : 0.025)) < 1.0e-12);
+        }
+        const auto properties = detail::shape_mass_properties(panel.shape);
+        NINHO_SIM_REQUIRE(std::abs(properties.volume_m3
+            * panel.density_kg_m3 - 0.294) < 1.0e-12);
+        NINHO_SIM_REQUIRE(std::ranges::find(farm.free_body_ids, panel.body_id)
+            != farm.free_body_ids.end());
+    }
+    std::size_t physical_fragment_budget = 0U;
+    for (const BodyDefinition& definition : farm.bodies) {
+        if (definition.fracture_pattern) {
+            physical_fragment_budget +=
+                definition.fracture_pattern->physical_fragments.size();
+        }
+    }
+    NINHO_SIM_REQUIRE(physical_fragment_budget == 68U);
+    NINHO_SIM_REQUIRE(physical_fragment_budget <= 80U);
+
+    auto created = SimulationSession::create(
+        product.materials, product.archetypes, product.farm);
+    NINHO_SIM_REQUIRE(created.ok());
+    auto session = std::move(created.value);
+    for (std::uint32_t tick = 0U; tick < 120U; ++tick) {
+        NINHO_SIM_REQUIRE(session->tick().ok());
+        NINHO_SIM_REQUIRE(session->events().empty());
+    }
 }
 
 NINHO_SIM_TEST("product v2 levels preserve legacy orbital bodies and bytes")

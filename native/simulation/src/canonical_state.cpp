@@ -1336,6 +1336,7 @@ std::vector<std::uint8_t> SimulationSession::Impl::serialize_canonical_state_v3(
         writer.quantized(damage->remaining_integrity);
         writer.boolean(damage->was_ejected);
         writer.boolean(damage->neutralized);
+        identifier(writer, damage->last_causal_damage_event_id);
     }
     std::vector<const detail::DamageState*> external_damage_receipts;
     std::ranges::copy_if(damage_states,
@@ -1413,6 +1414,7 @@ std::vector<std::uint8_t> SimulationSession::Impl::serialize_canonical_state_v3(
         identifier(writer, pending.incident_joint_id);
         identifier(writer, pending.cause_event_id);
         writer.vector(pending.position_m);
+        writer.boolean(pending.requires_physical_replacement);
     }
 
     writer.integer<std::uint32_t>(static_cast<std::uint32_t>(command_queue.size()));

@@ -6,6 +6,7 @@
 #include <compare>
 #include <cstdint>
 #include <span>
+#include <utility>
 #include <vector>
 
 namespace ninho::simulation::detail {
@@ -79,12 +80,23 @@ struct ScoreTransition {
     std::uint8_t stars{};
 };
 
+struct JointEntityEndpoints {
+    JointId joint_id{};
+    EntityId first{};
+    EntityId second{};
+
+    auto operator<=>(const JointEntityEndpoints&) const = default;
+};
+
 struct ScoreTickInput {
     TickIndex tick{};
     std::span<const DomainEvent> events;
     std::span<const ScoringCandidate> candidates;
     ScoreTerminalState terminal{ScoreTerminalState::None};
     std::uint32_t remaining_birds{};
+    std::span<const EntityId> dynamic_entities;
+    std::span<const std::pair<EntityId, EntityId>> dynamic_physical_edges;
+    std::span<const JointEntityEndpoints> joint_entity_endpoints;
 };
 
 class ScoreSystem {
@@ -148,7 +160,9 @@ private:
     void upsert_entity_root(EntityRoot);
     [[nodiscard]] CausalRecord resolve_event(const DomainEvent&) const noexcept;
     [[nodiscard]] std::vector<const DomainEvent*> resolve_tick_provenance(
-        std::span<const DomainEvent>);
+        std::span<const DomainEvent>, std::span<const EntityId> dynamic_entities,
+        std::span<const std::pair<EntityId, EntityId>> dynamic_physical_edges,
+        std::span<const JointEntityEndpoints> joint_entity_endpoints);
     void reset_chain(std::vector<ScoreTransition>&);
     void award(const ScoringCandidate&, const DomainEvent&,
         std::vector<ScoreTransition>&);

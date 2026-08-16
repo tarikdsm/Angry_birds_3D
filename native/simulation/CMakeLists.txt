@@ -7,6 +7,7 @@ add_library(ninho_simulation_kernel STATIC
   src/product_v2_serialization.cpp
   src/product_v2_content.cpp
   src/canonical_state.cpp
+  src/playthrough.cpp
   src/session.cpp
   src/session_builder.cpp
   src/launcher_system.cpp
@@ -73,6 +74,14 @@ if(BUILD_TESTING)
     tests/damage_anchor_tests.cpp
     tests/fracture_objective_tests.cpp
     tests/playthrough_tests.cpp
+    tests/product_v2_playthrough_tests.cpp
+    tests/product_v2_layout_fixture.cpp
+    tests/product_v2_fixture_writer.cpp
+    tests/product_v2_fixture_writer_tests.cpp
+    tests/product_v2_playthrough_fixture.cpp
+    tests/product_v2_orbital_fixture_tests.cpp
+    tests/product_v2_farm_fixture_tests.cpp
+    tests/product_v2_determinism_tests.cpp
     tests/legacy_orbital_characterization_tests.cpp
   )
 
@@ -97,6 +106,33 @@ if(BUILD_TESTING)
 
   if(MSVC)
     target_compile_options(ninho_simulation_tests PRIVATE
+      "$<$<COMPILE_LANGUAGE:CXX>:/W4;/permissive-;/fp:precise;/utf-8>"
+    )
+  endif()
+
+  # Deterministic fixture freezer. It deliberately reuses the strict replay
+  # support, is never linked into production, and is not registered in CTest.
+  add_executable(ninho_product_v2_fixture_emitter
+    tests/product_v2_fixture_emitter.cpp
+    tests/product_v2_fixture_writer.cpp
+    tests/product_v2_layout_fixture.cpp
+    tests/product_v2_playthrough_fixture.cpp
+  )
+  target_link_libraries(ninho_product_v2_fixture_emitter PRIVATE
+    ninho::simulation
+    nlohmann_json::nlohmann_json
+  )
+  target_include_directories(ninho_product_v2_fixture_emitter PRIVATE
+    "${CMAKE_CURRENT_SOURCE_DIR}/tests"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src"
+  )
+  target_compile_definitions(ninho_product_v2_fixture_emitter PRIVATE
+    NINHO_SOURCE_DIR="${PROJECT_SOURCE_DIR}"
+  )
+  target_compile_features(ninho_product_v2_fixture_emitter PRIVATE cxx_std_20)
+
+  if(MSVC)
+    target_compile_options(ninho_product_v2_fixture_emitter PRIVATE
       "$<$<COMPILE_LANGUAGE:CXX>:/W4;/permissive-;/fp:precise;/utf-8>"
     )
   endif()
@@ -173,6 +209,23 @@ if(BUILD_TESTING)
     NAME vertical_slice_determinism
     COMMAND ninho_simulation_tests --filter "vertical slice determinism"
   )
+  add_test(
+    NAME product_v2_playthrough
+    COMMAND ninho_simulation_tests --filter "product v2 playthrough"
+  )
+  add_test(
+    NAME product_v2_fixture_writer
+    COMMAND ninho_simulation_tests --filter "product v2 fixture writer"
+  )
+  add_test(
+    NAME product_v2_determinism
+    COMMAND ninho_simulation_tests --filter "product v2 determinism"
+  )
+  # Seven real routes replayed 50x exceeded the inherited 1500-second CTest
+  # watchdog in a healthy Debug process and later measured 6158 seconds. Keep
+  # the full aggregate and give this intentionally long determinism gate a
+  # watchdog with enough operational margin.
+  set_tests_properties(product_v2_determinism PROPERTIES TIMEOUT 14400)
   add_test(
     NAME legacy_orbital_characterization
     COMMAND ninho_simulation_tests --filter "legacy orbital characterization"

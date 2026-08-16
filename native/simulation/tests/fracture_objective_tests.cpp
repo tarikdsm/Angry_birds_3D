@@ -5,6 +5,7 @@
 #include "session_test_facade.hpp"
 
 #include <algorithm>
+#include <cmath>
 #include <filesystem>
 #include <fstream>
 #include <optional>
@@ -40,6 +41,110 @@ std::unique_ptr<SimulationSession> create_session()
     return std::move(created.value);
 }
 
+struct JointlessFractureOptions {
+    double impact_speed_m_s{16.0};
+    MaterialResponse response{MaterialResponse::Brittle};
+    bool authored_pattern{true};
+    bool exhaust_body_capacity{false};
+    bool enable_scoring{false};
+    bool remove_incident_joints{true};
+};
+
+std::unique_ptr<SimulationSession> create_jointless_fracture_session(
+    JointlessFractureOptions options = {})
+{
+    auto materials = parse_material_catalog(
+        read_source_file("game/data/materials/vertical_slice.materials.json"));
+    const auto archetypes = parse_archetype_catalog(
+        read_source_file("game/data/archetypes/vertical_slice.archetypes.json"));
+    auto level = parse_level_manifest(
+        read_source_file("game/data/levels/first_orbit.level.json"));
+    NINHO_SIM_REQUIRE(materials.ok() && archetypes.ok() && level.ok());
+
+    if (options.enable_scoring) {
+        level.value.scoring = {
+            .pig_points = 5000U,
+            .unused_bird_points = 10000U,
+            .star_thresholds = {1U, 38000U, 50000U},
+            .chain_window_ticks = 45U,
+            .chain_multiplier_step = 0.10,
+            .max_chain_multiplier = 2.0,
+        };
+    }
+
+    constexpr EntityId target_entity{110};
+    constexpr PartId target_part{1};
+    const auto material = std::ranges::find(
+        materials.value.materials, MaterialId{9}, &MaterialDefinition::id);
+    NINHO_SIM_REQUIRE(material != materials.value.materials.end());
+    material->response = options.response;
+
+    const auto target = std::ranges::find_if(
+        level.value.bodies, [](const BodyDefinition& body) {
+            return body.entity_id == target_entity && body.part_id == target_part;
+    });
+    NINHO_SIM_REQUIRE(target != level.value.bodies.end());
+    const std::uint32_t target_body_id = target->body_id;
+    target->fracture_pattern.reset();
+    if (options.authored_pattern) {
+        ShapeDefinition half;
+        half.type = ShapeType::Box;
+        half.half_extents_m = {0.02, 0.35, 0.225};
+        PhysicalFragmentDefinition first{
+            1U, half, {{0.0, 0.0, -0.225}, {0.0, 0.0, 0.0, 1.0}},
+            2450.0, "TEST_GlassHalf_A"};
+        PhysicalFragmentDefinition second{
+            2U, half, {{0.0, 0.0, 0.225}, {0.0, 0.0, 0.0, 1.0}},
+            2450.0, "TEST_GlassHalf_B"};
+        target->fracture_pattern = FracturePatternDefinition{
+            {std::move(first), std::move(second)}, {}};
+    }
+    if (options.remove_incident_joints) {
+        target->assembly_id.reset();
+        std::vector<JointId> removed_joints;
+        std::erase_if(level.value.joints, [&](const JointDefinition& joint) {
+            const bool incident = joint.body_a_id == target_body_id
+                || joint.body_b_id == target_body_id;
+            if (incident) removed_joints.push_back(joint.id);
+            return incident;
+        });
+        for (AssemblyDefinition& assembly : level.value.assemblies) {
+            std::erase(assembly.body_ids, target_body_id);
+            for (const JointId joint : removed_joints) {
+                std::erase(assembly.joint_ids, joint);
+            }
+        }
+        level.value.free_body_ids.push_back(target_body_id);
+    }
+
+    auto created = SimulationSession::create(
+        materials.value, archetypes.value, level.value);
+    if (!created.ok()) {
+        ninho::simulation::test::fail(__FILE__, __LINE__,
+            created.error.pointer + ": " + created.error.message);
+    }
+    auto session = std::move(created.value);
+    const auto snapshot = std::ranges::find_if(
+        session->snapshots(), [](const EntitySnapshot& body) {
+            return body.entity_id == target_entity && body.part_id == target_part;
+        });
+    NINHO_SIM_REQUIRE(snapshot != session->snapshots().end());
+    const ninho::physics::Vec3 impact_position = snapshot->transform.position
+        + ninho::physics::Vec3{0.0f, 0.0f, -0.97f};
+    NINHO_SIM_REQUIRE(detail::SessionTestFacade::add_dynamic_sphere(*session,
+        EntityId{0x80002000U}, PartId{1}, impact_position, 140.0,
+        {0.0f, 0.0f, static_cast<float>(options.impact_speed_m_s)}, 0.5));
+
+    if (options.exhaust_body_capacity) {
+        std::uint32_t identity = 0x81000000U;
+        while (detail::SessionTestFacade::remaining_body_capacity(*session) > 1U) {
+            NINHO_SIM_REQUIRE(detail::SessionTestFacade::add_static_sphere(
+                *session, EntityId{identity++}, {0.0f, 0.0f, 0.0f}, 0.001));
+        }
+    }
+    return session;
+}
+
 std::unique_ptr<SimulationSession> create_farm_session()
 {
     const auto materials = parse_material_catalog(
@@ -62,6 +167,236 @@ const DomainEvent* find_event(
         return event.kind == kind && (joint == JointId{} || event.joint_id == joint);
     });
     return found == session.events().end() ? nullptr : &*found;
+}
+
+const DomainEvent* find_target_event(
+    const SimulationSession& session, DomainEventKind kind)
+{
+    constexpr EntityId target_entity{110};
+    constexpr PartId target_part{1};
+    const auto found = std::ranges::find_if(
+        session.events(), [&](const DomainEvent& event) {
+            return event.kind == kind
+                && event.affected_entity_id == target_entity
+                && event.affected_part_id == target_part;
+        });
+    return found == session.events().end() ? nullptr : &*found;
+}
+
+std::optional<DomainEvent> advance_to_jointless_trigger(
+    SimulationSession& session, int maximum_ticks = 40)
+{
+    for (int tick = 0; tick < maximum_ticks; ++tick) {
+        for (const StructuralJointSnapshot& joint : session.structural_joints()) {
+            if (joint.active) {
+                detail::SessionTestFacade::override_joint_ratio_after_solver(
+                    session, joint.id, 0.0);
+            }
+        }
+        NINHO_SIM_REQUIRE(session.tick().ok());
+        const DomainEvent* trigger = find_target_event(
+            session, DomainEventKind::PieceFractureTriggered);
+        if (trigger != nullptr) return *trigger;
+    }
+    return std::nullopt;
+}
+
+NINHO_SIM_TEST("fracture objective physically fractures a free brittle patterned body without a joint")
+{
+    auto session = create_jointless_fracture_session();
+    constexpr EntityId target_entity{110};
+    constexpr PartId target_part{1};
+    const auto parent = std::ranges::find_if(
+        session->snapshots(), [](const EntitySnapshot& body) {
+            return body.entity_id == target_entity && body.part_id == target_part;
+        });
+    NINHO_SIM_REQUIRE(parent != session->snapshots().end());
+    const double parent_mass = parent->mass_kg;
+    const std::size_t body_records_before =
+        detail::SessionTestFacade::body_record_count(*session);
+    const std::size_t capacity_before =
+        detail::SessionTestFacade::remaining_body_capacity(*session);
+    NINHO_SIM_REQUIRE(std::ranges::none_of(
+        session->structural_joints(), [](const StructuralJointSnapshot& joint) {
+            return joint.a == JointEndpoint{target_entity, target_part}
+                || joint.b == JointEndpoint{target_entity, target_part};
+        }));
+
+    const auto trigger = advance_to_jointless_trigger(*session);
+    NINHO_SIM_REQUIRE(trigger.has_value());
+    NINHO_SIM_REQUIRE(trigger->joint_id == JointId{});
+    NINHO_SIM_REQUIRE(trigger->cause_event_id != EventId{});
+    NINHO_SIM_REQUIRE(trigger->fracture_ratio >= 1.0);
+    const auto damage = std::ranges::find(
+        session->events(), trigger->cause_event_id, &DomainEvent::id);
+    NINHO_SIM_REQUIRE(damage != session->events().end());
+    NINHO_SIM_REQUIRE(damage->kind == DomainEventKind::DamageApplied);
+    NINHO_SIM_REQUIRE(std::ranges::none_of(session->events(), [](const DomainEvent& event) {
+        return event.kind == DomainEventKind::JointBroken;
+    }));
+
+    for (const StructuralJointSnapshot& joint : session->structural_joints()) {
+        if (joint.active) {
+            detail::SessionTestFacade::override_joint_ratio_after_solver(
+                *session, joint.id, 0.0);
+        }
+    }
+    NINHO_SIM_REQUIRE(session->tick().ok());
+    const DomainEvent* fractured = find_target_event(
+        *session, DomainEventKind::PieceFractured);
+    NINHO_SIM_REQUIRE(fractured != nullptr);
+    NINHO_SIM_REQUIRE(fractured->joint_id == JointId{});
+    NINHO_SIM_REQUIRE(fractured->cause_event_id == trigger->id);
+    NINHO_SIM_REQUIRE(std::ranges::none_of(session->events(), [](const DomainEvent& event) {
+        return event.kind == DomainEventKind::JointBroken;
+    }));
+
+    std::vector<EntitySnapshot> fragments;
+    for (const EntitySnapshot& body : session->snapshots()) {
+        if (body.entity_id == target_entity) fragments.push_back(body);
+    }
+    NINHO_SIM_REQUIRE(fragments.size() == 2U);
+    NINHO_SIM_REQUIRE(std::ranges::none_of(fragments, [](const EntitySnapshot& body) {
+        return body.part_id == target_part;
+    }));
+    double fragment_mass = 0.0;
+    std::vector<std::string> fragment_visuals;
+    for (const EntitySnapshot& fragment : fragments) {
+        NINHO_SIM_REQUIRE(fragment.body_type == BodyType::Dynamic);
+        NINHO_SIM_REQUIRE(detail::SessionTestFacade::affected_by_world_gravity(
+            *session, fragment.entity_id, fragment.part_id));
+        fragment_mass += fragment.mass_kg;
+        fragment_visuals.push_back(fragment.visual_id);
+    }
+    std::ranges::sort(fragment_visuals);
+    const std::vector<std::string> expected_visuals{
+        "TEST_GlassHalf_A", "TEST_GlassHalf_B"};
+    NINHO_SIM_REQUIRE(fragment_visuals == expected_visuals);
+    NINHO_SIM_REQUIRE(std::abs(fragment_mass - parent_mass) <= parent_mass * 1.0e-6);
+    NINHO_SIM_REQUIRE(detail::SessionTestFacade::body_record_count(*session)
+        == body_records_before + 1U);
+    NINHO_SIM_REQUIRE(detail::SessionTestFacade::remaining_body_capacity(*session)
+        == capacity_before - 1U);
+}
+
+NINHO_SIM_TEST("fracture objective jointless material path rejects ineligible bodies")
+{
+    for (const JointlessFractureOptions options : {
+        JointlessFractureOptions{.impact_speed_m_s = 2.0},
+        JointlessFractureOptions{.response = MaterialResponse::Ductile},
+        JointlessFractureOptions{.authored_pattern = false},
+    }) {
+        auto session = create_jointless_fracture_session(options);
+        NINHO_SIM_REQUIRE(!advance_to_jointless_trigger(*session).has_value());
+        const auto parent = std::ranges::find_if(
+            session->snapshots(), [](const EntitySnapshot& body) {
+                return body.entity_id == EntityId{110} && body.part_id == PartId{1};
+            });
+        NINHO_SIM_REQUIRE(parent != session->snapshots().end());
+    }
+}
+
+NINHO_SIM_TEST("fracture objective jointless capacity failure retains the parent atomically")
+{
+    auto session = create_jointless_fracture_session(
+        {.exhaust_body_capacity = true});
+    const std::size_t body_records_before =
+        detail::SessionTestFacade::body_record_count(*session);
+    NINHO_SIM_REQUIRE(detail::SessionTestFacade::remaining_body_capacity(*session) == 1U);
+    const auto trigger = advance_to_jointless_trigger(*session);
+    NINHO_SIM_REQUIRE(trigger.has_value());
+    NINHO_SIM_REQUIRE(trigger->joint_id == JointId{});
+
+    for (int tick = 0; tick < 3; ++tick) {
+        NINHO_SIM_REQUIRE(session->tick().ok());
+        NINHO_SIM_REQUIRE(find_target_event(
+            *session, DomainEventKind::PieceFractured) == nullptr);
+        NINHO_SIM_REQUIRE(find_target_event(
+            *session, DomainEventKind::PieceFractureTriggered) == nullptr);
+        const auto parent = std::ranges::find_if(
+            session->snapshots(), [](const EntitySnapshot& body) {
+                return body.entity_id == EntityId{110} && body.part_id == PartId{1};
+            });
+        NINHO_SIM_REQUIRE(parent != session->snapshots().end());
+        NINHO_SIM_REQUIRE(std::ranges::count(
+            session->snapshots(), EntityId{110}, &EntitySnapshot::entity_id) == 1);
+        NINHO_SIM_REQUIRE(detail::SessionTestFacade::body_record_count(*session)
+            == body_records_before);
+        NINHO_SIM_REQUIRE(
+            detail::SessionTestFacade::remaining_body_capacity(*session) == 1U);
+    }
+}
+
+NINHO_SIM_TEST("fracture objective cancels a retained physical fracture when its parent disappears")
+{
+    auto session = create_jointless_fracture_session({
+        .exhaust_body_capacity = true,
+        .enable_scoring = true,
+    });
+    constexpr EntityId target_entity{110};
+    constexpr PartId target_part{1};
+    const auto trigger = advance_to_jointless_trigger(*session);
+    NINHO_SIM_REQUIRE(trigger.has_value());
+    NINHO_SIM_REQUIRE(trigger->joint_id == JointId{});
+
+    // First retry proves the capacity gate retained the physical replacement.
+    NINHO_SIM_REQUIRE(session->tick().ok());
+    NINHO_SIM_REQUIRE(find_target_event(
+        *session, DomainEventKind::PieceFractured) == nullptr);
+    NINHO_SIM_REQUIRE(std::ranges::count(
+        session->snapshots(), target_entity,
+        &EntitySnapshot::entity_id) == 1);
+    const std::uint64_t score_before = session->score_state().score;
+
+    NINHO_SIM_REQUIRE(detail::SessionTestFacade::remove_body_for_testing(
+        *session, target_entity, target_part));
+    NINHO_SIM_REQUIRE(session->tick().ok());
+
+    NINHO_SIM_REQUIRE(find_target_event(
+        *session, DomainEventKind::PieceFractured) == nullptr);
+    NINHO_SIM_REQUIRE(std::ranges::none_of(
+        session->events(), [](const DomainEvent& event) {
+            return event.kind == DomainEventKind::ScoreAwarded;
+        }));
+    NINHO_SIM_REQUIRE(session->score_state().score == score_before);
+    NINHO_SIM_REQUIRE(std::ranges::none_of(
+        session->snapshots(), [](const EntitySnapshot& body) {
+            return body.entity_id == EntityId{110};
+    }));
+}
+
+NINHO_SIM_TEST("fracture objective treats a patterned jointed pending as a required physical replacement")
+{
+    auto session = create_jointless_fracture_session({
+        .exhaust_body_capacity = true,
+        .enable_scoring = true,
+        .remove_incident_joints = false,
+    });
+    constexpr EntityId target_entity{110};
+    constexpr PartId target_part{1};
+    const auto trigger = advance_to_jointless_trigger(*session);
+    NINHO_SIM_REQUIRE(trigger.has_value());
+    NINHO_SIM_REQUIRE(trigger->joint_id != JointId{});
+
+    NINHO_SIM_REQUIRE(session->tick().ok());
+    NINHO_SIM_REQUIRE(find_target_event(
+        *session, DomainEventKind::PieceFractured) == nullptr);
+    const std::uint64_t score_before = session->score_state().score;
+    NINHO_SIM_REQUIRE(detail::SessionTestFacade::remove_body_for_testing(
+        *session, target_entity, target_part));
+    NINHO_SIM_REQUIRE(session->tick().ok());
+
+    NINHO_SIM_REQUIRE(find_target_event(
+        *session, DomainEventKind::PieceFractured) == nullptr);
+    NINHO_SIM_REQUIRE(std::ranges::none_of(
+        session->events(), [](const DomainEvent& event) {
+            return event.kind == DomainEventKind::ScoreAwarded;
+        }));
+    NINHO_SIM_REQUIRE(session->score_state().score == score_before);
+    NINHO_SIM_REQUIRE(std::ranges::none_of(
+        session->snapshots(), [](const EntitySnapshot& body) {
+            return body.entity_id == EntityId{110};
+        }));
 }
 
 NINHO_SIM_TEST("fracture objective static authored support cannot emit a fracture ratio")

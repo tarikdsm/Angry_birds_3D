@@ -1,5 +1,9 @@
 # Task 18 — checkpoint de playthroughs determinísticos
 
+> **Histórico superseded pelo resultado final:** o layout aprovado agora usa
+> `fnv1a64:ee2ad0b8c2912aa` e a suíte de fixtures final `all7`. O conteúdo abaixo
+> registra somente o estado de pausa de 21 de julho de 2026.
+
 **Data da pausa:** 21 de julho de 2026
 
 **Branch:** `codex/game-2-0`

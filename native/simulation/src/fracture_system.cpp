@@ -287,12 +287,14 @@ void schedule_joint(Impl& session, JointId joint, EventId cause)
     session.pending_joint_breaks.push_back({joint, cause});
 }
 
+#if defined(NINHO_ENABLE_TEST_FACADES)
 Impl::JointRecord* find_joint(Impl& session, JointId id)
 {
     const auto found = std::ranges::find_if(session.joint_records,
         [&](const Impl::JointRecord& joint) { return joint.snapshot.id == id; });
     return found == session.joint_records.end() ? nullptr : &*found;
 }
+#endif
 
 bool piece_already_scheduled(const Impl& session, EntityId entity, PartId part)
 {
@@ -323,7 +325,7 @@ EventId publish_overload(Impl& session, Impl::JointRecord& joint,
     return overload_id;
 }
 
-EventId publish_piece_fracture_trigger(Impl& session, const Impl::JointRecord& joint,
+EventId publish_piece_fracture_trigger(Impl& session, JointId incident_joint,
     EntityId entity, PartId part, MaterialId material,
     ninho::physics::Vec3 position, double fracture_ratio, EventId prior_cause)
 {
@@ -336,7 +338,7 @@ EventId publish_piece_fracture_trigger(Impl& session, const Impl::JointRecord& j
         .affected_part_id = part,
         .position_m = position,
         .cause_event_id = prior_cause,
-        .joint_id = joint.snapshot.id,
+        .joint_id = incident_joint,
         .material_id = material,
         .fracture_ratio = fracture_ratio,
     });
@@ -345,7 +347,7 @@ EventId publish_piece_fracture_trigger(Impl& session, const Impl::JointRecord& j
 
 void schedule_piece(Impl& session, EntityId entity, PartId part,
     MaterialId material, JointId incident, ninho::physics::Vec3 position,
-    EventId cause_event)
+    EventId cause_event, bool requires_physical_replacement)
 {
     if (piece_already_scheduled(session, entity, part)) {
         return;
@@ -354,7 +356,8 @@ void schedule_piece(Impl& session, EntityId entity, PartId part,
         return;
     }
     session.pending_piece_fractures.push_back(
-        {entity, part, material, incident, cause_event, position});
+        {entity, part, material, incident, cause_event, position,
+            requires_physical_replacement});
 }
 
 }
@@ -391,6 +394,15 @@ void SimulationSession::Impl::apply_pending_fractures_before_step()
     std::vector<PendingPieceFracture> retained;
     for (const PendingPieceFracture& pending : pending_piece_fractures) {
         BodyRecord* parent = find_body(body_records, pending.entity_id, pending.part_id);
+        if (pending.requires_physical_replacement
+            && (parent == nullptr || !parent->fracture_pattern)) {
+            // A free-body fracture was scheduled as an atomic physical
+            // replacement. If the authored parent disappeared while the
+            // request was retained, the replacement can no longer happen and
+            // the historical event-only fallback would publish a false
+            // fracture/score. Cancel this request instead.
+            continue;
+        }
         if (parent != nullptr && parent->fracture_pattern) {
             const auto parent_state = physics.state(parent->physics_handle);
             const MaterialDefinition* material = parent->material_id
@@ -578,17 +590,20 @@ void SimulationSession::Impl::evaluate_fractures_after_step()
             }
             const JointId incident = nearest_incident_joint(
                 *this, body->entity_id, body->part_id, event.position_m);
-            JointRecord* joint = find_joint(*this, incident);
-            if (joint == nullptr) {
+            // A joint can carry the historical event-only fracture semantics,
+            // but a free body must author physical children before it can be
+            // replaced atomically.
+            if (incident == JointId{} && !body->fracture_pattern) {
                 continue;
             }
             const double fracture_ratio =
                 damage->material_damage_energy_j / fracture_energy;
-            const EventId trigger = publish_piece_fracture_trigger(*this, *joint,
+            const EventId trigger = publish_piece_fracture_trigger(*this, incident,
                 body->entity_id, body->part_id, *body->material_id,
                 event.position_m, fracture_ratio, event.id);
             schedule_piece(*this, body->entity_id, body->part_id,
-                *body->material_id, incident, event.position_m, trigger);
+                *body->material_id, incident, event.position_m, trigger,
+                body->fracture_pattern.has_value());
         }
     }
 
@@ -607,10 +622,11 @@ void SimulationSession::Impl::evaluate_fractures_after_step()
         }
         const MaterialId material = body != nullptr && body->material_id
             ? *body->material_id : MaterialId{};
-        const EventId trigger = publish_piece_fracture_trigger(*this, *joint,
+        const EventId trigger = publish_piece_fracture_trigger(*this, incident,
             request.entity_id, request.part_id, material, position, 1.0, {});
         schedule_piece(*this, request.entity_id, request.part_id,
-            material, incident, position, trigger);
+            material, incident, position, trigger,
+            body != nullptr && body->fracture_pattern.has_value());
     }
     piece_fracture_requests_for_testing.clear();
 #endif

@@ -9,6 +9,8 @@
 #include <cstdint>
 #include <memory>
 #include <numbers>
+#include <tuple>
+#include <utility>
 #include <vector>
 
 namespace {
@@ -331,6 +333,677 @@ NINHO_SIM_TEST("score system carries provenance from damaged material into later
     NINHO_SIM_REQUIRE(award != transitions.end());
     NINHO_SIM_REQUIRE(award->root_cause_event_id == EventId{1});
     NINHO_SIM_REQUIRE(award->shot_id == 3U);
+}
+
+NINHO_SIM_TEST("score system propagates rooted physical contact through both dynamic endpoints")
+{
+    constexpr EntityId projectile{1000U};
+    constexpr EntityId first{20U};
+    constexpr EntityId relay{21U};
+    constexpr EntityId target{22U};
+    constexpr EntityId other{23U};
+    constexpr EntityId static_support{30U};
+    constexpr std::array dynamic_entities{
+        first, relay, target, other, projectile};
+
+    detail::ScoreSystem system{scoring(), 4U};
+    const std::array seed{
+        DomainEvent{.id = EventId{1}, .tick = TickIndex{1},
+            .kind = DomainEventKind::BirdLaunched,
+            .entity_id = projectile, .shot_id = 6U},
+        DomainEvent{.id = EventId{2}, .tick = TickIndex{2},
+            .kind = DomainEventKind::DamageApplied,
+            .entity_id = projectile, .affected_entity_id = first},
+    };
+    static_cast<void>(system.consume({.tick = TickIndex{2}, .events = seed,
+        .dynamic_entities = dynamic_entities}));
+
+    const DomainEvent reverse_contact{.id = EventId{3}, .tick = TickIndex{3},
+        .kind = DomainEventKind::DamageApplied,
+        .entity_id = relay, .affected_entity_id = first};
+    static_cast<void>(system.consume({.tick = TickIndex{3},
+        .events = std::span{&reverse_contact, 1U},
+        .dynamic_entities = dynamic_entities}));
+    NINHO_SIM_REQUIRE(system.has_root_for(relay));
+
+    const std::array scored_events{
+        DomainEvent{.id = EventId{4}, .tick = TickIndex{4},
+            .kind = DomainEventKind::DamageApplied,
+            .entity_id = relay, .affected_entity_id = target},
+        DomainEvent{.id = EventId{5}, .tick = TickIndex{4},
+            .kind = DomainEventKind::PieceFractured,
+            .entity_id = target, .affected_entity_id = target},
+        DomainEvent{.id = EventId{6}, .tick = TickIndex{5},
+            .kind = DomainEventKind::DamageApplied,
+            .entity_id = relay, .affected_entity_id = other},
+        DomainEvent{.id = EventId{7}, .tick = TickIndex{5},
+            .kind = DomainEventKind::PieceFractured,
+            .entity_id = other, .affected_entity_id = other},
+    };
+    const std::array candidates{
+        detail::ScoringCandidate{detail::ScoringIdentity::material(
+            target, PartId{1U}), EventId{5}, 100U},
+        detail::ScoringCandidate{detail::ScoringIdentity::material(
+            other, PartId{1U}), EventId{7}, 100U},
+    };
+    const auto transitions = system.consume({.tick = TickIndex{5},
+        .events = scored_events, .candidates = candidates,
+        .dynamic_entities = dynamic_entities});
+    std::vector<detail::ScoreTransition> awards;
+    std::ranges::copy_if(transitions, std::back_inserter(awards),
+        [](const auto& value) {
+            return value.kind == detail::ScoreTransitionKind::Awarded;
+        });
+    NINHO_SIM_REQUIRE(awards.size() == 2U);
+    NINHO_SIM_REQUIRE(awards[0].root_cause_event_id == EventId{1});
+    NINHO_SIM_REQUIRE(awards[1].root_cause_event_id == EventId{1});
+    NINHO_SIM_REQUIRE(awards[0].multiplier_percent == 100U);
+    NINHO_SIM_REQUIRE(awards[1].multiplier_percent == 110U);
+    NINHO_SIM_REQUIRE(system.state().current_score == 210U);
+
+    const DomainEvent static_reverse{.id = EventId{8}, .tick = TickIndex{6},
+        .kind = DomainEventKind::DamageApplied,
+        .entity_id = static_support, .affected_entity_id = first};
+    static_cast<void>(system.consume({.tick = TickIndex{6},
+        .events = std::span{&static_reverse, 1U},
+        .dynamic_entities = dynamic_entities}));
+    NINHO_SIM_REQUIRE(!system.has_root_for(static_support));
+
+    detail::ScoreSystem rootless{scoring(), 4U};
+    static_cast<void>(rootless.consume({.tick = TickIndex{3},
+        .events = std::span{&reverse_contact, 1U},
+        .dynamic_entities = dynamic_entities}));
+    NINHO_SIM_REQUIRE(!rootless.has_root_for(relay));
+}
+
+NINHO_SIM_TEST("score system propagates one launch root across a contact component without damage")
+{
+    constexpr EntityId source{1000U};
+    constexpr EntityId relay{20U};
+    constexpr EntityId target{21U};
+    constexpr std::array dynamic_entities{relay, target, source};
+    constexpr std::array contact_entities{
+        std::pair{source, relay}, std::pair{relay, target}};
+    const std::array events{
+        DomainEvent{.id = EventId{1}, .tick = TickIndex{1},
+            .kind = DomainEventKind::BirdLaunched,
+            .entity_id = source, .shot_id = 7U},
+        DomainEvent{.id = EventId{2}, .tick = TickIndex{1},
+            .kind = DomainEventKind::PieceFractured,
+            .affected_entity_id = target, .affected_part_id = PartId{1U}},
+    };
+    const std::array candidates{detail::ScoringCandidate{
+        detail::ScoringIdentity::material(target, PartId{1U}), EventId{2}, 160U}};
+
+    detail::ScoreSystem system{scoring(), 4U};
+    const auto transitions = system.consume({
+        .tick = TickIndex{1},
+        .events = events,
+        .candidates = candidates,
+        .dynamic_entities = dynamic_entities,
+        .dynamic_physical_edges = contact_entities,
+    });
+    const auto award = std::ranges::find(
+        transitions, detail::ScoreTransitionKind::Awarded,
+        &detail::ScoreTransition::kind);
+    NINHO_SIM_REQUIRE(award != transitions.end());
+    NINHO_SIM_REQUIRE(award->root_cause_event_id == EventId{1});
+    NINHO_SIM_REQUIRE(award->shot_id == 7U);
+    NINHO_SIM_REQUIRE(system.has_root_for(relay));
+    NINHO_SIM_REQUIRE(system.has_root_for(target));
+}
+
+NINHO_SIM_TEST("score system contact component propagation is pair order independent")
+{
+    constexpr EntityId source{1000U};
+    constexpr EntityId first{20U};
+    constexpr EntityId second{21U};
+    constexpr EntityId target{22U};
+    constexpr std::array dynamic_entities{first, second, target, source};
+    const auto run = [&](std::span<const std::pair<EntityId, EntityId>> contacts) {
+        detail::ScoreSystem system{scoring(), 4U};
+        const std::array events{
+            DomainEvent{.id = EventId{1}, .tick = TickIndex{1},
+                .kind = DomainEventKind::BirdLaunched,
+                .entity_id = source, .shot_id = 9U},
+            DomainEvent{.id = EventId{2}, .tick = TickIndex{1},
+                .kind = DomainEventKind::PieceFractured,
+                .affected_entity_id = target, .affected_part_id = PartId{1U}},
+        };
+        const std::array candidates{detail::ScoringCandidate{
+            detail::ScoringIdentity::material(target, PartId{1U}),
+            EventId{2}, 160U}};
+        const auto transitions = system.consume({
+            .tick = TickIndex{1},
+            .events = events,
+            .candidates = candidates,
+            .dynamic_entities = dynamic_entities,
+            .dynamic_physical_edges = contacts,
+        });
+        const auto award = std::ranges::find(
+            transitions, detail::ScoreTransitionKind::Awarded,
+            &detail::ScoreTransition::kind);
+        NINHO_SIM_REQUIRE(award != transitions.end());
+        return std::tuple{award->root_cause_event_id, award->shot_id,
+            award->awarded_points,
+            std::vector<detail::ScoreSystem::EntityRoot>{
+                system.entity_roots().begin(), system.entity_roots().end()}};
+    };
+    const std::array canonical{
+        std::pair{source, first}, std::pair{first, second},
+        std::pair{second, target}};
+    const std::array permuted{
+        std::pair{target, second}, std::pair{second, first},
+        std::pair{first, source}, std::pair{second, target}};
+    NINHO_SIM_REQUIRE(run(canonical) == run(permuted));
+}
+
+NINHO_SIM_TEST("score system leaves a contact component rootless on launch conflict")
+{
+    constexpr EntityId first_source{1000U};
+    constexpr EntityId relay{20U};
+    constexpr EntityId second_source{1001U};
+    constexpr std::array dynamic_entities{relay, first_source, second_source};
+    constexpr std::array contact_entities{
+        std::pair{first_source, relay}, std::pair{relay, second_source}};
+    const std::array events{
+        DomainEvent{.id = EventId{1}, .tick = TickIndex{1},
+            .kind = DomainEventKind::BirdLaunched,
+            .entity_id = first_source, .shot_id = 1U},
+        DomainEvent{.id = EventId{2}, .tick = TickIndex{1},
+            .kind = DomainEventKind::BirdLaunched,
+            .entity_id = second_source, .shot_id = 2U},
+        DomainEvent{.id = EventId{3}, .tick = TickIndex{1},
+            .kind = DomainEventKind::PieceFractured,
+            .affected_entity_id = relay, .affected_part_id = PartId{1U}},
+    };
+    const std::array candidates{detail::ScoringCandidate{
+        detail::ScoringIdentity::material(relay, PartId{1U}), EventId{3}, 160U}};
+
+    detail::ScoreSystem system{scoring(), 4U};
+    const auto transitions = system.consume({
+        .tick = TickIndex{1},
+        .events = events,
+        .candidates = candidates,
+        .dynamic_entities = dynamic_entities,
+        .dynamic_physical_edges = contact_entities,
+    });
+    const auto award = std::ranges::find(
+        transitions, detail::ScoreTransitionKind::Awarded,
+        &detail::ScoreTransition::kind);
+    NINHO_SIM_REQUIRE(award != transitions.end());
+    NINHO_SIM_REQUIRE(award->root_cause_event_id == EventId{});
+    NINHO_SIM_REQUIRE(award->shot_id == 0U);
+    NINHO_SIM_REQUIRE(!system.has_root_for(relay));
+}
+
+NINHO_SIM_TEST("score system preserves reciprocal launch roots and leaves the conflicted relay rootless")
+{
+    constexpr EntityId relay{20U};
+    constexpr EntityId first_projectile{1000U};
+    constexpr EntityId second_projectile{1001U};
+    constexpr std::array dynamic_entities{
+        relay, first_projectile, second_projectile};
+
+    struct Outcome {
+        std::pair<EventId, std::uint64_t> first_root;
+        std::pair<EventId, std::uint64_t> second_root;
+        std::pair<EventId, std::uint64_t> relay_root;
+        std::pair<EventId, std::uint64_t> relay_award;
+
+        bool operator==(const Outcome&) const = default;
+    };
+
+    const auto run = [&](bool reverse_damage_ids) {
+        detail::ScoreSystem system{scoring(), 4U};
+        const DomainEvent first_damage{
+            .id = EventId{reverse_damage_ids ? 4U : 3U},
+            .tick = TickIndex{1},
+            .kind = DomainEventKind::DamageApplied,
+            .entity_id = first_projectile,
+            .affected_entity_id = second_projectile,
+        };
+        const DomainEvent second_damage{
+            .id = EventId{reverse_damage_ids ? 3U : 4U},
+            .tick = TickIndex{1},
+            .kind = DomainEventKind::DamageApplied,
+            .entity_id = second_projectile,
+            .affected_entity_id = first_projectile,
+        };
+        const std::array events{
+            DomainEvent{.id = EventId{1}, .tick = TickIndex{1},
+                .kind = DomainEventKind::BirdLaunched,
+                .entity_id = first_projectile, .shot_id = 11U},
+            DomainEvent{.id = EventId{2}, .tick = TickIndex{1},
+                .kind = DomainEventKind::BirdLaunched,
+                .entity_id = second_projectile, .shot_id = 22U},
+            first_damage,
+            second_damage,
+            DomainEvent{.id = EventId{5}, .tick = TickIndex{1},
+                .kind = DomainEventKind::PieceFractured,
+                .affected_entity_id = relay, .affected_part_id = PartId{1U}},
+        };
+        const std::array physical_edges{
+            std::pair{first_projectile, relay},
+            std::pair{relay, second_projectile},
+        };
+        const detail::ScoringCandidate candidate{
+            detail::ScoringIdentity::material(relay, PartId{1U}),
+            EventId{5}, 160U};
+        const auto transitions = system.consume({
+            .tick = TickIndex{1},
+            .events = events,
+            .candidates = std::span{&candidate, 1U},
+            .dynamic_entities = dynamic_entities,
+            .dynamic_physical_edges = physical_edges,
+        });
+
+        const auto root_of = [&](EntityId entity) {
+            const auto found = std::ranges::find(system.entity_roots(), entity,
+                &detail::ScoreSystem::EntityRoot::entity_id);
+            return found == system.entity_roots().end()
+                ? std::pair{EventId{}, std::uint64_t{0}}
+                : std::pair{found->root_event_id, found->shot_id};
+        };
+        const auto award = std::ranges::find(transitions,
+            detail::ScoreTransitionKind::Awarded,
+            &detail::ScoreTransition::kind);
+        NINHO_SIM_REQUIRE(award != transitions.end());
+        return Outcome{
+            .first_root = root_of(first_projectile),
+            .second_root = root_of(second_projectile),
+            .relay_root = root_of(relay),
+            .relay_award = {award->root_cause_event_id, award->shot_id},
+        };
+    };
+
+    const Outcome expected{
+        .first_root = {EventId{1}, 11U},
+        .second_root = {EventId{2}, 22U},
+        .relay_root = {EventId{}, 0U},
+        .relay_award = {EventId{}, 0U},
+    };
+    const Outcome forward = run(false);
+    const Outcome reverse = run(true);
+    NINHO_SIM_REQUIRE(forward == expected);
+    NINHO_SIM_REQUIRE(reverse == expected);
+    NINHO_SIM_REQUIRE(forward == reverse);
+}
+
+NINHO_SIM_TEST("score system one way damage supersedes its target without contaminating an isolated relay")
+{
+    constexpr EntityId relay{20U};
+    constexpr EntityId first_projectile{1000U};
+    constexpr EntityId second_projectile{1001U};
+    constexpr std::array dynamic_entities{
+        relay, first_projectile, second_projectile};
+    const std::array events{
+        DomainEvent{.id = EventId{1}, .tick = TickIndex{1},
+            .kind = DomainEventKind::BirdLaunched,
+            .entity_id = first_projectile, .shot_id = 11U},
+        DomainEvent{.id = EventId{2}, .tick = TickIndex{1},
+            .kind = DomainEventKind::BirdLaunched,
+            .entity_id = second_projectile, .shot_id = 22U},
+        DomainEvent{.id = EventId{3}, .tick = TickIndex{1},
+            .kind = DomainEventKind::DamageApplied,
+            .entity_id = first_projectile,
+            .affected_entity_id = second_projectile},
+    };
+    const std::array physical_edges{
+        std::pair{first_projectile, second_projectile},
+    };
+
+    detail::ScoreSystem system{scoring(), 4U};
+    static_cast<void>(system.consume({
+        .tick = TickIndex{1},
+        .events = events,
+        .dynamic_entities = dynamic_entities,
+        .dynamic_physical_edges = physical_edges,
+    }));
+
+    const auto root_of = [&](EntityId entity) {
+        const auto found = std::ranges::find(system.entity_roots(), entity,
+            &detail::ScoreSystem::EntityRoot::entity_id);
+        return found == system.entity_roots().end()
+            ? std::pair{EventId{}, std::uint64_t{0}}
+            : std::pair{found->root_event_id, found->shot_id};
+    };
+    const std::pair first_expected{EventId{1}, std::uint64_t{11}};
+    const std::pair second_expected{EventId{1}, std::uint64_t{11}};
+    const std::pair relay_expected{EventId{}, std::uint64_t{0}};
+    NINHO_SIM_REQUIRE(root_of(first_projectile) == first_expected);
+    NINHO_SIM_REQUIRE(root_of(second_projectile) == second_expected);
+    NINHO_SIM_REQUIRE(root_of(relay) == relay_expected);
+}
+
+NINHO_SIM_TEST("score system contact components exclude static endpoints and preserve empty input")
+{
+    constexpr EntityId source{1000U};
+    constexpr EntityId static_target{30U};
+    constexpr EntityId isolated_target{31U};
+    constexpr std::array dynamic_entities{isolated_target, source};
+    constexpr std::array static_contact{
+        std::pair{source, static_target}};
+    const std::pair rootless{EventId{}, std::uint64_t{0}};
+    const auto run = [&](EntityId target,
+        std::span<const std::pair<EntityId, EntityId>> contacts) {
+        detail::ScoreSystem system{scoring(), 4U};
+        const std::array events{
+            DomainEvent{.id = EventId{1}, .tick = TickIndex{1},
+                .kind = DomainEventKind::BirdLaunched,
+                .entity_id = source, .shot_id = 4U},
+            DomainEvent{.id = EventId{2}, .tick = TickIndex{1},
+                .kind = DomainEventKind::PieceFractured,
+                .affected_entity_id = target, .affected_part_id = PartId{1U}},
+        };
+        const std::array candidates{detail::ScoringCandidate{
+            detail::ScoringIdentity::material(target, PartId{1U}),
+            EventId{2}, 160U}};
+        const auto transitions = system.consume({
+            .tick = TickIndex{1},
+            .events = events,
+            .candidates = candidates,
+            .dynamic_entities = dynamic_entities,
+            .dynamic_physical_edges = contacts,
+        });
+        const auto award = std::ranges::find(
+            transitions, detail::ScoreTransitionKind::Awarded,
+            &detail::ScoreTransition::kind);
+        NINHO_SIM_REQUIRE(award != transitions.end());
+        return std::pair{award->root_cause_event_id, award->shot_id};
+    };
+    NINHO_SIM_REQUIRE(run(static_target, static_contact) == rootless);
+    NINHO_SIM_REQUIRE(run(isolated_target, {}) == rootless);
+}
+
+NINHO_SIM_TEST("score system propagates a launch root through an active joint and a contact")
+{
+    constexpr EntityId projectile{1000U};
+    constexpr EntityId glass{20U};
+    constexpr EntityId beam{21U};
+    constexpr EntityId latch{22U};
+    constexpr std::array dynamic_entities{glass, beam, latch, projectile};
+
+    detail::ScoreSystem system{scoring(), 4U};
+    const std::array seed{
+        DomainEvent{.id = EventId{1}, .tick = TickIndex{1},
+            .kind = DomainEventKind::BirdLaunched,
+            .entity_id = projectile, .shot_id = 8U},
+        DomainEvent{.id = EventId{2}, .tick = TickIndex{1},
+            .kind = DomainEventKind::DamageApplied,
+            .entity_id = projectile, .affected_entity_id = glass},
+    };
+    static_cast<void>(system.consume({
+        .tick = TickIndex{1},
+        .events = seed,
+        .dynamic_entities = dynamic_entities,
+    }));
+
+    // The first edge represents the active glass-beam joint. The second is
+    // the beam-latch contact observed by the physics step.
+    constexpr std::array physical_edges{
+        std::pair{glass, beam}, std::pair{beam, latch}};
+    const std::array events{DomainEvent{
+        .id = EventId{3}, .tick = TickIndex{2},
+        .kind = DomainEventKind::PieceFractured,
+        .affected_entity_id = latch, .affected_part_id = PartId{1U}}};
+    const std::array candidates{detail::ScoringCandidate{
+        detail::ScoringIdentity::material(latch, PartId{1U}), EventId{3}, 160U}};
+    const auto transitions = system.consume({
+        .tick = TickIndex{2},
+        .events = events,
+        .candidates = candidates,
+        .dynamic_entities = dynamic_entities,
+        .dynamic_physical_edges = physical_edges,
+    });
+
+    const auto award = std::ranges::find(
+        transitions, detail::ScoreTransitionKind::Awarded,
+        &detail::ScoreTransition::kind);
+    NINHO_SIM_REQUIRE(award != transitions.end());
+    NINHO_SIM_REQUIRE(award->root_cause_event_id == EventId{1});
+    NINHO_SIM_REQUIRE(award->shot_id == 8U);
+    NINHO_SIM_REQUIRE(system.has_root_for(beam));
+    NINHO_SIM_REQUIRE(system.has_root_for(latch));
+}
+
+NINHO_SIM_TEST("score system excludes inactive joints and static joint endpoints")
+{
+    constexpr EntityId projectile{1000U};
+    constexpr EntityId glass{20U};
+    constexpr EntityId beam{21U};
+    constexpr EntityId latch{22U};
+    constexpr EntityId static_support{30U};
+    constexpr std::array dynamic_entities{glass, beam, latch, projectile};
+    const std::pair rootless{EventId{}, std::uint64_t{0}};
+
+    const auto run = [&](std::span<const std::pair<EntityId, EntityId>> edges) {
+        detail::ScoreSystem system{scoring(), 4U};
+        const std::array seed{
+            DomainEvent{.id = EventId{1}, .tick = TickIndex{1},
+                .kind = DomainEventKind::BirdLaunched,
+                .entity_id = projectile, .shot_id = 8U},
+            DomainEvent{.id = EventId{2}, .tick = TickIndex{1},
+                .kind = DomainEventKind::DamageApplied,
+                .entity_id = projectile, .affected_entity_id = glass},
+        };
+        static_cast<void>(system.consume({
+            .tick = TickIndex{1},
+            .events = seed,
+            .dynamic_entities = dynamic_entities,
+        }));
+        const std::array events{DomainEvent{
+            .id = EventId{3}, .tick = TickIndex{2},
+            .kind = DomainEventKind::PieceFractured,
+            .affected_entity_id = latch, .affected_part_id = PartId{1U}}};
+        const std::array candidates{detail::ScoringCandidate{
+            detail::ScoringIdentity::material(latch, PartId{1U}),
+            EventId{3}, 160U}};
+        const auto transitions = system.consume({
+            .tick = TickIndex{2},
+            .events = events,
+            .candidates = candidates,
+            .dynamic_entities = dynamic_entities,
+            .dynamic_physical_edges = edges,
+        });
+        const auto award = std::ranges::find(
+            transitions, detail::ScoreTransitionKind::Awarded,
+            &detail::ScoreTransition::kind);
+        NINHO_SIM_REQUIRE(award != transitions.end());
+        return std::pair{award->root_cause_event_id, award->shot_id};
+    };
+
+    // An inactive joint contributes no edge, leaving only the rootless
+    // beam-latch contact component.
+    constexpr std::array inactive_joint_edges{std::pair{beam, latch}};
+    NINHO_SIM_REQUIRE(run(inactive_joint_edges) == rootless);
+
+    // Even if a malformed collector supplies a static endpoint, the dynamic
+    // entity filter must prevent it from bridging into the contact component.
+    constexpr std::array static_joint_edges{
+        std::pair{glass, static_support}, std::pair{static_support, beam},
+        std::pair{beam, latch}};
+    NINHO_SIM_REQUIRE(run(static_joint_edges) == rootless);
+}
+
+NINHO_SIM_TEST("score system propagates a rooted overload through historical joint endpoints")
+{
+    constexpr EntityId projectile{1000U};
+    constexpr EntityId glass{20U};
+    constexpr EntityId beam{21U};
+    constexpr EntityId latch{22U};
+    constexpr std::array dynamic_entities{glass, beam, latch, projectile};
+    constexpr std::array joint_endpoints{
+        detail::JointEntityEndpoints{JointId{27U}, glass, beam}};
+    constexpr std::array contact_edges{std::pair{beam, latch}};
+    const std::array events{
+        DomainEvent{.id = EventId{1}, .tick = TickIndex{1},
+            .kind = DomainEventKind::BirdLaunched,
+            .entity_id = projectile, .shot_id = 8U},
+        DomainEvent{.id = EventId{2}, .tick = TickIndex{1},
+            .kind = DomainEventKind::JointOverloaded,
+            .cause_event_id = EventId{1}, .joint_id = JointId{27U}},
+        DomainEvent{.id = EventId{3}, .tick = TickIndex{1},
+            .kind = DomainEventKind::PieceFractured,
+            .affected_entity_id = latch, .affected_part_id = PartId{1U}},
+    };
+    const std::array candidates{detail::ScoringCandidate{
+        detail::ScoringIdentity::material(latch, PartId{1U}), EventId{3}, 160U}};
+
+    detail::ScoreSystem system{scoring(), 4U};
+    const auto transitions = system.consume({
+        .tick = TickIndex{1},
+        .events = events,
+        .candidates = candidates,
+        .dynamic_entities = dynamic_entities,
+        .dynamic_physical_edges = contact_edges,
+        .joint_entity_endpoints = joint_endpoints,
+    });
+    const auto award = std::ranges::find(
+        transitions, detail::ScoreTransitionKind::Awarded,
+        &detail::ScoreTransition::kind);
+    NINHO_SIM_REQUIRE(award != transitions.end());
+    NINHO_SIM_REQUIRE(award->root_cause_event_id == EventId{1});
+    NINHO_SIM_REQUIRE(award->shot_id == 8U);
+    NINHO_SIM_REQUIRE(system.has_root_for(glass));
+    NINHO_SIM_REQUIRE(system.has_root_for(beam));
+    NINHO_SIM_REQUIRE(system.has_root_for(latch));
+}
+
+NINHO_SIM_TEST("score system uses broken joint history without overwriting a conflicting root")
+{
+    constexpr EntityId first_projectile{1000U};
+    constexpr EntityId second_projectile{1001U};
+    constexpr EntityId first_endpoint{20U};
+    constexpr EntityId conflicting_endpoint{21U};
+    constexpr std::array dynamic_entities{
+        first_endpoint, conflicting_endpoint, first_projectile, second_projectile};
+    constexpr std::array joint_endpoints{detail::JointEntityEndpoints{
+        JointId{35U}, first_endpoint, conflicting_endpoint}};
+    const std::array seed{
+        DomainEvent{.id = EventId{1}, .tick = TickIndex{1},
+            .kind = DomainEventKind::BirdLaunched,
+            .entity_id = first_projectile, .shot_id = 1U},
+        DomainEvent{.id = EventId{2}, .tick = TickIndex{1},
+            .kind = DomainEventKind::BirdLaunched,
+            .entity_id = second_projectile, .shot_id = 2U},
+        DomainEvent{.id = EventId{3}, .tick = TickIndex{1},
+            .kind = DomainEventKind::DamageApplied,
+            .entity_id = second_projectile,
+            .affected_entity_id = conflicting_endpoint},
+    };
+    detail::ScoreSystem system{scoring(), 4U};
+    static_cast<void>(system.consume({
+        .tick = TickIndex{1},
+        .events = seed,
+        .dynamic_entities = dynamic_entities,
+    }));
+
+    const DomainEvent broken{
+        .id = EventId{4}, .tick = TickIndex{2},
+        .kind = DomainEventKind::JointBroken,
+        .cause_event_id = EventId{1}, .joint_id = JointId{35U}};
+    static_cast<void>(system.consume({
+        .tick = TickIndex{2},
+        .events = std::span{&broken, 1U},
+        .dynamic_entities = dynamic_entities,
+        .joint_entity_endpoints = joint_endpoints,
+    }));
+
+    const auto root_of = [&](EntityId entity) {
+        const auto found = std::ranges::find(
+            system.entity_roots(), entity,
+            &detail::ScoreSystem::EntityRoot::entity_id);
+        NINHO_SIM_REQUIRE(found != system.entity_roots().end());
+        return std::pair{found->root_event_id, found->shot_id};
+    };
+    const std::pair first_root{EventId{1}, std::uint64_t{1}};
+    const std::pair second_root{EventId{2}, std::uint64_t{2}};
+    NINHO_SIM_REQUIRE(root_of(first_endpoint) == first_root);
+    NINHO_SIM_REQUIRE(root_of(conflicting_endpoint) == second_root);
+}
+
+NINHO_SIM_TEST("score system ignores rootless unknown and static joint endpoints")
+{
+    constexpr EntityId projectile{1000U};
+    constexpr EntityId dynamic_endpoint{20U};
+    constexpr EntityId rootless_first{21U};
+    constexpr EntityId rootless_second{22U};
+    constexpr EntityId unknown_target{23U};
+    constexpr EntityId static_endpoint{30U};
+    constexpr std::array dynamic_entities{dynamic_endpoint, rootless_first,
+        rootless_second, unknown_target, projectile};
+    constexpr std::array joint_endpoints{
+        detail::JointEntityEndpoints{
+            JointId{27U}, dynamic_endpoint, static_endpoint},
+        detail::JointEntityEndpoints{
+            JointId{28U}, rootless_first, rootless_second},
+    };
+    const std::array events{
+        DomainEvent{.id = EventId{1}, .tick = TickIndex{1},
+            .kind = DomainEventKind::BirdLaunched,
+            .entity_id = projectile, .shot_id = 3U},
+        DomainEvent{.id = EventId{2}, .tick = TickIndex{1},
+            .kind = DomainEventKind::JointOverloaded,
+            .cause_event_id = EventId{1}, .joint_id = JointId{27U}},
+        DomainEvent{.id = EventId{3}, .tick = TickIndex{1},
+            .kind = DomainEventKind::JointBroken,
+            .joint_id = JointId{28U}},
+        DomainEvent{.id = EventId{4}, .tick = TickIndex{1},
+            .kind = DomainEventKind::JointBroken,
+            .affected_entity_id = unknown_target,
+            .cause_event_id = EventId{1}, .joint_id = JointId{999U}},
+    };
+
+    detail::ScoreSystem system{scoring(), 4U};
+    static_cast<void>(system.consume({
+        .tick = TickIndex{1},
+        .events = events,
+        .dynamic_entities = dynamic_entities,
+        .joint_entity_endpoints = joint_endpoints,
+    }));
+
+    NINHO_SIM_REQUIRE(system.has_root_for(dynamic_endpoint));
+    NINHO_SIM_REQUIRE(!system.has_root_for(static_endpoint));
+    NINHO_SIM_REQUIRE(!system.has_root_for(rootless_first));
+    NINHO_SIM_REQUIRE(!system.has_root_for(rootless_second));
+    NINHO_SIM_REQUIRE(!system.has_root_for(unknown_target));
+}
+
+NINHO_SIM_TEST("score system does not reverse propagate explicitly caused dynamic damage")
+{
+    constexpr EntityId first_projectile{1000U};
+    constexpr EntityId external_projectile{1001U};
+    constexpr EntityId target{20U};
+    constexpr EntityId relay{21U};
+    constexpr std::array dynamic_entities{
+        target, relay, first_projectile, external_projectile};
+    detail::ScoreSystem system{scoring(), 4U};
+    const std::array seed{
+        DomainEvent{.id = EventId{1}, .tick = TickIndex{1},
+            .kind = DomainEventKind::BirdLaunched,
+            .entity_id = first_projectile, .shot_id = 1U},
+        DomainEvent{.id = EventId{2}, .tick = TickIndex{2},
+            .kind = DomainEventKind::DamageApplied,
+            .entity_id = first_projectile, .affected_entity_id = target},
+        DomainEvent{.id = EventId{3}, .tick = TickIndex{3},
+            .kind = DomainEventKind::BirdLaunched,
+            .entity_id = external_projectile, .shot_id = 2U},
+    };
+    static_cast<void>(system.consume({.tick = TickIndex{3}, .events = seed,
+        .dynamic_entities = dynamic_entities}));
+
+    const DomainEvent externally_caused{
+        .id = EventId{4}, .tick = TickIndex{4},
+        .kind = DomainEventKind::DamageApplied,
+        .entity_id = relay, .affected_entity_id = target,
+        .cause_event_id = EventId{3},
+    };
+    static_cast<void>(system.consume({.tick = TickIndex{4},
+        .events = std::span{&externally_caused, 1U},
+        .dynamic_entities = dynamic_entities}));
+
+    NINHO_SIM_REQUIRE(!system.has_root_for(relay));
 }
 
 NINHO_SIM_TEST("score system resolves same tick provenance before awards for every permutation")

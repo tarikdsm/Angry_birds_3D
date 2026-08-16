@@ -27,6 +27,51 @@ detail::DamageBody pig_body()
         .enemy_archetype_id = EnemyArchetypeId{2}, .mass_kg = 65.0};
 }
 
+void require_published_damage_transition_inherits(bool bounds_exit)
+{
+    const MaterialCatalog materials{.schema_version = 2, .source_schema_version = 2};
+    const auto archetypes = pig_catalog();
+    constexpr EventId burst_event{77U};
+    const detail::ExternalDamage external{
+        .cause_entity_id = EntityId{3059U},
+        .cause_part_id = PartId{1U},
+        .target_entity_id = EntityId{200U},
+        .target_part_id = PartId{1U},
+        .position_m = {17.0F, 0.5F, -5.0F},
+        .normal_cause_to_target = {0.0F, 0.0F, -1.0F},
+        .energy_j = 2'000.0,
+        .cause_event_id = burst_event,
+    };
+    detail::DamageSystem system;
+    const auto damaged = system.process(materials, archetypes,
+        std::array{pig_body()}, std::array<detail::DamageContact, 0>{},
+        std::array{external});
+    NINHO_SIM_REQUIRE(damaged.size() == 1U);
+    NINHO_SIM_REQUIRE(damaged.front().kind
+        == detail::DamageOutcomeKind::DamageApplied);
+    NINHO_SIM_REQUIRE(damaged.front().cause_event_id == burst_event);
+    constexpr EventId published_damage_event{78U};
+    NINHO_SIM_REQUIRE(system.record_causal_damage_event(
+        external.target_entity_id, external.target_part_id,
+        published_damage_event));
+
+    auto transitioned = pig_body();
+    transitioned.bounds_exit = bounds_exit;
+    transitioned.ejected = !bounds_exit;
+    transitioned.transform.position = {4.0F, 0.0F, 0.0F};
+    transitioned.linear_velocity_m_s = {3.0F, 0.0F, 0.0F};
+    const auto neutralized = system.process(materials, archetypes,
+        std::array{transitioned}, std::array<detail::DamageContact, 0>{});
+    NINHO_SIM_REQUIRE(neutralized.size() == 1U);
+    NINHO_SIM_REQUIRE(neutralized.front().kind
+        == detail::DamageOutcomeKind::EntityNeutralized);
+    NINHO_SIM_REQUIRE(neutralized.front().neutralization_cause
+        == (bounds_exit ? NeutralizationCause::BoundsExit
+                        : NeutralizationCause::Ejection));
+    NINHO_SIM_REQUIRE(neutralized.front().cause_event_id
+        == published_damage_event);
+}
+
 }
 
 NINHO_SIM_TEST("pig damage raw specific energy threshold and cap are exact")
@@ -245,6 +290,7 @@ NINHO_SIM_TEST("pig damage uniform world exit uses append only BoundsExit cause"
     NINHO_SIM_REQUIRE(first.size() == 1U);
     NINHO_SIM_REQUIRE(first.front().kind == detail::DamageOutcomeKind::EntityNeutralized);
     NINHO_SIM_REQUIRE(first.front().neutralization_cause == NeutralizationCause::BoundsExit);
+    NINHO_SIM_REQUIRE(first.front().cause_event_id == EventId{});
     NINHO_SIM_REQUIRE(uniform.process(
         materials, archetypes, std::array{exited}, std::array<detail::DamageContact, 0>{}).empty());
 
@@ -258,6 +304,95 @@ NINHO_SIM_TEST("pig damage uniform world exit uses append only BoundsExit cause"
     NINHO_SIM_REQUIRE(radial_outcome.size() == 1U);
     NINHO_SIM_REQUIRE(radial_outcome.front().neutralization_cause
         == NeutralizationCause::Ejection);
+    NINHO_SIM_REQUIRE(radial_outcome.front().cause_event_id == EventId{});
+}
+
+NINHO_SIM_TEST("pig damage bounds exit inherits the last published damage event")
+{
+    require_published_damage_transition_inherits(true);
+}
+
+NINHO_SIM_TEST("pig damage ejection inherits the last published damage event")
+{
+    require_published_damage_transition_inherits(false);
+}
+
+NINHO_SIM_TEST("pig damage never reuses an external receipt after newer contact damage")
+{
+    const MaterialCatalog materials{.schema_version = 2, .source_schema_version = 2};
+    const auto archetypes = pig_catalog();
+    const detail::DamageBody source{
+        .entity_id = EntityId{99U}, .part_id = PartId{1U}, .mass_kg = 20.0};
+    const std::array stable_bodies{source, pig_body()};
+    const detail::ExternalDamage external{
+        .cause_entity_id = EntityId{77U},
+        .cause_part_id = PartId{1U},
+        .target_entity_id = EntityId{200U},
+        .target_part_id = PartId{1U},
+        .normal_cause_to_target = {0.0F, 1.0F, 0.0F},
+        .energy_j = 65.0 * 20.0,
+        .cause_event_id = EventId{51U},
+    };
+    const detail::DamageContact contact{
+        .a_entity_id = source.entity_id,
+        .a_part_id = source.part_id,
+        .b_entity_id = EntityId{200U},
+        .b_part_id = PartId{1U},
+        .normal_a_to_b = {1.0F, 0.0F, 0.0F},
+        .normal_speed_m_s = 20.0,
+        .effective_mass_kg = 6.5,
+    };
+
+    for (const bool bounds_exit : {false, true}) {
+        detail::DamageSystem system;
+        NINHO_SIM_REQUIRE(system.process(materials, archetypes,
+            stable_bodies, {}, std::span{&external, 1U}).size() == 1U);
+        const auto contacted = system.process(materials, archetypes,
+            stable_bodies, std::span{&contact, 1U});
+        NINHO_SIM_REQUIRE(contacted.size() == 1U);
+        NINHO_SIM_REQUIRE(contacted.front().kind
+            == detail::DamageOutcomeKind::DamageApplied);
+        constexpr EventId published_contact_event{80U};
+        NINHO_SIM_REQUIRE(system.record_causal_damage_event(
+            EntityId{200U}, PartId{1U}, published_contact_event));
+
+        auto exited = pig_body();
+        exited.bounds_exit = bounds_exit;
+        exited.ejected = !bounds_exit;
+        exited.transform.position = {4.0F, 0.0F, 0.0F};
+        exited.linear_velocity_m_s = {3.0F, 0.0F, 0.0F};
+        const auto neutralized = system.process(materials, archetypes,
+            std::array{exited}, {});
+        NINHO_SIM_REQUIRE(neutralized.size() == 1U);
+        NINHO_SIM_REQUIRE(neutralized.front().cause_event_id
+            == published_contact_event);
+    }
+}
+
+NINHO_SIM_TEST("pig damage causal anchor accepts only newer published damage event ids")
+{
+    const MaterialCatalog materials{.schema_version = 2, .source_schema_version = 2};
+    const auto archetypes = pig_catalog();
+    detail::DamageSystem system;
+    const std::array bodies{pig_body()};
+    NINHO_SIM_REQUIRE(system.process(materials, archetypes, bodies, {}).empty());
+
+    NINHO_SIM_REQUIRE(system.record_causal_damage_event(
+        EntityId{200U}, PartId{1U}, EventId{70U}));
+    NINHO_SIM_REQUIRE(!system.record_causal_damage_event(
+        EntityId{200U}, PartId{1U}, EventId{69U}));
+    NINHO_SIM_REQUIRE(!system.record_causal_damage_event(
+        EntityId{200U}, PartId{1U}, EventId{}));
+    const auto anchored = system.state(EntityId{200U}, PartId{1U});
+    NINHO_SIM_REQUIRE(anchored.has_value());
+    NINHO_SIM_REQUIRE(anchored->last_causal_damage_event_id == EventId{70U});
+
+    auto exited = pig_body();
+    exited.bounds_exit = true;
+    const auto neutralized = system.process(
+        materials, archetypes, std::array{exited}, {});
+    NINHO_SIM_REQUIRE(neutralized.size() == 1U);
+    NINHO_SIM_REQUIRE(neutralized.front().cause_event_id == EventId{70U});
 }
 
 NINHO_SIM_TEST("pig damage crush quantizes the boundary and aggregates contact loads")

@@ -75,7 +75,10 @@ struct DamageState {
     bool was_ejected{};
     bool was_bounds_exit{};
     bool neutralized{};
+    // Receipt watermark for external-effect deduplication. This is not a
+    // physical cause and must never be used as the exit/ejection anchor.
     EventId last_external_damage_event_id{};
+    EventId last_causal_damage_event_id{};
 };
 
 class DamageSystem {
@@ -83,6 +86,7 @@ public:
     std::vector<DamageOutcome> process(const MaterialCatalog&, const ArchetypeCatalog&,
         std::span<const DamageBody>, std::span<const DamageContact>,
         std::span<const ExternalDamage> external_damage = {});
+    bool record_causal_damage_event(EntityId, PartId, EventId) noexcept;
     [[nodiscard]] std::optional<DamageState> state(EntityId, PartId) const;
     bool erase_state(EntityId, PartId) noexcept;
     [[nodiscard]] std::span<const DamageState> states() const noexcept { return states_; }

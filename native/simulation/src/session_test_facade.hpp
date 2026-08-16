@@ -7,10 +7,12 @@
 #include <cstddef>
 #include <cstdint>
 #include <optional>
+#include <span>
 #include <string>
 #include <vector>
 #include <ninho/physics/physics_world.hpp>
 #include "ninho/simulation/content.hpp"
+#include "damage_system.hpp"
 
 namespace ninho::simulation {
 
@@ -64,8 +66,12 @@ public:
         const SimulationSession&, EntityId, PartId);
     static std::optional<ninho::physics::Vec3> body_center_of_mass(
         const SimulationSession&, EntityId, PartId);
+    static std::optional<ninho::physics::PhysicalContact> physical_contact(
+        const SimulationSession&, EntityId, EntityId);
     static bool set_body_neutralized(
         SimulationSession&, EntityId, PartId, bool neutralized);
+    static bool remove_body_for_testing(
+        SimulationSession&, EntityId, PartId);
     static void override_joint_ratio_after_solver(SimulationSession&, JointId, double ratio);
     static void override_joint_ratio_without_new_cause_after_solver(
         SimulationSession&, JointId, double ratio);
@@ -110,6 +116,10 @@ public:
     static bool shift_trigger_captured_origin(SimulationSession&, std::uint32_t);
     static bool queue_external_damage(SimulationSession&, EntityId target,
         PartId target_part, double energy_j, EventId cause_event_id);
+    static void publish_damage_outcomes_for_testing(
+        SimulationSession&, std::span<const DamageOutcome>);
+    static bool record_causal_damage_event_for_testing(
+        SimulationSession&, EntityId, PartId, EventId);
     static void inject_crush_load(SimulationSession&, EntityId, PartId,
         double total_normal_impulse_n_s);
     static bool set_crush_load_cause_for_testing(

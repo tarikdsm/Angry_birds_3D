@@ -91,6 +91,7 @@ struct SimulationSession::Impl : detail::AbilityLifecycleHooks {
         JointId incident_joint_id;
         EventId cause_event_id;
         ninho::physics::Vec3 position_m;
+        bool requires_physical_replacement{};
     };
 
     explicit Impl(ContentBundle source);
