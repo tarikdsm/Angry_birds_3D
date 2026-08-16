@@ -1,0 +1,26 @@
+[gd_scene format=3]
+
+[node name="OptionsMenu" type="Control"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="Title" type="Label" parent="."]
+layout_mode = 0
+offset_left = 80.0
+offset_top = 60.0
+offset_right = 700.0
+offset_bottom = 120.0
+metadata/message_id = "app.options.title"
+theme_override_font_sizes/font_size = 32
+
+[node name="BackButton" type="Button" parent="."]
+layout_mode = 0
+offset_left = 80.0
+offset_top = 160.0
+offset_right = 420.0
+offset_bottom = 210.0
+metadata/message_id = "app.options.back"

@@ -60,6 +60,22 @@ function Get-NinhoGodotSmokeRegistry {
             FixedFps = 0
             RequiredCompletionMarker = 'FORBID_GODOT_PHYSICS_OK'
             RequiredLogText = ''
+        },
+        [pscustomobject]@{
+            Name = 'input-router-smoke'
+            RelativePath = 'game/tests/input_router_smoke.gd'
+            ResourcePath = 'res://tests/input_router_smoke.gd'
+            FixedFps = 0
+            RequiredCompletionMarker = 'INPUT_ROUTER_SMOKE_OK'
+            RequiredLogText = ''
+        },
+        [pscustomobject]@{
+            Name = 'app-shell-smoke'
+            RelativePath = 'game/tests/app_shell_smoke.gd'
+            ResourcePath = 'res://tests/app_shell_smoke.gd'
+            FixedFps = 0
+            RequiredCompletionMarker = 'APP_SHELL_SMOKE_OK'
+            RequiredLogText = ''
         }
     )
 }

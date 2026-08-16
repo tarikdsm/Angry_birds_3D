@@ -1,0 +1,16 @@
+[gd_scene load_steps=4 format=3]
+
+[ext_resource type="Script" path="res://scripts/app/app_shell.gd" id="1_shell"]
+[ext_resource type="Script" path="res://scripts/input/input_router.gd" id="2_input"]
+[ext_resource type="Script" path="res://scripts/app/screen_router.gd" id="3_router"]
+
+[node name="AppShell" type="Node"]
+script = ExtResource("1_shell")
+
+[node name="InputRouter" type="Node" parent="."]
+script = ExtResource("2_input")
+
+[node name="ScreenRouter" type="Node" parent="."]
+script = ExtResource("3_router")
+
+[node name="ScreenHost" type="Node" parent="ScreenRouter"]

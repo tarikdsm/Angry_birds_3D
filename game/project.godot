@@ -6,7 +6,7 @@ config_version=5
 [application]
 
 config/name="Ninho Orbital Physics Spike"
-run/main_scene="res://scenes/vertical_slice.tscn"
+run/main_scene="res://scenes/app_shell.tscn"
 config/features=PackedStringArray("4.5", "Mobile")
 
 [display]
@@ -54,6 +54,54 @@ aim_power_up={
 toggle_reduced_motion={
 "deadzone": 0.5,
 "events": [Object(InputEventKey,"physical_keycode":77,"unicode":109)]
+}
+semantic_navigate_up={
+"deadzone": 0.5,
+"events": [Object(InputEventKey,"physical_keycode":4194320)]
+}
+semantic_navigate_down={
+"deadzone": 0.5,
+"events": [Object(InputEventKey,"physical_keycode":4194322)]
+}
+semantic_navigate_left={
+"deadzone": 0.5,
+"events": [Object(InputEventKey,"physical_keycode":4194319)]
+}
+semantic_navigate_right={
+"deadzone": 0.5,
+"events": [Object(InputEventKey,"physical_keycode":4194321)]
+}
+semantic_accept={
+"deadzone": 0.5,
+"events": [Object(InputEventKey,"physical_keycode":4194309), Object(InputEventKey,"physical_keycode":32,"unicode":32)]
+}
+semantic_back={
+"deadzone": 0.5,
+"events": [Object(InputEventKey,"physical_keycode":4194305)]
+}
+semantic_activate_ability={
+"deadzone": 0.5,
+"events": [Object(InputEventKey,"physical_keycode":32,"unicode":32)]
+}
+semantic_recenter={
+"deadzone": 0.5,
+"events": [Object(InputEventKey,"physical_keycode":70,"unicode":102)]
+}
+semantic_pause={
+"deadzone": 0.5,
+"events": [Object(InputEventKey,"physical_keycode":80,"unicode":112)]
+}
+semantic_restart={
+"deadzone": 0.5,
+"events": [Object(InputEventKey,"physical_keycode":82,"unicode":114)]
+}
+semantic_zoom_in={
+"deadzone": 0.5,
+"events": [Object(InputEventKey,"physical_keycode":61,"unicode":61)]
+}
+semantic_zoom_out={
+"deadzone": 0.5,
+"events": [Object(InputEventKey,"physical_keycode":45,"unicode":45)]
 }
 
 [physics]

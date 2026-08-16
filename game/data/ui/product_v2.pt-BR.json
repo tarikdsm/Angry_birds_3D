@@ -1,0 +1,28 @@
+{
+  "schema_version": 1,
+  "locale": "pt-BR",
+  "messages": {
+    "app.main_menu.title": "NINHO ORBITAL",
+    "app.main_menu.continue": "CONTINUAR",
+    "app.main_menu.worlds": "MUNDOS",
+    "app.main_menu.options": "OPÇÕES",
+    "app.main_menu.exit": "SAIR",
+    "app.options.title": "OPÇÕES",
+    "app.options.back": "VOLTAR",
+    "input.prompt.accept.keyboard": "ENTER",
+    "input.prompt.accept.gamepad": "ACEITAR",
+    "input.prompt.accept.generic": "CONFIRMAR",
+    "input.prompt.navigate.generic": "NAVEGAR",
+    "input.prompt.back.generic": "VOLTAR",
+    "input.prompt.orbit.generic": "ÓRBITA",
+    "input.prompt.zoom.generic": "ZOOM",
+    "input.prompt.begin_grab.generic": "INICIAR MIRA",
+    "input.prompt.update_pull.generic": "AJUSTAR PUXADA",
+    "input.prompt.release.generic": "LANÇAR",
+    "input.prompt.activate_ability.generic": "ATIVAR HABILIDADE",
+    "input.prompt.recenter.generic": "RECENTRAR",
+    "input.prompt.pause.generic": "PAUSAR",
+    "input.prompt.restart.generic": "REINICIAR",
+    "input.prompt.unknown.generic": "COMANDO"
+  }
+}

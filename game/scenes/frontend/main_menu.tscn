@@ -1,0 +1,50 @@
+[gd_scene format=3]
+
+[node name="MainMenu" type="Control"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="Title" type="Label" parent="."]
+layout_mode = 0
+offset_left = 80.0
+offset_top = 60.0
+offset_right = 700.0
+offset_bottom = 120.0
+metadata/message_id = "app.main_menu.title"
+theme_override_font_sizes/font_size = 32
+
+[node name="ContinueButton" type="Button" parent="."]
+layout_mode = 0
+offset_left = 80.0
+offset_top = 160.0
+offset_right = 420.0
+offset_bottom = 210.0
+metadata/message_id = "app.main_menu.continue"
+
+[node name="WorldsButton" type="Button" parent="."]
+layout_mode = 0
+offset_left = 80.0
+offset_top = 220.0
+offset_right = 420.0
+offset_bottom = 270.0
+metadata/message_id = "app.main_menu.worlds"
+
+[node name="OptionsButton" type="Button" parent="."]
+layout_mode = 0
+offset_left = 80.0
+offset_top = 280.0
+offset_right = 420.0
+offset_bottom = 330.0
+metadata/message_id = "app.main_menu.options"
+
+[node name="ExitButton" type="Button" parent="."]
+layout_mode = 0
+offset_left = 80.0
+offset_top = 340.0
+offset_right = 420.0
+offset_bottom = 390.0
+metadata/message_id = "app.main_menu.exit"
