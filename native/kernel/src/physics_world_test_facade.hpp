@@ -6,6 +6,7 @@
 
 #include <array>
 #include <cstddef>
+#include <cstdint>
 #include <ninho/physics/physics_types.hpp>
 #include <vector>
 
@@ -18,6 +19,8 @@ namespace detail {
 class PhysicsWorldTestFacade {
 public:
     [[nodiscard]] static int worker_count(const PhysicsWorld&);
+    // Packed b3WorldId, so tests can tell two live worlds apart by slot.
+    [[nodiscard]] static std::uint64_t box3d_world_identity(const PhysicsWorld&);
     [[nodiscard]] static Vec3 box3d_gravity(const PhysicsWorld&);
     [[nodiscard]] static int gravity_strategy(const PhysicsWorld&);
     [[nodiscard]] static int bounds_strategy(const PhysicsWorld&);

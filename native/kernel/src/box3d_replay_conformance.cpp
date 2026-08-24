@@ -1,5 +1,7 @@
 #include "box3d_replay_conformance.hpp"
 
+#include "box3d_world_lifecycle.hpp"
+
 #include <box3d/box3d.h>
 
 #include <system_error>
@@ -19,7 +21,7 @@ struct WorldOwner {
     ~WorldOwner()
     {
         if (B3_IS_NON_NULL(value) && b3World_IsValid(value)) {
-            b3DestroyWorld(value);
+            destroy_box3d_world(value);
         }
     }
 };
@@ -56,7 +58,7 @@ ReplayConformanceResult validate_box3d_replay(
     }
 
     b3WorldDef world_def = b3DefaultWorldDef();
-    WorldOwner world{b3CreateWorld(&world_def)};
+    WorldOwner world{create_box3d_world(world_def)};
     if (B3_IS_NULL(world.value) || !b3World_IsValid(world.value)) {
         result.error = "b3CreateWorld returned an invalid id";
         result.temporary_file_removed = temporary_file_absent();

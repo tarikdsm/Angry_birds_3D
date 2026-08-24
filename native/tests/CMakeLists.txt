@@ -56,25 +56,14 @@ add_test(
           "${CMAKE_BINARY_DIR}/native/spike/ninho_physics_spike${CMAKE_EXECUTABLE_SUFFIX}"
 )
 
+# Every gate here selects cases with --filter, so a filter that matches nothing
+# would report success while running no test at all. This is the one runner
+# argument contract worth a CTest entry; rejecting unknown options, empty values
+# and extra arguments cannot produce a false green and is covered by the runner's
+# own parsing.
 add_test(NAME runner_rejects_no_match
   COMMAND ninho_physics_tests --filter __ninho_missing__)
-add_test(NAME runner_rejects_missing_filter_value
-  COMMAND ninho_physics_tests --filter)
-add_test(NAME runner_rejects_empty_filter_value
-  COMMAND ninho_physics_tests --filter "")
-add_test(NAME runner_rejects_unknown_option
-  COMMAND ninho_physics_tests --unknown)
-add_test(NAME runner_rejects_extra_arguments
-  COMMAND ninho_physics_tests --filter radial extra)
-
-set_tests_properties(
-  runner_rejects_no_match
-  runner_rejects_missing_filter_value
-  runner_rejects_empty_filter_value
-  runner_rejects_unknown_option
-  runner_rejects_extra_arguments
-  PROPERTIES WILL_FAIL TRUE
-)
+set_tests_properties(runner_rejects_no_match PROPERTIES WILL_FAIL TRUE)
 
 set_tests_properties(
   projectile_ccd

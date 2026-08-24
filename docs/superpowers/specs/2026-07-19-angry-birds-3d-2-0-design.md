@@ -611,7 +611,7 @@ A fase introduz cada poder quando a ave chega ao estilingue. A quarta ave també
 - solução comum: três;
 - quatro aves garantem margem de recuperação;
 - cada porco é alcançável por pelo menos duas orientações do plano;
-- cadeia principal reproduz o mesmo resultado em pelo menos 8/10 replays idênticos antes do congelamento final; após congelamento, 50/50 replays devem ser idênticos;
+- cadeia principal reproduz o mesmo resultado em pelo menos 8/10 replays idênticos antes do congelamento final; após congelamento, cada rota congelada replaya 3/3 idêntica por processo, em processos separados por rota e em Debug e Release;
 - completar é acessível; três estrelas exigem eficiência;
 - materiais nunca são diferenciados somente por cor.
 
@@ -978,7 +978,7 @@ Consequências:
 
 ## 29. Critérios técnicos de aceite
 
-- 50 replays idênticos preservam outcome, score, estrelas, eventos e hash.
+- cada rota congelada replaya idêntica 3/3 dentro do processo e é replayada em um processo por rota, em Debug e Release, preservando outcome, score, estrelas, eventos e hash. O kernel não tem RNG, relógio nem iteração não-ordenada, e canonical_state ordena toda coleção antes de serializar: dentro de um processo a repetição só pode expor estado vazando entre execuções consecutivas, o que o replay 2 detecta e o replay 3 confirma contra o padrão alternado. Variação de layout e endereço é fixa durante a vida de um processo, portanto isolamento por processo — não repetição — é o que a cobre.
 - Debug e Release produzem a mesma sequência canônica.
 - plano fica bit-identical do grab ao release.
 - release abaixo da deadzone não consome ave.

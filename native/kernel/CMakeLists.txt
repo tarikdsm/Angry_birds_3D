@@ -6,6 +6,7 @@ add_library(ninho_physics_kernel STATIC
   src/scenario.cpp
   src/box3d_replay_conformance.cpp
   src/box3d_allocator_probe.cpp
+  src/box3d_world_lifecycle.cpp
 )
 add_library(ninho::physics ALIAS ninho_physics_kernel)
 

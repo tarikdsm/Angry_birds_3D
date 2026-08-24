@@ -1,6 +1,7 @@
 #include <ninho/physics/physics_world.hpp>
 
 #include "box3d_conversions.hpp"
+#include "box3d_world_lifecycle.hpp"
 #if defined(NINHO_ENABLE_TEST_FACADES)
 #include "physics_world_test_facade.hpp"
 #endif
@@ -477,7 +478,7 @@ struct PhysicsWorld::Impl {
         b3WorldDef world_def = b3DefaultWorldDef();
         world_def.gravity = {};
         world_def.workerCount = 1;
-        const b3WorldId created_world = b3CreateWorld(&world_def);
+        const b3WorldId created_world = detail::create_box3d_world(world_def);
         if (B3_IS_NULL(created_world) || !b3World_IsValid(created_world)) {
             throw std::runtime_error("Box3DFault: b3CreateWorld");
         }
@@ -487,7 +488,7 @@ struct PhysicsWorld::Impl {
     ~Impl()
     {
         if (B3_IS_NON_NULL(world) && b3World_IsValid(world)) {
-            b3DestroyWorld(world);
+            detail::destroy_box3d_world(world);
         }
     }
 
@@ -2457,6 +2458,13 @@ const WorldConfig& PhysicsWorld::config() const
 int detail::PhysicsWorldTestFacade::worker_count(const PhysicsWorld& world)
 {
     return b3World_GetWorkerCount(world.impl_->world);
+}
+
+std::uint64_t detail::PhysicsWorldTestFacade::box3d_world_identity(
+    const PhysicsWorld& world)
+{
+    return (static_cast<std::uint64_t>(world.impl_->world.index1) << 16U)
+        | static_cast<std::uint64_t>(world.impl_->world.generation);
 }
 
 Vec3 detail::PhysicsWorldTestFacade::box3d_gravity(const PhysicsWorld& world)

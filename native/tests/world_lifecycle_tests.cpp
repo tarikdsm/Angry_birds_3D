@@ -1,10 +1,19 @@
 #include "test_framework.hpp"
 #include "physics_world_test_facade.hpp"
 
+#include "box3d_world_lifecycle_probe.hpp"
+
 #include <ninho/physics/physics_world.hpp>
 #include <ninho/physics/world_bounds.hpp>
 
+#include <algorithm>
+#include <atomic>
+#include <cstddef>
+#include <cstdint>
 #include <limits>
+#include <mutex>
+#include <thread>
+#include <vector>
 #include <stdexcept>
 #include <type_traits>
 #include <utility>
@@ -485,4 +494,82 @@ NINHO_TEST("contract spherical six radius world exit does not fabricate ejection
     physics.step();
     NINHO_REQUIRE(!physics.state(handle).has_value());
     NINHO_REQUIRE(physics.states().empty());
+}
+
+// Box3D supports simulating separate worlds on separate threads, but only if
+// the application serializes world creation and destruction; see
+// docs/foundation.md, "Multithreading Multiple Worlds", and the check-then-act
+// on the global b3_worlds table in b3CreateWorld. These two tests pin the guard
+// that makes parallel replays legal.
+NINHO_TEST("contract concurrent worlds never overlap inside the Box3D lifecycle")
+{
+    constexpr std::size_t thread_count = 8U;
+    constexpr std::size_t rounds = 24U;
+
+    detail::reset_box3d_world_lifecycle_peak_concurrency();
+
+    // NINHO_REQUIRE throws, and an exception escaping a std::thread terminates
+    // the process, so workers only record and the assertions run after join.
+    std::atomic<std::size_t> single_worker_worlds{0U};
+    std::atomic<std::size_t> ready{0U};
+    std::atomic<bool> start{false};
+    std::vector<std::thread> workers;
+    workers.reserve(thread_count);
+    for (std::size_t worker = 0U; worker < thread_count; ++worker) {
+        workers.emplace_back([&] {
+            ready.fetch_add(1U);
+            while (!start.load()) {
+            }
+            for (std::size_t round = 0U; round < rounds; ++round) {
+                const PhysicsWorld world(WorldConfig{});
+                if (detail::PhysicsWorldTestFacade::worker_count(world) == 1) {
+                    single_worker_worlds.fetch_add(1U);
+                }
+            }
+        });
+    }
+    while (ready.load() < thread_count) {
+    }
+    start.store(true);
+    for (std::thread& worker : workers) {
+        worker.join();
+    }
+
+    NINHO_REQUIRE(single_worker_worlds.load() == thread_count * rounds);
+    NINHO_REQUIRE(detail::box3d_world_lifecycle_peak_concurrency() == 1U);
+}
+
+NINHO_TEST("contract concurrent worlds keep distinct simultaneous Box3D slots")
+{
+    constexpr std::size_t thread_count = 8U;
+
+    std::atomic<std::size_t> constructed{0U};
+    std::mutex collected_mutex;
+    std::vector<std::uint64_t> collected;
+    std::vector<std::thread> workers;
+    workers.reserve(thread_count);
+    for (std::size_t worker = 0U; worker < thread_count; ++worker) {
+        workers.emplace_back([&] {
+            const PhysicsWorld world(WorldConfig{});
+            const std::uint64_t identity =
+                detail::PhysicsWorldTestFacade::box3d_world_identity(world);
+            {
+                const std::lock_guard<std::mutex> guard{collected_mutex};
+                collected.push_back(identity);
+            }
+            // Hold every world alive until all of them exist, so the slots are
+            // genuinely simultaneous rather than recycled one after another.
+            constructed.fetch_add(1U);
+            while (constructed.load() < thread_count) {
+            }
+        });
+    }
+    for (std::thread& worker : workers) {
+        worker.join();
+    }
+
+    NINHO_REQUIRE(collected.size() == thread_count);
+    std::sort(collected.begin(), collected.end());
+    NINHO_REQUIRE(
+        std::adjacent_find(collected.begin(), collected.end()) == collected.end());
 }

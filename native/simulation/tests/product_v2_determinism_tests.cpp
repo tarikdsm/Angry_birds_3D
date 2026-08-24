@@ -4,6 +4,7 @@
 
 #include <nlohmann/json.hpp>
 
+#include <algorithm>
 #include <array>
 #include <cmath>
 #include <filesystem>
@@ -904,31 +905,90 @@ NINHO_SIM_TEST("product v2 determinism frozen replayer rejects a terminal route 
     NINHO_SIM_REQUIRE(replayed.error.pointer == "/shots/3");
 }
 
-NINHO_SIM_TEST("product v2 determinism replays all seven routes fifty times against common bytes")
-{
-    using namespace ninho::simulation;
-    for (const std::string_view route_name : frozen_route_names) {
-        std::ifstream fixture_file{frozen_fixture_path(route_name),
-            std::ios::binary};
-        NINHO_SIM_REQUIRE(fixture_file.is_open());
-        std::ostringstream document;
-        document << fixture_file.rdbuf();
-        const auto fixture = test::parse_frozen_playthrough_fixture_envelope(
-            document.str());
-        NINHO_SIM_REQUIRE(fixture.ok());
-        NINHO_SIM_REQUIRE(fixture.value.route_id == route_name);
+// Replaying a frozen route is not a sampling problem: the kernel has no RNG, no
+// clock and no unordered iteration, and canonical_state orders every collection
+// through ordered_values before serializing. Within one process the only thing
+// repetition can catch is state leaking between consecutive runs -- a stale id
+// pool, an accumulated float, a cache that survives a session. Replay 2 catches
+// that; replay 3 catches the alternating variant where run 3 matches run 1 while
+// run 2 differs. Replays 4..50 in the same process add cost, not evidence.
+//
+// What repetition cannot catch is layout and address dependence, because that is
+// fixed for the life of a process. Each route below is its own ctest test and so
+// its own process, and Debug and Release are separate builds; that is where the
+// cross-run variation actually comes from.
+constexpr std::uint32_t frozen_replay_repeats = 3U;
 
-        std::optional<test::FrozenPlaythroughReplay> baseline;
-        for (std::uint32_t repeat = 0U; repeat < 50U; ++repeat) {
-            const auto replayed = test::replay_frozen_playthrough(fixture.value);
-            NINHO_SIM_REQUIRE(replayed.ok());
-            if (!baseline) {
-                baseline = replayed.value;
-            } else {
-                NINHO_SIM_REQUIRE(replayed.value == *baseline);
-            }
-        }
+void replay_route_against_common_bytes(std::string_view route_name)
+{
+    std::ifstream fixture_file{frozen_fixture_path(route_name), std::ios::binary};
+    NINHO_SIM_REQUIRE(fixture_file.is_open());
+    std::ostringstream document;
+    document << fixture_file.rdbuf();
+    const auto fixture = ninho::simulation::test::
+        parse_frozen_playthrough_fixture_envelope(document.str());
+    NINHO_SIM_REQUIRE(fixture.ok());
+    NINHO_SIM_REQUIRE(fixture.value.route_id == route_name);
+
+    const auto baseline = ninho::simulation::test::replay_frozen_playthrough(
+        fixture.value);
+    NINHO_SIM_REQUIRE(baseline.ok());
+    for (std::uint32_t repeat = 1U; repeat < frozen_replay_repeats; ++repeat) {
+        const auto replayed = ninho::simulation::test::replay_frozen_playthrough(
+            fixture.value);
+        NINHO_SIM_REQUIRE(replayed.ok());
+        NINHO_SIM_REQUIRE(replayed.value == baseline.value);
     }
 }
 
+}
+
+NINHO_SIM_TEST("product v2 route replay farm_tutorial")
+{
+    replay_route_against_common_bytes("farm_tutorial");
+}
+
+NINHO_SIM_TEST("product v2 route replay farm_chain")
+{
+    replay_route_against_common_bytes("farm_chain");
+}
+
+NINHO_SIM_TEST("product v2 route replay farm_blue_alternative")
+{
+    replay_route_against_common_bytes("farm_blue_alternative");
+}
+
+NINHO_SIM_TEST("product v2 route replay farm_defeat")
+{
+    replay_route_against_common_bytes("farm_defeat");
+}
+
+NINHO_SIM_TEST("product v2 route replay orbital_virela")
+{
+    replay_route_against_common_bytes("orbital_virela");
+}
+
+NINHO_SIM_TEST("product v2 route replay orbital_structural")
+{
+    replay_route_against_common_bytes("orbital_structural");
+}
+
+NINHO_SIM_TEST("product v2 route replay orbital_defeat")
+{
+    replay_route_against_common_bytes("orbital_defeat");
+}
+
+NINHO_SIM_TEST("product v2 determinism registers one replay test per frozen route")
+{
+    // frozen_route_names is the single source of truth for which routes exist.
+    // Adding a route without its own test would otherwise leave it unreplayed
+    // and still green.
+    for (const std::string_view route_name : frozen_route_names) {
+        const std::string expected = "product v2 route replay " + std::string{route_name};
+        const auto& cases = ninho::simulation::test::registry();
+        NINHO_SIM_REQUIRE(std::any_of(cases.begin(), cases.end(),
+            [&](const ninho::simulation::test::Case& value) {
+                return value.name == expected;
+            }));
+    }
 }

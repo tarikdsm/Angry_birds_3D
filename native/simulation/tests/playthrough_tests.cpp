@@ -466,7 +466,7 @@ NINHO_SIM_TEST("playthrough local canonical quantizer enforces fixed point bound
     require_rejected(std::numeric_limits<double>::quiet_NaN());
 }
 
-NINHO_SIM_TEST("vertical slice determinism compares quantized canonical signatures ten times")
+NINHO_SIM_TEST("vertical slice determinism compares quantized canonical signatures across repeats")
 {
     const Trace virela_trace = virela_victory_script();
     const Trace structural_trace = structural_victory_script();
@@ -480,7 +480,11 @@ NINHO_SIM_TEST("vertical slice determinism compares quantized canonical signatur
     Trace repeated_virela_trace;
     Trace repeated_structural_trace;
     Trace repeated_defeat_trace;
-    for (int repetition = 1; repetition < 10; ++repetition) {
+    // Repeat 2 catches state leaking between consecutive runs; repeat 3 catches
+    // the alternating variant where run 3 matches run 1. Further repeats inside
+    // one process add cost without adding evidence -- see the rationale on
+    // frozen_replay_repeats in product_v2_determinism_tests.cpp.
+    for (int repetition = 1; repetition < 3; ++repetition) {
         repeated_virela_trace = virela_victory_script();
         repeated_structural_trace = structural_victory_script();
         repeated_defeat_trace = defeat_script();

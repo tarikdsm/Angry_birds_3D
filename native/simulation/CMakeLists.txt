@@ -217,15 +217,33 @@ if(BUILD_TESTING)
     NAME product_v2_fixture_writer
     COMMAND ninho_simulation_tests --filter "product v2 fixture writer"
   )
+  # Fixture, serializer and replayer contracts. Cheap and pure; the route
+  # replays below carry the expensive part.
   add_test(
     NAME product_v2_determinism
     COMMAND ninho_simulation_tests --filter "product v2 determinism"
   )
-  # Seven real routes replayed 50x exceeded the inherited 1500-second CTest
-  # watchdog in a healthy Debug process and later measured 6158 seconds. Keep
-  # the full aggregate and give this intentionally long determinism gate a
-  # watchdog with enough operational margin.
-  set_tests_properties(product_v2_determinism PROPERTIES TIMEOUT 14400)
+  # One test per frozen route, so CTest gives each route its own process and
+  # runs them concurrently under -j. Process isolation is what actually varies
+  # heap layout and addresses between replays; repeating inside a single
+  # process cannot. The route list mirrors frozen_route_names, and
+  # "product v2 determinism registers one replay test per frozen route" fails
+  # if a route is added without its entry here.
+  foreach(ninho_route IN ITEMS
+    farm_tutorial
+    farm_chain
+    farm_blue_alternative
+    farm_defeat
+    orbital_virela
+    orbital_structural
+    orbital_defeat
+  )
+    add_test(
+      NAME product_v2_route_${ninho_route}
+      COMMAND ninho_simulation_tests --filter "product v2 route replay ${ninho_route}"
+    )
+    set_tests_properties(product_v2_route_${ninho_route} PROPERTIES TIMEOUT 900)
+  endforeach()
   add_test(
     NAME legacy_orbital_characterization
     COMMAND ninho_simulation_tests --filter "legacy orbital characterization"
@@ -266,33 +284,11 @@ if(BUILD_TESTING)
     NAME session_reconfigure
     COMMAND ninho_simulation_tests --filter "session reconfigure"
   )
+  # Same reasoning as native/tests: only the no-match case can turn a typo in a
+  # --filter into a green run of zero tests.
   add_test(
     NAME simulation_runner_rejects_no_match
     COMMAND ninho_simulation_tests --filter __ninho_simulation_missing__
   )
-  add_test(
-    NAME simulation_runner_rejects_missing_filter_value
-    COMMAND ninho_simulation_tests --filter
-  )
-  add_test(
-    NAME simulation_runner_rejects_empty_filter_value
-    COMMAND ninho_simulation_tests --filter ""
-  )
-  add_test(
-    NAME simulation_runner_rejects_unknown_option
-    COMMAND ninho_simulation_tests --unknown
-  )
-  add_test(
-    NAME simulation_runner_rejects_extra_arguments
-    COMMAND ninho_simulation_tests --filter "simulation contracts" extra
-  )
-
-  set_tests_properties(
-    simulation_runner_rejects_no_match
-    simulation_runner_rejects_missing_filter_value
-    simulation_runner_rejects_empty_filter_value
-    simulation_runner_rejects_unknown_option
-    simulation_runner_rejects_extra_arguments
-    PROPERTIES WILL_FAIL TRUE
-  )
+  set_tests_properties(simulation_runner_rejects_no_match PROPERTIES WILL_FAIL TRUE)
 endif()

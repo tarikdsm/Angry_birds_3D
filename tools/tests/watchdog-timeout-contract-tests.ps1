@@ -66,12 +66,12 @@ $expectedSmokeTimeout = $baselineSmokeTimeoutSeconds +
 Assert-True ((Get-TestProperty -Test $spikeJsonSmoke -Name 'TIMEOUT') -eq $expectedSmokeTimeout) `
     "spike_json_smoke $Configuration timeout must be $expectedSmokeTimeout seconds"
 
+# A --filter that matches nothing must fail, or a typo in any gate's filter
+# would report success while running zero tests. The other runner argument
+# errors cannot produce a false green, so they are not CTest entries.
 foreach ($negativeName in @(
         'runner_rejects_no_match',
-        'runner_rejects_missing_filter_value',
-        'runner_rejects_empty_filter_value',
-        'runner_rejects_unknown_option',
-        'runner_rejects_extra_arguments'
+        'simulation_runner_rejects_no_match'
     )) {
     $negative = $inventory.tests | Where-Object { $_.name -ceq $negativeName }
     Assert-True ($null -ne $negative) "$negativeName must be registered"
