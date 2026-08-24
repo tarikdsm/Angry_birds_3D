@@ -156,6 +156,22 @@ function Get-NinhoGodotSmokeRegistry {
             FixedFps = 60
             RequiredCompletionMarker = 'TWO_WORLD_SCENE_SMOKE_OK'
             RequiredLogText = ''
+        },
+        [pscustomobject]@{
+            Name = 'camera-profiles-smoke'
+            RelativePath = 'game/tests/camera_profiles_smoke.gd'
+            ResourcePath = 'res://tests/camera_profiles_smoke.gd'
+            FixedFps = 0
+            RequiredCompletionMarker = 'CAMERA_PROFILES_SMOKE_OK'
+            RequiredLogText = ''
+        },
+        [pscustomobject]@{
+            Name = 'slingshot-input-smoke'
+            RelativePath = 'game/tests/slingshot_input_smoke.gd'
+            ResourcePath = 'res://tests/slingshot_input_smoke.gd'
+            FixedFps = 60
+            RequiredCompletionMarker = 'SLINGSHOT_INPUT_SMOKE_OK'
+            RequiredLogText = ''
         }
     )
 }

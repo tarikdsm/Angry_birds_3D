@@ -2,6 +2,7 @@ extends Node3D
 
 const CONTENT_FILE_LOADER := preload("res://scripts/data/content_file_loader.gd")
 const ASSET_CATALOG := preload("res://scripts/data/asset_catalog.gd")
+const INPUT_INTENT := preload("res://scripts/input/input_intent.gd")
 const MATERIALS_PATH := "res://data/materials/product_v2.materials.json"
 const ARCHETYPES_PATH := "res://data/archetypes/product_v2.archetypes.json"
 const REQUEST_KEYS := [
@@ -40,6 +41,8 @@ signal launch_rejected(message: String)
 @onready var _body_views: Node3D = $BodyViews
 @onready var _world_host: Node3D = $WorldHost
 @onready var _capture_driver: Node = $CaptureDriver
+@onready var _camera_director: Node3D = $CameraDirector
+@onready var _slingshot: Node3D = $Slingshot
 
 var current_frame: Dictionary = {}
 var current_request: Dictionary = {}
@@ -112,6 +115,11 @@ func configure_launch(request: Variant) -> bool:
 		last_error = str(level.get("message", "level document could not be parsed"))
 		launch_rejected.emit(last_error)
 		return false
+	var archetypes := CONTENT_FILE_LOADER.load_json(str(accepted.archetypes_path))
+	if not bool(archetypes.get("ok", false)):
+		last_error = str(archetypes.get("message", "archetype document could not be parsed"))
+		launch_rejected.emit(last_error)
+		return false
 	var unregistered: Array[String] = ASSET_CATALOG.missing_visual_asset_ids(
 		catalog.document as Dictionary, level.document as Dictionary)
 	if not unregistered.is_empty():
@@ -129,6 +137,23 @@ func configure_launch(request: Variant) -> bool:
 		release_level()
 		launch_rejected.emit(last_error)
 		return false
+	if not _camera_director.configure(
+			str(accepted.camera_profile_id), level.document as Dictionary):
+		last_error = _camera_director.last_error
+		release_level()
+		launch_rejected.emit(last_error)
+		return false
+	if not _slingshot.configure(
+			level.document as Dictionary,
+			archetypes.document as Dictionary,
+			catalog.document as Dictionary):
+		last_error = _slingshot.last_error
+		release_level()
+		launch_rejected.emit(last_error)
+		return false
+	_slingshot.bind_session(_session)
+	_slingshot.bind_camera(_camera_director.active_rig())
+	_slingshot.bind_camera_director(_camera_director)
 	configure_calls += 1
 	if not _session.configure_session(
 			str(documents.materials), str(documents.archetypes), str(documents.level)):
@@ -157,6 +182,8 @@ func release_level() -> void:
 	current_request = {}
 	loaded_document_paths = []
 	_body_views.release()
+	_slingshot.release()
+	_camera_director.release()
 	for child: Node in _world_host.get_children():
 		_world_host.remove_child(child)
 		child.queue_free()
@@ -166,12 +193,51 @@ func body_views() -> Node3D:
 	return _body_views
 
 
+func camera_director() -> Node3D:
+	return _camera_director
+
+
+func slingshot() -> Node3D:
+	return _slingshot
+
+
+func set_reduced_motion(enabled: bool) -> void:
+	_camera_director.set_reduced_motion(enabled)
+
+
+## Translates a semantic intent into presentation state. Gameplay authority
+## stays in the kernel: the slingshot only forwards the camera basis, the
+## metric pull and the release, and the camera only recomposes.
+func handle_intent(intent: RefCounted) -> bool:
+	if intent == null or not intent is INPUT_INTENT or not session_configured:
+		return false
+	var kind: StringName = intent.kind
+	if kind == INPUT_INTENT.KIND_BEGIN_GRAB:
+		var grab: StringName = _slingshot.handle_begin_grab(
+			intent.payload.get("position", Vector2.ZERO) as Vector2)
+		return grab != &"ignored"
+	if kind == INPUT_INTENT.KIND_UPDATE_PULL:
+		return _slingshot.handle_update_pull(
+			intent.payload.get("position", Vector2.ZERO) as Vector2)
+	if kind == INPUT_INTENT.KIND_RELEASE:
+		return _slingshot.handle_release() != &"ignored"
+	if kind == INPUT_INTENT.KIND_ACTIVATE_ABILITY:
+		return _slingshot.handle_activate_ability() != &"ignored"
+	if kind == INPUT_INTENT.KIND_BACK:
+		return _slingshot.handle_cancel()
+	if kind == INPUT_INTENT.KIND_RESTART:
+		return restart_level()
+	return _camera_director.handle_intent(intent)
+
+
 func _physics_process(_delta: float) -> void:
 	if not session_configured:
 		return
 	current_frame = _session.consume_frame()
 	consume_calls += 1
 	_body_views.apply_frame(current_frame)
+	_slingshot.observe_frame(current_frame)
+	_camera_director.observe_frame(current_frame)
 	_capture_driver.observe_frame(current_frame)
 
 

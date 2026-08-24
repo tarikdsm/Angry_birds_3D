@@ -45,7 +45,9 @@ $expectedNames = @(
     'product-v2-catalog-smoke',
     'product-v2-content-smoke',
     'earth-session-smoke',
-    'two-world-scene-smoke'
+    'two-world-scene-smoke',
+    'camera-profiles-smoke',
+    'slingshot-input-smoke'
 )
 Assert-True ($registry.Count -eq $expectedNames.Count) `
     'Registry must contain every shipped game/tests entrypoint'
@@ -79,6 +81,8 @@ $expectedMarkers = @{
     'product-v2-content-smoke' = 'PRODUCT_V2_CONTENT_SMOKE_OK'
     'earth-session-smoke' = 'EARTH_SESSION_SMOKE_OK'
     'two-world-scene-smoke' = 'TWO_WORLD_SCENE_SMOKE_OK'
+    'camera-profiles-smoke' = 'CAMERA_PROFILES_SMOKE_OK'
+    'slingshot-input-smoke' = 'SLINGSHOT_INPUT_SMOKE_OK'
 }
 foreach ($spec in $registry) {
     if ($expectedMarkers.ContainsKey([string]$spec.Name)) {

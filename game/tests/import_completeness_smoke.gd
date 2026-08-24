@@ -22,6 +22,13 @@ const REQUIRED_ENTRYPOINTS := [
 	"res://scenes/gameplay/gameplay_session.tscn",
 	"res://scenes/worlds/earth_farm.tscn",
 	"res://scenes/worlds/orbital_first_orbit.tscn",
+	"res://scripts/camera/camera_profile_catalog.gd",
+	"res://scripts/camera/camera_director.gd",
+	"res://scripts/camera/terrestrial_camera_rig.gd",
+	"res://scripts/camera/orbital_camera_rig.gd",
+	"res://scripts/camera/carousel_camera_rig.gd",
+	"res://scripts/game/slingshot_controller.gd",
+	"res://scripts/game/launch_device_view.gd",
 ]
 const IMPORTED_EXTENSIONS := ["glb", "png", "wav"]
 

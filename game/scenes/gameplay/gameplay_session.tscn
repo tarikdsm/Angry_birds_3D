@@ -1,8 +1,10 @@
-[gd_scene load_steps=4 format=3]
+[gd_scene load_steps=6 format=3]
 
 [ext_resource type="Script" path="res://scripts/game/gameplay_session_controller.gd" id="1_controller"]
 [ext_resource type="Script" path="res://scripts/game/body_view_registry_v2.gd" id="2_views"]
 [ext_resource type="Script" path="res://scripts/game/product_v2_capture_driver.gd" id="3_capture"]
+[ext_resource type="Script" path="res://scripts/camera/camera_director.gd" id="4_camera"]
+[ext_resource type="Script" path="res://scripts/game/slingshot_controller.gd" id="5_slingshot"]
 
 [node name="GameplaySession" type="Node3D"]
 script = ExtResource("1_controller")
@@ -13,6 +15,12 @@ script = ExtResource("1_controller")
 
 [node name="BodyViews" type="Node3D" parent="."]
 script = ExtResource("2_views")
+
+[node name="CameraDirector" type="Node3D" parent="."]
+script = ExtResource("4_camera")
+
+[node name="Slingshot" type="Node3D" parent="."]
+script = ExtResource("5_slingshot")
 
 [node name="CaptureDriver" type="Node" parent="."]
 script = ExtResource("3_capture")

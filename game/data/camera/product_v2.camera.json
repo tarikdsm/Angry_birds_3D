@@ -1,0 +1,51 @@
+{
+  "schema_version": 2,
+  "default_profile_id": "CAM_Carousel",
+  "profiles": [
+    {
+      "id": "CAM_Carousel",
+      "rig": "carousel",
+      "fov_degrees": 35.0,
+      "transition_seconds": 0.45,
+      "reduced_motion_transition_seconds": 0.1,
+      "safe_margin_ratio": 0.08,
+      "impact_focus_seconds": 0.0,
+      "impact_fov_kick_degrees": 0.0,
+      "occlusion_policy": "none",
+      "distance_range_m": [7.0, 13.0],
+      "inclination_range_deg": [10.0, 26.0],
+      "orbit_sensitivity_deg": [0.0, 0.0],
+      "zoom_step_m": 0.5
+    },
+    {
+      "id": "CAM_Farm",
+      "rig": "terrestrial",
+      "fov_degrees": 44.0,
+      "transition_seconds": 0.35,
+      "reduced_motion_transition_seconds": 0.1,
+      "safe_margin_ratio": 0.08,
+      "impact_focus_seconds": 0.6,
+      "impact_fov_kick_degrees": 2.0,
+      "occlusion_policy": "none",
+      "distance_range_m": [16.0, 44.0],
+      "inclination_range_deg": [6.0, 42.0],
+      "orbit_sensitivity_deg": [0.18, 0.14],
+      "zoom_step_m": 1.5
+    },
+    {
+      "id": "CAM_Orbital",
+      "rig": "orbital",
+      "fov_degrees": 48.0,
+      "transition_seconds": 0.35,
+      "reduced_motion_transition_seconds": 0.1,
+      "safe_margin_ratio": 0.08,
+      "impact_focus_seconds": 0.6,
+      "impact_fov_kick_degrees": 2.0,
+      "occlusion_policy": "radial_body",
+      "distance_range_m": [14.0, 24.0],
+      "inclination_range_deg": [15.0, 70.0],
+      "orbit_sensitivity_deg": [0.18, 0.14],
+      "zoom_step_m": 1.0
+    }
+  ]
+}

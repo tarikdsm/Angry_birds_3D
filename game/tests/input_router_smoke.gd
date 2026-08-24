@@ -100,6 +100,7 @@ func _run() -> void:
 		"gameplay.keyboard": [
 			INPUT_INTENT.KIND_ACTIVATE_ABILITY, INPUT_INTENT.KIND_RECENTER,
 			INPUT_INTENT.KIND_PAUSE, INPUT_INTENT.KIND_RESTART, INPUT_INTENT.KIND_ZOOM,
+			INPUT_INTENT.KIND_BACK,
 		],
 		"gameplay.mouse": [
 			INPUT_INTENT.KIND_ORBIT, INPUT_INTENT.KIND_ZOOM,
@@ -123,6 +124,7 @@ func _run() -> void:
 	_assert_raw_intent(&"gameplay", _key_event(KEY_P), INPUT_INTENT.KIND_PAUSE)
 	_assert_raw_intent(&"gameplay", _key_event(KEY_R), INPUT_INTENT.KIND_RESTART)
 	_assert_raw_intent(&"gameplay", _key_event(KEY_EQUAL), INPUT_INTENT.KIND_ZOOM)
+	_assert_raw_intent(&"gameplay", _key_event(KEY_ESCAPE), INPUT_INTENT.KIND_BACK)
 	_assert_raw_intent(&"gameplay", _wheel_event(MOUSE_BUTTON_WHEEL_DOWN), INPUT_INTENT.KIND_ZOOM)
 	_assert_raw_intent(&"gameplay", _left_button_event(true), INPUT_INTENT.KIND_BEGIN_GRAB)
 	_assert_raw_intent(&"gameplay", _left_button_event(false), INPUT_INTENT.KIND_RELEASE)

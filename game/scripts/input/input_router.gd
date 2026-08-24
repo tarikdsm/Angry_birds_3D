@@ -105,6 +105,7 @@ func supported_intent_kinds(context: StringName, source: StringName) -> Array[St
 			INPUT_INTENT.KIND_PAUSE,
 			INPUT_INTENT.KIND_RESTART,
 			INPUT_INTENT.KIND_ZOOM,
+			INPUT_INTENT.KIND_BACK,
 		]
 	if context == CONTEXT_GAMEPLAY and source == &"mouse":
 		return [
@@ -188,6 +189,10 @@ func _route_gameplay_key(event: InputEventKey) -> bool:
 		submit_semantic(INPUT_INTENT.KIND_ZOOM, {"amount": 1.0}, &"keyboard")
 	elif event.is_action_pressed(&"semantic_zoom_out"):
 		submit_semantic(INPUT_INTENT.KIND_ZOOM, {"amount": -1.0}, &"keyboard")
+	elif event.is_action_pressed(&"semantic_back"):
+		# Esc cancels an open grab; the gameplay layer decides what an
+		# unstarted grab means. The router never inspects gameplay state.
+		submit_semantic(INPUT_INTENT.KIND_BACK, {}, &"keyboard")
 	else:
 		return false
 	return true

@@ -432,7 +432,8 @@ $expectedRegisteredFixedFpsNames = @(
     'vertical-slice-smoke',
     'feedback-smoke',
     'earth-session-smoke',
-    'two-world-scene-smoke'
+    'two-world-scene-smoke',
+    'slingshot-input-smoke'
 )
 $registeredFixedFpsNames = @(
     $smokeRegistry |
