@@ -132,6 +132,30 @@ function Get-NinhoGodotSmokeRegistry {
             FixedFps = 0
             RequiredCompletionMarker = 'PRODUCT_V2_CATALOG_SMOKE_OK'
             RequiredLogText = ''
+        },
+        [pscustomobject]@{
+            Name = 'product-v2-content-smoke'
+            RelativePath = 'game/tests/product_v2_content_smoke.gd'
+            ResourcePath = 'res://tests/product_v2_content_smoke.gd'
+            FixedFps = 0
+            RequiredCompletionMarker = 'PRODUCT_V2_CONTENT_SMOKE_OK'
+            RequiredLogText = ''
+        },
+        [pscustomobject]@{
+            Name = 'earth-session-smoke'
+            RelativePath = 'game/tests/earth_session_smoke.gd'
+            ResourcePath = 'res://tests/earth_session_smoke.gd'
+            FixedFps = 60
+            RequiredCompletionMarker = 'EARTH_SESSION_SMOKE_OK'
+            RequiredLogText = ''
+        },
+        [pscustomobject]@{
+            Name = 'two-world-scene-smoke'
+            RelativePath = 'game/tests/two_world_scene_smoke.gd'
+            ResourcePath = 'res://tests/two_world_scene_smoke.gd'
+            FixedFps = 60
+            RequiredCompletionMarker = 'TWO_WORLD_SCENE_SMOKE_OK'
+            RequiredLogText = ''
         }
     )
 }

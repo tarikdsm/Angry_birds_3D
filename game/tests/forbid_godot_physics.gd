@@ -7,6 +7,9 @@ const PRODUCTION_ROOTS := [
 const RUNTIME_SCENE_PATHS := [
 	"res://scenes/vertical_slice.tscn",
 	"res://scenes/physics_spike.tscn",
+	"res://scenes/gameplay/gameplay_session.tscn",
+	"res://scenes/worlds/earth_farm.tscn",
+	"res://scenes/worlds/orbital_first_orbit.tscn",
 ]
 const RUNTIME_SCAN_PHYSICS_FRAMES := 3
 const FORBIDDEN_SOURCE_FRAGMENTS := [

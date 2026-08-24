@@ -15,6 +15,13 @@ const REQUIRED_ENTRYPOINTS := [
 	"res://materials/brick.tres",
 	"res://materials/glass.tres",
 	"res://materials/pine.tres",
+	"res://scripts/data/asset_catalog.gd",
+	"res://scripts/game/body_view_registry_v2.gd",
+	"res://scripts/game/gameplay_session_controller.gd",
+	"res://scripts/game/product_v2_capture_driver.gd",
+	"res://scenes/gameplay/gameplay_session.tscn",
+	"res://scenes/worlds/earth_farm.tscn",
+	"res://scenes/worlds/orbital_first_orbit.tscn",
 ]
 const IMPORTED_EXTENSIONS := ["glb", "png", "wav"]
 

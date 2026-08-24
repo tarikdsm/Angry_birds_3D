@@ -1,0 +1,18 @@
+[gd_scene load_steps=4 format=3]
+
+[ext_resource type="Script" path="res://scripts/game/gameplay_session_controller.gd" id="1_controller"]
+[ext_resource type="Script" path="res://scripts/game/body_view_registry_v2.gd" id="2_views"]
+[ext_resource type="Script" path="res://scripts/game/product_v2_capture_driver.gd" id="3_capture"]
+
+[node name="GameplaySession" type="Node3D"]
+script = ExtResource("1_controller")
+
+[node name="Session" type="GameplaySessionNode" parent="."]
+
+[node name="WorldHost" type="Node3D" parent="."]
+
+[node name="BodyViews" type="Node3D" parent="."]
+script = ExtResource("2_views")
+
+[node name="CaptureDriver" type="Node" parent="."]
+script = ExtResource("3_capture")

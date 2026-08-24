@@ -1,0 +1,37 @@
+[gd_scene load_steps=2 format=3]
+
+[sub_resource type="Environment" id="Environment_orbit"]
+background_mode = 1
+background_color = Color(0.018, 0.028, 0.055, 1)
+ambient_light_source = 3
+ambient_light_color = Color(0.28, 0.36, 0.48, 1)
+ambient_light_energy = 0.72
+reflected_light_source = 2
+tonemap_mode = 2
+
+[node name="OrbitalFirstOrbit" type="Node3D"]
+
+[node name="WorldEnvironment" type="WorldEnvironment" parent="."]
+environment = SubResource("Environment_orbit")
+
+[node name="Sun" type="DirectionalLight3D" parent="."]
+rotation_degrees = Vector3(-48, -32, 0)
+light_color = Color(1, 0.91, 0.72, 1)
+light_energy = 1.35
+shadow_enabled = true
+
+[node name="RimLight" type="OmniLight3D" parent="."]
+position = Vector3(-8, 16, 8)
+light_color = Color(0.3, 0.83, 0.89, 1)
+light_energy = 3.5
+omni_range = 24.0
+
+[node name="Markers" type="Node3D" parent="."]
+
+[node name="LaunchMarker" type="Marker3D" parent="Markers"]
+position = Vector3(-13, 0, 0)
+
+[node name="PlanetCenter" type="Marker3D" parent="Markers"]
+
+[node name="CameraAnchor" type="Marker3D" parent="Markers"]
+position = Vector3(-8, 21, 13)

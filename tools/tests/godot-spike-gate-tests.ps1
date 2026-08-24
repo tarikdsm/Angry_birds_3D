@@ -316,8 +316,8 @@ if (-not [regex]::IsMatch(
 }
 if (-not [regex]::IsMatch(
         $physicsGuardText,
-        '(?s)const RUNTIME_SCENE_PATHS := \[\s*"res://scenes/vertical_slice\.tscn",\s*"res://scenes/physics_spike\.tscn",?\s*\]')) {
-    throw 'Godot physics guard must runtime-scan the playable and foundation scenes'
+        '(?s)const RUNTIME_SCENE_PATHS := \[\s*"res://scenes/vertical_slice\.tscn",\s*"res://scenes/physics_spike\.tscn",\s*"res://scenes/gameplay/gameplay_session\.tscn",\s*"res://scenes/worlds/earth_farm\.tscn",\s*"res://scenes/worlds/orbital_first_orbit\.tscn",?\s*\]')) {
+    throw 'Godot physics guard must runtime-scan the legacy fixture, foundation and product scenes'
 }
 foreach ($runtimeScanContract in @(
         'const RUNTIME_SCAN_PHYSICS_FRAMES := 3',
@@ -430,7 +430,9 @@ if ($inlineFixedFpsCount -ne 4) {
 $expectedRegisteredFixedFpsNames = @(
     'gameplay-session-smoke',
     'vertical-slice-smoke',
-    'feedback-smoke'
+    'feedback-smoke',
+    'earth-session-smoke',
+    'two-world-scene-smoke'
 )
 $registeredFixedFpsNames = @(
     $smokeRegistry |
