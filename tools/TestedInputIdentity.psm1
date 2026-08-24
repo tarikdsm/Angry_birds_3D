@@ -61,6 +61,8 @@ function Get-NinhoTestedInputIdentity {
     $rows = [Collections.Generic.List[object]]::new()
     $aggregate = [Text.StringBuilder]::new()
     $previous = $null
+    $fileAlgorithm = [Security.Cryptography.SHA256]::Create()
+    try {
     foreach ($relative in $paths) {
         if ($null -ne $previous -and $relative -ceq $previous) {
             throw "tested input path is duplicated: $relative"
@@ -72,22 +74,24 @@ function Get-NinhoTestedInputIdentity {
         }
         $content = Get-NinhoCanonicalTestedInputContent -Path $path -RelativePath $relative
         $size = [int64]$content.bytes.Length
-        $fileAlgorithm = [Security.Cryptography.SHA256]::Create()
-        try {
-            $hash = -join ($fileAlgorithm.ComputeHash($content.bytes) |
-                ForEach-Object { $_.ToString('x2') })
-        } finally { $fileAlgorithm.Dispose() }
+        # BitConverter formats the digest in one native call. Piping the 32
+        # bytes through ForEach-Object instead cost more than the hashing
+        # itself once this set grew past a hundred files, and this identity is
+        # recomputed by every foundation and vertical slice gate.
+        $hash = [BitConverter]::ToString(
+            $fileAlgorithm.ComputeHash($content.bytes)).Replace('-','').ToLowerInvariant()
         $rows.Add([ordered]@{
             path=$relative; mode=$content.mode; size_bytes=$size; sha256=$hash
         })
         $null = $aggregate.Append($relative).Append("`0").Append($content.mode).Append("`0")
         $null = $aggregate.Append($size).Append("`0").Append($hash).Append("`n")
     }
+    } finally { $fileAlgorithm.Dispose() }
     $algorithm = [Security.Cryptography.SHA256]::Create()
     try {
-        $fingerprint = -join ($algorithm.ComputeHash(
-                [Text.Encoding]::UTF8.GetBytes($aggregate.ToString())) |
-            ForEach-Object { $_.ToString('x2') })
+        $fingerprint = [BitConverter]::ToString($algorithm.ComputeHash(
+            [Text.Encoding]::UTF8.GetBytes($aggregate.ToString()))).Replace(
+            '-','').ToLowerInvariant()
     } finally { $algorithm.Dispose() }
     return [pscustomobject]@{ files=@($rows); sha256=$fingerprint }
 }

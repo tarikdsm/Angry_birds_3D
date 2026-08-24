@@ -284,7 +284,15 @@ function Assert-NinhoFoundationEvidence {
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)] [string]$Root,
-        [Parameter(Mandatory)] [string]$ReportPath
+        [Parameter(Mandatory)] [string]$ReportPath,
+
+        # Precomputed result of Get-NinhoFoundationTestedInputs for $Root. Only
+        # pass this when the caller knows no tested input changed since it was
+        # computed: hashing the whole set dominates this gate, and a caller that
+        # mutates only the evidence document repeats it for nothing. Omit it and
+        # the identity is recomputed, which is what every production call site
+        # does.
+        [object]$TestedInputIdentity = $null
     )
 
     $rootPath = [System.IO.Path]::GetFullPath($Root).TrimEnd('\', '/')
@@ -300,7 +308,11 @@ function Assert-NinhoFoundationEvidence {
         'stress',
         'capability_matrix'
     )
-    $testedInputs = Get-NinhoFoundationTestedInputs -Root $rootPath
+    $testedInputs = if ($null -ne $TestedInputIdentity) {
+        $TestedInputIdentity
+    } else {
+        Get-NinhoFoundationTestedInputs -Root $rootPath
+    }
 
     foreach ($configuration in 'Debug', 'Release') {
         $canonicalRelative = "docs/physics/evidence/foundation-report-$($configuration.ToLowerInvariant()).json"

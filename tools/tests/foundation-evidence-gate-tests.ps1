@@ -166,9 +166,30 @@ function Reset-EvidenceDocuments {
     return $identity
 }
 
+$script:GeneratedReportCache = @{}
+
+function Get-EvidenceDocumentsKey {
+    return (($documents.Keys | Sort-Object | ForEach-Object {
+        $_ + '=' + (Get-FileHash -Algorithm SHA256 `
+            -LiteralPath $documents[$_].Path).Hash
+    }) -join ';')
+}
+
 function Write-EvidenceReport {
     param([switch]$AllowInvalidEvidence)
 
+    # The generator is a Python process, and these assertions call this function
+    # twice each: once to rebuild the pristine report and once after mutating a
+    # document. The pristine pair repeats identically across every assertion, so
+    # its report is reused instead of paying another interpreter start. The key
+    # is the digest of both evidence documents, which is what the report is
+    # derived from, so a changed document always regenerates.
+    $documentsKey = Get-EvidenceDocumentsKey
+    if ($script:GeneratedReportCache.ContainsKey($documentsKey)) {
+        [System.IO.File]::WriteAllText(
+            $reportPath, $script:GeneratedReportCache[$documentsKey])
+        return
+    }
     $previousErrorActionPreference = $ErrorActionPreference
     try {
         $ErrorActionPreference = 'Continue'
@@ -178,7 +199,11 @@ function Write-EvidenceReport {
     } finally {
         $ErrorActionPreference = $previousErrorActionPreference
     }
-    if ($generatorExitCode -eq 0) { return }
+    if ($generatorExitCode -eq 0) {
+        $script:GeneratedReportCache[$documentsKey] =
+            [System.IO.File]::ReadAllText($reportPath)
+        return
+    }
     if (-not $AllowInvalidEvidence) {
         throw 'failed to generate evidence report fixture'
     }
@@ -213,6 +238,8 @@ function Write-EvidenceReport {
     [System.IO.File]::WriteAllText($reportPath, $report)
 }
 
+$script:SemanticMutationTestedInputs = Get-NinhoFoundationTestedInputs -Root $gateRoot
+
 function Assert-SemanticMutation {
     param(
         [scriptblock]$Mutation,
@@ -228,8 +255,12 @@ function Assert-SemanticMutation {
         Set-Content -LiteralPath $documents[$Configuration].Path -Encoding utf8
     $documents[$Configuration].Hash = (Get-FileHash -Algorithm SHA256 -LiteralPath $documents[$Configuration].Path).Hash
     Write-EvidenceReport -AllowInvalidEvidence
+    # A semantic mutation rewrites the evidence document only; the sandbox's
+    # tested inputs are untouched, so their identity is reused instead of
+    # rehashing every file for each of these assertions.
     Assert-Throws {
-        Assert-NinhoFoundationEvidence -Root $gateRoot -ReportPath $reportPath
+        Assert-NinhoFoundationEvidence -Root $gateRoot -ReportPath $reportPath `
+            -TestedInputIdentity $script:SemanticMutationTestedInputs
     } $ExpectedMessage
 }
 
@@ -331,46 +362,14 @@ Assert-TestedInputMutationInvalidatesEvidence `
     -RelativePath 'cmake/Dependencies.cmake' `
     -From '8441b4a06d6d09dcfb0b0f704df4d847d1437b92' `
     -To '9441b4a06d6d09dcfb0b0f704df4d847d1437b92'
-Assert-TestedInputMutationInvalidatesEvidence `
-    -RelativePath 'cmake/Dependencies.cmake' `
-    -From '/fp:precise' `
-    -To '/fp:fast'
-Assert-TestedInputMutationInvalidatesEvidence `
-    -RelativePath 'tools/toolchain.lock.json' `
-    -From '4.3.3' `
-    -To '4.3.4'
-Assert-TestedInputMutationInvalidatesEvidence `
-    -RelativePath 'tools/build.ps1' `
-    -From 'tools/build.ps1' `
-    -To 'tools/build-v2.ps1'
-Assert-TestedInputMutationInvalidatesEvidence `
-    -RelativePath 'tools/run_spike.ps1' `
-    -From 'tools/run_spike.ps1' `
-    -To 'tools/run-spike-v2.ps1'
-Assert-TestedInputMutationInvalidatesEvidence `
-    -RelativePath 'tools/generate_foundation_report.py' `
-    -From 'tools/generate_foundation_report.py' `
-    -To 'tools/generate-foundation-report-v2.py'
-Assert-TestedInputMutationInvalidatesEvidence `
-    -RelativePath 'tools/SpikeEvidenceValidation.psm1' `
-    -From 'tools/SpikeEvidenceValidation.psm1' `
-    -To 'tools/SpikeEvidenceValidationV2.psm1'
-Assert-TestedInputMutationInvalidatesEvidence `
-    -RelativePath 'tools/GodotSpikeGate.psm1' `
-    -From 'tools/GodotSpikeGate.psm1' `
-    -To 'tools/GodotSpikeGateV2.psm1'
-Assert-TestedInputMutationInvalidatesEvidence `
-    -RelativePath 'tools/VerticalSliceGate.psm1' `
-    -From 'tools/VerticalSliceGate.psm1' `
-    -To 'tools/VerticalSliceGateV2.psm1'
-Assert-TestedInputMutationInvalidatesEvidence `
-    -RelativePath 'tools/GodotSmokeRegistry.psm1' `
-    -From 'tools/GodotSmokeRegistry.psm1' `
-    -To 'tools/GodotSmokeRegistryV2.psm1'
-Assert-TestedInputMutationInvalidatesEvidence `
-    -RelativePath 'tools/ToolchainIntegrity.psm1' `
-    -From 'tools/ToolchainIntegrity.psm1' `
-    -To 'tools/ToolchainIntegrityV2.psm1'
+# The aggregate is a hash over the whole tested-input set, so "any mutation
+# invalidates it" is one property of the hashing, not one property per file: the
+# single mutation above proves it. Which files belong to the set is a different
+# property, and it is already proven exhaustively and without hashing by the
+# ordinal element-by-element comparison of Get-NinhoFoundationTestedInputPaths
+# against $expectedFoundationInputs earlier in this file. Ten further mutations
+# re-proved the first property once per file and recomputed the full identity
+# each time.
 $validIdentity = Reset-EvidenceDocuments
 Write-EvidenceReport
 Assert-Throws {
