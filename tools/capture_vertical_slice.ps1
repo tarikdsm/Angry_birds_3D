@@ -17,8 +17,14 @@ foreach ($path in $OutputDirectory,$GoldenDirectory) {
     Assert-NinhoNoReparseAncestors -Path $path -AllowedRoot $root | Out-Null
     New-Item -ItemType Directory -Force -Path $path | Out-Null
 }
-$godot = Join-Path $root '.tools\godot\Godot_v4.5.1-stable_win64.exe'
-if (-not (Test-Path -LiteralPath $godot -PathType Leaf)) { throw "pinned Godot missing: $godot" }
+$godot = Resolve-NinhoPinnedToolchainExecutable `
+    -Root $root -ToolName 'godot' `
+    -ExecutableProperty 'exe' -HashProperty 'exe_sha256' `
+    -Name 'Godot'
+$godotConsole = Resolve-NinhoPinnedToolchainExecutable `
+    -Root $root -ToolName 'godot' `
+    -ExecutableProperty 'console_exe' -HashProperty 'console_exe_sha256' `
+    -Name 'Godot console'
 $ffprobe = Resolve-NinhoPinnedToolchainExecutable `
     -Root $root -ToolName 'ffmpeg' `
     -ExecutableProperty 'ffprobe_exe' -HashProperty 'ffprobe_exe_sha256' `
@@ -89,9 +95,17 @@ function Invoke-CaptureRun {
             $arguments.Add("--vertical-slice-metrics=res://$metricsRelative")
         }
         $timeoutMs = if ($Movie) { 600000 } else { 120000 }
-        $process = Invoke-NinhoTimedProcess -FilePath $godot -ArgumentList @($arguments) `
+        # Hidden render windows are occlusion-throttled by Windows and produce
+        # non-representative 100-150 ms hitches. The console executable comes
+        # from the same pinned archive; metrics inherit the invoking session's
+        # render-window state while movie capture stays hidden on the GUI executable to preserve
+        # the existing unattended capture behavior and bytes.
+        $runner = if ($Metrics) { $godotConsole } else { $godot }
+        $windowStyle = if ($Metrics) { 'Inherited' } else { 'Hidden' }
+        $process = Invoke-NinhoTimedProcess -FilePath $runner -ArgumentList @($arguments) `
             -TimeoutMs $timeoutMs -StdoutPath $stdout -StderrPath $stderr `
-            -WorkingDirectory $root -FatalMarker "NINHO_CAPTURE_FATAL name=$Name reason=timeout"
+            -WorkingDirectory $root -FatalMarker "NINHO_CAPTURE_FATAL name=$Name reason=timeout" `
+            -WindowStyle $windowStyle
         $exitCode = [int]$process.ExitCode
         if ($exitCode -ne 0 -and $isVulkan -and $attempt -lt $maximum -and
                 $exitCode -notin -1073741819,-1073740791) {

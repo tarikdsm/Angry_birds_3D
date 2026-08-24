@@ -3,6 +3,11 @@ extends Node
 const INPUT_INTENT := preload("res://scripts/input/input_intent.gd")
 const MAIN_MENU := preload("res://scenes/frontend/main_menu.tscn")
 const OPTIONS_MENU := preload("res://scenes/frontend/options_menu.tscn")
+const FAN_PROJECT_NOTICE := preload("res://scenes/frontend/fan_project_notice.tscn")
+const ABOUT_SCREEN := preload("res://scenes/frontend/about_screen.tscn")
+const WORLD_CAROUSEL := preload("res://scenes/frontend/world_carousel.tscn")
+const LEVEL_SELECT := preload("res://scenes/frontend/level_select.tscn")
+const NARRATIVE_BRIEF := preload("res://scenes/frontend/narrative_brief.tscn")
 
 signal exit_requested
 signal screen_changed(route: StringName)
@@ -23,6 +28,21 @@ func show_main_menu() -> void:
 func show_options_menu() -> void:
 	_show_screen(OPTIONS_MENU, &"options")
 
+func show_fan_project_notice() -> void:
+	_show_screen(FAN_PROJECT_NOTICE, &"fan_notice")
+
+func show_about_screen() -> void:
+	_show_screen(ABOUT_SCREEN, &"about")
+
+func show_world_carousel() -> void:
+	_show_screen(WORLD_CAROUSEL, &"worlds")
+
+func show_level_select() -> void:
+	_show_screen(LEVEL_SELECT, &"levels")
+
+func show_narrative_brief() -> void:
+	_show_screen(NARRATIVE_BRIEF, &"briefing")
+
 
 func current_screen() -> Control:
 	return _current_screen
@@ -32,12 +52,11 @@ func handle_intent(intent: RefCounted) -> void:
 	if intent == null or not intent is INPUT_INTENT:
 		return
 	if intent.kind == INPUT_INTENT.KIND_NAVIGATE:
-		_move_focus((intent.payload.get("direction", Vector2.ZERO) as Vector2).y)
+		_navigate(intent.payload.get("direction", Vector2.ZERO) as Vector2)
 	elif intent.kind == INPUT_INTENT.KIND_ACCEPT:
 		_activate_accept(intent)
-	elif intent.kind == INPUT_INTENT.KIND_BACK and _current_screen != null \
-			and _current_screen.name == &"OptionsMenu":
-		show_main_menu()
+	elif intent.kind == INPUT_INTENT.KIND_BACK:
+		_match_back()
 
 
 func _show_screen(scene: PackedScene, route: StringName) -> void:
@@ -53,6 +72,8 @@ func _show_screen(scene: PackedScene, route: StringName) -> void:
 
 
 func _apply_messages() -> void:
+	if _current_screen.has_method("set_messages"):
+		_current_screen.set_messages(_messages)
 	for control: Node in _current_screen.find_children("*", "Control", true, false):
 		if control is Label or control is Button:
 			var message_id := str(control.get_meta("message_id", ""))
@@ -66,11 +87,26 @@ func _connect_actions(route: StringName) -> void:
 	if route == &"main":
 		(_current_screen.find_child("OptionsButton", true, false) as Button).pressed.connect(
 			show_options_menu)
+		(_current_screen.find_child("WorldsButton", true, false) as Button).pressed.connect(
+			show_world_carousel)
 		(_current_screen.find_child("ExitButton", true, false) as Button).pressed.connect(
 			exit_requested.emit)
+		var about := _current_screen.find_child("AboutButton", true, false) as Button
+		if about != null:
+			about.pressed.connect(show_about_screen)
 	elif route == &"options":
 		(_current_screen.find_child("BackButton", true, false) as Button).pressed.connect(
 			show_main_menu)
+
+func _match_back() -> void:
+	if _current_screen == null:
+		return
+	match _current_screen.name:
+		&"OptionsMenu", &"AboutScreen": show_main_menu()
+		&"FanProjectNotice": return
+		&"WorldCarousel": show_main_menu()
+		&"LevelSelect": show_world_carousel()
+		&"NarrativeBrief": show_level_select()
 
 
 func _action_buttons() -> Array[Button]:
@@ -89,8 +125,16 @@ func _focus_first_action() -> void:
 		buttons.front().grab_focus()
 
 
-func _move_focus(vertical_direction: float) -> void:
-	if is_zero_approx(vertical_direction):
+func _navigate(direction: Vector2) -> void:
+	if _current_screen != null and _current_screen.name == &"WorldCarousel" \
+			and not is_zero_approx(direction.x) and _current_screen.has_method("select_offset"):
+		_current_screen.select_offset(1 if direction.x > 0.0 else -1)
+		return
+	_move_focus(direction.y)
+
+
+func _move_focus(direction: float) -> void:
+	if is_zero_approx(direction):
 		return
 	var buttons := _action_buttons()
 	if buttons.is_empty():
@@ -99,7 +143,7 @@ func _move_focus(vertical_direction: float) -> void:
 	var index := buttons.find(focused)
 	if index < 0:
 		index = 0
-	var step := 1 if vertical_direction > 0.0 else -1
+	var step := 1 if direction > 0.0 else -1
 	buttons[posmod(index + step, buttons.size())].grab_focus()
 
 

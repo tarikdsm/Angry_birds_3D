@@ -100,6 +100,38 @@ function Get-NinhoGodotSmokeRegistry {
             FixedFps = 0
             RequiredCompletionMarker = 'INPUT_REMAPPING_SMOKE_OK'
             RequiredLogText = ''
+        },
+        [pscustomobject]@{
+            Name = 'fan-project-notice-smoke'
+            RelativePath = 'game/tests/fan_project_notice_smoke.gd'
+            ResourcePath = 'res://tests/fan_project_notice_smoke.gd'
+            FixedFps = 0
+            RequiredCompletionMarker = 'FAN_PROJECT_NOTICE_SMOKE_OK'
+            RequiredLogText = ''
+        },
+        [pscustomobject]@{
+            Name = 'about-screen-smoke'
+            RelativePath = 'game/tests/about_screen_smoke.gd'
+            ResourcePath = 'res://tests/about_screen_smoke.gd'
+            FixedFps = 0
+            RequiredCompletionMarker = 'ABOUT_SCREEN_SMOKE_OK'
+            RequiredLogText = ''
+        },
+        [pscustomobject]@{
+            Name = 'world-carousel-smoke'
+            RelativePath = 'game/tests/world_carousel_smoke.gd'
+            ResourcePath = 'res://tests/world_carousel_smoke.gd'
+            FixedFps = 0
+            RequiredCompletionMarker = 'WORLD_CAROUSEL_SMOKE_OK'
+            RequiredLogText = ''
+        },
+        [pscustomobject]@{
+            Name = 'product-v2-catalog-smoke'
+            RelativePath = 'game/tests/product_v2_catalog_smoke.gd'
+            ResourcePath = 'res://tests/product_v2_catalog_smoke.gd'
+            FixedFps = 0
+            RequiredCompletionMarker = 'PRODUCT_V2_CATALOG_SMOKE_OK'
+            RequiredLogText = ''
         }
     )
 }

@@ -61,3 +61,11 @@ offset_top = 340.0
 offset_right = 420.0
 offset_bottom = 390.0
 metadata/message_id = "app.main_menu.exit"
+
+[node name="AboutButton" type="Button" parent="."]
+layout_mode = 0
+offset_left = 80.0
+offset_top = 400.0
+offset_right = 420.0
+offset_bottom = 450.0
+metadata/message_id = "app.about.title"

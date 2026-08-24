@@ -8,6 +8,12 @@ const FORMAT_TOKENS := {
 	"app.options.binding_waiting": ["%s"],
 	"app.options.camera_sensitivity_down": ["%s"],
 	"app.options.camera_sensitivity_up": ["%s"],
+	"app.worlds.record_format": ["%s", "%d", "%d"],
+}
+const CLOSED_MESSAGES := {
+	"app.save.retry": "NÃO FOI POSSÍVEL SALVAR. TENTE NOVAMENTE.",
+	"TXT_LEVEL_FARM_REACTION": "Fazenda — Reação em Cadeia",
+	"TXT_LEVEL_FIRST_ORBIT_V2": "Primeira Órbita — Contrapeso de Aster",
 }
 const REQUIRED_MESSAGE_IDS := [
 	"app.main_menu.title",
@@ -50,6 +56,7 @@ const REQUIRED_MESSAGE_IDS := [
 	"app.options.confirm",
 	"app.options.cancel",
 	"app.recovery.total",
+	"app.save.retry",
 	"input.prompt.accept.keyboard",
 	"input.prompt.accept.gamepad",
 	"input.prompt.accept.generic",
@@ -65,7 +72,15 @@ const REQUIRED_MESSAGE_IDS := [
 	"input.prompt.pause.generic",
 	"input.prompt.restart.generic",
 	"input.prompt.unknown.generic",
+	"app.fan_notice.legal", "app.fan_notice.accept", "app.about.title", "app.about.back",
+	"app.worlds.title", "app.worlds.previous", "app.worlds.next", "app.worlds.select",
+	"app.levels.title", "app.briefing.continue", "app.briefing.back",
+	"app.worlds.record_format", "TXT_WORLD_EARTH", "TXT_WORLD_ORBITAL",
+	"TXT_LEVEL_FARM_REACTION", "TXT_LEVEL_FIRST_ORBIT_V2",
 ]
+
+const NARRATIVE_ROOT_KEYS := ["schema_version", "locale", "briefings"]
+const NARRATIVE_IDS := ["BRF_Farm", "BRF_Orbital"]
 
 
 static func load_catalog(path: String) -> Dictionary:
@@ -105,6 +120,53 @@ static func validate_catalog_document(document: Variant) -> String:
 		if FORMAT_TOKENS.has(message_id) \
 				and _format_tokens(str(messages[message_id])) != FORMAT_TOKENS[message_id]:
 			return "$.messages.%s has invalid format placeholders" % message_id
+		if CLOSED_MESSAGES.has(message_id) \
+				and str(messages[message_id]) != str(CLOSED_MESSAGES[message_id]):
+			return "$.messages.%s must match the closed pt-BR copy" % message_id
+	return ""
+
+
+static func load_narrative_catalog(path: String) -> Dictionary:
+	var result := CONTENT_FILE_LOADER.load_json(path)
+	if not bool(result.get("ok", false)):
+		return result
+	var error := validate_narrative_catalog_document(result.get("document"))
+	return result if error.is_empty() else {"ok": false, "error_kind": "schema", "message": error}
+
+
+static func validate_narrative_catalog_document(document: Variant) -> String:
+	if not document is Dictionary:
+		return "$ must be an object"
+	var value := document as Dictionary
+	var error := _exact_keys_error(value, NARRATIVE_ROOT_KEYS, "$")
+	if not error.is_empty():
+		return error
+	if not _is_integer(value.schema_version) or int(value.schema_version) != 1:
+		return "$.schema_version must be integer 1"
+	if typeof(value.locale) != TYPE_STRING or value.locale != "pt-BR":
+		return "$.locale must be pt-BR"
+	if not value.briefings is Dictionary:
+		return "$.briefings must be an object"
+	error = _exact_keys_error(value.briefings as Dictionary, NARRATIVE_IDS, "$.briefings")
+	if not error.is_empty():
+		return error
+	for briefing_id: String in NARRATIVE_IDS:
+		var briefing: Variant = value.briefings[briefing_id]
+		if not briefing is Dictionary:
+			return "$.briefings.%s must be an object" % briefing_id
+		error = _exact_keys_error(briefing as Dictionary, ["lines"],
+			"$.briefings.%s" % briefing_id)
+		if not error.is_empty():
+			return error
+		if not (briefing as Dictionary).get("lines") is Array:
+			return "$.briefings.%s must contain lines" % briefing_id
+		var lines := (briefing as Dictionary).lines as Array
+		if lines.size() < 2 or lines.size() > 3:
+			return "$.briefings.%s must contain 2-3 lines" % briefing_id
+		for line: Variant in lines:
+			if typeof(line) != TYPE_STRING or str(line).strip_edges().is_empty() \
+					or "\n" in str(line) or "\r" in str(line):
+				return "$.briefings.%s lines must be non-empty strings" % briefing_id
 	return ""
 
 

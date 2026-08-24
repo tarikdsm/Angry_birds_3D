@@ -7,6 +7,7 @@ $captureScriptPath = (Resolve-Path -LiteralPath (
         Join-Path $root 'tools\capture_vertical_slice.ps1')).Path
 $projectPath = (Resolve-Path -LiteralPath (Join-Path $root 'game\project.godot')).Path
 $godotPath = Join-Path $root '.tools\godot\Godot_v4.5.1-stable_win64.exe'
+$godotConsolePath = Join-Path $root '.tools\godot\Godot_v4.5.1-stable_win64_console.exe'
 $expectedScene = 'res://scenes/vertical_slice.tscn'
 $sceneFailure = 'Legacy capture must pass exactly one executable explicit res:// scene argument'
 $argvFailure = 'Legacy capture recorder observed invalid executable argv'
@@ -201,7 +202,8 @@ function Invoke-NinhoTimedProcess {
         [string]$StdoutPath,
         [string]$StderrPath,
         [string]$WorkingDirectory,
-        [string]$FatalMarker
+        [string]$FatalMarker,
+        [string]$WindowStyle = 'Hidden'
     )
     $operationName = [regex]::Match(
         $FatalMarker, 'name=([^ ]+)').Groups[1].Value
@@ -247,6 +249,7 @@ function Invoke-NinhoTimedProcess {
         stderr_path = $StderrPath
         working_directory = $WorkingDirectory
         fatal_marker = $FatalMarker
+        window_style = $WindowStyle
         script_root = $PSScriptRoot
         state = $global:NinhoReachabilityState
     }
@@ -431,10 +434,13 @@ function Get-TopLevelReachabilityContract {
     }
     $expectedArguments = @(Get-ExpectedCaptureArguments `
             -Case $expectedCase -RecorderRoot $root)
+    $expectedRunner = if ($expectedCase.MetricsEnabled) { $godotConsolePath } else { $godotPath }
+    $expectedWindowStyle = if ($expectedCase.MetricsEnabled) { 'Inherited' } else { 'Hidden' }
     $stateNames = @($probe.State.timed_process_names |
         ForEach-Object { [string]$_ })
     if ($payload.name -cne $TargetName -or
-            $payload.file_path -cne $godotPath -or
+            $payload.file_path -cne $expectedRunner -or
+            $payload.window_style -cne $expectedWindowStyle -or
             -not (Test-ExactSequence -Actual @($payload.argument_list) `
                 -Expected $expectedArguments) -or
             $payload.timeout_ms -ne $expectedTimeout -or
@@ -522,6 +528,7 @@ $ErrorActionPreference = 'Stop'
 $root = $RecorderRoot
 $OutputDirectory = $RecorderOutput
 $godot = Join-Path $RecorderOutput '__recorder_no_launch__.exe'
+$godotConsole = Join-Path $RecorderOutput '__recorder_console_no_launch__.exe'
 $script:records = [Collections.Generic.List[object]]::new()
 $script:retryCalls = [Collections.Generic.List[object]]::new()
 $script:markers = [Collections.Generic.List[object]]::new()
@@ -568,7 +575,8 @@ function Invoke-NinhoTimedProcess {
         [string]$StdoutPath,
         [string]$StderrPath,
         [string]$WorkingDirectory,
-        [string]$FatalMarker
+        [string]$FatalMarker,
+        [string]$WindowStyle = 'Hidden'
     )
     ++$script:interceptedLaunchCount
     $script:records.Add([pscustomobject]@{
@@ -582,6 +590,7 @@ function Invoke-NinhoTimedProcess {
             StderrPath = $StderrPath
             WorkingDirectory = $WorkingDirectory
             FatalMarker = $FatalMarker
+            WindowStyle = $WindowStyle
         }) | Out-Null
     return [pscustomobject]@{
         ExitCode = 0
@@ -630,6 +639,7 @@ foreach ($case in @($Cases)) {
     InterceptedLaunchCount = $script:interceptedLaunchCount
     ExternalLaunchCount = $script:externalLaunchCount
     GodotSentinel = $godot
+    GodotConsoleSentinel = $godotConsole
 }
 '@
 
@@ -699,8 +709,11 @@ function Assert-RecordedCaptureContract {
     $markers = @($Recorder.Markers)
     $artifacts = @($Recorder.Artifacts)
     $expectedSentinel = Join-Path $RecorderOutput '__recorder_no_launch__.exe'
+    $expectedConsoleSentinel = Join-Path $RecorderOutput '__recorder_console_no_launch__.exe'
     Assert-True ($Recorder.GodotSentinel -ceq $expectedSentinel -and
+            $Recorder.GodotConsoleSentinel -ceq $expectedConsoleSentinel -and
             -not (Test-Path -LiteralPath $expectedSentinel) -and
+            -not (Test-Path -LiteralPath $expectedConsoleSentinel) -and
             -not (Test-Path -LiteralPath $RecorderOutput)) `
         "$recorderFailure`: recorder created or resolved a real external target"
     $expectedRecordCount = @($Cases | ForEach-Object {
@@ -728,6 +741,10 @@ function Assert-RecordedCaptureContract {
             'Legacy capture recorder observed an invalid attempt count'
         $expectedArguments = @(Get-ExpectedCaptureArguments `
                 -Case $case -RecorderRoot $RecorderRoot)
+        $expectedRunner = if ($case.MetricsEnabled) {
+            $Recorder.GodotConsoleSentinel
+        } else { $Recorder.GodotSentinel }
+        $expectedWindowStyle = if ($case.MetricsEnabled) { 'Inherited' } else { 'Hidden' }
         foreach ($record in $caseRecords) {
             $actualArguments = @($record.ArgumentList)
             $sceneArguments = @($actualArguments | Where-Object {
@@ -746,7 +763,8 @@ function Assert-RecordedCaptureContract {
             $expectedStderr = Join-Path $RecorderOutput `
                 "$($case.Name)-attempt$($record.Attempt).stderr.log"
             Assert-True ($record.MaximumAttempts -eq $maximumAttempts -and
-                    $record.FilePath -ceq $Recorder.GodotSentinel -and
+                    $record.FilePath -ceq $expectedRunner -and
+                    $record.WindowStyle -ceq $expectedWindowStyle -and
                     $record.TimeoutMs -eq $(if ($case.MovieEnabled) { 600000 } else { 120000 }) -and
                     $record.StdoutPath -ceq $expectedStdout -and
                     $record.StderrPath -ceq $expectedStderr -and
@@ -839,6 +857,8 @@ Assert-True ($projectPath -ceq (Join-Path $root 'game\project.godot')) `
     'Capture contract resolved a non-canonical project file'
 Assert-True (Test-Path -LiteralPath $godotPath -PathType Leaf) `
     "Pinned Godot executable missing: $godotPath"
+Assert-True (Test-Path -LiteralPath $godotConsolePath -PathType Leaf) `
+    "Pinned Godot console executable missing: $godotConsolePath"
 
 $functionContract = Get-CaptureFunctionContract -ScriptPath $captureScriptPath
 $sceneStatement = "`$arguments.Add('$expectedScene')"

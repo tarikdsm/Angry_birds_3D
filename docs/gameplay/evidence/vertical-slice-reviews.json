@@ -2,66 +2,66 @@
   "schema": "ninho.vertical-slice.reviews.v2",
   "schema_version": 2,
   "tested_inputs_schema": "ninho.tested-inputs.v2",
-  "tested_inputs_sha256": "57bf28f13af31d893854596619133235d53d3de9e8215be7f037cede9d12c7f2",
+  "tested_inputs_sha256": "759f9a062e3a5fba804751b909db9275d9c2cde29a495a4387c80537657e4b38",
   "reviews": [
     {
       "role": "code",
-      "reviewer_id": "/root/finding_018#certified-code-review",
+      "reviewer_id": "/root/task18_implement/task21_final_review#certified-code-review",
       "verdict": "approved",
       "critical": 0,
       "important": 0,
       "minor": 0,
-      "summary": "Foundation, CI, publicacao atomica, smokes, lifecycle, downsample, escopo de modulos, C++ e GDScript revisados sem findings acionaveis."
+      "summary": "AppShell, roteamento, persistencia transacional, catalogos fechados, smokes e tooling de captura pinado revisados sem findings acionaveis."
     },
     {
       "role": "architecture",
-      "reviewer_id": "/root/finding_025#certified-architecture-review",
+      "reviewer_id": "/root/task18_implement/task21_final_review#certified-architecture-review",
       "verdict": "approved",
       "critical": 0,
       "important": 0,
       "minor": 0,
-      "summary": "Trust chain, identidades, CaptureOnly/UseExistingCapture, publicacao atomica, pacote Production e grafos sem ciclos revisados sem findings."
+      "summary": "Lazy loading legado, boundaries frontend/save, registries, runner GUI/console, WindowStyle e contratos recorder/reachability revisados sem findings."
     },
     {
       "role": "gameplay",
-      "reviewer_id": "/root/finding_006#certified-gameplay-review",
+      "reviewer_id": "/root/task18_implement/task21_capture_review#certified-gameplay-review",
       "verdict": "approved",
       "critical": 0,
       "important": 0,
       "minor": 0,
-      "summary": "Oito perfis de desempenho, ticks causais, catalogo pt-BR, lifecycle, rotas, hashes, diagnosticos e goldens revisados sem findings."
+      "summary": "Oito perfis atendem budgets; rotas, hashes, eventos, input, ruptura e VFX permanecem deterministas entre Debug e Release."
     },
     {
       "role": "art",
-      "reviewer_id": "/root/finding_025#certified-art-review",
+      "reviewer_id": "/root/task18_implement/task21_capture_review#certified-art-review",
       "verdict": "approved",
       "critical": 0,
       "important": 0,
       "minor": 0,
-      "summary": "Dez goldens inspecionados visualmente; composicao, legibilidade, silhuetas, materiais e feedback aprovados sem findings.",
+      "summary": "Dez goldens 1920x1080 inspecionados; composicao, leitura, silhuetas, materiais, trajetoria, copy pt-BR e feedback aprovados sem findings.",
       "artifact_bindings": [
         {
           "schema": "ninho.vertical-slice.art-review-binding.v1",
-          "capture_manifest_sha256": "7d2d02e94d7462389131b74d7b59e31dea1f321cf7bdca70b51e768bcc5af8a9",
+          "capture_manifest_sha256": "2a0748542e6ff5b3644438c62c22ee5b63b2b680d8fad08e099d3add2e3a0675",
           "capture_configuration": "Debug",
           "goldens": [
-            { "name": "overview", "sha256": "f781242d099e915fdca0d2303f6098caba249f3b33f903ae26e19feb5a8caa78" },
-            { "name": "aim", "sha256": "8b1b33712b986c3d50a0c9dc864d7d678bb7e282e2dea7a1623f7f1e4e6f6d81" },
-            { "name": "virela", "sha256": "a21d4cd8852034fbf51cea6281ceffc86cc660b051857712cb35ce4b033eabb8" },
-            { "name": "vulnerable_impact", "sha256": "3f8eba2d60245bb15ada0c3d49c622fb14bfdc1a72cd720031833b6e971d24f2" },
-            { "name": "result", "sha256": "9b0d40ced7ebb73fdd11b6030b3b062372924e8d73786d53202ee94f7e5a6831" }
+            { "name": "overview", "sha256": "c65adbd544801248554f287ca2823f265cbbde5969db7e3c0c3e3854ee0f0213" },
+            { "name": "aim", "sha256": "f62f9deacc8b38b34839efdca67ae22cb2741dc263fb33b2a03789c93126dcad" },
+            { "name": "virela", "sha256": "a77a12a579c92eebe2a7e9f9aa063edf3406afb349619438b798c4bcec73344c" },
+            { "name": "vulnerable_impact", "sha256": "a311108675d6aa86300393f4c2d987a8ddd944a516c7a0e12ca70e72bcaf08fd" },
+            { "name": "result", "sha256": "a4f6c8a51694a2d5d464ac075455529f55e35971fd6a01c93f76aee4be890f11" }
           ]
         },
         {
           "schema": "ninho.vertical-slice.art-review-binding.v1",
-          "capture_manifest_sha256": "484611fb9c590de8412c3e506435d9e49407b381c577f57709383004f3c0e883",
+          "capture_manifest_sha256": "d0ba965767eb39d0ce8e62651920167e261429ce82d6e42e0cd1cd8cbc03f13f",
           "capture_configuration": "Release",
           "goldens": [
-            { "name": "overview", "sha256": "f781242d099e915fdca0d2303f6098caba249f3b33f903ae26e19feb5a8caa78" },
-            { "name": "aim", "sha256": "8b1b33712b986c3d50a0c9dc864d7d678bb7e282e2dea7a1623f7f1e4e6f6d81" },
-            { "name": "virela", "sha256": "a21d4cd8852034fbf51cea6281ceffc86cc660b051857712cb35ce4b033eabb8" },
-            { "name": "vulnerable_impact", "sha256": "b7c1787721c691789784a8026e23068ab97979c5fd776f9ca2d8777311d75ad5" },
-            { "name": "result", "sha256": "c815f5bb6b9c0111e67844c27e420375a806cff88a92882c2c83e2b30af326a8" }
+            { "name": "overview", "sha256": "c65adbd544801248554f287ca2823f265cbbde5969db7e3c0c3e3854ee0f0213" },
+            { "name": "aim", "sha256": "f62f9deacc8b38b34839efdca67ae22cb2741dc263fb33b2a03789c93126dcad" },
+            { "name": "virela", "sha256": "a77a12a579c92eebe2a7e9f9aa063edf3406afb349619438b798c4bcec73344c" },
+            { "name": "vulnerable_impact", "sha256": "2e496ea622dffcf01087b86add4cfa7c8d5bd17a7ffc77b0931c65b6f0f4c945" },
+            { "name": "result", "sha256": "3e959a62a50882553e3123964a5a0dadb0d81dc3dc88e528751ae1573fd92f3d" }
           ]
         }
       ]

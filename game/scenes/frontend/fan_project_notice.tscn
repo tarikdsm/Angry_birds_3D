@@ -1,0 +1,30 @@
+[gd_scene load_steps=3 format=3]
+[ext_resource type="Script" path="res://scripts/app/scrollable_frontend_screen.gd" id="1"]
+[ext_resource type="Script" path="res://scripts/frontend/fan_project_notice_controller.gd" id="2"]
+[node name="FanProjectNotice" type="Control"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+script = ExtResource("2")
+[node name="LegalNotice" type="Label" parent="."]
+offset_left = 80.0
+offset_top = 120.0
+offset_right = 600.0
+offset_bottom = 240.0
+autowrap_mode = 2
+metadata/message_id = "app.fan_notice.legal"
+[node name="AcceptButton" type="Button" parent="."]
+offset_left = 80.0
+offset_top = 280.0
+offset_right = 420.0
+offset_bottom = 330.0
+metadata/message_id = "app.fan_notice.accept"
+[node name="RetryNotice" type="Label" parent="."]
+visible = false
+offset_left = 80.0
+offset_top = 240.0
+offset_right = 600.0
+offset_bottom = 275.0
+autowrap_mode = 2
+metadata/message_id = "app.save.retry"

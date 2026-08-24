@@ -1,3 +1,4 @@
+import json
 import re
 import unittest
 from pathlib import Path
@@ -298,6 +299,24 @@ class VerticalSliceToolingContractsTest(unittest.TestCase):
         for field in decimal_fields:
             self.assertIn(f"{field} = $document.{field}", capture)
             self.assertNotIn(f"{field} = [double]$document.{field}", capture)
+
+    def test_performance_capture_uses_the_pinned_console_runner(self) -> None:
+        capture = (ROOT / "tools" / "capture_vertical_slice.ps1").read_text(
+            encoding="utf-8"
+        )
+        lock = json.loads((ROOT / "tools" / "toolchain.lock.json").read_text())
+
+        self.assertEqual(
+            lock["godot"]["console_exe"],
+            "Godot_v4.5.1-stable_win64_console.exe",
+        )
+        self.assertRegex(lock["godot"]["console_exe_sha256"], r"^[0-9a-f]{64}$")
+        self.assertIn("-ExecutableProperty 'console_exe'", capture)
+        self.assertIn("-HashProperty 'console_exe_sha256'", capture)
+        self.assertIn("$runner = if ($Metrics) { $godotConsole } else { $godot }", capture)
+        self.assertIn("$windowStyle = if ($Metrics) { 'Inherited' } else { 'Hidden' }", capture)
+        self.assertIn("-FilePath $runner", capture)
+        self.assertIn("-WindowStyle $windowStyle", capture)
 
     def test_virela_golden_uses_a_logged_ability_event(self) -> None:
         controller = (

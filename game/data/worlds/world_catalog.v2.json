@@ -3,8 +3,8 @@
   "default_world_id": "earth",
   "world_order": ["earth", "orbital"],
   "scene_ids": ["SCN_FarmReaction", "SCN_FirstOrbitV2"],
-  "diorama_ids": ["WRD_EarthFarm_Diorama", "WRD_Orbital_Diorama"],
-  "text_ids": ["TXT_WORLD_EARTH", "TXT_WORLD_ORBITAL"],
+  "diorama_ids": ["WRD_EarthFarm_Diorama", "WRD_Aster_Diorama"],
+  "text_ids": ["TXT_WORLD_EARTH", "TXT_WORLD_ORBITAL", "TXT_LEVEL_FARM_REACTION", "TXT_LEVEL_FIRST_ORBIT_V2"],
   "worlds": [
     {
       "id": "earth",
@@ -18,7 +18,7 @@
     },
     {
       "id": "orbital",
-      "diorama_id": "WRD_Orbital_Diorama",
+      "diorama_id": "WRD_Aster_Diorama",
       "text_id": "TXT_WORLD_ORBITAL",
       "default_level_id": "first_orbit_v2",
       "level_order": ["first_orbit_v2"],

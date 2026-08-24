@@ -38,7 +38,11 @@ $expectedNames = @(
     'app-shell-smoke',
     'save-recovery-smoke',
     'settings-model-smoke',
-    'input-remapping-smoke'
+    'input-remapping-smoke',
+    'fan-project-notice-smoke',
+    'about-screen-smoke',
+    'world-carousel-smoke',
+    'product-v2-catalog-smoke'
 )
 Assert-True ($registry.Count -eq $expectedNames.Count) `
     'Registry must contain every shipped game/tests entrypoint'
@@ -65,6 +69,10 @@ $expectedMarkers = @{
     'save-recovery-smoke' = 'SAVE_RECOVERY_SMOKE_OK'
     'settings-model-smoke' = 'SETTINGS_MODEL_SMOKE_OK'
     'input-remapping-smoke' = 'INPUT_REMAPPING_SMOKE_OK'
+    'fan-project-notice-smoke' = 'FAN_PROJECT_NOTICE_SMOKE_OK'
+    'about-screen-smoke' = 'ABOUT_SCREEN_SMOKE_OK'
+    'world-carousel-smoke' = 'WORLD_CAROUSEL_SMOKE_OK'
+    'product-v2-catalog-smoke' = 'PRODUCT_V2_CATALOG_SMOKE_OK'
 }
 foreach ($spec in $registry) {
     if ($expectedMarkers.ContainsKey([string]$spec.Name)) {

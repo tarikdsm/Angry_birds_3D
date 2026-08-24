@@ -247,16 +247,18 @@ function Invoke-NinhoTimedProcess {
         [Parameter(Mandatory)][string]$StderrPath,
         [string]$WorkingDirectory = '',
         [string]$FatalMarker = 'NINHO_CAPTURE_FATAL reason=timeout',
-        [string]$ProcessIdentityToken = ''
+        [string]$ProcessIdentityToken = '',
+        [ValidateSet('Hidden','Normal','Inherited')][string]$WindowStyle = 'Hidden'
     )
     $encodedArguments = @($ArgumentList | ForEach-Object {
         $argument = [string]$_
         if ($argument -match '[\s"]') { '"' + $argument.Replace('"','\"') + '"' } else { $argument }
     })
     $parameters = @{
-        FilePath=$FilePath; ArgumentList=$encodedArguments; PassThru=$true; WindowStyle='Hidden'
+        FilePath=$FilePath; ArgumentList=$encodedArguments; PassThru=$true
         RedirectStandardOutput=$StdoutPath; RedirectStandardError=$StderrPath
     }
+    if ($WindowStyle -cne 'Inherited') { $parameters.WindowStyle = $WindowStyle }
     if (-not [string]::IsNullOrWhiteSpace($WorkingDirectory)) { $parameters.WorkingDirectory = $WorkingDirectory }
     $process = Start-Process @parameters
     $processDisposed = $false

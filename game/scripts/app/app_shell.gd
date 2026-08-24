@@ -2,6 +2,7 @@ extends Node
 
 const PRODUCT_TEXT_CATALOG := preload("res://scripts/data/product_text_catalog.gd")
 const CONTENT_FILE_LOADER := preload("res://scripts/data/content_file_loader.gd")
+const WORLD_CATALOG := preload("res://scripts/data/world_catalog.gd")
 const SETTINGS_MODEL := preload("res://scripts/save/settings_model.gd")
 const SAVE_STORE := preload("res://scripts/save/save_store.gd")
 const BINDING_STORE := preload("res://scripts/input/binding_store.gd")
@@ -16,6 +17,11 @@ var _storage_root := "user://"
 var _save_store: RefCounted
 var _messages: Dictionary = {}
 var _settings: Dictionary = {}
+var _progress: Dictionary = {}
+var _world_catalog: Dictionary = {}
+var _narrative: Dictionary = {}
+var _selected_world_id := "earth"
+var _selected_level_id := ""
 var _default_bindings: Array = []
 var _binding_specs: Array = []
 var _show_recovery_notice := false
@@ -29,7 +35,7 @@ func _ready() -> void:
 		push_error("AppShell failed closed while loading product text: %s" % catalog_result.get("message", ""))
 		return
 	_messages = (catalog_result.get("document", {}) as Dictionary).get("messages", {}).duplicate(true)
-	var world_result := CONTENT_FILE_LOADER.load_json(WORLD_CATALOG_PATH)
+	var world_result := WORLD_CATALOG.load_catalog()
 	if not bool(world_result.get("ok", false)):
 		push_error("AppShell failed closed while loading the world catalog")
 		return
@@ -42,6 +48,14 @@ func _ready() -> void:
 		push_error("AppShell failed closed while loading recoverable profile data")
 		return
 	_settings = (settings_result.get("document", {}) as Dictionary).duplicate(true)
+	_progress = (progress_result.get("document", {}) as Dictionary).duplicate(true)
+	_world_catalog = (world_result.get("document", {}) as Dictionary).duplicate(true)
+	var narrative_result := PRODUCT_TEXT_CATALOG.load_narrative_catalog(
+		"res://data/narrative/product_v2.pt-BR.json")
+	if not bool(narrative_result.get("ok", false)):
+		push_error("AppShell failed closed while loading product narrative")
+		return
+	_narrative = (narrative_result.document as Dictionary).duplicate(true)
 	if not _apply_runtime(_settings):
 		push_error("AppShell rejected validated runtime settings")
 		return
@@ -52,7 +66,10 @@ func _ready() -> void:
 	_input_router.binding_token_captured.connect(_on_binding_token_captured)
 	_screen_router.exit_requested.connect(request_exit)
 	_screen_router.screen_changed.connect(_on_screen_changed)
-	_screen_router.show_main_menu()
+	if (_progress.get("seen_tutorial_ids", []) as Array).has("FAN_PROJECT_NOTICE"):
+		_screen_router.show_main_menu()
+	else:
+		_screen_router.show_fan_project_notice()
 
 
 func set_storage_root(storage_root: String) -> bool:
@@ -83,6 +100,31 @@ func _on_screen_changed(route: StringName) -> void:
 		var recovery_notice := screen.find_child("RecoveryNotice", true, false) as Label
 		if recovery_notice != null:
 			recovery_notice.visible = _show_recovery_notice
+		return
+	if route == &"fan_notice":
+		screen.accepted.connect(_accept_fan_notice)
+		return
+	if route == &"about":
+		screen.back_requested.connect(_screen_router.show_main_menu)
+		return
+	if route == &"worlds":
+		screen.configure(_world_catalog, _progress)
+		screen.world_selected.connect(_open_levels)
+		screen.back_requested.connect(_screen_router.show_main_menu)
+		return
+	if route == &"levels":
+		screen.configure(_find_world(_selected_world_id), _progress)
+		screen.level_selected.connect(_open_briefing)
+		screen.back_requested.connect(_screen_router.show_world_carousel)
+		return
+	if route == &"briefing":
+		var briefing_id := "BRF_Farm" if _selected_world_id == "earth" else "BRF_Orbital"
+		var lines: Array[String] = []
+		for line: Variant in ((_narrative.briefings as Dictionary)[briefing_id] as Dictionary).lines:
+			lines.append(str(line))
+		screen.configure(lines)
+		screen.accepted.connect(_accept_briefing)
+		screen.back_requested.connect(_screen_router.show_level_select)
 		return
 	if route != &"options":
 		return
@@ -311,3 +353,74 @@ func _focus_binding_action(action: StringName) -> void:
 
 func _screen_control(screen: Control, node_name: String) -> Control:
 	return screen.find_child(node_name, true, false) as Control
+
+
+func _accept_fan_notice() -> void:
+	var screen := _screen_router.current_screen() as Control
+	var persisted := _mark_seen("seen_tutorial_ids", "FAN_PROJECT_NOTICE")
+	if screen != null and screen.has_method("show_save_retry"):
+		screen.show_save_retry(not persisted)
+	if not persisted:
+		return
+	_screen_router.show_main_menu()
+
+
+func _open_levels(world_id: String) -> void:
+	var world := _find_world(world_id)
+	var default_level_id := str(world.get("default_level_id", ""))
+	if world.is_empty() or not _persist_position(world_id, default_level_id):
+		return
+	_selected_world_id = world_id
+	_selected_level_id = default_level_id
+	_screen_router.show_level_select()
+
+
+func _open_briefing(world_id: String, level_id: String) -> void:
+	if not _persist_position(world_id, level_id):
+		return
+	_selected_world_id = world_id
+	_selected_level_id = level_id
+	_screen_router.show_narrative_brief()
+
+
+func _accept_briefing() -> void:
+	var screen := _screen_router.current_screen() as Control
+	var persisted := _mark_seen(
+		"seen_briefing_ids", "%s/%s" % [_selected_world_id, _selected_level_id])
+	if screen != null and screen.has_method("show_save_retry"):
+		screen.show_save_retry(not persisted)
+	if not persisted:
+		return
+	_screen_router.show_main_menu()
+
+
+func _mark_seen(field: String, identifier: String) -> bool:
+	var candidate := _progress.duplicate(true)
+	var seen := candidate.get(field, []) as Array
+	if seen.has(identifier):
+		return true
+	seen.append(identifier)
+	candidate[field] = seen
+	var saved: Dictionary = _save_store.save_progress(candidate, _world_catalog)
+	if not bool(saved.get("ok", false)):
+		return false
+	_progress = candidate
+	return true
+
+
+func _persist_position(world_id: String, level_id: String) -> bool:
+	var candidate := _progress.duplicate(true)
+	candidate.last_world_id = world_id
+	candidate.last_level_id = level_id
+	var saved: Dictionary = _save_store.save_progress(candidate, _world_catalog)
+	if not bool(saved.get("ok", false)):
+		return false
+	_progress = candidate
+	return true
+
+
+func _find_world(world_id: String) -> Dictionary:
+	for world: Variant in _world_catalog.get("worlds", []):
+		if world is Dictionary and str((world as Dictionary).get("id", "")) == world_id:
+			return world as Dictionary
+	return {}

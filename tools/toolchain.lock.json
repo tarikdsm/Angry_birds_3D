@@ -18,7 +18,9 @@
     "url": "https://github.com/godotengine/godot/releases/download/4.5.1-stable/Godot_v4.5.1-stable_win64.exe.zip",
     "sha256": "defccc78669e644861b4247626b01ae362cd9f23975edf19c8bfd2eb1f6a1783",
     "exe_sha256": "a829242096d640007de9fa93ea923d0f666d13d6a3b472a0231c820be6dc7627",
-    "exe": "Godot_v4.5.1-stable_win64.exe"
+    "exe": "Godot_v4.5.1-stable_win64.exe",
+    "console_exe_sha256": "f0336c8b2ae039d39767a64c416f01b1b49d95d8dde87724012874dd4be1c1a8",
+    "console_exe": "Godot_v4.5.1-stable_win64_console.exe"
   },
   "godot_export_templates": {
     "version": "4.5.1-stable",
