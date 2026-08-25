@@ -5,6 +5,7 @@ const SETTINGS_MODEL := preload("res://scripts/save/settings_model.gd")
 const PROGRESS_FILE := "progress.v2.json"
 const SETTINGS_FILE := "settings.v2.json"
 const TOTAL_RECOVERY_MESSAGE_ID := &"app.recovery.total"
+const MIGRATED_MESSAGE_ID := &"app.recovery.migrated"
 
 var _storage_root: String
 var _phase_hook: Callable
@@ -99,6 +100,26 @@ func _load_document(
 			return restore_result
 		return {"ok": true, "source": &"backup", "recovered": true,
 			"document": backup_result.document, "diagnostic_paths": diagnostics}
+	# A profile whose level set no longer matches the world catalog is migrated,
+	# never discarded. Only what migration cannot restore — invalid JSON or a
+	# broken internal invariant — reaches the corruption branch below.
+	if kind == &"progress":
+		for candidate_path: String in [primary, backup]:
+			var migrated := _read_migrated(candidate_path, context)
+			if not bool(migrated.get("ok", false)):
+				continue
+			var installed := _install_without_rotation(
+				primary, migrated.document as Dictionary, kind, context)
+			if not bool(installed.get("ok", false)):
+				return installed
+			return {
+				"ok": true,
+				"source": &"migration",
+				"recovered": false,
+				"migrated": true,
+				"warning_message_id": MIGRATED_MESSAGE_ID,
+				"document": (migrated.document as Dictionary).duplicate(true),
+			}
 	var primary_exists := FileAccess.file_exists(primary)
 	var backup_exists := FileAccess.file_exists(backup)
 	if not primary_exists and not backup_exists:
@@ -193,6 +214,23 @@ func _read_valid(path: String, kind: StringName, context: Variant) -> Dictionary
 	if not validation_error.is_empty():
 		return _failure(&"schema", validation_error)
 	return {"ok": true, "document": _normalize(kind, parsed as Dictionary)}
+
+
+## Reads a progress file that failed validation and tries to bring it forward to
+## the current world catalog. It never repairs a record: it only rebuilds the
+## catalog-derived shape and keeps everything the player earned.
+func _read_migrated(path: String, context: Variant) -> Dictionary:
+	if not FileAccess.file_exists(path):
+		return _failure(&"missing", "file does not exist")
+	var parser := JSON.new()
+	if parser.parse(FileAccess.get_file_as_string(path)) != OK \
+			or not parser.data is Dictionary:
+		return _failure(&"parse", "file is not valid JSON object")
+	var migrated: Dictionary = PROGRESS_MODEL.migrate_document(
+		parser.data, context as Dictionary)
+	if not bool(migrated.get("ok", false)):
+		return _failure(&"schema", str(migrated.get("message", "migration failed")))
+	return {"ok": true, "document": _normalize(&"progress", migrated.document as Dictionary)}
 
 
 func _validate(kind: StringName, document: Variant, context: Variant) -> String:

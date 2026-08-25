@@ -42,6 +42,7 @@
     "app.options.confirm": "CONFIRMAR TROCA",
     "app.options.cancel": "CANCELAR TROCA",
     "app.recovery.total": "ARQUIVOS DANIFICADOS FORAM PRESERVADOS; PADRÕES SEGUROS FORAM RESTAURADOS.",
+    "app.recovery.migrated": "O CATÁLOGO DE FASES MUDOU; SEU PROGRESSO FOI PRESERVADO E ADAPTADO.",
     "app.save.retry": "NÃO FOI POSSÍVEL SALVAR. TENTE NOVAMENTE.",
     "app.fan_notice.legal": "fan game não oficial, sem afiliação ou endosso",
     "app.fan_notice.accept": "CONTINUAR",

@@ -107,6 +107,68 @@ static func validate_document(document: Variant, world_catalog: Dictionary) -> S
 	return ""
 
 
+## Migrates a structurally sound profile whose level set no longer matches the
+## world catalog.
+##
+## Adding or removing a level is a content change, never a corrupted file: every
+## existing profile stops matching the closed key set the moment the catalog
+## moves. Migration rebuilds only the catalog-derived shape — a level that
+## arrived starts with a zeroed record, a record whose level left is dropped —
+## and preserves everything the player earned in the levels that remain.
+## Anything the migration cannot restore stays a validation failure, so real
+## corruption never reaches the player disguised as a schema change.
+static func migrate_document(document: Variant, world_catalog: Dictionary) -> Dictionary:
+	if not document is Dictionary:
+		return {"ok": false, "message": "$ must be an object"}
+	var value := (document as Dictionary).duplicate(true)
+	var error := _exact_keys_error(value, ROOT_KEYS, "$")
+	if not error.is_empty():
+		return {"ok": false, "message": error}
+	if not _is_int(value.schema_version) or int(value.schema_version) != SCHEMA_VERSION:
+		return {"ok": false, "message": "$.schema_version must be integer 2"}
+	if not value.levels is Dictionary:
+		return {"ok": false, "message": "$.levels must be an object"}
+	var canonical := default_document(world_catalog)
+	var stored := value.levels as Dictionary
+	var records := {}
+	for level_id: Variant in canonical.levels:
+		var qualified := str(level_id)
+		var carried: Variant = stored.get(qualified)
+		if carried is Dictionary and _exact_keys_error(
+				carried as Dictionary, RECORD_KEYS, "$").is_empty():
+			records[qualified] = (carried as Dictionary).duplicate(true)
+		else:
+			records[qualified] = (canonical.levels[qualified] as Dictionary).duplicate(true)
+	value.levels = records
+	value.available_world_ids = (canonical.available_world_ids as Array).duplicate(true)
+	# The unlock chain may have moved with the catalog. A record that survives in
+	# a level the new chain no longer opens is zeroed, and availability is
+	# recomputed until it stops changing.
+	var available: Array = _available_level_ids(world_catalog, records)
+	for _pass: int in range(records.size() + 1):
+		var changed := false
+		for level_id: Variant in records:
+			var record := records[level_id] as Dictionary
+			if bool(record.completed) and not available.has(str(level_id)):
+				records[level_id] = (canonical.levels[str(level_id)] as Dictionary).duplicate(true)
+				changed = true
+		if not changed:
+			break
+		available = _available_level_ids(world_catalog, records)
+	value.available_level_ids = available
+	var position_id := "%s/%s" % [value.last_world_id, value.last_level_id]
+	if typeof(value.last_world_id) != TYPE_STRING \
+			or typeof(value.last_level_id) != TYPE_STRING \
+			or not (value.available_world_ids as Array).has(value.last_world_id) \
+			or not available.has(position_id):
+		value.last_world_id = canonical.last_world_id
+		value.last_level_id = canonical.last_level_id
+	var validation_error := validate_document(value, world_catalog)
+	if not validation_error.is_empty():
+		return {"ok": false, "message": validation_error}
+	return {"ok": true, "document": value}
+
+
 static func apply_result(
 		document: Dictionary, result: Dictionary, world_catalog: Dictionary) -> Dictionary:
 	var validation_error := validate_document(document, world_catalog)

@@ -21,6 +21,10 @@ const FORMAT_TOKENS := {
 	"app.result.stars": ["%d"],
 	"app.result.birds_used": ["%d"],
 }
+## Deliberate second source of truth for three visible pt-BR strings. It is a
+## fail-closed pin: a silent edit of the shipped catalog would change copy the
+## product depends on without any gate noticing. Every other string lives only
+## in the catalog, and this list stays short on purpose.
 const CLOSED_MESSAGES := {
 	"app.save.retry": "NÃO FOI POSSÍVEL SALVAR. TENTE NOVAMENTE.",
 	"TXT_LEVEL_FARM_REACTION": "Fazenda — Reação em Cadeia",
@@ -67,6 +71,7 @@ const REQUIRED_MESSAGE_IDS := [
 	"app.options.confirm",
 	"app.options.cancel",
 	"app.recovery.total",
+	"app.recovery.migrated",
 	"app.save.retry",
 	"input.prompt.accept.keyboard",
 	"input.prompt.accept.gamepad",

@@ -238,6 +238,8 @@ func _run() -> void:
 	if not bool(after_backup.get("ok", false)) or after_backup.get("source") != &"backup":
 		_fail("interruption after backup must leave a recoverable backup")
 		return
+	if not _check_catalog_migration(world_catalog, extended_catalog, second_progress):
+		return
 	if not _finish_simulation_isolation_probe():
 		return
 
@@ -248,6 +250,79 @@ func _run() -> void:
 	print(SUCCESS_MARKER)
 	_free_simulation_probe()
 	quit(0)
+
+
+## A level added to or removed from the world catalog is a content change, never
+## a corrupted file. The profile must migrate — a level that arrived enters with
+## a zeroed record, a record whose level left is dropped, everything else
+## survives — instead of falling into the corruption branch that renames both
+## files and installs defaults with the wrong message.
+func _check_catalog_migration(world_catalog: Dictionary, extended_catalog: Dictionary,
+		earned: Dictionary) -> bool:
+	var migration_root := "user://tests/task20-migrate-%d-%d" % [
+		OS.get_process_id(), Time.get_ticks_usec()]
+	if not bool(SAVE_STORE.new(migration_root).save_progress(
+			earned, world_catalog).get("ok", false)):
+		_fail("the migration probe must persist a profile under the current catalog")
+		return false
+	var migrated: Dictionary = SAVE_STORE.new(migration_root).load_progress(extended_catalog)
+	var failure := _migration_failure(migrated, extended_catalog, migration_root)
+	if not failure.is_empty():
+		_cleanup_root(migration_root)
+		_fail(failure)
+		return false
+	var document := migrated.get("document", {}) as Dictionary
+	var added := (document.get("levels", {}) as Dictionary).get(
+		"earth/locked_after_farm", {}) as Dictionary
+	var reloaded: Dictionary = SAVE_STORE.new(migration_root).load_progress(extended_catalog)
+	var shrunk: Dictionary = SAVE_STORE.new(migration_root).load_progress(world_catalog)
+	var shrunk_record := ((shrunk.get("document", {}) as Dictionary).get(
+		"levels", {}) as Dictionary).get("earth/farm_reaction", {}) as Dictionary
+	var errors: Array[String] = []
+	if bool(added.get("completed", true)) or int(added.get("completion_count", -1)) != 0 \
+			or int(added.get("best_score", -1)) != 0:
+		errors.append("a level added by the catalog must enter with a zeroed record")
+	if reloaded.get("source") != &"primary" \
+			or reloaded.get("document", {}) != document:
+		errors.append("the migrated profile must be installed as the durable primary")
+	if shrunk.get("source") != &"migration" \
+			or (shrunk.get("document", {}) as Dictionary).get("levels", {}).has(
+				"earth/locked_after_farm"):
+		errors.append("a level removed from the catalog must be dropped by migration")
+	if int(shrunk_record.get("best_score", -1)) != 42000 \
+			or int(shrunk_record.get("completion_count", -1)) != 2:
+		errors.append("migrating a shrunk catalog must still preserve earned records")
+	_cleanup_root(migration_root)
+	if not errors.is_empty():
+		_fail(" | ".join(errors))
+		return false
+	return true
+
+
+func _migration_failure(migrated: Dictionary, extended_catalog: Dictionary,
+		migration_root: String) -> String:
+	if not bool(migrated.get("ok", false)) or migrated.get("source") != &"migration" \
+			or migrated.get("warning_message_id") != &"app.recovery.migrated" \
+			or bool(migrated.get("recovered", true)):
+		return "a catalog that gained a level must migrate the profile, not discard it: %s" \
+			% [migrated.get("source", "")]
+	var document := migrated.get("document", {}) as Dictionary
+	var record := (document.get("levels", {}) as Dictionary).get(
+		"earth/farm_reaction", {}) as Dictionary
+	if not bool(record.get("completed", false)) or int(record.get("best_score", -1)) != 42000 \
+			or int(record.get("best_stars", -1)) != 2 \
+			or int(record.get("best_birds_used", -1)) != 3 \
+			or int(record.get("completion_count", -1)) != 2:
+		return "migration must preserve every record the player earned: %s" % [record]
+	if not PROGRESS_MODEL.validate_document(document, extended_catalog).is_empty():
+		return "the migrated profile must satisfy the closed schema of the new catalog"
+	var directory := DirAccess.open(ProjectSettings.globalize_path(migration_root))
+	if directory == null:
+		return "the migration probe directory must be readable"
+	for file_name: String in directory.get_files():
+		if ".corrupt." in file_name:
+			return "a catalog change must never be preserved as corruption: %s" % file_name
+	return ""
 
 
 func _begin_simulation_isolation_probe() -> bool:
