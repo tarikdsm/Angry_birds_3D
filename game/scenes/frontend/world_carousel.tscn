@@ -6,6 +6,14 @@ anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
 script = ExtResource("1")
+[node name="Title" type="Label" parent="."]
+layout_mode = 0
+offset_left = 80.0
+offset_top = 20.0
+offset_right = 700.0
+offset_bottom = 70.0
+metadata/message_id = "app.worlds.title"
+
 [node name="CurrentWorld" type="Label" parent="."]
 offset_left = 80.0
 offset_top = 80.0

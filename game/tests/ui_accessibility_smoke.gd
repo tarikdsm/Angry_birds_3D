@@ -21,6 +21,15 @@ const VIEWPORT_SIZES := [
 	{"id": "4:3", "size": Vector2i(1024, 768)},
 ]
 const UI_SCALES := [1.0, 1.5, 2.0]
+const FRONTEND_SCREENS := [
+	"res://scenes/frontend/main_menu.tscn",
+	"res://scenes/frontend/options_menu.tscn",
+	"res://scenes/frontend/world_carousel.tscn",
+	"res://scenes/frontend/level_select.tscn",
+	"res://scenes/frontend/narrative_brief.tscn",
+	"res://scenes/frontend/about_screen.tscn",
+	"res://scenes/frontend/fan_project_notice.tscn",
+]
 const MARKER := "UI_ACCESSIBILITY_SMOKE_OK"
 
 var _errors: Array[String] = []
@@ -37,6 +46,7 @@ func _initialize() -> void:
 func _run() -> void:
 	_check_contrast()
 	_check_badges()
+	await _check_frontend_screens()
 	await _check_hud_layout()
 	if _errors.is_empty():
 		await _check_overlay_focus(PAUSE_MENU, "PauseMenu")
@@ -78,6 +88,80 @@ func _check_badges() -> void:
 	for readiness: String in ["unavailable", "arming", "armed", "active", "spent"]:
 		_check(not ACCESSIBILITY_SETTINGS.readiness_message_id(readiness).is_empty(),
 			"every ability state must carry localized text: %s" % readiness)
+
+
+## The contrast proof measures the ThemeFactory palette, so it says something
+## about a screen only if that screen actually renders with the palette. Task 24
+## proved three surfaces; the seven screens the player meets first were left on
+## the engine default theme, therefore unmeasured. This probe pins that every
+## registered frontend screen resolves the audited colours, paints the audited
+## surface behind them, and keeps every action reachable without clipping at
+## every supported aspect ratio and UI scale.
+func _check_frontend_screens() -> void:
+	var messages := _product_messages()
+	var audited: Array[Color] = []
+	for entry: Dictionary in THEME_FACTORY.text_pairs():
+		var foreground := entry.foreground as Color
+		if not audited.has(foreground):
+			audited.append(foreground)
+	var original_size := root.size
+	for scene_path: String in FRONTEND_SCREENS:
+		var packed := load(scene_path) as PackedScene
+		if packed == null:
+			_check(false, "the frontend screen must be loadable: %s" % scene_path)
+			continue
+		_overlay = packed.instantiate() as Control
+		root.add_child(_overlay)
+		await process_frame
+		if _overlay.has_method("set_messages"):
+			_overlay.set_messages(messages)
+		var screen_name := str(_overlay.name)
+		var screen_theme: Theme = _overlay.theme
+		_check(screen_theme != null \
+				and screen_theme.get_color("font_color", "Label") == THEME_FACTORY.PRIMARY_TEXT \
+				and screen_theme.has_stylebox("normal", "Button"),
+			"%s must render with the audited product theme" % screen_name)
+		var backdrop := _overlay.find_child("Backdrop", true, false) as ColorRect
+		_check(backdrop != null and backdrop.color == THEME_FACTORY.SURFACE,
+			"%s must paint the audited surface behind its copy" % screen_name)
+		for control: Node in _overlay.find_children("*", "Control", true, false):
+			if control is Button:
+				_check(audited.has((control as Button).get_theme_color("font_color")) \
+						and audited.has(
+							(control as Button).get_theme_color("font_focus_color")),
+					"%s renders %s in an unaudited colour" % [screen_name, control.name])
+			elif control is Label:
+				_check(audited.has((control as Label).get_theme_color("font_color")),
+					"%s renders %s in an unaudited colour" % [screen_name, control.name])
+		for viewport: Dictionary in VIEWPORT_SIZES:
+			for scale: float in UI_SCALES:
+				root.size = viewport.size as Vector2i
+				root.content_scale_factor = scale
+				await process_frame
+				await process_frame
+				var view := root.get_visible_rect()
+				for button: Button in _visible_buttons(_overlay):
+					button.grab_focus()
+					await process_frame
+					_check(button.has_focus() and button.is_visible_in_tree() \
+							and view.encloses(button.get_global_rect()),
+						"%s must keep %s reachable without clipping at %s %d%%: view=%s rect=%s" % [
+							screen_name, button.name, viewport.id,
+							roundi(scale * 100.0), view, button.get_global_rect()])
+		root.remove_child(_overlay)
+		_overlay.free()
+		_overlay = null
+	root.content_scale_factor = 1.0
+	root.size = original_size
+	await process_frame
+
+
+func _visible_buttons(screen: Control) -> Array[Button]:
+	var buttons: Array[Button] = []
+	for control: Node in screen.find_children("*", "Button", true, false):
+		if control is Button and (control as Button).is_visible_in_tree():
+			buttons.append(control as Button)
+	return buttons
 
 
 func _check_hud_layout() -> void:
@@ -162,12 +246,12 @@ func _check_hud_fits(hud: CanvasLayer, label: String) -> void:
 	var view := root.get_visible_rect()
 	var rects: Dictionary = {}
 	for panel_name: String in [
-			"ObjectivePanel", "ScorePanel", "QueuePanel", "ControlsPanel"]:
+			"ObjectivePanel", "ScorePanel", "QueuePanel", "ControlsPanel", "MaterialsPanel"]:
 		var panel: Control = hud.root_control().find_child(panel_name, true, false) as Control
 		if panel == null:
 			_check(false, "the HUD must keep %s mounted" % panel_name)
 			return
-		if panel_name != "ControlsPanel":
+		if panel_name not in ["ControlsPanel", "MaterialsPanel"]:
 			_check(panel.is_visible_in_tree(),
 				"%s must never hide %s" % [label, panel_name])
 		if not panel.is_visible_in_tree():
@@ -178,17 +262,39 @@ func _check_hud_fits(hud: CanvasLayer, label: String) -> void:
 			"%s must keep %s inside the viewport: view=%s rect=%s" % [
 				label, panel_name, view, rect])
 	for pair: Array in [["ObjectivePanel", "ScorePanel"], ["QueuePanel", "ControlsPanel"],
-			["ObjectivePanel", "QueuePanel"], ["ScorePanel", "ControlsPanel"]]:
+			["ObjectivePanel", "QueuePanel"], ["ScorePanel", "ControlsPanel"],
+			["QueuePanel", "MaterialsPanel"], ["ObjectivePanel", "MaterialsPanel"],
+			["ScorePanel", "MaterialsPanel"]]:
 		if not rects.has(pair[0]) or not rects.has(pair[1]):
 			continue
 		var first := rects[pair[0]] as Rect2
 		var second := rects[pair[1]] as Rect2
 		_check(not first.intersects(second),
 			"%s must never overlap %s and %s" % [label, pair[0], pair[1]])
+	# The queue and the material legend are specification guarantees, not
+	# progressive-disclosure candidates: the current bird plus the next three, and
+	# a non-colour carrier for every material of the level, at every supported
+	# aspect ratio and UI scale. Compaction may fold the header, the row spacing
+	# and the control hints; it may never fold these two.
 	var queue_host: Control = hud.root_control().find_child(
 		"QueueHost", true, false) as Control
-	_check(queue_host != null and queue_host.get_child_count() >= 2,
-		"%s must always show the current bird and the next one" % label)
+	_check(queue_host != null and queue_host.get_child_count() == 4,
+		"%s must always show the current bird and the next three: %d" % [
+			label, -1 if queue_host == null else queue_host.get_child_count()])
+	if queue_host != null:
+		_check(view.encloses(queue_host.get_global_rect()),
+			"%s must keep the whole queue inside the viewport: view=%s rect=%s" % [
+				label, view, queue_host.get_global_rect()])
+	var legend: Control = hud.root_control().find_child(
+		"MaterialsBlock", true, false) as Control
+	_check(legend != null and legend.is_visible_in_tree(),
+		"%s must never hide the material legend" % label)
+	for key: String in hud.material_legend_keys():
+		var row: Control = hud.root_control().find_child(
+			"MaterialRow_%s" % key, true, false) as Control
+		_check(row != null and row.is_visible_in_tree() \
+				and view.encloses(row.get_global_rect()),
+			"%s must keep the %s legend row readable inside the viewport" % [label, key])
 
 
 func _check_overlay_focus(scene_path: String, expected_name: String) -> void:

@@ -156,6 +156,27 @@ func _run() -> void:
 		scale_button.pressed.emit()
 		await process_frame
 
+	# The rebind capture belongs to the options screen alone. Any other route must
+	# disarm it, or the next key the player presses anywhere is swallowed and
+	# persisted as a binding they never asked for.
+	(options.find_child("BindingSemanticAcceptButton", true, false) as Button).pressed.emit()
+	screen_router.show_world_carousel()
+	await process_frame
+	_push_key(KEY_Y)
+	await process_frame
+	saved_options = JSON.parse_string(FileAccess.get_file_as_string(settings_path))
+	var leaked_tokens: Array = []
+	if saved_options is Dictionary:
+		for binding: Dictionary in saved_options.get("bindings", []):
+			if str(binding.get("action", "")) == "semantic_accept":
+				leaked_tokens = binding.get("tokens", [])
+	if leaked_tokens.has("key:%d" % KEY_Y):
+		_fail("leaving the options screen must disarm the pending rebind capture")
+		return
+	screen_router.show_options_menu()
+	await process_frame
+	options = _shell.get_node("ScreenRouter/ScreenHost/OptionsMenu")
+
 	input_intents.clear()
 	(options.find_child("BindingSemanticAcceptButton", true, false) as Button).pressed.emit()
 	_push_key(KEY_ESCAPE)
@@ -302,6 +323,8 @@ func _exercise_task21_routes_at_scale(scale_percent: int) -> void:
 	if carousel == null:
 		return
 	await _assert_controls_visible(carousel, "World carousel at %d percent" % scale_percent)
+	_record_localized_title(carousel, "app.worlds.title",
+		"World carousel at %d percent" % scale_percent)
 	var rendered_record := ""
 	for child: Node in carousel.find_child("CardHost", true, false).get_children():
 		if child is Button and str(child.get_meta("world_id", "")) == "earth":
@@ -320,6 +343,19 @@ func _exercise_task21_routes_at_scale(scale_percent: int) -> void:
 			% scale_percent)
 	if orbital_neighbor == null:
 		return
+	# At 150% and 200% the authored 1280-wide layout is larger than the logical
+	# viewport, so the neighbour only exists as a pointer target once the frontend
+	# scroll brings it in. Hovering a point outside the visible rect would prove
+	# nothing about routing.
+	var carousel_scroll := carousel.find_child("ContentScroll", true, false) as ScrollContainer
+	if carousel_scroll != null:
+		carousel_scroll.ensure_control_visible(orbital_neighbor)
+		await process_frame
+	_record(root.get_viewport().get_visible_rect().encloses(
+			orbital_neighbor.get_global_rect()),
+		"the Orbital neighbor must reach the visible rect at %d percent: view=%s rect=%s" % [
+			scale_percent, root.get_viewport().get_visible_rect(),
+			orbital_neighbor.get_global_rect()])
 	var neighbor_center := orbital_neighbor.get_global_rect().get_center()
 	_push_mouse_motion(neighbor_center)
 	await process_frame
@@ -402,6 +438,8 @@ func _exercise_task21_routes_at_scale(scale_percent: int) -> void:
 	if levels == null:
 		return
 	await _assert_controls_visible(levels, "Orbital level select at %d percent" % scale_percent)
+	_record_localized_title(levels, "app.levels.title",
+		"Orbital level select at %d percent" % scale_percent)
 	var phase_buttons := levels.find_child("LevelHost", true, false).get_children()
 	_record(phase_buttons.size() == 1 \
 			and (phase_buttons[0] as Button).text \
@@ -491,6 +529,15 @@ func _exercise_task21_routes_at_scale(scale_percent: int) -> void:
 		await process_frame
 	_record(_shell.get_node_or_null("ScreenRouter/ScreenHost/MainMenu") != null,
 		"semantic accept must leave the notice route at %d percent" % scale_percent)
+
+
+## Both ids are required by the closed pt-BR catalog. Requiring copy that no
+## scene renders is a catalog that promises a title the player never sees.
+func _record_localized_title(screen: Control, message_id: String, label: String) -> void:
+	var title := screen.find_child("Title", true, false) as Label
+	_record(title != null and title.is_visible_in_tree()
+			and not title.text.is_empty() and title.text != message_id,
+		"%s must render the localized %s" % [label, message_id])
 
 
 func _assert_controls_visible(screen: Control, label: String) -> void:

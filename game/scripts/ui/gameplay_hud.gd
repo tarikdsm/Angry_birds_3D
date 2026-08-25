@@ -15,13 +15,17 @@ const TRAJECTORY_RENDERER := preload("res://scripts/ui/trajectory_renderer.gd")
 
 const QUEUE_VISIBLE_ENTRIES := 4
 const HINT_ACTIONS := [&"semantic_pause", &"semantic_restart", &"semantic_recenter"]
-## Below this logical viewport the HUD drops its secondary blocks so the
-## objective, the score and the queue keep fitting at 150% and 200% UI scale.
+## Below this logical viewport the HUD folds its secondary blocks so the
+## objective, the score, the queue and the material legend keep fitting at the
+## 150% and 200% UI scales the specification supports.
 const COMPACT_VIEWPORT := Vector2(1000.0, 560.0)
-## Below this one the queue itself shortens. The current bird and the next one
-## always stay readable.
+## Below this one the material legend folds into a single wrapped line. It never
+## disappears: the glyph and the pt-BR name are the only non-colour carrier of
+## material identity, and the accessibility requirement has no exception for a
+## scale the product supports.
 const MINIMAL_VIEWPORT := Vector2(760.0, 420.0)
-const MINIMAL_QUEUE_ENTRIES := 2
+const QUEUE_SEPARATION := 8
+const MINIMAL_QUEUE_SEPARATION := 2
 
 var _messages: Dictionary = {}
 var _birds: Dictionary = {}
@@ -35,6 +39,9 @@ var _trajectory: Node
 var _objective_label: Label
 var _plane_label: Label
 var _materials_host: VBoxContainer
+var _materials_panel: PanelContainer
+var _materials_box: VBoxContainer
+var _objective_box: VBoxContainer
 var _score_label: Label
 var _multiplier_label: Label
 var _stars_label: Label
@@ -149,13 +156,18 @@ func is_minimal() -> bool:
 	return _minimal
 
 
+## The queue is never shortened. The specification asks for the current bird and
+## the next three, without an exception for a supported UI scale, so compaction
+## folds other blocks instead of dropping shots the player has to plan around.
 func visible_queue_entries() -> int:
-	return MINIMAL_QUEUE_ENTRIES if _minimal else QUEUE_VISIBLE_ENTRIES
+	return QUEUE_VISIBLE_ENTRIES
 
 
-## Progressive disclosure: the objective, the score and the bird queue are the
-## blocks a player needs to act and are never hidden; the material legend and
-## the control hints step aside when the logical viewport gets small.
+## Progressive disclosure: the objective, the score, the bird queue and the
+## material legend are the blocks a player needs to act and to read state
+## without relying on colour, so none of them is ever hidden. What steps aside
+## is the control hint panel and the assist label, and the legend moves into the
+## space they vacate.
 func _apply_responsive_layout() -> void:
 	if _root == null:
 		return
@@ -165,14 +177,44 @@ func _apply_responsive_layout() -> void:
 	var changed := compact != _compact or minimal != _minimal
 	_compact = compact
 	_minimal = minimal
-	if _materials_block != null:
-		_materials_block.visible = not _compact
 	if _controls_panel != null:
 		_controls_panel.visible = not _compact
 	if _assist_label != null:
 		_assist_label.visible = not _compact
-	if changed and _configured and not _last_frame.is_empty():
+	# At the smallest supported logical viewport the queue gives up its header
+	# and its row spacing, never an entry: the header is decoration, the four
+	# entries are the shot plan the player plays around.
+	if _queue_title != null:
+		_queue_title.visible = not _minimal
+	if _queue_host != null:
+		_queue_host.add_theme_constant_override(
+			"separation", MINIMAL_QUEUE_SEPARATION if _minimal else QUEUE_SEPARATION)
+	# The legend gives up the same decoration for the same reason: each row still
+	# names its material by glyph and by pt-BR copy, which is the guarantee.
+	if _materials_title != null:
+		_materials_title.visible = not _minimal
+	if _materials_host != null:
+		_materials_host.add_theme_constant_override(
+			"separation", MINIMAL_QUEUE_SEPARATION if _minimal else QUEUE_SEPARATION)
+	if not changed:
+		return
+	_relocate_material_legend()
+	if _configured and not _last_frame.is_empty():
 		_render_queue(_last_frame)
+
+
+## The legend is never dropped: it moves into the bottom row, taking exactly the
+## space the control hints vacate. The glyph and the pt-BR name of every
+## material therefore stay on screen at 150% and 200% as well, and the material
+## state never has to be read from colour alone.
+func _relocate_material_legend() -> void:
+	if _materials_block == null or _materials_panel == null or _objective_box == null:
+		return
+	var host: Node = _materials_box if _compact else _objective_box
+	if _materials_block.get_parent() != host:
+		_materials_block.reparent(host)
+	_materials_panel.visible = _compact
+	_materials_block.visible = true
 
 
 func material_legend_keys() -> Array[String]:
@@ -374,16 +416,16 @@ func _build() -> void:
 	rows.add_child(top)
 
 	var objective_panel := _panel(&"ObjectivePanel")
-	var objective_box := _column(&"ObjectiveBox")
-	objective_panel.add_child(objective_box)
+	_objective_box = _column(&"ObjectiveBox")
+	objective_panel.add_child(_objective_box)
 	_objective_label = _label("", "Headline")
 	_objective_label.name = &"ObjectiveLabel"
-	objective_box.add_child(_objective_label)
+	_objective_box.add_child(_objective_label)
 	_plane_label = _label("", "Value")
 	_plane_label.name = &"PlaneLabel"
-	objective_box.add_child(_plane_label)
+	_objective_box.add_child(_plane_label)
 	_materials_block = _column(&"MaterialsBlock")
-	objective_box.add_child(_materials_block)
+	_objective_box.add_child(_materials_block)
 	_materials_title = _label(_message("hud.material.title"), "Muted")
 	_materials_title.name = &"MaterialsTitle"
 	_materials_block.add_child(_materials_title)
@@ -431,6 +473,15 @@ func _build() -> void:
 	bottom.add_child(queue_panel)
 
 	bottom.add_child(_spacer(&"BottomSpacer", true))
+
+	# Second home of the material legend. It only becomes visible when the
+	# compact layout pulls the legend out of the objective panel, and it occupies
+	# exactly the room the control hints give up.
+	_materials_panel = _panel(&"MaterialsPanel")
+	_materials_panel.visible = false
+	_materials_box = _column(&"MaterialsBox")
+	_materials_panel.add_child(_materials_box)
+	bottom.add_child(_materials_panel)
 
 	_controls_panel = _panel(&"ControlsPanel")
 	var controls_box := _column(&"ControlsBox")
