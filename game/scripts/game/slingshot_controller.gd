@@ -156,6 +156,15 @@ func observe_frame(frame: Dictionary) -> void:
 	if not _configured:
 		return
 	_phase = str(frame.get("phase", _phase))
+	# A gesture the kernel refuses — a grab requested before the level finished
+	# reinstalling, for instance — must never leave the presentation holding a
+	# grab the kernel does not know about.
+	if _grabbing and _phase != "grabbed" and _has_rejection(frame):
+		_grabbing = false
+		_plane = {}
+		if _director != null:
+			_director.unlock()
+		grab_cancelled.emit()
 	var current: Variant = frame.get("current_bird")
 	if current != null:
 		_rebuild_ghost(int(current))
@@ -268,6 +277,13 @@ func handle_cancel() -> bool:
 		return false
 	grab_cancelled.emit()
 	return true
+
+
+static func _has_rejection(frame: Dictionary) -> bool:
+	for event: Variant in frame.get("events", []):
+		if event is Dictionary 				and str((event as Dictionary).get("kind", "")) == "command_rejected":
+			return true
+	return false
 
 
 func _displacement_of(frame: Dictionary) -> Vector3:

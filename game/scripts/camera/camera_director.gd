@@ -31,6 +31,7 @@ var _grab_locked := false
 var _phase_locked := false
 var _presentation_driven := false
 var _reduced_motion := false
+var _shake_enabled := true
 
 
 static func composition_bounds_of(level_document: Dictionary) -> Dictionary:
@@ -111,6 +112,7 @@ func configure(profile_id: String, level_document: Dictionary) -> bool:
 	_phase_locked = false
 	_presentation_driven = false
 	rig.set_reduced_motion(_reduced_motion)
+	rig.set_shake_enabled(_shake_enabled)
 	rig.set_process(true)
 	rig.make_current()
 	profile_activated.emit(profile_id)
@@ -212,6 +214,19 @@ func set_reduced_motion(value: bool) -> void:
 
 func reduced_motion() -> bool:
 	return _reduced_motion
+
+
+## Camera shake is the impact kick of the profile. It is independent from
+## reduced motion: a player may keep the guided transitions and still turn the
+## kick off.
+func set_shake_enabled(value: bool) -> void:
+	_shake_enabled = value
+	for rig_kind: Variant in _rigs:
+		(_rigs[rig_kind] as Camera3D).set_shake_enabled(value)
+
+
+func shake_enabled() -> bool:
+	return _shake_enabled
 
 
 func recenter() -> void:

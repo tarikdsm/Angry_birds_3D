@@ -16,6 +16,7 @@ var _base_offset := Vector3.BACK
 var _configured := false
 var _locked := false
 var _reduced_motion := false
+var _shake_enabled := true
 var _yaw_degrees := 0.0
 var _inclination_degrees := 0.0
 var _distance := 0.0
@@ -107,6 +108,14 @@ func set_reduced_motion(value: bool) -> void:
 
 func reduced_motion() -> bool:
 	return _reduced_motion
+
+
+func set_shake_enabled(value: bool) -> void:
+	_shake_enabled = value
+
+
+func shake_enabled() -> bool:
+	return _shake_enabled
 
 
 func is_occluded() -> bool:

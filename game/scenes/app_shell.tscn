@@ -14,3 +14,5 @@ script = ExtResource("2_input")
 script = ExtResource("3_router")
 
 [node name="ScreenHost" type="Node" parent="ScreenRouter"]
+
+[node name="GameplayHost" type="Node" parent="ScreenRouter"]

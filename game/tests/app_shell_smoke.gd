@@ -23,6 +23,10 @@ func _initialize() -> void:
 
 
 func _run() -> void:
+	# The shipped window is 1280x720; headless starts at 64x64 and the product
+	# stretch mode follows the real aspect, so the probe pins the shipped size.
+	root.size = Vector2i(1280, 720)
+	await process_frame
 	var packed := load(APP_SHELL_SCENE) as PackedScene
 	if packed == null:
 		_fail("AppShell must be loadable by explicit resource path")

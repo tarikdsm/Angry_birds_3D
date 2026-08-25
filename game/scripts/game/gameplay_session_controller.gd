@@ -3,6 +3,10 @@ extends Node3D
 const CONTENT_FILE_LOADER := preload("res://scripts/data/content_file_loader.gd")
 const ASSET_CATALOG := preload("res://scripts/data/asset_catalog.gd")
 const INPUT_INTENT := preload("res://scripts/input/input_intent.gd")
+const PRODUCT_TEXT_CATALOG := preload("res://scripts/data/product_text_catalog.gd")
+const UI_CATALOG_PATH := "res://data/ui/product_v2.pt-BR.json"
+const TERMINAL_PHASE := "result"
+const TERMINAL_OUTCOMES := ["victory", "defeat"]
 const MATERIALS_PATH := "res://data/materials/product_v2.materials.json"
 const ARCHETYPES_PATH := "res://data/archetypes/product_v2.archetypes.json"
 const REQUEST_KEYS := [
@@ -36,6 +40,9 @@ const LEVEL_REGISTRY := {
 
 signal session_faulted(code: String, message: String)
 signal launch_rejected(message: String)
+## Published exactly once per configured launch, on the first confirmed
+## terminal frame. The save layer is only allowed to write after this.
+signal level_resolved(summary: Dictionary)
 
 @onready var _session: Node = $Session
 @onready var _body_views: Node3D = $BodyViews
@@ -43,6 +50,7 @@ signal launch_rejected(message: String)
 @onready var _capture_driver: Node = $CaptureDriver
 @onready var _camera_director: Node3D = $CameraDirector
 @onready var _slingshot: Node3D = $Slingshot
+@onready var _hud: CanvasLayer = $Hud
 
 var current_frame: Dictionary = {}
 var current_request: Dictionary = {}
@@ -52,6 +60,17 @@ var consume_calls := 0
 var restart_calls := 0
 var session_configured := false
 var last_error := ""
+var resolution_count := 0
+var last_resolution: Dictionary = {}
+
+var _advancing := false
+var _paused := false
+var _resolved := false
+var _queue_size := 0
+var _reduced_motion := false
+var _shake := true
+var _trajectory_assist := false
+var _bindings: Array = []
 
 
 static func registry_key(world_id: String, level_id: String) -> String:
@@ -154,6 +173,31 @@ func configure_launch(request: Variant) -> bool:
 	_slingshot.bind_session(_session)
 	_slingshot.bind_camera(_camera_director.active_rig())
 	_slingshot.bind_camera_director(_camera_director)
+	var text_catalog := PRODUCT_TEXT_CATALOG.load_catalog(UI_CATALOG_PATH)
+	if not bool(text_catalog.get("ok", false)):
+		last_error = "the closed pt-BR product catalog could not be loaded"
+		release_level()
+		launch_rejected.emit(last_error)
+		return false
+	var materials := CONTENT_FILE_LOADER.load_json(str(accepted.materials_path))
+	if not bool(materials.get("ok", false)):
+		last_error = str(materials.get("message", "materials could not be parsed"))
+		release_level()
+		launch_rejected.emit(last_error)
+		return false
+	if not _hud.configure(
+			(text_catalog.document as Dictionary).messages as Dictionary,
+			level.document as Dictionary,
+			archetypes.document as Dictionary,
+			materials.document as Dictionary):
+		last_error = "the product HUD rejected the registered content bundle"
+		release_level()
+		launch_rejected.emit(last_error)
+		return false
+	_hud.set_camera(_camera_director.active_rig())
+	_hud.set_bindings(_bindings)
+	_hud.set_trajectory_assist(_trajectory_assist)
+	_hud.set_reduced_motion(_reduced_motion)
 	configure_calls += 1
 	if not _session.configure_session(
 			str(documents.materials), str(documents.archetypes), str(documents.level)):
@@ -163,8 +207,11 @@ func configure_launch(request: Variant) -> bool:
 		return false
 	loaded_document_paths = documents.paths as Array
 	current_request = accepted
+	_queue_size = ((level.document as Dictionary).get("bird_queue", []) as Array).size()
 	session_configured = true
-	_session.set_physics_process(true)
+	_paused = false
+	_resolved = false
+	_set_advancing(true)
 	return true
 
 
@@ -172,11 +219,18 @@ func restart_level() -> bool:
 	if not session_configured or not _session.restart_level():
 		return false
 	restart_calls += 1
+	_resolved = false
+	_paused = false
+	_set_advancing(true)
 	return true
 
 
 func release_level() -> void:
 	session_configured = false
+	_advancing = false
+	_paused = false
+	_resolved = false
+	_queue_size = 0
 	_session.set_physics_process(false)
 	current_frame = {}
 	current_request = {}
@@ -184,6 +238,8 @@ func release_level() -> void:
 	_body_views.release()
 	_slingshot.release()
 	_camera_director.release()
+	if _hud != null:
+		_hud.release()
 	for child: Node in _world_host.get_children():
 		_world_host.remove_child(child)
 		child.queue_free()
@@ -201,8 +257,74 @@ func slingshot() -> Node3D:
 	return _slingshot
 
 
+func hud() -> CanvasLayer:
+	return _hud
+
+
+## Pause is an overlay, never an authoritative simulation state: it only stops
+## the presentation from advancing the kernel. No command is queued and no
+## frame is consumed while it is open.
+func set_paused(value: bool) -> void:
+	if not session_configured or _paused == value:
+		return
+	_paused = value
+	_set_advancing(not value and not _resolved)
+
+
+func is_paused() -> bool:
+	return _paused
+
+
+func is_advancing() -> bool:
+	return _advancing
+
+
+func is_resolved() -> bool:
+	return _resolved
+
+
+## Applies the persisted accessibility options to the presentation. None of
+## them reaches the kernel, so none of them can change score or trajectory.
+func apply_accessibility(settings: Dictionary) -> void:
+	set_reduced_motion(bool(settings.get("reduced_motion", false)))
+	set_shake(bool(settings.get("shake", true)))
+	set_trajectory_assist(bool(settings.get("trajectory_assist", false)))
+
+
 func set_reduced_motion(enabled: bool) -> void:
+	_reduced_motion = enabled
 	_camera_director.set_reduced_motion(enabled)
+	if _hud != null:
+		_hud.set_reduced_motion(enabled)
+
+
+func reduced_motion() -> bool:
+	return _reduced_motion
+
+
+func set_shake(enabled: bool) -> void:
+	_shake = enabled
+	_camera_director.set_shake_enabled(enabled)
+
+
+func shake_enabled() -> bool:
+	return _shake
+
+
+func set_trajectory_assist(enabled: bool) -> void:
+	_trajectory_assist = enabled
+	if _hud != null:
+		_hud.set_trajectory_assist(enabled)
+
+
+func trajectory_assist() -> bool:
+	return _trajectory_assist
+
+
+func set_bindings(bindings: Array) -> void:
+	_bindings = bindings.duplicate(true)
+	if _hud != null:
+		_hud.set_bindings(_bindings)
 
 
 ## Translates a semantic intent into presentation state. Gameplay authority
@@ -231,14 +353,44 @@ func handle_intent(intent: RefCounted) -> bool:
 
 
 func _physics_process(_delta: float) -> void:
-	if not session_configured:
+	if not session_configured or not _advancing:
 		return
 	current_frame = _session.consume_frame()
 	consume_calls += 1
 	_body_views.apply_frame(current_frame)
 	_slingshot.observe_frame(current_frame)
 	_camera_director.observe_frame(current_frame)
+	_hud.apply_frame(current_frame)
 	_capture_driver.observe_frame(current_frame)
+	_publish_resolution(current_frame)
+
+
+func _set_advancing(value: bool) -> void:
+	_advancing = value and session_configured
+	_session.set_physics_process(_advancing)
+
+
+## Publishes the terminal frame exactly once. Everything downstream, including
+## the save, depends on this single confirmation.
+func _publish_resolution(frame: Dictionary) -> void:
+	if _resolved or str(frame.get("phase", "")) != TERMINAL_PHASE:
+		return
+	var outcome := str(frame.get("outcome", "none"))
+	if not TERMINAL_OUTCOMES.has(outcome):
+		return
+	var remaining := (frame.get("bird_queue", []) as Array).size()
+	_resolved = true
+	_set_advancing(false)
+	resolution_count += 1
+	last_resolution = {
+		"world_id": str(current_request.get("world_id", "")),
+		"level_id": str(current_request.get("level_id", "")),
+		"outcome": outcome,
+		"score": int(frame.get("score", 0)),
+		"stars": int(frame.get("stars", 0)),
+		"birds_used": maxi(0, _queue_size - remaining),
+	}
+	level_resolved.emit(last_resolution.duplicate(true))
 
 
 func _read_documents(request: Dictionary) -> Dictionary:

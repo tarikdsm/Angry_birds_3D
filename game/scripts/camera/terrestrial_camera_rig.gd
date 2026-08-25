@@ -21,6 +21,7 @@ var _configured := false
 var _composed := false
 var _locked := false
 var _reduced_motion := false
+var _shake_enabled := true
 var _yaw_degrees := 0.0
 var _inclination_degrees := 0.0
 var _distance := 0.0
@@ -129,6 +130,16 @@ func reduced_motion() -> bool:
 	return _reduced_motion
 
 
+func set_shake_enabled(value: bool) -> void:
+	_shake_enabled = value
+	if not value:
+		_pending_kick_degrees = 0.0
+
+
+func shake_enabled() -> bool:
+	return _shake_enabled
+
+
 func is_occluded() -> bool:
 	return false
 
@@ -184,7 +195,7 @@ func observe_frame(frame: Dictionary) -> void:
 		_impact_focus = _clamped_point((event as Dictionary).get(
 			"position", _desired_focus) as Vector3)
 		_impact_remaining = float(_profile.get("impact_focus_seconds", 0.0))
-		if not _reduced_motion:
+		if not _reduced_motion and _shake_enabled:
 			_pending_kick_degrees = float(_profile.get("impact_fov_kick_degrees", 0.0))
 	if _reduced_motion:
 		_impact_remaining = 0.0

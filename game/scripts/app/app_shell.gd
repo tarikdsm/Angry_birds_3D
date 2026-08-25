@@ -6,6 +6,10 @@ const WORLD_CATALOG := preload("res://scripts/data/world_catalog.gd")
 const SETTINGS_MODEL := preload("res://scripts/save/settings_model.gd")
 const SAVE_STORE := preload("res://scripts/save/save_store.gd")
 const BINDING_STORE := preload("res://scripts/input/binding_store.gd")
+const INPUT_ROUTER := preload("res://scripts/input/input_router.gd")
+const ACCESSIBILITY_SETTINGS := preload("res://scripts/ui/accessibility_settings.gd")
+const GAMEPLAY_SESSION_CONTROLLER := preload(
+	"res://scripts/game/gameplay_session_controller.gd")
 const CATALOG_PATH := "res://data/ui/product_v2.pt-BR.json"
 const WORLD_CATALOG_PATH := "res://data/worlds/world_catalog.v2.json"
 const UI_SCALES := [100, 125, 150, 200]
@@ -66,6 +70,7 @@ func _ready() -> void:
 	_input_router.binding_token_captured.connect(_on_binding_token_captured)
 	_screen_router.exit_requested.connect(request_exit)
 	_screen_router.screen_changed.connect(_on_screen_changed)
+	_screen_router.gameplay_launch_failed.connect(_on_gameplay_launch_failed)
 	if (_progress.get("seen_tutorial_ids", []) as Array).has("FAN_PROJECT_NOTICE"):
 		_screen_router.show_main_menu()
 	else:
@@ -93,13 +98,24 @@ func request_exit() -> void:
 
 
 func _on_screen_changed(route: StringName) -> void:
+	_input_router.set_context(
+		INPUT_ROUTER.CONTEXT_GAMEPLAY if route == &"gameplay"
+		else INPUT_ROUTER.CONTEXT_FRONTEND)
+	if route == &"gameplay":
+		_bind_gameplay()
+		return
 	var screen := _screen_router.current_screen() as Control
+	if screen == null:
+		return
 	if route == &"main":
 		_input_router.cancel_binding_capture()
 		_pending_binding_proposal.clear()
 		var recovery_notice := screen.find_child("RecoveryNotice", true, false) as Label
 		if recovery_notice != null:
 			recovery_notice.visible = _show_recovery_notice
+		var continue_button := screen.find_child("ContinueButton", true, false) as Button
+		if continue_button != null:
+			continue_button.pressed.connect(_continue_progress)
 		return
 	if route == &"fan_notice":
 		screen.accepted.connect(_accept_fan_notice)
@@ -125,6 +141,8 @@ func _on_screen_changed(route: StringName) -> void:
 		screen.configure(lines)
 		screen.accepted.connect(_accept_briefing)
 		screen.back_requested.connect(_screen_router.show_level_select)
+		return
+	if route in [&"pause", &"result"]:
 		return
 	if route != &"options":
 		return
@@ -246,10 +264,21 @@ func _persist_settings(candidate: Dictionary) -> bool:
 		_apply_runtime(previous)
 		return false
 	_settings = candidate.duplicate(true)
+	_publish_runtime_settings()
 	var screen := _screen_router.current_screen() as Control
 	if screen != null and screen.name == &"OptionsMenu":
 		_refresh_options(screen)
 	return true
+
+
+## Pushes the persisted accessibility options to a mounted level. They only
+## reach the presentation, so they can never change score or trajectory.
+func _publish_runtime_settings() -> void:
+	var session: Node3D = _screen_router.gameplay()
+	if session == null:
+		return
+	session.set_bindings(_settings.get("bindings", []) as Array)
+	session.apply_accessibility(ACCESSIBILITY_SETTINGS.from_document(_settings))
 
 
 func _apply_runtime(value: Dictionary) -> bool:
@@ -391,7 +420,74 @@ func _accept_briefing() -> void:
 		screen.show_save_retry(not persisted)
 	if not persisted:
 		return
-	_screen_router.show_main_menu()
+	open_gameplay()
+
+
+## Opens the selected level. The launch request is built by the gameplay
+## controller from its closed campaign registry, so an unregistered pair can
+## never reach the kernel.
+func open_gameplay() -> bool:
+	var request: Dictionary = GAMEPLAY_SESSION_CONTROLLER.make_launch_request(
+		_selected_world_id, _selected_level_id)
+	if not bool(request.get("ok", false)):
+		_on_gameplay_launch_failed(str(request.get("message", "")))
+		return false
+	return _screen_router.show_gameplay(request.request as Dictionary)
+
+
+func _continue_progress() -> void:
+	_selected_world_id = str(_progress.get("last_world_id", ""))
+	_selected_level_id = str(_progress.get("last_level_id", ""))
+	if (_progress.get("seen_briefing_ids", []) as Array).has(
+			"%s/%s" % [_selected_world_id, _selected_level_id]):
+		open_gameplay()
+		return
+	_screen_router.show_narrative_brief()
+
+
+func _bind_gameplay() -> void:
+	var session: Node3D = _screen_router.gameplay()
+	if session == null:
+		return
+	if not session.level_resolved.is_connected(_on_level_resolved):
+		session.level_resolved.connect(_on_level_resolved)
+	if not session.session_faulted.is_connected(_on_session_faulted):
+		session.session_faulted.connect(_on_session_faulted)
+	_publish_runtime_settings()
+
+
+## Runs on the single confirmed terminal frame published by the controller.
+## Only a victory reaches the save, and it reaches it exactly once.
+func _on_level_resolved(summary: Dictionary) -> void:
+	var payload := summary.duplicate(true)
+	payload.new_record = false
+	payload.save_failed = false
+	if str(summary.get("outcome", "")) == "victory":
+		var saved: Dictionary = _save_store.save_level_result(
+			_progress, summary, _world_catalog)
+		if bool(saved.get("ok", false)):
+			_progress = (saved.get("document", _progress) as Dictionary).duplicate(true)
+			payload.new_record = bool(saved.get("new_record", false))
+		else:
+			payload.save_failed = true
+	_screen_router.show_result_screen(payload)
+
+
+## A content or physics fault is never a defeat: nothing is recorded and the
+## player returns to the level list.
+func _on_session_faulted(_code: String, _fault_message: String) -> void:
+	_screen_router.show_level_select()
+
+
+func _on_gameplay_launch_failed(_reason: String) -> void:
+	var screen := _screen_router.current_screen() as Control
+	if screen == null:
+		return
+	var notice := screen.find_child("RetryNotice", true, false) as Label
+	if notice == null:
+		return
+	notice.text = _message("app.gameplay.launch_failed")
+	notice.visible = true
 
 
 func _mark_seen(field: String, identifier: String) -> bool:

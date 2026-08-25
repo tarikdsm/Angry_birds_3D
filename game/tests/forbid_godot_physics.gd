@@ -10,6 +10,8 @@ const RUNTIME_SCENE_PATHS := [
 	"res://scenes/gameplay/gameplay_session.tscn",
 	"res://scenes/worlds/earth_farm.tscn",
 	"res://scenes/worlds/orbital_first_orbit.tscn",
+	"res://scenes/frontend/pause_menu.tscn",
+	"res://scenes/frontend/result_screen.tscn",
 ]
 const RUNTIME_SCAN_PHYSICS_FRAMES := 3
 const FORBIDDEN_SOURCE_FRAGMENTS := [

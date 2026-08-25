@@ -172,6 +172,30 @@ function Get-NinhoGodotSmokeRegistry {
             FixedFps = 60
             RequiredCompletionMarker = 'SLINGSHOT_INPUT_SMOKE_OK'
             RequiredLogText = ''
+        },
+        [pscustomobject]@{
+            Name = 'trajectory-renderer-smoke'
+            RelativePath = 'game/tests/trajectory_renderer_smoke.gd'
+            ResourcePath = 'res://tests/trajectory_renderer_smoke.gd'
+            FixedFps = 60
+            RequiredCompletionMarker = 'TRAJECTORY_RENDERER_SMOKE_OK'
+            RequiredLogText = ''
+        },
+        [pscustomobject]@{
+            Name = 'ui-accessibility-smoke'
+            RelativePath = 'game/tests/ui_accessibility_smoke.gd'
+            ResourcePath = 'res://tests/ui_accessibility_smoke.gd'
+            FixedFps = 60
+            RequiredCompletionMarker = 'UI_ACCESSIBILITY_SMOKE_OK'
+            RequiredLogText = ''
+        },
+        [pscustomobject]@{
+            Name = 'result-save-smoke'
+            RelativePath = 'game/tests/result_save_smoke.gd'
+            ResourcePath = 'res://tests/result_save_smoke.gd'
+            FixedFps = 60
+            RequiredCompletionMarker = 'RESULT_SAVE_SMOKE_OK'
+            RequiredLogText = ''
         }
     )
 }

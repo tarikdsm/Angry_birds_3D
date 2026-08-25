@@ -47,7 +47,10 @@ $expectedNames = @(
     'earth-session-smoke',
     'two-world-scene-smoke',
     'camera-profiles-smoke',
-    'slingshot-input-smoke'
+    'slingshot-input-smoke',
+    'trajectory-renderer-smoke',
+    'ui-accessibility-smoke',
+    'result-save-smoke'
 )
 Assert-True ($registry.Count -eq $expectedNames.Count) `
     'Registry must contain every shipped game/tests entrypoint'
@@ -83,6 +86,9 @@ $expectedMarkers = @{
     'two-world-scene-smoke' = 'TWO_WORLD_SCENE_SMOKE_OK'
     'camera-profiles-smoke' = 'CAMERA_PROFILES_SMOKE_OK'
     'slingshot-input-smoke' = 'SLINGSHOT_INPUT_SMOKE_OK'
+    'trajectory-renderer-smoke' = 'TRAJECTORY_RENDERER_SMOKE_OK'
+    'ui-accessibility-smoke' = 'UI_ACCESSIBILITY_SMOKE_OK'
+    'result-save-smoke' = 'RESULT_SAVE_SMOKE_OK'
 }
 foreach ($spec in $registry) {
     if ($expectedMarkers.ContainsKey([string]$spec.Name)) {

@@ -29,6 +29,43 @@ func save_progress(document: Dictionary, world_catalog: Dictionary) -> Dictionar
 	return _save_document(PROGRESS_FILE, document, &"progress", world_catalog)
 
 
+## Records one confirmed terminal result.
+##
+## The write only happens for a victory that actually improves or creates a
+## record; a defeat and a repeated identical victory leave the file untouched.
+## Idempotency at the level of the frame belongs to the caller, which is only
+## allowed to call this once per confirmed terminal frame.
+func save_level_result(
+		progress: Dictionary, result: Dictionary, world_catalog: Dictionary) -> Dictionary:
+	var previous := ((progress.get("levels", {}) as Dictionary).get(
+		"%s/%s" % [result.get("world_id", ""), result.get("level_id", "")], {})) as Dictionary
+	var applied: Dictionary = PROGRESS_MODEL.apply_result(progress, result, world_catalog)
+	if not bool(applied.get("ok", false)):
+		return {
+			"ok": false,
+			"changed": false,
+			"new_record": false,
+			"message": str(applied.get("message", "result could not be applied")),
+			"document": progress.duplicate(true),
+		}
+	if not bool(applied.get("changed", false)):
+		return {"ok": true, "changed": false, "new_record": false,
+			"document": progress.duplicate(true)}
+	var candidate := applied.document as Dictionary
+	var saved := _save_document(PROGRESS_FILE, candidate, &"progress", world_catalog)
+	if not bool(saved.get("ok", false)):
+		saved.changed = false
+		saved.new_record = false
+		saved.document = progress.duplicate(true)
+		return saved
+	return {
+		"ok": true,
+		"changed": true,
+		"new_record": int(result.get("score", 0)) > int(previous.get("best_score", 0)),
+		"document": candidate,
+	}
+
+
 func load_settings(default_bindings: Array, specs: Array) -> Dictionary:
 	var defaults := SETTINGS_MODEL.default_document(default_bindings)
 	return _load_document(SETTINGS_FILE, defaults, &"settings", specs)
