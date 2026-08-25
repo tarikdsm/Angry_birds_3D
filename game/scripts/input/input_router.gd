@@ -42,6 +42,11 @@ func set_context(context: StringName) -> void:
 	if context not in [CONTEXT_FRONTEND, CONTEXT_GAMEPLAY]:
 		push_error("InputRouter received an unsupported input context: %s" % context)
 		return
+	if context != CONTEXT_FRONTEND:
+		# A rebind is only ever captured on the options screen. Leaving the
+		# frontend disarms it, so no gameplay key can be swallowed and persisted
+		# as a binding the player never asked for.
+		_binding_capture_action = &""
 	_context = context
 
 
@@ -132,7 +137,9 @@ func submit_semantic(kind: StringName, payload: Dictionary = {}, source: StringN
 func route_raw_event(event: InputEvent) -> bool:
 	if event is InputEventKey:
 		var key_event := event as InputEventKey
-		if not _binding_capture_action.is_empty() and key_event.pressed and not key_event.echo:
+		var capturing := _context == CONTEXT_FRONTEND \
+			and not _binding_capture_action.is_empty()
+		if capturing and key_event.pressed and not key_event.echo:
 			var keycode := key_event.physical_keycode
 			if keycode == 0:
 				keycode = key_event.keycode

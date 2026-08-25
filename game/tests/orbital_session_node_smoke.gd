@@ -38,6 +38,9 @@ func _initialize() -> void:
 		if not _session.has_method(method_name):
 			_fail("missing binding: %s" % method_name)
 			return
+	if _session.process_physics_priority != -100:
+		_fail("OrbitalSessionNode physics priority must be -100")
+		return
 	if _session.process_priority != -100:
 		_fail("OrbitalSessionNode priority must be -100")
 		return

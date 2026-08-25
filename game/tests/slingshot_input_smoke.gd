@@ -241,6 +241,14 @@ func _run_router_and_camera_lock() -> void:
 	_check(not _director.apply_orbit(Vector2(12.0, 4.0))
 			and not _director.apply_zoom(1.0),
 		"orbit and zoom must be blocked while the launcher is grabbed")
+	var locked_orbit: Vector2 = _director.orbit_degrees()
+	# The freeze covers every camera motion, and the guard has to live in the
+	# rig itself: the director already unlocks on release one frame before the
+	# kernel leaves the grabbed phase, so a recenter reaching the rig directly
+	# would move the camera with the launcher still grabbed.
+	rig.recenter()
+	_check(_director.orbit_degrees() == locked_orbit,
+		"the rig must refuse a direct recenter while the launcher is grabbed")
 	_check(str(_slingshot.handle_release()) == "release" and not _director.is_locked(),
 		"release must unfreeze the camera")
 	_slingshot.observe_frame(_inspection_frame())

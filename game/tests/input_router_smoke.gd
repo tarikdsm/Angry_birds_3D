@@ -131,6 +131,39 @@ func _run() -> void:
 	_assert_raw_intent(&"gameplay", _motion_event(MOUSE_BUTTON_MASK_RIGHT), INPUT_INTENT.KIND_ORBIT)
 	_assert_raw_intent(&"gameplay", _motion_event(MOUSE_BUTTON_MASK_LEFT), INPUT_INTENT.KIND_UPDATE_PULL)
 
+	# A rebind capture is a frontend affordance. Consuming keys while gameplay is
+	# the active context would swallow the player's restart or ability key and
+	# persist it as a binding they never asked for.
+	var captured: Array = []
+	_router.binding_token_captured.connect(
+		func(action: StringName, token: String) -> void:
+			captured.append([action, token]))
+	_router.set_context(&"frontend")
+	if not _router.begin_binding_capture(&"semantic_accept"):
+		_fail("the options screen must be able to arm a rebind capture")
+		return
+	_received.clear()
+	_router.set_context(&"gameplay")
+	if not _router.route_raw_event(_key_event(KEY_R)) or _received.size() != 1 \
+			or _received[0].kind != INPUT_INTENT.KIND_RESTART or not captured.is_empty():
+		_fail("an armed capture must never consume a gameplay key: %s" % [captured])
+		return
+	_router.set_context(&"frontend")
+	_received.clear()
+	if _router.route_raw_event(_key_event(KEY_R)) or not captured.is_empty():
+		_fail("returning to the frontend must not resurrect a disarmed capture")
+		return
+	if not _router.begin_binding_capture(&"semantic_accept"):
+		_fail("the options screen must be able to arm the capture again")
+		return
+	if not _router.route_raw_event(_key_event(KEY_Y)) \
+			or captured != [[&"semantic_accept", "key:%d" % KEY_Y]]:
+		_fail("the frontend must still capture a rebind on the options screen")
+		return
+	captured.clear()
+	_received.clear()
+	_router.cancel_binding_capture()
+
 	var kinds: Array = INPUT_INTENT.all_kinds()
 	if kinds.size() != 12:
 		_fail("InputIntent must expose all twelve semantic intent kinds")

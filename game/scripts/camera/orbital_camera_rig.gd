@@ -139,7 +139,9 @@ func shake_enabled() -> bool:
 
 
 func recenter() -> void:
-	if not _configured:
+	# The freeze covers every camera motion, recentring included: the rig
+	# refuses it exactly like orbit and zoom while the launcher is grabbed.
+	if not _configured or _locked:
 		return
 	_yaw_degrees = 0.0
 	_inclination_degrees = _default_inclination_degrees

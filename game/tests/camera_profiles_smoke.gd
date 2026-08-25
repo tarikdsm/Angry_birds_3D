@@ -172,6 +172,24 @@ func _check_profiles() -> void:
 	_check(_director.orbit_degrees() != orbited,
 		"recenter must restore the authored composition")
 
+	# The presentation owns the freeze only until the kernel confirms the
+	# gesture is over. If it kept that ownership forever, the phase lock — the
+	# safety net against a desynchronised presentation — would retire after
+	# the very first grab of the level.
+	_director.lock()
+	_check(_director.is_locked(), "a presentation grab must freeze the camera")
+	_director.unlock()
+	_director.observe_frame(_frame("inspection", []))
+	_check(not _director.is_locked(), "the release must unfreeze the camera")
+	_director.observe_frame(_frame("grabbed", []))
+	_check(_director.is_locked(),
+		"a published grabbed phase must still freeze the camera after a gesture")
+	_check(not _director.apply_orbit(Vector2(20.0, 5.0)),
+		"orbit must stay refused under the phase lock after a gesture")
+	_director.observe_frame(_frame("flight_ability", []))
+	_check(not _director.is_locked(),
+		"leaving the published grab must unfreeze the camera again")
+
 	if not _director.configure("CAM_Carousel", _earth):
 		_check(false, "the carousel profile must configure: %s" % _director.last_error)
 		return

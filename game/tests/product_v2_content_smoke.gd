@@ -87,6 +87,21 @@ func _run() -> void:
 		var level := level_result.document as Dictionary
 		_check(ASSET_CATALOG.missing_visual_asset_ids(catalog, level).is_empty(),
 			"every visual referenced by %s must be registered" % level_key)
+		# Fracture fragments become real bodies in flight and carry their own
+		# visual, so they belong to the referenced set. Leaving them out let an
+		# unregistered fragment pass both the gate and the launch and appear only
+		# as invisible debris mid-shot.
+		var referenced: Array[String] = ASSET_CATALOG.level_visual_asset_ids(level)
+		var authored_fragments: Array[String] = _fragment_visual_ids(level)
+		for fragment_id: String in authored_fragments:
+			_check(referenced.has(fragment_id),
+				"%s must reference its fracture fragment visual: %s" % [level_key, fragment_id])
+		if not authored_fragments.is_empty():
+			var tampered := level.duplicate(true)
+			_replace_first_fragment_visual(tampered, "KIT_Unregistered_Fragment")
+			_check(ASSET_CATALOG.missing_visual_asset_ids(catalog, tampered)
+					== ["KIT_Unregistered_Fragment"],
+				"an unregistered fracture fragment visual must be reported by %s" % level_key)
 		var world := _world_entry(str(request.world_id))
 		var registered_level := _level_entry(world, str(request.level_id))
 		_check(str(request.scene_id) == str(registered_level.get("scene_id", "")),
@@ -207,6 +222,33 @@ func _with_key(document: Dictionary, key: String, replacement: Variant) -> Dicti
 func _expect_catalog_invalid(value: Dictionary, label: String) -> void:
 	_check(not ASSET_CATALOG.validate_catalog_document(value).is_empty(),
 		"the asset catalog must reject %s" % label)
+
+
+static func _fragment_visual_ids(level: Dictionary) -> Array[String]:
+	var ids: Array[String] = []
+	for body: Variant in level.get("bodies", []):
+		if not body is Dictionary:
+			continue
+		var pattern := (body as Dictionary).get("fracture_pattern", {}) as Dictionary
+		for fragment: Variant in pattern.get("physical_fragments", []):
+			if not fragment is Dictionary:
+				continue
+			var visual_id := str((fragment as Dictionary).get("visual_id", ""))
+			if not visual_id.is_empty() and not ids.has(visual_id):
+				ids.append(visual_id)
+	ids.sort()
+	return ids
+
+
+static func _replace_first_fragment_visual(level: Dictionary, visual_id: String) -> void:
+	for body: Variant in level.get("bodies", []):
+		if not body is Dictionary:
+			continue
+		var pattern := (body as Dictionary).get("fracture_pattern", {}) as Dictionary
+		for fragment: Variant in pattern.get("physical_fragments", []):
+			if fragment is Dictionary:
+				(fragment as Dictionary).visual_id = visual_id
+				return
 
 
 func _check(condition: bool, message: String) -> void:

@@ -107,6 +107,29 @@ func release() -> void:
 	_director = null
 
 
+## Drops every presentation trace of an open gesture without queueing a single
+## command. A restart already rewound the kernel, so the presentation may not
+## keep a grab the kernel no longer knows about — nor the camera freeze that
+## grab opened, which no published phase would ever close.
+func reset_gesture() -> void:
+	if not _configured:
+		return
+	var was_grabbing := _grabbing
+	_grabbing = false
+	_plane = {}
+	_offset = Vector3.ZERO
+	_phase = "inspection"
+	if _ghost != null:
+		_ghost.global_position = _rest
+		_ghost.visible = true
+	if _device != null:
+		_device.apply_pull(Vector3.ZERO)
+	if _director != null:
+		_director.unlock()
+	if was_grabbing:
+		grab_cancelled.emit()
+
+
 func configured() -> bool:
 	return _configured
 
@@ -281,7 +304,8 @@ func handle_cancel() -> bool:
 
 static func _has_rejection(frame: Dictionary) -> bool:
 	for event: Variant in frame.get("events", []):
-		if event is Dictionary 				and str((event as Dictionary).get("kind", "")) == "command_rejected":
+		if event is Dictionary \
+				and str((event as Dictionary).get("kind", "")) == "command_rejected":
 			return true
 	return false
 
@@ -316,7 +340,12 @@ func _authored_visual(asset_id: String) -> Node3D:
 	var packed := ResourceLoader.load(resource_path, "PackedScene") as PackedScene
 	if packed == null:
 		return null
-	return packed.instantiate() as Node3D
+	var root := packed.instantiate()
+	var instance := root as Node3D
+	if instance == null and root != null:
+		# Nothing parents a failed cast, so nothing would ever free it.
+		root.free()
+	return instance
 
 
 func _provisional_visual(bird: Dictionary) -> Node3D:

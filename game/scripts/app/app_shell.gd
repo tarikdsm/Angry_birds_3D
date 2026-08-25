@@ -29,6 +29,7 @@ var _selected_level_id := ""
 var _default_bindings: Array = []
 var _binding_specs: Array = []
 var _show_recovery_notice := false
+var _recovery_message_id := ""
 var _pending_binding_proposal: Dictionary = {}
 var exit_request_count := 0
 
@@ -63,8 +64,12 @@ func _ready() -> void:
 	if not _apply_runtime(_settings):
 		push_error("AppShell rejected validated runtime settings")
 		return
-	_show_recovery_notice = progress_result.has("warning_message_id") \
-		or settings_result.has("warning_message_id")
+	# The notice must say which recovery actually happened: a migrated profile
+	# and a discarded one are different events for the player, and both texts
+	# come from the closed pt-BR catalog.
+	_recovery_message_id = str(progress_result.get("warning_message_id",
+		settings_result.get("warning_message_id", "")))
+	_show_recovery_notice = not _recovery_message_id.is_empty()
 	_screen_router.set_messages(_messages)
 	_input_router.intent_submitted.connect(_screen_router.handle_intent)
 	_input_router.binding_token_captured.connect(_on_binding_token_captured)
@@ -101,6 +106,13 @@ func _on_screen_changed(route: StringName) -> void:
 	_input_router.set_context(
 		INPUT_ROUTER.CONTEXT_GAMEPLAY if route == &"gameplay"
 		else INPUT_ROUTER.CONTEXT_FRONTEND)
+	if route != &"options":
+		# The rebind capture and its pending proposal belong to the options
+		# screen alone. Every other route — the pause menu and gameplay
+		# included — disarms them, so a key pressed elsewhere is never consumed
+		# and never rewrites a persisted binding.
+		_input_router.cancel_binding_capture()
+		_pending_binding_proposal.clear()
 	if route == &"gameplay":
 		_bind_gameplay()
 		return
@@ -108,11 +120,11 @@ func _on_screen_changed(route: StringName) -> void:
 	if screen == null:
 		return
 	if route == &"main":
-		_input_router.cancel_binding_capture()
-		_pending_binding_proposal.clear()
 		var recovery_notice := screen.find_child("RecoveryNotice", true, false) as Label
 		if recovery_notice != null:
 			recovery_notice.visible = _show_recovery_notice
+			if _show_recovery_notice:
+				recovery_notice.text = _message(_recovery_message_id)
 		var continue_button := screen.find_child("ContinueButton", true, false) as Button
 		if continue_button != null:
 			continue_button.pressed.connect(_continue_progress)

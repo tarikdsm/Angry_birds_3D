@@ -263,8 +263,15 @@ func handle_intent(intent: RefCounted) -> bool:
 
 
 func observe_frame(frame: Dictionary) -> void:
-	_phase_locked = not _presentation_driven \
-		and str(frame.get("phase", "")) == "grabbed"
+	var phase := str(frame.get("phase", ""))
+	# The presentation only owns the freeze until the kernel confirms the
+	# gesture is over. Once the published phase agrees the launcher is no
+	# longer grabbed, the phase lock — the safety net against a desynchronised
+	# presentation — becomes the source of truth again. Keeping the gesture
+	# ownership forever would retire that net after the very first grab.
+	if _presentation_driven and not _grab_locked and phase != "grabbed":
+		_presentation_driven = false
+	_phase_locked = not _presentation_driven and phase == "grabbed"
 	if _active_rig == null:
 		return
 	_apply_lock()

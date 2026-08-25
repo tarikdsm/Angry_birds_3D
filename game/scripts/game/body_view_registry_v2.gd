@@ -135,8 +135,13 @@ func _instantiate_authored(asset_id: String, entry: Dictionary) -> Node3D:
 	var scene: PackedScene = _scenes[asset_id]
 	if scene == null:
 		return null
-	var instance := scene.instantiate() as Node3D
+	var root := scene.instantiate()
+	var instance := root as Node3D
 	if instance == null:
+		# The error path is exactly where a leak is invisible: release_level()
+		# never sees a node that was never parented.
+		if root != null:
+			root.free()
 		_reject(asset_id, "authored visual root is not a Node3D")
 		return null
 	var selected := _select_authored_node(instance, str(entry.get("node_path", "")))

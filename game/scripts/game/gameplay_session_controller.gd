@@ -72,6 +72,9 @@ var _shake := true
 var _trajectory_assist := false
 var _bindings: Array = []
 
+## Diagnostics published by the body view registry while a level is mounted.
+var asset_diagnostics: Array[String] = []
+
 
 static func registry_key(world_id: String, level_id: String) -> String:
 	return "%s/%s" % [world_id, level_id]
@@ -111,6 +114,9 @@ func _ready() -> void:
 	process_physics_priority = 100
 	_session.set_physics_process(false)
 	_session.gameplay_fault.connect(_on_gameplay_fault)
+	# Production listener for the registry diagnostic. Without one, an asset the
+	# registry refuses mid-flight left no trace outside the smokes.
+	_body_views.asset_resolution_failed.connect(_on_asset_resolution_failed)
 
 
 func configure_launch(request: Variant) -> bool:
@@ -143,6 +149,24 @@ func configure_launch(request: Variant) -> bool:
 		catalog.document as Dictionary, level.document as Dictionary)
 	if not unregistered.is_empty():
 		last_error = "level references unregistered visuals: %s" % ", ".join(unregistered)
+		launch_rejected.emit(last_error)
+		return false
+	# The other two catalog validations used to run only in the content gate, so
+	# a required asset that disappeared after the build reached the player as a
+	# provisional primitive instead of a refused launch. Product loading is
+	# fail-closed at runtime too.
+	var unavailable: Array[String] = ASSET_CATALOG.unavailable_required_asset_ids(
+		catalog.document as Dictionary)
+	if not unavailable.is_empty():
+		last_error = "required product assets are unavailable: %s" % ", ".join(unavailable)
+		launch_rejected.emit(last_error)
+		return false
+	var catalog_document := catalog.document as Dictionary
+	var unregistered_presentation: Array[String] = ASSET_CATALOG.missing_presentation_asset_ids(
+		catalog_document, archetypes.document as Dictionary)
+	if not unregistered_presentation.is_empty():
+		last_error = "archetypes reference unregistered presentation assets: %s" % [
+			", ".join(unregistered_presentation)]
 		launch_rejected.emit(last_error)
 		return false
 
@@ -215,18 +239,26 @@ func configure_launch(request: Variant) -> bool:
 	return true
 
 
+## Restarting rewinds the kernel, so no presentation state from the interrupted
+## attempt may survive it: an open gesture would keep the camera frozen and
+## refuse every new grab, and a surviving body view would interpolate from the
+## previous debris back into the reinstalled layout.
 func restart_level() -> bool:
 	if not session_configured or not _session.restart_level():
 		return false
 	restart_calls += 1
 	_resolved = false
 	_paused = false
+	_slingshot.reset_gesture()
+	_camera_director.unlock()
+	_body_views.release()
 	_set_advancing(true)
 	return true
 
 
 func release_level() -> void:
 	session_configured = false
+	asset_diagnostics = []
 	_advancing = false
 	_paused = false
 	_resolved = false
@@ -413,14 +445,23 @@ func _mount_world_scene(scene_path: String) -> bool:
 		last_error = "registered world scene is unavailable: %s" % scene_path
 		return false
 	var packed := ResourceLoader.load(scene_path, "PackedScene") as PackedScene
-	var instance: Node3D = null
-	if packed != null:
-		instance = packed.instantiate() as Node3D
+	var root: Node = packed.instantiate() if packed != null else null
+	var instance := root as Node3D
 	if instance == null:
+		# release_level() only frees what reached the host, so the failed cast has
+		# to be freed here or it survives the whole session.
+		if root != null:
+			root.free()
 		last_error = "registered world scene root is not a Node3D: %s" % scene_path
 		return false
 	_world_host.add_child(instance)
 	return true
+
+
+func _on_asset_resolution_failed(_asset_id: String, message: String) -> void:
+	if not asset_diagnostics.has(message):
+		asset_diagnostics.append(message)
+	last_error = message
 
 
 func _on_gameplay_fault(code: String, message: String) -> void:

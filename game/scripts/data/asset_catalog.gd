@@ -106,6 +106,17 @@ static func level_visual_asset_ids(level_document: Dictionary) -> Array[String]:
 		var asset_id := str(visual.get("asset_id", ""))
 		if not asset_id.is_empty():
 			referenced[asset_id] = true
+		# Fracture fragments become real bodies in flight and carry their own
+		# visual. Leaving them out of the referenced set lets an unregistered
+		# fragment pass the gate and the launch, and show up only as invisible
+		# debris mid-shot.
+		var pattern := (body as Dictionary).get("fracture_pattern", {}) as Dictionary
+		for fragment: Variant in pattern.get("physical_fragments", []):
+			if not fragment is Dictionary:
+				continue
+			var fragment_id := str((fragment as Dictionary).get("visual_id", ""))
+			if not fragment_id.is_empty():
+				referenced[fragment_id] = true
 	return _sorted_ids(referenced)
 
 

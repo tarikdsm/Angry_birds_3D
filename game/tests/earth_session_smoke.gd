@@ -40,6 +40,14 @@ func _run() -> void:
 
 	_check(_gameplay.configure_calls == 0 and not _gameplay.session_configured,
 		"an unlaunched gameplay scene must stay inert")
+	# The ordering that actually decides the frame: the kernel node advances the
+	# session in its own _physics_process and the controller consumes the
+	# published frame only afterwards. In Godot 4 that order comes from
+	# process_physics_priority, never from process_priority.
+	var session_node: Node = _gameplay.find_child("Session", true, false)
+	_check(session_node != null and _gameplay.process_physics_priority \
+			> session_node.process_physics_priority,
+		"the controller must consume the frame only after the kernel node advanced it")
 	var tampered := request.duplicate(true)
 	tampered.level_path = "res://data/levels/first_orbit.level.json"
 	_check(not _gameplay.configure_launch(tampered),
@@ -117,6 +125,7 @@ func _run() -> void:
 			and (restarted.get("events", [1]) as Array).is_empty(),
 		"a restart must republish a reset session")
 
+	await _check_restart_during_open_gesture()
 	await _check_missing_asset_diagnostic()
 
 	if not _errors.is_empty():
@@ -124,6 +133,42 @@ func _run() -> void:
 		return
 	print(MARKER)
 	_finish(0)
+
+
+## Restarting rewinds the kernel, so a gesture that was open when the player hit
+## restart must not survive it. A surviving grab keeps the camera frozen with no
+## published phase left to close it, and refuses every new grab until the player
+## completes one more full click.
+func _check_restart_during_open_gesture() -> void:
+	var slingshot := _gameplay.slingshot() as Node3D
+	var director := _gameplay.camera_director() as Node3D
+	var rig := director.active_rig() as Camera3D
+	for _index: int in 3:
+		await physics_frame
+	var center := rig.unproject_position(slingshot.ghost_position())
+	_check(str(slingshot.handle_begin_grab(center)) == "grab",
+		"the probe must open a grab before restarting")
+	_check(slingshot.is_grabbing() and director.is_locked(),
+		"an open grab must freeze the camera before the restart")
+	await physics_frame
+	_check(str((_gameplay.current_frame as Dictionary).get("phase", "")) == "grabbed",
+		"the kernel must confirm the grab before the restart")
+	_check(_gameplay.restart_level(), "restarting during an open grab must succeed")
+	_check(not slingshot.is_grabbing(),
+		"a restart must close the presentation gesture the kernel rewound")
+	_check(not director.is_locked(),
+		"a restart must release the camera freeze the open grab had opened")
+	await physics_frame
+	await physics_frame
+	_check(director.apply_orbit(Vector2(8.0, 3.0)),
+		"the camera must orbit again right after a restart during a grab")
+	await process_frame
+	var recentered := rig.unproject_position(slingshot.ghost_position())
+	_check(str(slingshot.handle_begin_grab(recentered)) == "grab",
+		"a new grab must be accepted right after a restart during a grab")
+	_check(slingshot.handle_cancel(), "the probe must cancel the grab it opened")
+	_check(_gameplay.restart_level(), "the probe must restore an idle session")
+	await physics_frame
 
 
 func _check_missing_asset_diagnostic() -> void:

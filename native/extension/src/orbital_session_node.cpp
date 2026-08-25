@@ -601,7 +601,12 @@ namespace {
 
 OrbitalSessionNode::OrbitalSessionNode()
 {
+    // process_priority orders _process; this node only overrides
+    // _physics_process, whose order comes from process_physics_priority. Both
+    // are set so the kernel node advances before any presentation consumer
+    // regardless of which callback a future consumer uses.
     set_process_priority(-100);
+    set_physics_process_priority(-100);
 }
 
 void OrbitalSessionNode::_bind_methods()
