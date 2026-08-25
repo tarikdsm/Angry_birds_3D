@@ -116,6 +116,18 @@ public:
         bool operator==(const EntityRoot&) const = default;
     };
 
+    /// The chain formula frozen by the specification: the multiplier grows ten
+    /// percent per link and caps at two times. Content authors the same two
+    /// numbers into every level manifest and they reach canonical_state_v3, so
+    /// content validation pins them fail-closed against the values implemented
+    /// here instead of letting a manifest and the score drift apart silently.
+    static constexpr std::uint32_t chain_multiplier_step_percent = 10U;
+    static constexpr std::uint32_t maximum_chain_multiplier_percent = 200U;
+    static constexpr double authored_chain_multiplier_step =
+        static_cast<double>(chain_multiplier_step_percent) / 100.0;
+    static constexpr double authored_max_chain_multiplier =
+        static_cast<double>(maximum_chain_multiplier_percent) / 100.0;
+
     ScoreSystem() = default;
     ScoreSystem(ScoringDefinition, std::uint32_t initial_queue_size);
 

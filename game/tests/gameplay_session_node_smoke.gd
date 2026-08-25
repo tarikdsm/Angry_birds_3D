@@ -67,7 +67,7 @@ func _level_json() -> String:
 		"bird_queue": [1, 1],
 		"scoring": {"pig_points": 5000, "unused_bird_points": 10000,
 			"star_thresholds": [10000, 20000, 30000], "chain_window_ticks": 45,
-			"chain_multiplier_step": 0.25, "max_chain_multiplier": 3.0},
+			"chain_multiplier_step": 0.10, "max_chain_multiplier": 2.0},
 		"free_body_ids": [1],
 		"bodies": [{
 			"body_id": 1, "entity_id": 100, "part_id": 1, "body_type": "dynamic",
@@ -113,6 +113,12 @@ func _initialize() -> void:
 			return
 	if _session.process_priority != -100:
 		_fail("GameplaySessionNode priority must be -100")
+		return
+	# The node only overrides _physics_process, and that callback is ordered by
+	# process_physics_priority, never by process_priority. The kernel has to
+	# advance before any presentation consumer reads the published frame.
+	if _session.process_physics_priority != -100:
+		_fail("GameplaySessionNode physics priority must be -100")
 		return
 
 	if not _session.configure_session(_materials_json(), _archetypes_json(), _level_json()):

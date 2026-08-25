@@ -154,7 +154,12 @@ SessionStatus PressureBurstSystem::commit_impulses(
             }
         }
     }
-    std::ranges::sort(impulses, {}, &ninho::physics::CentralImpulse::body);
+    // The handle alone is not a total order and the reduction below is a float
+    // accumulation: with three impulses on the same body in the same tick, an
+    // unstable sort would let the association of the sum -- and therefore its
+    // last bit -- depend on the introsort of the toolchain. Stable sorting
+    // keeps the deterministic plan order as the tie-break.
+    std::ranges::stable_sort(impulses, {}, &ninho::physics::CentralImpulse::body);
     std::vector<ninho::physics::CentralImpulse> reduced;
     reduced.reserve(impulses.size());
     for (const auto& impulse : impulses) {

@@ -456,7 +456,7 @@ void write_ability_payload(
             writer.integer(value.duration_ticks);
             writer.quantized(value.mass_multiplier);
         } else if constexpr (std::is_same_v<Payload, SpeedBoostAbilityDefinition>) {
-            writer.quantized(value.impulse_m_s);
+            writer.quantized(value.fallback_speed_m_s);
         } else if constexpr (std::is_same_v<Payload, ExplosionAbilityDefinition>) {
             writer.quantized(value.radius_m);
             writer.quantized(value.impulse_n_s);
@@ -1395,7 +1395,10 @@ std::vector<std::uint8_t> SimulationSession::Impl::serialize_canonical_state_v3(
         identifier(writer, part);
     }
     auto pending_breaks = pending_joint_breaks;
-    std::ranges::sort(pending_breaks, {}, &PendingJointBreak::joint_id);
+    // Same reasoning as the burst reduction: joint_id alone is not proven to be
+    // a total order here, and the canonical bytes below must not depend on the
+    // tie-break an unstable sort happens to pick.
+    std::ranges::stable_sort(pending_breaks, {}, &PendingJointBreak::joint_id);
     writer.integer<std::uint32_t>(static_cast<std::uint32_t>(pending_breaks.size()));
     for (const PendingJointBreak& pending : pending_breaks) {
         identifier(writer, pending.joint_id);

@@ -13,6 +13,12 @@
 namespace ninho::simulation {
 
 inline constexpr float speed_boost_direction_speed_threshold_m_s = 1.0e-4F;
+/// The in-flight multiplier and the absolute post-ability ceiling of the
+/// specification. Content validation measures the authored fallback speed
+/// against the ceiling, so a manifest can never author a magnitude the kernel
+/// would silently clamp away.
+inline constexpr float speed_boost_speed_multiplier = 1.55F;
+inline constexpr float speed_boost_absolute_speed_cap_m_s = 45.0F;
 
 [[nodiscard]] inline bool valid_speed_boost_direction(
     ninho::physics::Vec3 direction) noexcept

@@ -1,7 +1,9 @@
 #include "content_semantic_validation.hpp"
 #include "ability_system.hpp"
+#include "score_system.hpp"
 #include "shape_volume.hpp"
 
+#include <algorithm>
 #include <array>
 #include <cmath>
 #include <numbers>
@@ -188,8 +190,16 @@ std::optional<ContentError> validate_level_semantics(
         entity.enemy_archetype_ids.insert(body.enemy_archetype_id->value());
     }
 
-    for (const auto& [entity_id, summary] : entities) {
-        static_cast<void>(entity_id);
+    // The diagnostic below names one body index. entities is a hash container,
+    // so iterating it directly lets the reported index depend on the hash order
+    // whenever more than one entity is invalid: same accept/reject decision,
+    // different message between runs and builds.
+    std::vector<std::uint32_t> ordered_entity_ids;
+    ordered_entity_ids.reserve(entities.size());
+    for (const auto& entry : entities) ordered_entity_ids.push_back(entry.first);
+    std::ranges::sort(ordered_entity_ids);
+    for (const std::uint32_t ordered_entity_id : ordered_entity_ids) {
+        const EntitySummary& summary = entities.at(ordered_entity_id);
         if (!summary.enemy_archetype_ids.empty()
             && (summary.has_non_enemy_part || summary.enemy_archetype_ids.size() != 1U)) {
             return error(ContentErrorCode::InvalidInvariant, "/bodies",
@@ -466,6 +476,28 @@ std::optional<ContentError> validate_product_v2_session_content(
                 return error(ContentErrorCode::InvalidInvariant, pointer,
                     "terrestrial pig physics calibration is invalid");
             }
+        }
+    }
+    // The chain formula is frozen: 100 + 10 x min(chain - 1, 10) percent, capped
+    // at 200. Content authors both numbers, they reach canonical_state_v3 and
+    // the score ignores them, so a manifest could move the canonical hash --
+    // announcing a balance change and invalidating fixtures -- while the chain
+    // kept the frozen numbers. Product-v2 loading is fail-closed: the authored
+    // values must be the ones the kernel runs.
+    // The gate mirrors the session builder: a manifest without a chain window
+    // installs no score system at all, and there is no formula to contradict.
+    if (level.scoring.chain_window_ticks != 0U) {
+        if (level.scoring.chain_multiplier_step
+            != ScoreSystem::authored_chain_multiplier_step) {
+            return error(ContentErrorCode::InvalidInvariant,
+                "/scoring/chain_multiplier_step",
+                "chain multiplier step must match the frozen scoring formula");
+        }
+        if (level.scoring.max_chain_multiplier
+            != ScoreSystem::authored_max_chain_multiplier) {
+            return error(ContentErrorCode::InvalidInvariant,
+                "/scoring/max_chain_multiplier",
+                "maximum chain multiplier must match the frozen scoring formula");
         }
     }
     if (level.bird_queue.empty()) {

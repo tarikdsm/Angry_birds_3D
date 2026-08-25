@@ -8,8 +8,6 @@
 namespace ninho::simulation {
 namespace {
 
-constexpr float speed_multiplier = 1.55F;
-constexpr float absolute_speed_cap_m_s = 45.0F;
 constexpr float canonical_scale = 100000.0F;
 
 [[nodiscard]] SessionStatus speed_boost_failure(std::string message)
@@ -82,9 +80,10 @@ SessionStatus SimulationSession::Impl::apply_before_step(ShotState& active_shot,
         return speed_boost_failure(
             "active speed boost physics state is invalid");
     }
-    if (!std::isfinite(definition.impulse_m_s)
-        || definition.impulse_m_s <= 0.0
-        || definition.impulse_m_s > 1000.0) {
+    if (!std::isfinite(definition.fallback_speed_m_s)
+        || definition.fallback_speed_m_s <= 0.0
+        || definition.fallback_speed_m_s
+            > static_cast<double>(speed_boost_absolute_speed_cap_m_s)) {
         return speed_boost_failure("speed boost fallback speed is invalid");
     }
 
@@ -105,10 +104,14 @@ SessionStatus SimulationSession::Impl::apply_before_step(ShotState& active_shot,
         return missing_direction_failure();
     }
 
+    // In flight the specification multiplies the speed; stalled, there is
+    // nothing to multiply, so the authored fallback speed is the magnitude and
+    // the last valid flight direction is the direction.
     const float target_speed = moving
-        ? std::min(current_speed * speed_multiplier, absolute_speed_cap_m_s)
-        : std::min(static_cast<float>(definition.impulse_m_s),
-            absolute_speed_cap_m_s);
+        ? std::min(current_speed * speed_boost_speed_multiplier,
+            speed_boost_absolute_speed_cap_m_s)
+        : std::min(static_cast<float>(definition.fallback_speed_m_s),
+            speed_boost_absolute_speed_cap_m_s);
     const ninho::physics::Vec3 target_velocity = direction * target_speed;
     const ninho::physics::Vec3 delta_velocity = quantized(
         target_velocity - state->linear_velocity);

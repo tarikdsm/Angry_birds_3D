@@ -159,7 +159,7 @@ struct AbilityArchetype {
         bool operator==(const MassBoostPayload&) const = default;
     };
     struct SpeedBoostPayload {
-        double impulse_m_s{};
+        double fallback_speed_m_s{};
         bool operator==(const SpeedBoostPayload&) const = default;
     };
     struct ExplosionPayload {

@@ -2,6 +2,7 @@
 
 #include "ninho/simulation/content.hpp"
 #include "ninho/simulation/session.hpp"
+#include "score_system.hpp"
 #include "session_test_facade.hpp"
 
 #include <nlohmann/json.hpp>
@@ -72,7 +73,7 @@ json archetype_catalog()
             {"abilities", json::array({ability(1, "gravity_field", gravity_payload()),
                                        ability(2, "mass_boost",
                                                {{"duration_ticks", 60}, {"mass_multiplier", 2.0}}),
-                                       ability(3, "speed_boost", {{"impulse_m_s", 12.0}}),
+                                       ability(3, "speed_boost", {{"fallback_speed_m_s", 12.0}}),
                                        ability(4, "explosion",
                                                {{"radius_m", 5.0},
                                                 {"impulse_n_s", 2000.0},
@@ -185,8 +186,8 @@ json level_manifest(std::string_view gravity_kind = "uniform")
               {"unused_bird_points", 10000},
               {"star_thresholds", json::array({10000, 20000, 30000})},
               {"chain_window_ticks", 45},
-              {"chain_multiplier_step", 0.25},
-              {"max_chain_multiplier", 3.0}}},
+              {"chain_multiplier_step", 0.10},
+              {"max_chain_multiplier", 2.0}}},
             {"free_body_ids", json::array({1})},
             {"bodies",
              json::array({{{"body_id", 1},
@@ -360,6 +361,47 @@ NINHO_SIM_TEST("product v2 content rejects ability shape scoring and gravity vio
     level["bodies"][0]["shape"] =
         {{"type", "capsule"}, {"radius_m", 0.25}, {"half_height_m", 0.5}};
     NINHO_SIM_REQUIRE(parse_level_manifest_v2(level.dump()).ok());
+}
+
+NINHO_SIM_TEST("product v2 content pins the frozen chain multiplier formula fail closed")
+{
+    const auto materials = parse_material_catalog_v2(material_catalog().dump());
+    const auto archetypes = parse_archetype_catalog_v2(archetype_catalog().dump());
+    const auto campaign = parse_campaign_manifest(campaign_manifest().dump());
+    NINHO_SIM_REQUIRE(materials.ok() && archetypes.ok() && campaign.ok());
+    const auto accepted = parse_level_manifest_v2(level_manifest().dump());
+    NINHO_SIM_REQUIRE(accepted.ok());
+    NINHO_SIM_REQUIRE(accepted.value.scoring.chain_multiplier_step
+                      == detail::ScoreSystem::authored_chain_multiplier_step);
+    NINHO_SIM_REQUIRE(accepted.value.scoring.max_chain_multiplier
+                      == detail::ScoreSystem::authored_max_chain_multiplier);
+    NINHO_SIM_REQUIRE(make_product_v2_content_bundle(materials.value, archetypes.value,
+                                                     campaign.value, accepted.value)
+                          .ok());
+    // Both numbers are authored, both reach canonical_state_v3 and the chain
+    // ignores them: moving either one would announce a balance change and
+    // invalidate the frozen playthroughs while the score kept the ten percent
+    // step and the two times cap the kernel implements. Product-v2 loading is
+    // fail-closed, so the divergence is refused at the door.
+    for (const auto& probe : std::array<std::pair<const char*, double>, 4>{
+             std::pair<const char*, double>{"chain_multiplier_step", 0.25},
+             std::pair<const char*, double>{"chain_multiplier_step", 0.0},
+             std::pair<const char*, double>{"max_chain_multiplier", 3.0},
+             std::pair<const char*, double>{"max_chain_multiplier", 1.5}}) {
+        auto level_json = level_manifest();
+        level_json["scoring"][probe.first] = probe.second;
+        const auto parsed = parse_level_manifest_v2(level_json.dump());
+        NINHO_SIM_REQUIRE(parsed.ok());
+        const std::string pointer = std::string{"/scoring/"} + probe.first;
+        require_error(make_product_v2_content_bundle(materials.value, archetypes.value,
+                                                     campaign.value, parsed.value),
+                      ContentErrorCode::InvalidInvariant, pointer);
+        const auto created = SimulationSession::create(
+            materials.value, archetypes.value, parsed.value);
+        NINHO_SIM_REQUIRE(!created.ok());
+        NINHO_SIM_REQUIRE(created.error.code == ContentErrorCode::InvalidInvariant);
+        NINHO_SIM_REQUIRE(created.error.pointer == pointer);
+    }
 }
 
 NINHO_SIM_TEST("product v2 content rejects orphan queue presentation and campaign references")
@@ -675,6 +717,68 @@ NINHO_SIM_TEST("product v2 content uses a typed terrestrial pig damage model")
     NINHO_SIM_REQUIRE(roundtrip.ok());
     NINHO_SIM_REQUIRE(roundtrip.value.enemies.front().damage_model
         == EnemyDamageModel::TerrestrialPig);
+}
+
+NINHO_SIM_TEST("product v2 content reports the lowest invalid enemy entity index")
+{
+    auto materials_json = material_catalog();
+    materials_json["surfaces"][1]["density_kg_m3"] = 65.0;
+    materials_json["surfaces"][1]["friction"] = 0.65;
+    materials_json["surfaces"][1]["restitution"] = 0.05;
+    auto archetypes_json = archetype_catalog();
+    archetypes_json["weakpoints"][0]["protected_multiplier"] = 1.0;
+    archetypes_json["weakpoints"][0]["exposed_multiplier"] = 1.0;
+    archetypes_json["enemies"][0]["damage_model"] = "terrestrial_pig";
+    archetypes_json["enemies"][0]["mass_kg"] = 65.0;
+    archetypes_json["enemies"][0]["damage_energy_j_per_kg"] = 18.0;
+    archetypes_json["enemies"][0]["max_damage"] = 70.0;
+    archetypes_json["abilities"] = json::array({archetypes_json["abilities"][0]});
+    const auto materials = parse_material_catalog_v2(materials_json.dump());
+    const auto archetypes = parse_archetype_catalog_v2(archetypes_json.dump());
+    NINHO_SIM_REQUIRE(materials.ok() && archetypes.ok());
+
+    // Two pig entities, and the diagnostic names exactly one body index. The
+    // per-entity summary lives in a hash container, so the loop that decides
+    // has to be ordered before the reported index can be reproducible between
+    // runs and builds. The accepted baseline pins that both entities are legal
+    // when their authored mass agrees with the archetype.
+    const auto two_pig_level = [&](double first_density, double second_density) {
+        auto level_json = level_manifest();
+        auto second = level_json["bodies"][0];
+        second["body_id"] = 2;
+        second["entity_id"] = 200;
+        second["transform"]["position_m"] = json::array({6.0, 0.0, 0.0});
+        level_json["bodies"].push_back(second);
+        level_json["free_body_ids"].push_back(2);
+        level_json["bodies"][0]["density_kg_m3"] = first_density;
+        level_json["bodies"][1]["density_kg_m3"] = second_density;
+        return parse_level_manifest_v2(level_json.dump());
+    };
+    const auto accepted = two_pig_level(65.0, 65.0);
+    NINHO_SIM_REQUIRE(accepted.ok());
+    {
+        auto created =
+            SimulationSession::create(materials.value, archetypes.value, accepted.value);
+        if (!created.ok()) {
+            ninho::simulation::test::fail(__FILE__, __LINE__,
+                created.error.pointer + ": " + created.error.message);
+        }
+    }
+    for (const auto& probe : std::array<std::pair<std::pair<double, double>, const char*>, 3>{
+             std::pair<std::pair<double, double>, const char*>{{64.0, 66.0},
+                 "/bodies/0/density_kg_m3"},
+             std::pair<std::pair<double, double>, const char*>{{64.0, 65.0},
+                 "/bodies/0/density_kg_m3"},
+             std::pair<std::pair<double, double>, const char*>{{65.0, 66.0},
+                 "/bodies/1/density_kg_m3"}}) {
+        const auto level = two_pig_level(probe.first.first, probe.first.second);
+        NINHO_SIM_REQUIRE(level.ok());
+        const auto created =
+            SimulationSession::create(materials.value, archetypes.value, level.value);
+        NINHO_SIM_REQUIRE(!created.ok());
+        NINHO_SIM_REQUIRE(created.error.code == ContentErrorCode::InvalidInvariant);
+        NINHO_SIM_REQUIRE(created.error.pointer == probe.second);
+    }
 }
 
 NINHO_SIM_TEST("product v2 content accepts mass conserving authored fracture patterns only on materials")

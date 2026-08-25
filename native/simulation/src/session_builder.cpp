@@ -461,18 +461,16 @@ void append_primitives(const ShapeDefinition& shape,
     return result;
 }
 
+/// A static body and a jointed body stay where they are; everything else that
+/// leaves the bounds is removed. The world model does not take part in the
+/// decision: the former std::visit over level.world returned the same policy in
+/// every branch and only suggested that the two gravity models differed here.
 [[nodiscard]] ninho::physics::WorldExitPolicy world_exit_policy_for(
-    const LevelManifest& level, const BodyDefinition& body, bool participates_in_joint) noexcept
+    const BodyDefinition& body, bool participates_in_joint) noexcept
 {
-    if (body.body_type == BodyType::Static || participates_in_joint) {
-        return ninho::physics::WorldExitPolicy::KeepOutsideBounds;
-    }
-    if (level.source_schema_version == 1U) {
-        return ninho::physics::WorldExitPolicy::RemoveOutsideBounds;
-    }
-    return std::visit([](const auto&) {
-        return ninho::physics::WorldExitPolicy::RemoveOutsideBounds;
-    }, level.world);
+    return body.body_type == BodyType::Static || participates_in_joint
+        ? ninho::physics::WorldExitPolicy::KeepOutsideBounds
+        : ninho::physics::WorldExitPolicy::RemoveOutsideBounds;
 }
 
 [[nodiscard]] ninho::physics::BodyDesc make_body(
@@ -490,7 +488,7 @@ void append_primitives(const ShapeDefinition& shape,
     // A physics-side body removal also invalidates every attached solver joint.
     // Keep jointed bodies under simulation ownership so public/canonical joint
     // state can never claim an invalid solver constraint is still active.
-    result.world_exit_policy = world_exit_policy_for(level, body, participates_in_joint);
+    result.world_exit_policy = world_exit_policy_for(body, participates_in_joint);
     result.name = body.visual.asset_id;
     return result;
 }

@@ -6,12 +6,6 @@
 #include <tuple>
 
 namespace ninho::simulation::detail {
-namespace {
-
-constexpr std::uint32_t chain_multiplier_step_percent = 10U;
-constexpr std::uint32_t maximum_chain_multiplier_percent = 200U;
-
-}
 
 ScoreSystem::ScoreSystem(ScoringDefinition definition, std::uint32_t initial_queue_size)
     : definition_(definition)
@@ -394,10 +388,10 @@ void ScoreSystem::award(const ScoringCandidate& candidate,
         state_.current_chain_shot_id = cause.shot_id;
     }
     const std::uint64_t uncapped = 100ULL
-        + static_cast<std::uint64_t>(chain_multiplier_step_percent)
+        + static_cast<std::uint64_t>(ScoreSystem::chain_multiplier_step_percent)
             * std::min<std::uint32_t>(state_.chain_index - 1U, 10U);
     state_.multiplier_percent = static_cast<std::uint32_t>(
-        std::min<std::uint64_t>(uncapped, maximum_chain_multiplier_percent));
+        std::min<std::uint64_t>(uncapped, ScoreSystem::maximum_chain_multiplier_percent));
     state_.last_scoring_tick = source.tick;
     transitions.push_back({
         .kind = ScoreTransitionKind::ChainChanged,

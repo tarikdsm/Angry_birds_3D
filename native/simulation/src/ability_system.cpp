@@ -236,14 +236,19 @@ std::optional<ContentError> AbilitySystem::validate_definition(
         const auto& definition =
             std::get<SpeedBoostAbilityDefinition>(ability.payload);
         const std::string payload_pointer = std::string{pointer} + "/payload";
-        if (!std::isfinite(definition.impulse_m_s)) {
+        if (!std::isfinite(definition.fallback_speed_m_s)) {
             return ContentError{ContentErrorCode::InvalidNumber,
-                payload_pointer + "/impulse_m_s", "number must be finite"};
+                payload_pointer + "/fallback_speed_m_s", "number must be finite"};
         }
-        if (definition.impulse_m_s <= 0.0
-            || definition.impulse_m_s > 1000.0) {
+        // The field is the absolute speed the kernel restores when the
+        // projectile has stalled, not the in-flight multiplier. Anything above
+        // the post-ability ceiling would be clamped away in silence, so the
+        // ceiling is the authoring bound.
+        if (definition.fallback_speed_m_s <= 0.0
+            || definition.fallback_speed_m_s
+                > static_cast<double>(speed_boost_absolute_speed_cap_m_s)) {
             return ContentError{ContentErrorCode::OutOfRange,
-                payload_pointer + "/impulse_m_s", "number out of range"};
+                payload_pointer + "/fallback_speed_m_s", "number out of range"};
         }
     }
     if (ability.kind_v2 == AbilityKind::Explosion) {

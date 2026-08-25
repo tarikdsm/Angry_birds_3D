@@ -483,8 +483,11 @@ NINHO_SIM_TEST("fracture objective consecutive overload publishes cause on secon
     NINHO_SIM_REQUIRE(find_event(*session, DomainEventKind::DamageApplied) == nullptr);
     NINHO_SIM_REQUIRE(find_event(*session, DomainEventKind::JointOverloaded, joint) == nullptr);
 
-    detail::SessionTestFacade::override_joint_ratio_without_new_cause_after_solver(
-        *session, joint, 1.0);
+    // Repeating the same override is the point: a second tick over the
+    // threshold without any new cause is what publishes the overload. The
+    // former "without_new_cause" entry point was byte-identical to this one and
+    // only made the test look like it exercised a second path.
+    detail::SessionTestFacade::override_joint_ratio_after_solver(*session, joint, 1.0);
     NINHO_SIM_REQUIRE(session->tick().ok());
     NINHO_SIM_REQUIRE(find_event(*session, DomainEventKind::DamageApplied) == nullptr);
     const DomainEvent* overload = find_event(*session, DomainEventKind::JointOverloaded, joint);

@@ -176,6 +176,10 @@ bool EnvironmentalTriggerSystem::mark_detonated(
     }
     runtime->detonated = true;
     runtime->detonated_event_id = detonated_event_id;
+    // Nothing reads this back: a trigger detonates exactly once, so due_requests
+    // is already barred by runtime.detonated. It is kept because it belongs to
+    // the frozen canonical_state_v3 layout -- dropping it would move every
+    // frozen route hash -- and because a future repeatable trigger needs it.
     runtime->cooldown_until_tick = TickIndex{
         detonation_tick.value() + runtime->cooldown_ticks};
     return true;

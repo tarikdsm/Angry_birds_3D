@@ -118,8 +118,8 @@ json level_manifest()
         {"bird_queue", json::array({1, 1})},
         {"scoring", {{"pig_points", 5000}, {"unused_bird_points", 10000},
                      {"star_thresholds", json::array({10000, 20000, 30000})},
-                     {"chain_window_ticks", 45}, {"chain_multiplier_step", 0.25},
-                     {"max_chain_multiplier", 3.0}}},
+                     {"chain_window_ticks", 45}, {"chain_multiplier_step", 0.10},
+                     {"max_chain_multiplier", 2.0}}},
         {"free_body_ids", json::array({1})},
         {"bodies", json::array({
             {{"body_id", 1}, {"entity_id", 100}, {"part_id", 1},

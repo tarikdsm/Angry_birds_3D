@@ -33,6 +33,11 @@ constexpr double fallback_speed_m_s = 12.0;
 constexpr double speed_multiplier = 1.55;
 constexpr double absolute_speed_cap_m_s = 45.0;
 
+static_assert(static_cast<float>(speed_multiplier)
+    == ninho::simulation::speed_boost_speed_multiplier);
+static_assert(static_cast<float>(absolute_speed_cap_m_s)
+    == ninho::simulation::speed_boost_absolute_speed_cap_m_s);
+
 void require_near(double actual, double expected, double tolerance)
 {
     NINHO_SIM_REQUIRE(std::isfinite(actual));
@@ -230,15 +235,18 @@ NINHO_SIM_TEST("speed boost ability parser derives nine arm ticks and shares pay
     NINHO_SIM_REQUIRE(parsed.ok());
     NINHO_SIM_REQUIRE(parsed.value.abilities.front().arm_ticks == 9U);
     NINHO_SIM_REQUIRE(std::get<SpeedBoostAbilityDefinition>(
-        parsed.value.abilities.front().payload).impulse_m_s == fallback_speed_m_s);
+        parsed.value.abilities.front().payload).fallback_speed_m_s == fallback_speed_m_s);
 
-    for (const double invalid : {0.0, -1.0, 1001.0}) {
+    // The field is an absolute speed, so the post-ability ceiling of the
+    // specification is the authoring bound: anything above it would be clamped
+    // away in silence instead of failing closed at load.
+    for (const double invalid : {0.0, -1.0, 45.5, 1001.0}) {
         const auto rejected = parse_archetype_catalog_v2(
             to_canonical_json(archetypes(invalid)));
         NINHO_SIM_REQUIRE(!rejected.ok());
         NINHO_SIM_REQUIRE(rejected.error.code == ContentErrorCode::OutOfRange);
         NINHO_SIM_REQUIRE(rejected.error.pointer
-            == "/abilities/0/payload/impulse_m_s");
+            == "/abilities/0/payload/fallback_speed_m_s");
     }
 }
 
@@ -250,6 +258,7 @@ NINHO_SIM_TEST("speed boost ability typed create and reconfigure validate payloa
     } invalids[]{
         {0.0, ContentErrorCode::OutOfRange},
         {-1.0, ContentErrorCode::OutOfRange},
+        {45.5, ContentErrorCode::OutOfRange},
         {1001.0, ContentErrorCode::OutOfRange},
         {std::numeric_limits<double>::quiet_NaN(), ContentErrorCode::InvalidNumber},
         {std::numeric_limits<double>::infinity(), ContentErrorCode::InvalidNumber},
@@ -270,14 +279,14 @@ NINHO_SIM_TEST("speed boost ability typed create and reconfigure validate payloa
         NINHO_SIM_REQUIRE(!created.ok());
         NINHO_SIM_REQUIRE(created.error.code == invalid.code);
         NINHO_SIM_REQUIRE(created.error.pointer
-            == "/abilities/0/payload/impulse_m_s");
+            == "/abilities/0/payload/fallback_speed_m_s");
 
         const SessionStatus status = session->reconfigure(
             materials(), archetypes(invalid.value), level());
         NINHO_SIM_REQUIRE(!status.ok());
         NINHO_SIM_REQUIRE(status.error.code == invalid.code);
         NINHO_SIM_REQUIRE(status.error.pointer
-            == "/abilities/0/payload/impulse_m_s");
+            == "/abilities/0/payload/fallback_speed_m_s");
         NINHO_SIM_REQUIRE(session->canonical_state_v3() == canonical_before);
         NINHO_SIM_REQUIRE(session->shot_state() == shot_before);
         NINHO_SIM_REQUIRE(session->state().tick == state_before.tick);

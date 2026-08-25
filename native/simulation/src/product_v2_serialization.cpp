@@ -103,7 +103,7 @@ json ability_payload_json(const AbilityArchetype& ability)
     case AbilityKind::SpeedBoost:
     {
         const auto& p = std::get<AbilityArchetype::SpeedBoostPayload>(ability.payload);
-        return {{"impulse_m_s", p.impulse_m_s}};
+        return {{"fallback_speed_m_s", p.fallback_speed_m_s}};
     }
     case AbilityKind::Explosion:
     {

@@ -73,8 +73,6 @@ public:
     static bool remove_body_for_testing(
         SimulationSession&, EntityId, PartId);
     static void override_joint_ratio_after_solver(SimulationSession&, JointId, double ratio);
-    static void override_joint_ratio_without_new_cause_after_solver(
-        SimulationSession&, JointId, double ratio);
     static void fracture_piece_after_solver(
         SimulationSession&, EntityId, PartId, ninho::physics::Vec3 position);
     static void fracture_piece_at_incident_tie_after_solver(
