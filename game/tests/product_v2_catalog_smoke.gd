@@ -2,6 +2,7 @@ extends SceneTree
 
 const PRODUCT_TEXT := preload("res://scripts/data/product_text_catalog.gd")
 const WORLD_CATALOG := preload("res://scripts/data/world_catalog.gd")
+const CONTENT_FILE_LOADER := preload("res://scripts/data/content_file_loader.gd")
 const MARKER := "PRODUCT_V2_CATALOG_SMOKE_OK"
 
 var _errors: Array[String] = []
@@ -98,7 +99,11 @@ func _run() -> void:
 	_expect_world_invalid(mutated, "level order cross-reference")
 	mutated = world.duplicate(true)
 	mutated.worlds[1].levels[0].id = "farm_reaction"
-	_expect_world_invalid(mutated, "globally duplicate level id")
+	# Borrowing another world's level id lands on the positional level_order
+	# check, which is what makes ids globally unique: level_order is closed
+	# against the registry list of the world and the lists are disjoint.
+	_expect_world_invalid(mutated, "level id borrowed from another world",
+		"level IDs must preserve level_order")
 	mutated = world.duplicate(true)
 	mutated.worlds[0].levels[0].scene_id = "SCN_UNKNOWN"
 	_expect_world_invalid(mutated, "level scene registry cross-reference")
@@ -122,7 +127,12 @@ func _run() -> void:
 	_expect_world_invalid(mutated, "level presentation profile type")
 	mutated = world.duplicate(true)
 	mutated.worlds[0].levels[0].unlock_after_level_id = "unknown"
-	_expect_world_invalid(mutated, "level prerequisite cross-reference")
+	# Every shipped world has a single level today, so the only prerequisite
+	# branch reachable from real content is the one that pins the first level to
+	# null. The cross-reference branch stays for the second level of a world and
+	# no content can exercise it yet.
+	_expect_world_invalid(mutated, "first level prerequisite",
+		"first level prerequisite must be null")
 
 	var earth: Dictionary = JSON.parse_string(FileAccess.get_file_as_string(
 		"res://data/worlds/earth.world.json")) as Dictionary
@@ -186,6 +196,8 @@ func _run() -> void:
 			== "Primeira Órbita — Contrapeso de Aster",
 		"Orbital phase copy must match the normative pt-BR catalog exactly")
 
+	_check_duplicate_key_rejection()
+
 	if not _errors.is_empty():
 		_fail(" | ".join(_errors))
 		return
@@ -193,9 +205,55 @@ func _run() -> void:
 	quit(0)
 
 
-func _expect_world_invalid(value: Dictionary, label: String) -> void:
-	_check(not WORLD_CATALOG.validate_catalog_document(value).is_empty(),
-		"world catalog must reject %s" % label)
+## Godot's JSON parser collapses a repeated object key and keeps the last value,
+## while the C++ reader rejects it as an explicit DuplicateKey. These catalogs
+## never reach C++, so without an equivalent check the strict, fail-closed
+## loading rule stopped at the language boundary.
+func _check_duplicate_key_rejection() -> void:
+	var cases := [
+		['{"a": 1, "b": 2}', ""],
+		['{"a": 1, "a": 2}', "duplicate JSON key: a"],
+		['{"a": {"b": 1, "b": 2}}', "duplicate JSON key: b"],
+		['{"a": [{"b": 1}, {"b": 2}]}', ""],
+		['{"a": "a", "b": "b"}', ""],
+		['{"outer": {"a": 1}, "a": 2}', ""],
+	]
+	for entry: Array in cases:
+		var message: String = CONTENT_FILE_LOADER.duplicate_key_error(str(entry[0]))
+		_check(message == str(entry[1]),
+			"%s must diagnose '%s', got '%s'" % [entry[0], entry[1], message])
+	var probe_root := "user://tests/task-review-json-%d-%d" % [
+		OS.get_process_id(), Time.get_ticks_usec()]
+	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(probe_root))
+	var probe_path := probe_root.path_join("duplicate.json")
+	var file := FileAccess.open(probe_path, FileAccess.WRITE)
+	if file == null:
+		_check(false, "the duplicate key probe must be writable")
+		return
+	file.store_string('{"schema_version": 1, "schema_version": 2}
+')
+	file.flush()
+	file = null
+	var loaded: Dictionary = CONTENT_FILE_LOADER.load_json(probe_path)
+	_check(not bool(loaded.get("ok", true))
+			and str(loaded.get("error_kind", "")) == "json"
+			and str(loaded.get("message", "")).contains("duplicate JSON key: schema_version"),
+		"a document with a duplicated key must fail closed: %s" % loaded)
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(probe_path))
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(probe_root))
+
+
+## The label is only worth writing down if it is checked. Passing an expected
+## fragment makes the mutation prove which branch it actually reaches, instead
+## of accepting any rejection at all as evidence.
+func _expect_world_invalid(
+		value: Dictionary, label: String, expected_fragment: String = "") -> void:
+	var message := WORLD_CATALOG.validate_catalog_document(value)
+	_check(not message.is_empty(), "world catalog must reject %s" % label)
+	if expected_fragment.is_empty() or message.is_empty():
+		return
+	_check(message.contains(expected_fragment),
+		"rejecting %s must diagnose %s, got: %s" % [label, expected_fragment, message])
 
 
 func _expect_definition_invalid(value: Dictionary, world_id: String, label: String) -> void:

@@ -92,7 +92,6 @@ static func validate_catalog_document(document: Variant) -> String:
 		return error
 	if not value.worlds is Array or (value.worlds as Array).size() != WORLD_ORDER.size():
 		return "$.worlds must match the closed world registry"
-	var seen_level_ids := {}
 	for index: int in WORLD_ORDER.size():
 		var candidate: Variant = value.worlds[index]
 		if not candidate is Dictionary:
@@ -129,9 +128,12 @@ static func validate_catalog_document(document: Variant) -> String:
 			if not error.is_empty():
 				return error
 			var level_id := str(level.id)
-			if level_id != str(world.level_order[level_index]) or seen_level_ids.has(level_id):
-				return "level IDs must be unique and preserve level_order"
-			seen_level_ids[level_id] = true
+			# level_order is already closed against the registry list of this world,
+			# and the registry lists are disjoint, so matching it positionally is
+			# what guarantees global uniqueness. The former seen_level_ids set could
+			# never be reached and only made the check look wider than it is.
+			if level_id != str(world.level_order[level_index]):
+				return "level IDs must preserve level_order"
 			if not _matches_registered_string(level.scene_id, registry.scene_id) \
 					or not _matches_registered_string(
 						level.region_id, registry.level_region_ids[level_index]) \
